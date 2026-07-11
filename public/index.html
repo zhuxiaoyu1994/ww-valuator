@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>鸣潮账号估价助手</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', sans-serif;
+      background: #0f0f1e;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* 头部 */
+    .header {
+      text-align: center;
+      padding: 30px 20px 20px;
+    }
+    .header h1 {
+      font-size: 28px;
+      color: #e94560;
+      margin-bottom: 8px;
+    }
+    .header p {
+      font-size: 14px;
+      color: #666;
+    }
+
+    /* 搜索区 */
+    .search-section {
+      max-width: 700px;
+      margin: 0 auto 30px;
+      display: flex;
+      gap: 10px;
+    }
+    .search-section input {
+      flex: 1;
+      padding: 14px 18px;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-section input:focus { border-color: #e94560; }
+    .search-section input::placeholder { color: #445; }
+    .search-section button {
+      padding: 14px 30px;
+      border: none;
+      border-radius: 10px;
+      background: #e94560;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    .search-section button:hover { opacity: 0.85; }
+    .search-section button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* 状态提示 */
+    .status-msg {
+      max-width: 700px;
+      margin: 0 auto;
+      text-align: center;
+      padding: 20px;
+      color: #666;
+      font-size: 14px;
+    }
+    .status-msg.error { color: #ef4444; }
+    .status-msg.loading { color: #8ecdf5; }
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 2px solid #0f3460;
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 结果区 */
+    .result-container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .result-card {
+      background: #1a1a2e;
+      border-radius: 16px;
+      border: 1px solid #0f3460;
+      padding: 24px;
+      margin-bottom: 16px;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 标题栏 */
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #0f3460;
+    }
+    .ratio-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ratio-number {
+      font-size: 28px;
+      font-weight: 800;
+    }
+    .ratio-tag {
+      font-size: 13px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      color: #fff;
+      font-weight: 700;
+    }
+    .product-code {
+      font-size: 12px;
+      color: #555;
+    }
+
+    /* 价格对比 */
+    .price-compare {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 18px;
+      align-items: center;
+    }
+    .price-box {
+      flex: 1;
+      background: #16213e;
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+    .price-box .label { font-size: 12px; color: #666; margin-bottom: 4px; }
+    .price-box .value { font-size: 22px; font-weight: 800; }
+    .price-arrow { font-size: 20px; color: #333; }
+
+    /* 概览标签 */
+    .overview-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 18px;
+    }
+    .tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+    .tag-blue { background: #0f3460; color: #8ecdf5; }
+    .tag-red { background: #3b1d1d; color: #e94560; }
+    .tag-green { background: #1a3b1d; color: #10b981; }
+    .tag-yellow { background: #3b2d1a; color: #f59e0b; }
+    .tag-purple { background: #2d1a3b; color: #a78bfa; }
+
+    /* 区块标题 */
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e94560;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #0f3460;
+    }
+    .section-title span { color: #666; font-weight: 400; font-size: 12px; }
+
+    /* 表格 */
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 18px;
+    }
+    .detail-table th {
+      padding: 6px 8px;
+      text-align: left;
+      color: #555;
+      font-weight: 400;
+      font-size: 11px;
+      border-bottom: 1px solid #1a1a3a;
+    }
+    .detail-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+
+    /* 满命溢价 */
+    .c6-bonus {
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: rgba(233,69,96,0.1);
+      border-radius: 8px;
+      border-left: 3px solid #e94560;
+    }
+    .c6-bonus .title { font-size: 13px; color: #e94560; font-weight: 600; }
+    .c6-bonus .desc { font-size: 12px; color: #888; margin-top: 4px; }
+
+    /* 黄数系数 */
+    .yellow-coef {
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: rgba(245,158,11,0.1);
+      border-radius: 8px;
+      border-left: 3px solid #f59e0b;
+    }
+    .yellow-coef .title { font-size: 13px; color: #f59e0b; font-weight: 600; }
+    .yellow-coef .desc { font-size: 12px; color: #888; margin-top: 4px; }
+
+    /* 链接按钮 */
+    .view-link {
+      display: block;
+      text-align: center;
+      padding: 10px 24px;
+      border-radius: 8px;
+      background: #e94560;
+      color: #fff;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    .view-link:hover { opacity: 0.85; }
+
+    /* 描述文本 */
+    .desc-text {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #888;
+      line-height: 1.6;
+      max-height: 150px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* 历史搜索 */
+    .history-section {
+      max-width: 700px;
+      margin: 0 auto 24px;
+    }
+    .history-title {
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+    .history-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .history-item {
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      background: #16213e;
+      color: #8ecdf5;
+      cursor: pointer;
+      border: 1px solid #0f3460;
+      transition: all 0.2s;
+    }
+    .history-item:hover {
+      border-color: #e94560;
+      color: #e94560;
+    }
+
+    @media (max-width: 600px) {
+      .price-compare { flex-direction: column; }
+      .price-arrow { transform: rotate(90deg); }
+      .search-section { flex-direction: column; }
+    }
+
+    /* 模式切换 */
+    .mode-tabs {
+      max-width: 700px;
+      margin: 0 auto 20px;
+      display: flex;
+      gap: 8px;
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 10px 16px;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      background: #16213e;
+      color: #666;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .mode-tab.active {
+      background: #e94560;
+      color: #fff;
+      border-color: #e94560;
+    }
+    .mode-tab:hover:not(.active) {
+      border-color: #e94560;
+      color: #e94560;
+    }
+
+    /* 手动描述模式 */
+    .manual-section {
+      max-width: 700px;
+      margin: 0 auto 30px;
+    }
+    .manual-section textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 14px 18px;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 13px;
+      line-height: 1.6;
+      outline: none;
+      resize: vertical;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    .manual-section textarea:focus { border-color: #e94560; }
+    .manual-price-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .manual-price-row input {
+      flex: 1;
+      padding: 12px 18px;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 14px;
+      outline: none;
+    }
+    .manual-price-row input:focus { border-color: #e94560; }
+    .manual-price-row button {
+      padding: 12px 30px;
+      border: none;
+      border-radius: 10px;
+      background: #e94560;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    .manual-price-row button:hover { opacity: 0.85; }
+    .manual-price-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* 错误提示带建议 */
+    .error-suggestion {
+      max-width: 700px;
+      margin: 16px auto 0;
+      padding: 14px 18px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 10px;
+      font-size: 13px;
+      color: #ef4444;
+      text-align: center;
+    }
+    .error-suggestion button {
+      margin-top: 8px;
+      padding: 6px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #e94560;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* 配置导入区 */
+    .config-section {
+      max-width: 700px;
+      margin: 0 auto 20px;
+    }
+    .config-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: border-color 0.2s;
+    }
+    .config-header:hover { border-color: #e94560; }
+    .config-status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #666;
+      transition: background 0.2s;
+    }
+    .config-status-dot.active { background: #10b981; }
+    .config-toggle {
+      margin-left: auto;
+      color: #666;
+      font-size: 12px;
+    }
+    .config-panel {
+      margin-top: 8px;
+      padding: 16px;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      animation: fadeIn 0.2s ease;
+    }
+    .config-instructions {
+      font-size: 12px;
+      color: #888;
+      line-height: 1.8;
+      margin-bottom: 12px;
+    }
+    .config-instructions p { margin-bottom: 4px; }
+    .config-instructions strong { color: #e0e0e0; }
+    .config-instructions code {
+      padding: 2px 6px;
+      background: #0f0f1e;
+      border-radius: 4px;
+      color: #8ecdf5;
+      font-size: 11px;
+    }
+    .config-cmd {
+      padding: 8px 12px;
+      background: #0f0f1e;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      color: #10b981;
+      font-size: 12px;
+      margin: 6px 0;
+      cursor: pointer;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .config-cmd:hover { border-color: #e94560; }
+    .config-panel textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 10px 14px;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      background: #0f0f1e;
+      color: #e0e0e0;
+      font-size: 12px;
+      line-height: 1.5;
+      outline: none;
+      resize: vertical;
+      font-family: 'SF Mono', 'Menlo', monospace;
+    }
+    .config-panel textarea:focus { border-color: #e94560; }
+    .config-btns {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .config-btns button {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .config-btns button:hover { opacity: 0.85; }
+    #importConfigBtn { background: #e94560; color: #fff; }
+    .config-result {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .config-result.success { color: #10b981; }
+    .config-result.error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>鸣潮账号估价助手</h1>
+    <p>输入螃蟹网商品编号，或粘贴商品描述进行估价</p>
+  </div>
+
+  <!-- 配置导入区 -->
+  <div class="config-section" id="configSection">
+    <div class="config-header" onclick="toggleConfigPanel()">
+      <span class="config-status-dot" id="configDot"></span>
+      <span id="configLabel">使用默认参数</span>
+      <span class="config-toggle" id="configToggle">展开</span>
+    </div>
+    <div class="config-panel" id="configPanel" style="display:none;">
+      <div class="config-instructions">
+        <p><strong>如何从油猴脚本导入你的配置？</strong></p>
+        <p>1. 在安装了油猴脚本的浏览器中打开螃蟹网页面：<code>https://www.pxb7.com/buy/10302/1</code></p>
+        <p>2. 按 <code>F12</code> 打开开发者工具，切换到 <code>Console</code>（控制台）</p>
+        <p>3. 粘贴以下命令并回车：</p>
+        <pre class="config-cmd">copy(localStorage.getItem('pxb_value_finder_config_v3'))</pre>
+        <p>4. 配置已复制到剪贴板，粘贴到下方文本框中，点击"导入配置"</p>
+      </div>
+      <textarea id="configInput" placeholder='粘贴从油猴脚本导出的配置 JSON...'></textarea>
+      <div class="config-btns">
+        <button id="importConfigBtn" onclick="importConfig()">导入配置</button>
+        <button id="resetConfigBtn" onclick="resetConfig()" style="background:#333;">恢复默认</button>
+      </div>
+      <div id="configResult" class="config-result"></div>
+    </div>
+  </div>
+
+  <!-- 模式切换 -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabOnline" onclick="switchMode('online')">按编号查询</button>
+    <button class="mode-tab" id="tabManual" onclick="switchMode('manual')">粘贴描述估价</button>
+  </div>
+
+  <!-- 在线查询模式 -->
+  <div class="search-section" id="onlineSection">
+    <input type="text" id="productId" placeholder="输入商品编号，如 MEBNB9606" onkeydown="if(event.key==='Enter')doSearch()">
+    <button id="searchBtn" onclick="doSearch()">估价</button>
+  </div>
+
+  <!-- 手动描述模式 -->
+  <div class="manual-section" id="manualSection" style="display:none;">
+    <textarea id="manualDesc" placeholder="粘贴商品描述文本，如：&#10;【MEBNB9606】80级，55黄，星声：1998，余波珊瑚：419，21个五星角色：..."></textarea>
+    <div class="manual-price-row">
+      <input type="number" id="manualPrice" placeholder="标价（元，选填）">
+      <button id="manualBtn" onclick="doManualSearch()">估价</button>
+    </div>
+  </div>
+
+  <div class="history-section" id="historySection" style="display:none;">
+    <div class="history-title">最近查询</div>
+    <div class="history-items" id="historyItems"></div>
+  </div>
+
+  <div class="status-msg" id="statusMsg">输入商品编号开始估价</div>
+
+  <div class="result-container" id="resultContainer"></div>
+
+  <script>
+    const thresholds = { great: 100, good: 30 };
+    let currentMode = 'online';
+
+    // === 配置导入功能 ===
+    function toggleConfigPanel() {
+      const panel = document.getElementById('configPanel');
+      const toggle = document.getElementById('configToggle');
+      if (panel.style.display === 'none') {
+        panel.style.display = '';
+        toggle.textContent = '收起';
+      } else {
+        panel.style.display = 'none';
+        toggle.textContent = '展开';
+      }
+    }
+
+    async function importConfig() {
+      const input = document.getElementById('configInput').value.trim();
+      const result = document.getElementById('configResult');
+      if (!input) {
+        result.className = 'config-result error';
+        result.textContent = '请先粘贴配置 JSON';
+        return;
+      }
+      try {
+        const resp = await fetch('/api/import-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config: input }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          result.className = 'config-result success';
+          result.innerHTML = data.message + '<br>' + Object.values(data.details).join('<br>');
+          document.getElementById('configDot').classList.add('active');
+          document.getElementById('configLabel').textContent = '已导入自定义参数';
+        } else {
+          result.className = 'config-result error';
+          result.textContent = data.error || '导入失败';
+        }
+      } catch (err) {
+        result.className = 'config-result error';
+        result.textContent = '网络错误: ' + err.message;
+      }
+    }
+
+    async function resetConfig() {
+      try {
+        const resp = await fetch('/api/reset-config', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+          document.getElementById('configResult').className = 'config-result success';
+          document.getElementById('configResult').textContent = data.message;
+          document.getElementById('configDot').classList.remove('active');
+          document.getElementById('configLabel').textContent = '使用默认参数';
+          document.getElementById('configInput').value = '';
+        }
+      } catch (err) {
+        document.getElementById('configResult').className = 'config-result error';
+        document.getElementById('configResult').textContent = '错误: ' + err.message;
+      }
+    }
+
+    // 页面加载时检查配置状态
+    async function checkConfigStatus() {
+      try {
+        const resp = await fetch('/api/config-status');
+        const data = await resp.json();
+        if (data.success && data.hasCustomConfig) {
+          document.getElementById('configDot').classList.add('active');
+          document.getElementById('configLabel').textContent = '已导入自定义参数';
+        }
+      } catch {}
+    }
+
+    function switchMode(mode) {
+      currentMode = mode;
+      document.getElementById('tabOnline').classList.toggle('active', mode === 'online');
+      document.getElementById('tabManual').classList.toggle('active', mode === 'manual');
+      document.getElementById('onlineSection').style.display = mode === 'online' ? '' : 'none';
+      document.getElementById('manualSection').style.display = mode === 'manual' ? '' : 'none';
+      document.getElementById('statusMsg').style.display = '';
+      document.getElementById('statusMsg').textContent = mode === 'online' ? '输入商品编号开始估价' : '粘贴商品描述文本进行估价';
+      document.getElementById('statusMsg').className = 'status-msg';
+    }
+
+    function getRatioColor(ratio) {
+      if (ratio >= thresholds.great) return '#10b981';
+      if (ratio >= thresholds.good) return '#f59e0b';
+      return '#6b7280';
+    }
+    function getRatioLabel(ratio) {
+      if (ratio >= thresholds.great) return '捡漏';
+      if (ratio >= thresholds.good) return '可入';
+      return '普通';
+    }
+
+    // 历史搜索
+    function loadHistory() {
+      try {
+        return JSON.parse(localStorage.getItem('ww_valuator_history') || '[]');
+      } catch { return []; }
+    }
+    function saveHistory(history) {
+      localStorage.setItem('ww_valuator_history', JSON.stringify(history));
+    }
+    function addToHistory(productId, ratio) {
+      let history = loadHistory().filter(h => h.productId !== productId);
+      history.unshift({ productId, ratio, time: Date.now() });
+      history = history.slice(0, 8);
+      saveHistory(history);
+      renderHistory();
+    }
+    function renderHistory() {
+      const history = loadHistory();
+      const section = document.getElementById('historySection');
+      const items = document.getElementById('historyItems');
+      if (history.length === 0) { section.style.display = 'none'; return; }
+      section.style.display = 'block';
+      items.innerHTML = history.map(h => {
+        const color = getRatioColor(h.ratio);
+        return `<span class="history-item" style="color:${color}" onclick="document.getElementById('productId').value='${h.productId}';doSearch()">${h.productId} (${h.ratio >= 0 ? '+' : ''}${h.ratio}%)</span>`;
+      }).join('');
+    }
+
+    async function doSearch() {
+      const productId = document.getElementById('productId').value.trim();
+      if (!productId) return;
+
+      const btn = document.getElementById('searchBtn');
+      const status = document.getElementById('statusMsg');
+      const container = document.getElementById('resultContainer');
+
+      btn.disabled = true;
+      btn.textContent = '查询中...';
+      status.className = 'status-msg loading';
+      status.innerHTML = '<span class="spinner"></span>正在获取商品信息...';
+      status.style.display = '';
+      container.innerHTML = '';
+
+      try {
+        const resp = await fetch(`/api/valuate?productId=${encodeURIComponent(productId)}`);
+        const result = await resp.json();
+
+        if (!resp.ok || !result.success) {
+          status.className = 'status-msg error';
+          // 商品已下架等错误，提示切换到手动模式
+          if (result.errCode === 'pro00601' || (result.error && result.error.includes('下架'))) {
+            status.innerHTML = `${result.error}<br><button onclick="switchToManualWithDesc()">切换到粘贴描述模式估价</button>`;
+            status.className = 'error-suggestion';
+          } else {
+            status.textContent = result.error || '查询失败，请重试';
+          }
+          btn.disabled = false;
+          btn.textContent = '估价';
+          return;
+        }
+
+        status.style.display = 'none';
+        renderResult(result.data);
+        addToHistory(productId, result.data.ratio);
+      } catch (err) {
+        status.className = 'status-msg error';
+        status.textContent = '网络错误: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '估价';
+      }
+    }
+
+    async function doManualSearch() {
+      const desc = document.getElementById('manualDesc').value.trim();
+      if (!desc) return;
+
+      const price = document.getElementById('manualPrice').value.trim();
+      const btn = document.getElementById('manualBtn');
+      const status = document.getElementById('statusMsg');
+      const container = document.getElementById('resultContainer');
+
+      btn.disabled = true;
+      btn.textContent = '估价中...';
+      status.className = 'status-msg loading';
+      status.innerHTML = '<span class="spinner"></span>正在计算估值...';
+      status.style.display = '';
+      container.innerHTML = '';
+
+      try {
+        const resp = await fetch('/api/valuate-manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: desc, price: price || 0 }),
+        });
+        const result = await resp.json();
+
+        if (!resp.ok || !result.success) {
+          status.className = 'status-msg error';
+          status.textContent = result.error || '估价失败，请重试';
+          btn.disabled = false;
+          btn.textContent = '估价';
+          return;
+        }
+
+        status.style.display = 'none';
+        renderResult(result.data);
+      } catch (err) {
+        status.className = 'status-msg error';
+        status.textContent = '网络错误: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '估价';
+      }
+    }
+
+    function switchToManualWithDesc() {
+      // 尝试从商品编号输入框提取描述（用户可能已粘贴了完整描述）
+      const productIdVal = document.getElementById('productId').value.trim();
+      switchMode('manual');
+      // 如果输入框的内容包含商品描述特征（含有"级"或"黄"），自动填入
+      if (productIdVal.length > 20 && (productIdVal.includes('级') || productIdVal.includes('黄'))) {
+        document.getElementById('manualDesc').value = productIdVal;
+      }
+      document.getElementById('manualDesc').focus();
+    }
+
+    function renderResult(data) {
+      const { info, price, estValue, ratio, productUniqueNo, productId } = data;
+      const color = getRatioColor(ratio);
+      const diff = estValue - price;
+      const container = document.getElementById('resultContainer');
+      const codeDisplay = productUniqueNo || (productId ? '编号: ' + productId : '手动估价');
+
+      // 角色明细行
+      let charRows = '';
+      let charTotal = 0;
+      if (info.charBreakdown && info.charBreakdown.length > 0) {
+        charRows = info.charBreakdown.map(cb => {
+          charTotal += cb.value;
+          const constText = cb.const > 0
+            ? `<span style="color:#f59e0b">${cb.const === 6 ? '满命' : cb.const + '命'}</span>`
+            : '<span style="color:#555">0命</span>';
+          const tierTag = cb.isHot
+            ? `<span style="color:#e94560;font-size:10px;font-weight:600">[${cb.tier}]</span>`
+            : `<span style="color:#666;font-size:10px">[${cb.tier}]</span>`;
+          const sigTag = cb.hasSig
+            ? ` <span style="color:#10b981;font-weight:600">[专武]</span>`
+            : (cb.isHot ? ` <span style="color:#ef4444;font-weight:600">[无专武]</span>` : '');
+          const premTag = cb.premium > 0 ? ` <span style="color:#10b981;font-weight:600">[溢+${cb.premium}]</span>` : '';
+          return `<tr>
+            <td style="color:${cb.isHot ? '#ddd' : '#888'};font-weight:${cb.isHot ? '600' : '400'};">${cb.name} ${tierTag}</td>
+            <td style="text-align:center;font-size:12px">${constText}${sigTag}${premTag}</td>
+            <td style="text-align:right;color:${cb.isHot ? color : '#888'};font-weight:${cb.isHot ? '600' : '400'}">${cb.value}元</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // 资源明细 — 使用后端返回的实际权重值
+      const w = info.activeWeights || { outfit: 30, motoAccessory: 20, motoFrame: 40, paint: 15 };
+      const outfitVal = info.outfits.length * w.outfit;
+      const motoAccVal = info.motoAccessories.length * w.motoAccessory;
+      const motoFrameVal = info.motoFrames.length * w.motoFrame;
+      const paintVal = info.paints.length * w.paint;
+      const resItems = [
+        { label: '抽数(星声/160+月相/160+珊瑚/8+铸潮波纹)', val: info.pullInfo ? info.pullInfo.pulls : 0, unit: '抽', weight: info.pullInfo ? info.pullInfo.perPull : 0, total: info.pullInfo ? info.pullInfo.total : 0, tierLabel: info.pullInfo ? info.pullInfo.tierLabel : '' },
+        { label: '服饰/皮肤', val: info.outfits.length, unit: '个', weight: w.outfit, total: outfitVal },
+        { label: '摩托饰品', val: info.motoAccessories.length, unit: '个', weight: w.motoAccessory, total: motoAccVal },
+        { label: '车架模组', val: info.motoFrames.length, unit: '个', weight: w.motoFrame, total: motoFrameVal },
+        { label: '涂装', val: info.paints.length, unit: '个', weight: w.paint, total: paintVal },
+      ];
+      if (info.teamBonus && info.teamBonus.value > 0) {
+        resItems.push({ label: `配队溢价(${info.teamBonus.notes.join('，')})`, val: info.matchedTeams.length, unit: '队', weight: '-', total: info.teamBonus.value });
+      }
+      let resRows = '';
+      let resTotal = 0;
+      for (const r of resItems) {
+        if (r.val <= 0) continue;
+        resTotal += r.total;
+        const weightStr = r.weight === '-' ? '-' : (r.weight < 1 ? r.weight : r.weight.toString());
+        const tierTag = r.tierLabel ? `<span style="color:#8ecdf5;font-size:10px;margin-left:4px">[${r.tierLabel}]</span>` : '';
+        resRows += `<tr>
+          <td style="color:#aaa;font-size:12px;">${r.label}${tierTag}</td>
+          <td style="text-align:right;color:#ccc;font-size:12px;white-space:nowrap;">${r.val}${r.unit}</td>
+          <td style="text-align:right;color:#888;font-size:11px;white-space:nowrap;">x${weightStr}</td>
+          <td style="text-align:right;color:#ddd;font-size:12px;font-weight:600;white-space:nowrap;">${Math.round(r.total)}元</td>
+        </tr>`;
+      }
+
+      // 武器明细
+      let weaponRows = '';
+      if (info.weaponDetails && info.weaponDetails.length > 0) {
+        weaponRows = info.weaponDetails.map(wd => {
+          const sigChar = info.charDetails.find(cd => cd.name && CHAR_SIG_MAP[cd.name] === wd.name && info.hasSignatureWeapons.includes(cd.name));
+          const isSig = !!sigChar;
+          return `<tr>
+            <td style="color:${isSig ? '#10b981' : '#555'};font-weight:${isSig ? '600' : '400'};">${wd.name}${isSig ? ' ★' : ''}</td>
+            <td style="text-align:center;color:${wd.refine > 1 ? '#f59e0b' : '#444'};">精${wd.refine}</td>
+            <td style="text-align:right;color:${isSig ? '#10b981' : '#555'};font-size:11px;">${isSig ? '专武' : '非专武'}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // 外观/摩托
+      let cosmeticRows = '';
+      if (info.outfits.length > 0 || info.motoAccessories.length > 0 || info.motoFrames.length > 0 || info.paints.length > 0) {
+        if (info.outfits.length > 0) cosmeticRows += `<tr><td style="color:#f59e0b;">服饰</td><td style="color:#aaa;">${info.outfits.join(', ')}</td><td style="text-align:right;color:#ddd;">${info.outfits.length}x${w.outfit}=${Math.round(outfitVal)}元</td></tr>`;
+        if (info.motoFrames.length > 0) cosmeticRows += `<tr><td style="color:#a78bfa;">车架模组</td><td style="color:#aaa;">${info.motoFrames.join(', ')}</td><td style="text-align:right;color:#ddd;">${info.motoFrames.length}x${w.motoFrame}=${Math.round(motoFrameVal)}元</td></tr>`;
+        if (info.paints.length > 0) cosmeticRows += `<tr><td style="color:#a78bfa;">涂装</td><td style="color:#aaa;">${info.paints.join(', ')}</td><td style="text-align:right;color:#ddd;">${info.paints.length}x${w.paint}=${Math.round(paintVal)}元</td></tr>`;
+        if (info.motoAccessories.length > 0) cosmeticRows += `<tr><td style="color:#a78bfa;">摩托饰品</td><td style="color:#aaa;">${info.motoAccessories.join(', ')}</td><td style="text-align:right;color:#ddd;">${info.motoAccessories.length}x${w.motoAccessory}=${Math.round(motoAccVal)}元</td></tr>`;
+      }
+
+      const buyUrl = `https://www.pxb7.com/buy/10302/1`;
+
+      let html = `<div class="result-card">
+        <div class="result-header">
+          <div class="ratio-badge">
+            <span class="ratio-number" style="color:${color}">${ratio >= 0 ? '+' : ''}${ratio}%</span>
+            <span class="ratio-tag" style="background:${color}">${getRatioLabel(ratio)}</span>
+          </div>
+          <div class="product-code">${codeDisplay}</div>
+        </div>
+
+        <div class="price-compare">
+          <div class="price-box">
+            <div class="label">标价</div>
+            <div class="value" style="color:#e94560">¥${price}</div>
+          </div>
+          <div class="price-arrow">→</div>
+          <div class="price-box">
+            <div class="label">估值</div>
+            <div class="value" style="color:${color}">¥${estValue}</div>
+          </div>
+          <div class="price-arrow">=</div>
+          <div class="price-box">
+            <div class="label">差价</div>
+            <div class="value" style="color:${diff >= 0 ? '#10b981' : '#ef4444'}">${diff >= 0 ? '+' : ''}¥${diff}</div>
+          </div>
+        </div>
+
+        <div class="overview-tags">
+          <span class="tag tag-blue">Lv.${info.level}</span>
+          <span class="tag tag-blue">${info.pullInfo ? info.pullInfo.pulls : 0}抽</span>
+          <span class="tag tag-blue">${info.fiveStarChars}五星</span>
+          ${info.maxConstChars > 0 ? `<span class="tag tag-red">${info.maxConstChars}满命</span>` : ''}
+          ${info.fourStarChars > 0 ? `<span class="tag tag-blue">${info.fourStarChars}四星</span>` : ''}
+          ${info.weaponDetails.length > 0 ? `<span class="tag tag-blue">${info.weaponDetails.length}五星武器</span>` : ''}
+          ${info.hasSignatureWeapons.length > 0 ? `<span class="tag tag-green">${info.hasSignatureWeapons.length}专武</span>` : ''}
+          ${info.outfits.length > 0 ? `<span class="tag tag-yellow">${info.outfits.length}服饰</span>` : ''}
+          ${info.motoAccessories.length > 0 ? `<span class="tag tag-purple">${info.motoAccessories.length}摩托饰品</span>` : ''}
+          ${info.motoFrames.length > 0 ? `<span class="tag tag-purple">${info.motoFrames.length}车架</span>` : ''}
+          ${info.paints.length > 0 ? `<span class="tag tag-purple">${info.paints.length}涂装</span>` : ''}
+          ${info.matchedTeams && info.matchedTeams.length > 0 ? `<span class="tag tag-yellow">${info.matchedTeams.length}配队</span>` : ''}
+        </div>
+      </div>`;
+
+      // 角色明细
+      if (info.charDetails.length > 0) {
+        html += `<div class="result-card">
+          <div class="section-title">⭐ 五星角色明细 <span>(${info.charDetails.length}个，${info.hasSignatureWeapons.length}专武，合计 ${Math.round(charTotal)}元)</span></div>
+          <table class="detail-table">
+            <thead><tr><th>角色</th><th style="text-align:center;">命座</th><th style="text-align:right;">价值</th></tr></thead>
+            <tbody>${charRows}</tbody>
+          </table>
+        </div>`;
+      }
+
+      // 满命溢价
+      if (info.c6Bonus && info.c6Bonus.value > 0) {
+        html += `<div class="result-card">
+          <div class="c6-bonus">
+            <div class="title">${info.c6Bonus.notes.join('，')}</div>
+            <div class="desc">满命角色难度递增，额外加成 ${info.c6Bonus.value}元</div>
+          </div>
+        </div>`;
+      }
+
+      // 资源明细
+      if (resRows) {
+        html += `<div class="result-card">
+          <div class="section-title">💎 资源明细 <span>(合计 ${Math.round(resTotal)}元)</span></div>
+          <table class="detail-table">
+            <thead><tr><th>项目</th><th style="text-align:right;">数量</th><th style="text-align:right;">系数</th><th style="text-align:right;">价值</th></tr></thead>
+            <tbody>${resRows}</tbody>
+          </table>
+        </div>`;
+      }
+
+      // 武器明细
+      if (info.weaponDetails.length > 0) {
+        html += `<div class="result-card">
+          <div class="section-title">⚔️ 五星武器明细 <span>(${info.weaponDetails.length}把，${info.hasSignatureWeapons.length}专武)</span></div>
+          <table class="detail-table">
+            <thead><tr><th>武器</th><th style="text-align:center;">精炼</th><th style="text-align:right;">类型</th></tr></thead>
+            <tbody>${weaponRows}</tbody>
+          </table>
+        </div>`;
+      }
+
+      // 外观/摩托
+      if (cosmeticRows) {
+        html += `<div class="result-card">
+          <div class="section-title">🎨 外观/摩托 <span>(合计 ${Math.round(outfitVal + motoAccVal + motoFrameVal + paintVal)}元)</span></div>
+          <table class="detail-table">
+            <tbody>${cosmeticRows}</tbody>
+          </table>
+        </div>`;
+      }
+
+      // 黄数系数
+      if (info.yellowInfo && info.yellowInfo.yellowCount > 0) {
+        html += `<div class="result-card">
+          <div class="yellow-coef">
+            <div class="title">🌟 黄数系数：${info.yellowInfo.yellowCount}黄 [${info.yellowInfo.tierLabel}] × ${info.yellowInfo.coefficient}</div>
+            <div class="desc">黄数 = ${info.yellowInfo.yellowCount}，最终估值乘以此系数</div>
+          </div>
+        </div>`;
+      }
+
+      // 原始描述
+      html += `<div class="result-card">
+        <div class="section-title">📝 商品描述原文</div>
+        <div class="desc-text">${data.description || '无描述'}</div>
+      </div>`;
+
+      // 链接
+      html += `<a class="view-link" href="https://www.pxb7.com/buy/10302/1" target="_blank">🔗 前往螃蟹网查看</a>`;
+
+      container.innerHTML = html;
+    }
+
+    // 专武映射表（前端用于武器明细显示）
+    const CHAR_SIG_MAP = {
+      '忌炎': '苍鳞千嶂', '吟霖': '掣傀之手', '卡卡罗': '无', '安可': '无',
+      '维里奈': '无', '凌阳': '无', '今汐': '时和岁稔', '长离': '赫奕流明',
+      '相里要': '诸方玄枢', '椿': '裁春', '珂莱塔': '死与舞', '折枝': '琼枝冰绡',
+      '守岸人': '星序协响', '洛瑟菈': '存帧', '莫宁': '宙算仪轨', '千咲': '昙切',
+      '爱弥斯': '永远的启明星', '弗洛洛': '幽冥的忘忧章', '卡提希娅': '不屈命定之冠',
+      '尤诺': '万物持存的注释', '夏空': '林间的咏叹调', '赞妮': '焰光裁定',
+      '坎特蕾拉': '海的呢喃', '仇远': '裁竹', '布兰特': '不灭航路', '露帕': '焰痕',
+      '奥古斯塔': '驭冕铸雷之权', '嘉贝莉娜': '光影双生', '西格莉卡': '昭日译注',
+      '灯灯': '存帧', '达妮娅': '赝作的矮星', '菲比': '和光回唱', '绯雪': '灼霜',
+      '琳奈': '溢彩荧辉', '丽贝卡': '碎骨', '陆赫斯': '白昼之脊',
+      '秧秧玄翎': '白昼之脊', '秧秧': '白昼之脊', '穗穗': '栖霞饮露'
+    };
+
+    // 初始化
+    renderHistory();
+    checkConfigStatus();
+  </script>
+</body>
+</html>

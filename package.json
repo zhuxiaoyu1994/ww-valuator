@@ -1,0 +1,13 @@
+{
+  "name": "wuthering-waves-valuator",
+  "version": "1.0.0",
+  "description": "鸣潮账号估价助手 - 输入螃蟹网商品编号即可查看估值",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
