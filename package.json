@@ -1,13 +1,16 @@
 {
   "name": "wuthering-waves-valuator",
   "version": "1.0.0",
-  "description": "鸣潮账号估价助手 - 输入螃蟹网商品编号即可查看估值",
+  "description": "鸣潮账号估价助手 - 7x24监控螃蟹网鸣潮账号，自动发现高性价比账号并推送通知",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^25.3.0",
+    "puppeteer-core": "^25.3.0"
   }
 }
