@@ -88,7 +88,7 @@ app.post('/api/lookup', async (req, res) => {
     }
 
     const showTitle = productData.showTitle || productData.title || '';
-    const priceInCents = (productData.price || 0) * 100; // 搜索API返回的是元，需要转为分
+    const priceInCents = productData.price || 0; // API返回的price已经是分
 
     if (!showTitle) {
       return res.json({ success: false, error: '无法获取商品描述信息' });
