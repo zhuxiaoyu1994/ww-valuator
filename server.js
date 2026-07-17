@@ -736,8 +736,8 @@ function getPageHTML() {
       let charHtml = '<div style="color:#888;font-size:12px;margin-bottom:4px;">角色明细</div><div class="char-tags">';
       if (det.characters && det.characters.length > 0) {
         det.characters.forEach(c => {
-          const constStr = c.constellation === 6 ? '满命' : c.constellation + '命';
-          const sigStr = c.hasSignatureWeapon ? ' <span class="sig">+专武</span>' : '';
+          const constStr = c.const === 6 ? '满命' : c.const + '命';
+          const sigStr = c.hasSig ? ' <span class="sig">+专武</span>' : '';
           charHtml += '<span class="char-tag ' + c.tier + '">' + constStr + ' ' + c.name + sigStr + ' (' + c.value + '元)</span>';
         });
       } else {
