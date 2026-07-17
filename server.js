@@ -606,7 +606,7 @@ function getPageHTML() {
           <img src="/public/qq-group.jpg" alt="QQ群二维码" />
         </div>
         <div class="info">
-          <h3>鸣潮账号估价交流群</h3>
+          <h3>咕嘎鸣潮估价群</h3>
           <div class="group-id">群号：<span class="num">1064412729</span></div>
           <div class="desc">扫码加入QQ群，交流鸣潮账号估价心得，获取最新行情动态</div>
         </div>
