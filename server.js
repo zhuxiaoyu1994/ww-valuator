@@ -1,19 +1,15 @@
 /**
- * server.js - 鸣潮估价助手 监控服务器
- * Express 服务器，提供 Web 仪表板和 API 接口
- * 启动后定时执行监控任务，自动发现高性价比账号
+ * server.js - 鸣潮估价助手
+ * 轻量估价工具，支持按编号查询和粘贴描述估价
  */
 
 'use strict';
 
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
+const https = require('https');
 
-const monitor = require('./monitor');
-const notify = require('./notify');
 const valueEngine = require('./value-engine');
-const browserScan = require('./browser-scan');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,148 +19,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
-// 初始化配置
-const config = monitor.loadConfig();
-
-// ============================================================
-// 定时监控
-// ============================================================
-let monitorTimer = null;
-
-function startMonitorTimer() {
-  if (monitorTimer) {
-    clearInterval(monitorTimer);
-  }
-  const interval = config.scanInterval || 300000; // 默认5分钟
-  console.log(`[Server] Monitor timer started, interval: ${interval / 1000}s`);
-  monitorTimer = setInterval(async () => {
-    console.log('[Server] Timer triggered, starting scan...');
-    await monitor.scanAccounts();
-  }, interval);
-}
-
-function restartMonitorTimer() {
-  startMonitorTimer();
-}
-
 // ============================================================
 // API 路由
 // ============================================================
 
 /**
- * 状态接口
- */
-app.get('/api/status', (req, res) => {
-  const status = monitor.getStatus();
-  res.json({
-    success: true,
-    data: {
-      ...status,
-      serverTime: new Date().toISOString(),
-      uptime: process.uptime(),
-    },
-  });
-});
-
-/**
- * 配置接口 - GET
- */
-app.get('/api/config', (req, res) => {
-  const currentConfig = monitor.getConfig();
-  // 返回配置，但隐藏敏感信息（只显示是否已设置）
-  res.json({
-    success: true,
-    data: {
-      ...currentConfig,
-      envConfigured: {
-        serverchan: !!process.env.SERVERCHAN_KEY,
-        bark: !!process.env.BARK_KEY,
-        dingtalk: !!process.env.DINGTALK_WEBHOOK,
-      },
-    },
-  });
-});
-
-/**
- * 配置接口 - POST（在线修改配置）
- */
-app.post('/api/config', (req, res) => {
-  const newConfig = req.body;
-
-  // 只允许修改这些字段
-  const allowedFields = ['gameId', 'scanPages', 'pageSize', 'threshold', 'scanInterval', 'maxConcurrent', 'batchDelay'];
-  const updates = {};
-  for (const field of allowedFields) {
-    if (newConfig[field] !== undefined) {
-      updates[field] = newConfig[field];
-    }
-  }
-
-  // 类型转换
-  if (updates.scanPages !== undefined) updates.scanPages = parseInt(updates.scanPages, 10);
-  if (updates.pageSize !== undefined) updates.pageSize = parseInt(updates.pageSize, 10);
-  if (updates.threshold !== undefined) updates.threshold = parseFloat(updates.threshold);
-  if (updates.scanInterval !== undefined) updates.scanInterval = parseInt(updates.scanInterval, 10);
-  if (updates.maxConcurrent !== undefined) updates.maxConcurrent = parseInt(updates.maxConcurrent, 10);
-  if (updates.batchDelay !== undefined) updates.batchDelay = parseInt(updates.batchDelay, 10);
-
-  const savedConfig = monitor.saveConfig(updates);
-
-  // 如果扫描间隔改变了，重启定时器
-  if (updates.scanInterval !== undefined) {
-    restartMonitorTimer();
-  }
-
-  res.json({
-    success: true,
-    data: savedConfig,
-    message: 'Configuration updated successfully',
-  });
-});
-
-/**
- * 手动触发扫描
- */
-app.post('/api/scan', async (req, res) => {
-  const result = monitor.triggerScan();
-  res.json(result);
-});
-
-/**
- * 获取高性价比账号列表
- */
-app.get('/api/hot-accounts', (req, res) => {
-  const limit = parseInt(req.query.limit, 10) || 50;
-  const accounts = monitor.getHotAccounts(limit);
-  res.json({
-    success: true,
-    data: accounts,
-    count: accounts.length,
-  });
-});
-
-/**
- * 获取通知记录
- */
-app.get('/api/notifications', (req, res) => {
-  const logs = notify.getNotificationLog();
-  res.json({
-    success: true,
-    data: logs,
-    count: logs.length,
-  });
-});
-
-/**
- * 重置数据
- */
-app.post('/api/reset', (req, res) => {
-  const result = monitor.resetData();
-  res.json(result);
-});
-
-/**
- * 估值测试接口 - 输入文本返回估值
+ * 估值接口 - 输入文本返回估值
  */
 app.post('/api/evaluate', (req, res) => {
   const { showTitle, priceInCents } = req.body;
@@ -195,98 +55,120 @@ app.post('/api/evaluate', (req, res) => {
 });
 
 /**
- * 数据上报接口 - 接收油猴脚本从浏览器发送的账号数据
- * 油猴脚本在浏览器中通过 API 获取账号列表后，将数据上报到此接口
- * 服务器使用估值引擎计算性价比，发现高性价比账号时通知
+ * 按商品编号查询 - 从螃蟹网获取商品信息后估价
  */
-app.post('/api/ingest', async (req, res) => {
-  const { accounts, source } = req.body;
-  if (!accounts || !Array.isArray(accounts)) {
-    return res.status(400).json({ success: false, error: 'accounts array is required' });
+app.post('/api/lookup', async (req, res) => {
+  const { productId } = req.body;
+  if (!productId) {
+    return res.status(400).json({ success: false, error: 'productId is required' });
   }
 
-  const threshold = config.threshold || 30;
-  const seenAccounts = browserScan.loadSeenAccounts();
-  const seenSet = new Set(seenAccounts.map(a => a.productId));
-  const hotAccounts = browserScan.loadHotAccounts();
-
-  const results = {
-    totalReceived: accounts.length,
-    newAccounts: 0,
-    hotFound: 0,
-    hotAccounts: [],
-  };
-
-  for (const acc of accounts) {
-    if (!acc.productId || !acc.title) continue;
-    if (seenSet.has(String(acc.productId))) continue;
-
-    results.newAccounts++;
-    seenSet.add(String(acc.productId));
-
-    // 估值计算
-    const priceInCents = (acc.price || 0) * 100;
-    const evalResult = valueEngine.evaluateWithPrice(acc.title, priceInCents);
-
-    if (evalResult.costPerformance >= threshold && evalResult.details.finalValue > 0) {
-      results.hotFound++;
-      const hotAccount = {
-        productId: String(acc.productId),
-        title: acc.title,
-        price: acc.price || 0,
-        value: Math.round(evalResult.details.finalValue),
-        ratio: Math.round(evalResult.costPerformance * 100) / 100,
-        url: acc.url || `https://www.pxb7.com/buy/10302/detail?productId=${acc.productId}`,
-        foundAt: new Date().toISOString(),
-        source: source || 'userscript',
-      };
-      results.hotAccounts.push(hotAccount);
-      hotAccounts.unshift(hotAccount);
+  try {
+    const productData = await fetchProductDetail(productId);
+    if (!productData) {
+      return res.json({ success: false, error: '未找到该商品，请检查编号是否正确' });
     }
+
+    const showTitle = productData.showTitle || productData.title || '';
+    const priceInCents = productData.price || 0;
+
+    if (!showTitle) {
+      return res.json({ success: false, error: '无法获取商品描述信息' });
+    }
+
+    const result = valueEngine.evaluateWithPrice(showTitle, priceInCents);
+    res.json({
+      success: true,
+      data: {
+        productId: productId,
+        title: productData.gameName || showTitle.substring(0, 50),
+        showTitle: showTitle,
+        price: priceInCents / 100,
+        estimatedValue: result.details.finalValue,
+        costPerformance: result.costPerformance,
+        details: result.details,
+        info: {
+          starSounds: result.info.starSounds,
+          moonPhases: result.info.moonPhases,
+          coral: result.info.coral,
+          goldenRipples: result.info.goldenRipples,
+          tideRipples: result.info.tideRipples,
+          outfits: result.info.outfits,
+          motorcycles: result.info.motorcycles,
+          yellowCount: result.info.yellowCount,
+        },
+        shortDescription: valueEngine.generateShortDescription(result),
+        url: `https://www.pxb7.com/buy/10302/detail?productId=${productId}`,
+      },
+    });
+  } catch (err) {
+    console.error('[Lookup] Error:', err.message);
+    res.json({ success: false, error: '查询失败: ' + err.message });
   }
-
-  // 保存数据
-  const newSeen = accounts
-    .filter(a => a.productId)
-    .map(a => ({ productId: String(a.productId), seenAt: new Date().toISOString() }));
-  browserScan.saveSeenAccounts([...seenAccounts, ...newSeen].slice(-5000));
-  browserScan.saveHotAccounts(hotAccounts.slice(0, 500));
-
-  // 发送通知
-  if (results.hotAccounts.length > 0) {
-    const notifMsg = notify.formatNotification(results.hotAccounts);
-    notify.sendNotification(
-      `🎯 发现 ${results.hotAccounts.length} 个高性价比账号！`,
-      notifMsg
-    );
-    console.log(`[Ingest] 发现 ${results.hotAccounts.length} 个高性价比账号！`);
-  }
-
-  console.log(`[Ingest] 收到 ${accounts.length} 个账号，新 ${results.newAccounts} 个，高性价比 ${results.hotFound} 个`);
-
-  res.json({
-    success: true,
-    data: results,
-  });
 });
 
+/**
+ * 从螃蟹网 API 获取商品详情
+ */
+function fetchProductDetail(productId) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({ productId: String(productId) });
+    const options = {
+      hostname: 'api-pc.pxb7.com',
+      port: 443,
+      path: '/api/product/web/product/detailPost',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Origin': 'https://www.pxb7.com',
+        'Referer': 'https://www.pxb7.com/',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.code === 200 && json.data) {
+            resolve(json.data);
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          reject(new Error('解析商品数据失败'));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.setTimeout(10000, () => {
+      req.destroy(new Error('请求超时'));
+    });
+    req.write(postData);
+    req.end();
+  });
+}
+
 // ============================================================
-// Web 仪表板
+// Web 页面
 // ============================================================
 app.get('/', (req, res) => {
-  res.send(getDashboardHTML());
+  res.send(getPageHTML());
 });
 
-// ============================================================
-// 仪表板 HTML
-// ============================================================
-function getDashboardHTML() {
+function getPageHTML() {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>鸣潮估价助手 - 监控仪表板</title>
+  <title>鸣潮账号估价助手</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -296,722 +178,213 @@ function getDashboardHTML() {
       min-height: 100vh;
       padding: 20px;
     }
-    .container { max-width: 1200px; margin: 0 auto; }
+    .container { max-width: 800px; margin: 0 auto; }
 
     /* Header */
     .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      padding: 20px 24px;
-      background: linear-gradient(135deg, #12122a 0%, #1a1a3a 100%);
-      border-radius: 12px;
-      border: 1px solid #2a2a4a;
+      text-align: center;
+      margin-bottom: 32px;
+      padding: 32px 24px 24px;
     }
     .header h1 {
-      font-size: 24px;
+      font-size: 28px;
       color: #e94560;
+      margin-bottom: 8px;
+    }
+    .header .subtitle {
+      color: #888;
+      font-size: 14px;
+    }
+
+    /* Tabs */
+    .tabs {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      gap: 8px;
+      margin-bottom: 20px;
     }
-    .header h1 .icon { font-size: 28px; }
-    .header .version { color: #666; font-size: 12px; }
-
-    /* Status Bar */
-    .status-bar {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-    .stat-card {
-      background: #12122a;
+    .tab-btn {
+      flex: 1;
+      padding: 12px 16px;
       border: 1px solid #2a2a4a;
-      border-radius: 10px;
-      padding: 20px;
+      border-radius: 8px;
+      background: #12122a;
+      color: #888;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
       text-align: center;
-      transition: transform 0.2s, box-shadow 0.2s;
     }
-    .stat-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 20px rgba(233, 69, 96, 0.15);
+    .tab-btn.active {
+      background: #e94560;
+      color: #fff;
+      border-color: #e94560;
     }
-    .stat-card .label { color: #888; font-size: 13px; margin-bottom: 8px; }
-    .stat-card .value { font-size: 28px; font-weight: bold; }
-    .stat-card .value.green { color: #4ade80; }
-    .stat-card .value.red { color: #e94560; }
-    .stat-card .value.blue { color: #60a5fa; }
-    .stat-card .value.yellow { color: #fbbf24; }
-    .stat-card .sub { color: #666; font-size: 12px; margin-top: 4px; }
 
-    /* Panel */
-    .panel {
+    /* Input area */
+    .input-card {
       background: #12122a;
       border: 1px solid #2a2a4a;
       border-radius: 12px;
-      margin-bottom: 24px;
-      overflow: hidden;
+      padding: 24px;
+      margin-bottom: 20px;
     }
-    .panel-header {
-      padding: 16px 24px;
-      border-bottom: 1px solid #2a2a4a;
+    .input-row {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      gap: 12px;
+      align-items: stretch;
     }
-    .panel-header h2 {
-      font-size: 16px;
-      color: #e94560;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .panel-body { padding: 20px 24px; }
-
-    /* Buttons */
-    .btn {
-      background: #e94560;
-      color: white;
-      border: none;
-      padding: 8px 20px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-    .btn:hover { background: #d63d57; transform: translateY(-1px); }
-    .btn:active { transform: translateY(0); }
-    .btn.secondary { background: #2a2a4a; color: #aaa; }
-    .btn.secondary:hover { background: #3a3a5a; }
-    .btn.danger { background: #dc2626; }
-    .btn.danger:hover { background: #b91c1c; }
-    .btn.small { padding: 4px 12px; font-size: 12px; }
-
-    /* Config Form */
-    .config-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
-    }
-    .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-group label { color: #888; font-size: 13px; }
-    .form-group input, .form-group select {
-      background: #0a0a1a;
+    .input-row input,
+    .input-row textarea {
+      flex: 1;
+      padding: 12px 16px;
       border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      background: #0a0a1a;
       color: #e0e0e0;
-      padding: 10px 12px;
-      border-radius: 6px;
       font-size: 14px;
+      font-family: inherit;
       outline: none;
       transition: border-color 0.2s;
     }
-    .form-group input:focus { border-color: #e94560; }
-    .form-group .hint { color: #666; font-size: 11px; }
-    .form-group .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: bold;
+    .input-row input:focus,
+    .input-row textarea:focus {
+      border-color: #e94560;
     }
-    .badge.on { background: #166534; color: #4ade80; }
-    .badge.off { background: #450a0a; color: #f87171; }
-
-    /* Table */
-    table { width: 100%; border-collapse: collapse; }
-    th, td {
-      padding: 12px 16px;
-      text-align: left;
-      border-bottom: 1px solid #1e1e38;
-      font-size: 13px;
-    }
-    th { color: #888; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
-    tr:hover { background: #1a1a2e; }
-    .cp-high { color: #4ade80; font-weight: bold; }
-    .cp-mid { color: #fbbf24; font-weight: bold; }
-    .cp-low { color: #f87171; }
-
-    /* Notification Log */
-    .notif-item {
-      padding: 12px 16px;
-      border-bottom: 1px solid #1e1e38;
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      gap: 12px;
-    }
-    .notif-item:last-child { border-bottom: none; }
-    .notif-title { font-weight: 600; color: #e0e0e0; font-size: 13px; }
-    .notif-time { color: #666; font-size: 11px; white-space: nowrap; }
-    .notif-channels { display: flex; gap: 6px; margin-top: 4px; }
-    .channel-tag {
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 600;
-    }
-    .channel-tag.ok { background: #166534; color: #4ade80; }
-    .channel-tag.fail { background: #450a0a; color: #f87171; }
-    .channel-tag.none { background: #1e1e38; color: #666; }
-
-    /* Loading */
-    .loading { text-align: center; padding: 40px; color: #666; }
-    .empty { text-align: center; padding: 40px; color: #555; }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #0a0a1a; }
-    ::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3a3a5a; }
-
-    /* Auto-refresh indicator */
-    .refresh-indicator {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 6px;
-    }
-    .refresh-indicator.active { background: #4ade80; animation: pulse 2s infinite; }
-    .refresh-indicator.idle { background: #555; }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-
-    /* Description text */
-    .desc-text { color: #aaa; font-size: 12px; line-height: 1.5; }
-    .desc-text .char-tag {
-      display: inline-block;
-      background: #1e1e38;
-      padding: 1px 6px;
-      border-radius: 3px;
-      margin: 1px 2px;
-      font-size: 11px;
-    }
-    .desc-text .char-tag.sig { background: #166534; color: #4ade80; }
-
-    /* Eval Tester */
-    .eval-tester textarea {
-      width: 100%;
-      background: #0a0a1a;
-      border: 1px solid #2a2a4a;
-      color: #e0e0e0;
-      padding: 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: monospace;
+    .input-row textarea {
       resize: vertical;
-      min-height: 80px;
-      outline: none;
+      min-height: 120px;
     }
-    .eval-tester textarea:focus { border-color: #e94560; }
-    .eval-result {
-      margin-top: 12px;
-      padding: 16px;
-      background: #0a0a1a;
+    .eval-btn {
+      padding: 12px 28px;
+      border: none;
+      border-radius: 8px;
+      background: #e94560;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+    .eval-btn:hover { background: #ff5577; }
+    .eval-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .price-input {
+      width: 120px !important;
+      flex: none !important;
+    }
+
+    /* Result */
+    .result-card {
+      background: #12122a;
       border: 1px solid #2a2a4a;
-      border-radius: 6px;
+      border-radius: 12px;
+      padding: 24px;
       display: none;
     }
-    .eval-result.show { display: block; }
-    .eval-result .row {
+    .result-card.show { display: block; }
+    .result-row {
       display: flex;
       justify-content: space-between;
-      padding: 4px 0;
-      border-bottom: 1px solid #1e1e38;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 14px;
+    }
+    .result-row .key { color: #888; }
+    .result-row .val { font-weight: 600; }
+    .result-divider {
+      border-top: 1px solid #2a2a4a;
+      margin: 10px 0;
+    }
+    .result-summary {
+      text-align: center;
+      padding: 20px 0;
+    }
+    .result-summary .big-value {
+      font-size: 36px;
+      font-weight: bold;
+      color: #4ade80;
+    }
+    .result-summary .label {
+      color: #888;
       font-size: 13px;
+      margin-top: 4px;
     }
-    .eval-result .row:last-child { border-bottom: none; }
-    .eval-result .row .key { color: #888; }
-    .eval-result .row .val { font-weight: 600; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <!-- Header -->
-    <div class="header">
-      <h1><span class="icon">🌊</span> 鸣潮估价助手 <span class="version">v1.0</span></h1>
-      <div>
-        <button class="btn" onclick="triggerScan()">手动扫描</button>
-        <button class="btn secondary" onclick="loadAll()">刷新数据</button>
-      </div>
-    </div>
-
-    <!-- Status Cards -->
-    <div class="status-bar" id="statusBar">
-      <div class="stat-card">
-        <div class="label">监控状态</div>
-        <div class="value" id="monitorStatus">--</div>
-        <div class="sub" id="monitorSub">--</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">已发现账号总数</div>
-        <div class="value blue" id="totalScanned">0</div>
-        <div class="sub" id="seenSub">--</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">高性价比账号</div>
-        <div class="value green" id="totalHot">0</div>
-        <div class="sub" id="hotSub">阈值: --%</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">扫描次数</div>
-        <div class="value yellow" id="scanCount">0</div>
-        <div class="sub" id="lastScan">--</div>
-      </div>
-    </div>
-
-    <!-- Hot Accounts Table -->
-    <div class="panel">
-      <div class="panel-header">
-        <h2><span class="refresh-indicator idle" id="hotIndicator"></span>高性价比账号列表</h2>
-        <button class="btn secondary small" onclick="loadHotAccounts()">刷新</button>
-      </div>
-      <div class="panel-body" style="padding: 0;">
-        <div id="hotAccountsContainer">
-          <div class="loading">加载中...</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Config Panel -->
-    <div class="panel">
-      <div class="panel-header">
-        <h2>⚙ 监控配置</h2>
-        <button class="btn small" onclick="saveConfig()">保存配置</button>
-      </div>
-      <div class="panel-body">
-        <div class="config-grid">
-          <div class="form-group">
-            <label>Game ID</label>
-            <input type="text" id="cfg-gameId" value="10302">
-            <span class="hint">鸣潮=10302</span>
-          </div>
-          <div class="form-group">
-            <label>扫描页数</label>
-            <input type="number" id="cfg-scanPages" value="3" min="1" max="10">
-            <span class="hint">每次扫描获取的页数</span>
-          </div>
-          <div class="form-group">
-            <label>每页数量</label>
-            <input type="number" id="cfg-pageSize" value="20" min="5" max="50">
-            <span class="hint">API 每页返回的账号数</span>
-          </div>
-          <div class="form-group">
-            <label>性价比阈值 (%)</label>
-            <input type="number" id="cfg-threshold" value="30" min="0" max="500" step="5">
-            <span class="hint">超过此值推送通知</span>
-          </div>
-          <div class="form-group">
-            <label>扫描间隔 (毫秒)</label>
-            <input type="number" id="cfg-scanInterval" value="300000" min="60000" step="60000">
-            <span class="hint">默认 300000=5分钟</span>
-          </div>
-          <div class="form-group">
-            <label>最大并发数</label>
-            <input type="number" id="cfg-maxConcurrent" value="2" min="1" max="5">
-            <span class="hint">详情 API 并发请求数</span>
-          </div>
-          <div class="form-group">
-            <label>批次间隔 (毫秒)</label>
-            <input type="number" id="cfg-batchDelay" value="300" min="0" step="100">
-            <span class="hint">批次间等待时间</span>
-          </div>
-        </div>
-
-        <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #2a2a4a;">
-          <h3 style="color: #888; font-size: 14px; margin-bottom: 12px;">通知渠道配置（通过环境变量设置）</h3>
-          <div class="config-grid">
-            <div class="form-group">
-              <label>Server酱 <span class="badge off" id="env-serverchan">未设置</span></label>
-              <input type="text" id="env-serverchan-key" placeholder="SERVERCHAN_KEY (sctxxxxx)" style="font-size: 12px;">
-              <span class="hint">环境变量 SERVERCHAN_KEY</span>
-            </div>
-            <div class="form-group">
-              <label>Bark <span class="badge off" id="env-bark">未设置</span></label>
-              <input type="text" id="env-bark-key" placeholder="BARK_KEY" style="font-size: 12px;">
-              <span class="hint">环境变量 BARK_KEY</span>
-            </div>
-            <div class="form-group">
-              <label>钉钉机器人 <span class="badge off" id="env-dingtalk">未设置</span></label>
-              <input type="text" id="env-dingtalk-key" placeholder="DINGTALK_WEBHOOK URL" style="font-size: 12px;">
-              <span class="hint">环境变量 DINGTALK_WEBHOOK</span>
-            </div>
-          </div>
-          <div style="margin-top: 8px; color: #666; font-size: 12px;">
-            注意: 通知渠道的 Key 需要通过环境变量设置后重启服务生效。上方输入框仅供参考显示。
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Evaluation Tester -->
-    <div class="panel">
-      <div class="panel-header">
-        <h2>🔬 估值测试器</h2>
-      </div>
-      <div class="panel-body eval-tester">
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>账号描述文本 (showTitle)</label>
-          <textarea id="eval-text" placeholder="例如: 满命爱弥斯+专武 0命守岸人 500星声 200黄数 3件服饰"></textarea>
-        </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>标价 (元)</label>
-          <input type="number" id="eval-price" placeholder="例如: 500" style="max-width: 200px;">
-        </div>
-        <button class="btn" onclick="testEvaluate()">计算估值</button>
-        <div class="eval-result" id="evalResult"></div>
-      </div>
-    </div>
-
-    <!-- Notification Log -->
-    <div class="panel">
-      <div class="panel-header">
-        <h2>📬 最近推送通知</h2>
-        <button class="btn secondary small" onclick="loadNotifications()">刷新</button>
-      </div>
-      <div class="panel-body" style="padding: 0;" id="notifContainer">
-        <div class="loading">加载中...</div>
-      </div>
-    </div>
-
-    <!-- Data Management -->
-    <div class="panel">
-      <div class="panel-header">
-        <h2>🗃 数据管理</h2>
-      </div>
-      <div class="panel-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <button class="btn danger" onclick="resetData()">清空所有数据</button>
-        <span style="color: #666; font-size: 12px; line-height: 36px;">将清空已扫描账号记录和高性价比账号记录</span>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // ============================================================
-    // API 调用
-    // ============================================================
-    async function apiGet(url) {
-      const res = await fetch(url);
-      return res.json();
+    .result-summary .ratio {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 8px;
     }
-    async function apiPost(url, body) {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body || {}),
-      });
-      return res.json();
+    .ratio.good { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+    .ratio.ok { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    .ratio.bad { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+
+    .char-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .char-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .char-tag.S { background: rgba(233, 69, 96, 0.2); color: #e94560; }
+    .char-tag.A { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+    .char-tag.B { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+    .char-tag.C { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+    .char-tag.D { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
+    .char-tag.E { background: rgba(156, 163, 175, 0.1); color: #666; }
+    .char-tag .const { color: #aaa; margin-left: 2px; }
+    .char-tag .sig { color: #4ade80; }
+
+    /* History */
+    .history {
+      margin-top: 20px;
+    }
+    .history-title {
+      color: #666;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .history-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .history-tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 16px;
+      background: #12122a;
+      border: 1px solid #2a2a4a;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .history-tag:hover { border-color: #e94560; color: #e0e0e0; }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #888;
+    }
+    .error-msg {
+      text-align: center;
+      padding: 16px;
+      color: #f87171;
+      font-size: 14px;
     }
 
-    // ============================================================
-    // 加载状态
-    // ============================================================
-    async function loadStatus() {
-      try {
-        const result = await apiGet('/api/status');
-        if (!result.success) return;
-        const d = result.data;
-
-        // 监控状态
-        const statusEl = document.getElementById('monitorStatus');
-        const subEl = document.getElementById('monitorSub');
-        if (d.isScanning) {
-          statusEl.textContent = '扫描中...';
-          statusEl.className = 'value yellow';
-          subEl.textContent = '正在获取账号数据';
-        } else {
-          statusEl.textContent = '运行中';
-          statusEl.className = 'value green';
-          subEl.textContent = '等待下次扫描';
-        }
-
-        // 统计数据
-        document.getElementById('totalScanned').textContent = d.totalScanned;
-        document.getElementById('totalHot').textContent = d.totalHot;
-        document.getElementById('scanCount').textContent = d.scanCount;
-
-        // 子文本
-        document.getElementById('seenSub').textContent = d.lastScanTime ? '上次扫描: ' + formatTime(d.lastScanTime) : '未扫描';
-        document.getElementById('hotSub').textContent = '阈值: ' + (d.config.threshold || 30) + '%';
-        document.getElementById('lastScan').textContent = d.lastScanTime ? formatTime(d.lastScanTime) : '从未扫描';
-
-        if (d.lastScanError) {
-          document.getElementById('lastScan').textContent = '错误: ' + d.lastScanError.substring(0, 40);
-        }
-
-        // 加载配置到表单
-        loadConfigToForm(d.config);
-
-        // 通知渠道状态
-        const envCfg = d.config.envConfigured || {};
-        updateChannelBadge('env-serverchan', envCfg.serverchan);
-        updateChannelBadge('env-bark', envCfg.bark);
-        updateChannelBadge('env-dingtalk', envCfg.dingtalk);
-
-      } catch (err) {
-        console.error('Failed to load status:', err);
-      }
-    }
-
-    function updateChannelBadge(id, configured) {
-      const el = document.getElementById(id);
-      if (configured) {
-        el.textContent = '已配置';
-        el.className = 'badge on';
-      } else {
-        el.textContent = '未设置';
-        el.className = 'badge off';
-      }
-    }
-
-    // ============================================================
-    // 加载配置到表单
-    // ============================================================
-    function loadConfigToForm(cfg) {
-      if (!cfg) return;
-      const fields = ['gameId', 'scanPages', 'pageSize', 'threshold', 'scanInterval', 'maxConcurrent', 'batchDelay'];
-      fields.forEach(f => {
-        const el = document.getElementById('cfg-' + f);
-        if (el && cfg[f] !== undefined && document.activeElement !== el) {
-          el.value = cfg[f];
-        }
-      });
-    }
-
-    // ============================================================
-    // 保存配置
-    // ============================================================
-    async function saveConfig() {
-      const config = {
-        gameId: document.getElementById('cfg-gameId').value,
-        scanPages: parseInt(document.getElementById('cfg-scanPages').value, 10),
-        pageSize: parseInt(document.getElementById('cfg-pageSize').value, 10),
-        threshold: parseFloat(document.getElementById('cfg-threshold').value),
-        scanInterval: parseInt(document.getElementById('cfg-scanInterval').value, 10),
-        maxConcurrent: parseInt(document.getElementById('cfg-maxConcurrent').value, 10),
-        batchDelay: parseInt(document.getElementById('cfg-batchDelay').value, 10),
-      };
-      try {
-        const result = await apiPost('/api/config', config);
-        if (result.success) {
-          alert('配置已保存！');
-          loadStatus();
-        } else {
-          alert('保存失败: ' + (result.error || 'Unknown error'));
-        }
-      } catch (err) {
-        alert('保存失败: ' + err.message);
-      }
-    }
-
-    // ============================================================
-    // 加载高性价比账号
-    // ============================================================
-    async function loadHotAccounts() {
-      try {
-        const result = await apiGet('/api/hot-accounts?limit=50');
-        const container = document.getElementById('hotAccountsContainer');
-        if (!result.success || result.data.length === 0) {
-          container.innerHTML = '<div class="empty">暂无高性价比账号</div>';
-          return;
-        }
-        let html = '<table><thead><tr>';
-        html += '<th>性价比</th><th>估值</th><th>标价</th><th>角色</th><th>抽数</th><th>时间</th><th>链接</th>';
-        html += '</tr></thead><tbody>';
-        result.data.forEach(acc => {
-          const cpClass = acc.costPerformance >= 100 ? 'cp-high' : (acc.costPerformance >= 50 ? 'cp-mid' : 'cp-low');
-          const charTags = (acc.evaluation && acc.evaluation.characters || []).map(c => {
-            const cls = c.hasSignatureWeapon ? 'char-tag sig' : 'char-tag';
-            const constStr = c.constellation === 6 ? '满' : c.constellation + '命';
-            return '<span class="' + cls + '">' + constStr + c.name + (c.hasSignatureWeapon ? '+武' : '') + '</span>';
-          }).join('');
-          html += '<tr>';
-          html += '<td class="' + cpClass + '">' + acc.costPerformance + '%</td>';
-          html += '<td style="color:#4ade80;font-weight:600;">' + (acc.estimatedValue || 0) + '元</td>';
-          html += '<td style="color:#f87171;">' + (acc.priceInYuan || 0) + '元</td>';
-          html += '<td><div class="desc-text">' + (charTags || acc.shortDescription || '-') + '</div></td>';
-          html += '<td>' + ((acc.info && acc.info.yellowCount) || 0) + '黄</td>';
-          html += '<td style="color:#666;font-size:11px;">' + formatTime(acc.scannedAt) + '</td>';
-          html += '<td><a href="' + acc.detailUrl + '" target="_blank" style="color:#60a5fa;font-size:12px;">查看</a></td>';
-          html += '</tr>';
-        });
-        html += '</tbody></table>';
-        container.innerHTML = html;
-      } catch (err) {
-        console.error('Failed to load hot accounts:', err);
-      }
-    }
-
-    // ============================================================
-    // 加载通知记录
-    // ============================================================
-    async function loadNotifications() {
-      try {
-        const result = await apiGet('/api/notifications');
-        const container = document.getElementById('notifContainer');
-        if (!result.success || result.data.length === 0) {
-          container.innerHTML = '<div class="empty">暂无通知记录</div>';
-          return;
-        }
-        let html = '';
-        result.data.forEach(n => {
-          let channelsHtml = '';
-          if (n.results && n.results.length > 0) {
-            n.results.forEach(r => {
-              const cls = r.success ? 'ok' : 'fail';
-              channelsHtml += '<span class="channel-tag ' + cls + '">' + (r.channel || '?') + (r.success ? ' OK' : ' FAIL') + '</span>';
-            });
-          } else {
-            channelsHtml = '<span class="channel-tag none">无渠道</span>';
-          }
-          html += '<div class="notif-item">';
-          html += '<div style="flex:1;">';
-          html += '<div class="notif-title">' + escapeHtml(n.title) + '</div>';
-          html += '<div class="notif-channels">' + channelsHtml + '</div>';
-          html += '</div>';
-          html += '<div class="notif-time">' + formatTime(n.timestamp) + '</div>';
-          html += '</div>';
-        });
-        container.innerHTML = html;
-      } catch (err) {
-        console.error('Failed to load notifications:', err);
-      }
-    }
-
-    // ============================================================
-    // 手动触发扫描
-    // ============================================================
-    async function triggerScan() {
-      try {
-        const result = await apiPost('/api/scan');
-        if (result.success) {
-          alert('扫描已触发！');
-          setTimeout(() => loadAll(), 3000);
-        } else {
-          alert(result.message || '触发失败');
-        }
-      } catch (err) {
-        alert('触发失败: ' + err.message);
-      }
-    }
-
-    // ============================================================
-    // 估值测试
-    // ============================================================
-    async function testEvaluate() {
-      const text = document.getElementById('eval-text').value.trim();
-      const price = parseFloat(document.getElementById('eval-price').value) || 0;
-      if (!text) {
-        alert('请输入账号描述文本');
-        return;
-      }
-      try {
-        const result = await apiPost('/api/evaluate', {
-          showTitle: text,
-          priceInCents: price * 100,
-        });
-        if (!result.success) {
-          alert('估值失败: ' + (result.error || ''));
-          return;
-        }
-        const d = result.data;
-        const el = document.getElementById('evalResult');
-        let html = '';
-        html += row('最终估值', d.estimatedValue + ' 元', '#4ade80');
-        html += row('标价', d.priceInYuan + ' 元', '#f87171');
-        html += row('性价比', d.costPerformance + ' %', d.costPerformance >= 30 ? '#4ade80' : '#fbbf24');
-        html += '<div style="border-top:1px solid #2a2a4a;margin:8px 0;"></div>';
-        html += row('角色价值', d.details.characterValue + ' 元', '#aaa');
-        html += row('满命溢价', d.details.c6Premium + ' 元', '#aaa');
-        html += row('配队溢价', d.details.teamPremium + ' 元', '#aaa');
-        html += row('抽数价值', d.details.pullValue + ' 元', '#aaa');
-        html += row('资源价值', d.details.resourceValue + ' 元', '#aaa');
-        html += row('黄数系数', 'x' + d.details.yellowMultiplier, '#aaa');
-        html += '<div style="border-top:1px solid #2a2a4a;margin:8px 0;"></div>';
-        // 角色明细
-        if (d.details.characters && d.details.characters.length > 0) {
-          html += '<div style="color:#888;font-size:12px;margin-bottom:4px;">角色明细:</div>';
-          d.details.characters.forEach(c => {
-            const constStr = c.constellation === 6 ? '满命' : c.constellation + '命';
-            const w = c.hasSignatureWeapon ? '+专武' : '';
-            html += row(constStr + c.name + w, c.value + ' 元', c.hasSignatureWeapon ? '#4ade80' : '#aaa');
-          });
-        }
-        // 资源
-        html += '<div style="border-top:1px solid #2a2a4a;margin:8px 0;"></div>';
-        html += row('星声', d.info.starSounds, '#666');
-        html += row('月相', d.info.moonPhases, '#666');
-        html += row('余波珊瑚', d.info.coral, '#666');
-        html += row('黄数', d.info.yellowCount, '#666');
-        html += row('服饰', d.info.outfits + ' 件', '#666');
-        el.innerHTML = html;
-        el.classList.add('show');
-      } catch (err) {
-        alert('估值失败: ' + err.message);
-      }
-    }
-
-    function row(key, val, color) {
-      return '<div class="row"><span class="key">' + key + '</span><span class="val" style="color:' + (color || '#e0e0e0') + ';">' + val + '</span></div>';
-    }
-
-    // ============================================================
-    // 重置数据
-    // ============================================================
-    async function resetData() {
-      if (!confirm('确定要清空所有数据吗？此操作不可撤销。')) return;
-      try {
-        const result = await apiPost('/api/reset');
-        if (result.success) {
-          alert('数据已清空');
-          loadAll();
-        }
-      } catch (err) {
-        alert('操作失败: ' + err.message);
-      }
-    }
-
-    // ============================================================
-    // 工具函数
-    // ============================================================
-    function formatTime(iso) {
-      if (!iso) return '--';
-      const d = new Date(iso);
-      const pad = n => String(n).padStart(2, '0');
-      return pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text || '';
-      return div.innerHTML;
-    }
-
-    function loadAll() {
-      loadStatus();
-      loadHotAccounts();
-      loadNotifications();
-    }
-
-    // ============================================================
-    // 初始化
-    // ============================================================
-    loadAll();
-    // 每 10 秒刷新状态
-    setInterval(loadStatus, 10000);
-    // 每 30 秒刷新高性价比列表
-    setInterval(loadHotAccounts, 30000);
-  </script>
-
-  <!-- QQ群 & 合规声明 -->
-  <style>
+    /* QQ群 & 合规声明 */
     .footer-section {
-      max-width: 1200px;
-      margin: 0 auto 40px;
+      margin-top: 40px;
     }
     .qq-group-card {
       background: linear-gradient(135deg, #12122a 0%, #1a1a3a 100%);
@@ -1074,26 +447,278 @@ function getDashboardHTML() {
     }
     .disclaimer p { margin: 0; }
     .disclaimer p + p { margin-top: 4px; }
-  </style>
 
-  <div class="footer-section">
-    <div class="qq-group-card">
-      <div class="qr-wrapper">
-        <img src="/public/qq-group.jpg" alt="QQ群二维码" />
-      </div>
-      <div class="info">
-        <h3>鸣潮账号估价交流群</h3>
-        <div class="group-id">群号：<span class="num">1064412729</span></div>
-        <div class="desc">扫码加入QQ群，交流鸣潮账号估价心得，获取最新行情动态</div>
+    @media (max-width: 600px) {
+      .input-row { flex-direction: column; }
+      .price-input { width: 100% !important; }
+      .qq-group-card { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>鸣潮账号估价助手</h1>
+      <div class="subtitle">输入螃蟹网商品编号，或粘贴商品描述进行估价</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">按编号查询</button>
+      <button class="tab-btn" id="tab-paste" onclick="switchTab('paste')">粘贴描述估价</button>
+    </div>
+
+    <!-- 按编号查询 -->
+    <div class="input-card" id="panel-lookup">
+      <div class="input-row">
+        <input type="text" id="product-id" placeholder="输入商品编号，如 MEBNB9606" onkeydown="if(event.key==='Enter')doLookup()" />
+        <button class="eval-btn" id="lookup-btn" onclick="doLookup()">估价</button>
       </div>
     </div>
-    <div class="disclaimer">
-      <div class="title">合规声明</div>
-      <p>本工具仅提供游戏账号行情数据测算参考，不支持、不引导任何账号买卖、转让行为。</p>
-      <p>《鸣潮》官方禁止账号交易，所有账号交易产生封禁、被骗等损失由用户自行承担。</p>
-      <p>本站不收集任何游戏账号密码、实名隐私信息，数据仅本地临时解析。</p>
+
+    <!-- 粘贴描述估价 -->
+    <div class="input-card" id="panel-paste" style="display:none;">
+      <div class="input-row" style="flex-direction:column;gap:12px;">
+        <textarea id="eval-text" placeholder="粘贴螃蟹网商品描述文本（包含角色、命座、武器、资源等信息）"></textarea>
+        <div class="input-row">
+          <input type="number" class="price-input" id="eval-price" placeholder="标价(元)" min="0" />
+          <button class="eval-btn" id="eval-btn" onclick="doEvaluate()">估价</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 结果 -->
+    <div class="result-card" id="result">
+      <div class="result-summary" id="result-summary"></div>
+      <div class="result-divider"></div>
+      <div id="result-details"></div>
+      <div class="result-divider"></div>
+      <div id="result-chars"></div>
+      <div class="result-divider"></div>
+      <div id="result-resources"></div>
+    </div>
+
+    <!-- Loading/Error -->
+    <div id="status-msg"></div>
+
+    <!-- History -->
+    <div class="history" id="history-section" style="display:none;">
+      <div class="history-title">最近查询</div>
+      <div class="history-tags" id="history-tags"></div>
+    </div>
+
+    <!-- QQ群 & 合规声明 -->
+    <div class="footer-section">
+      <div class="qq-group-card">
+        <div class="qr-wrapper">
+          <img src="/public/qq-group.jpg" alt="QQ群二维码" />
+        </div>
+        <div class="info">
+          <h3>鸣潮账号估价交流群</h3>
+          <div class="group-id">群号：<span class="num">1064412729</span></div>
+          <div class="desc">扫码加入QQ群，交流鸣潮账号估价心得，获取最新行情动态</div>
+        </div>
+      </div>
+      <div class="disclaimer">
+        <div class="title">合规声明</div>
+        <p>本工具仅提供游戏账号行情数据测算参考，不支持、不引导任何账号买卖、转让行为。</p>
+        <p>《鸣潮》官方禁止账号交易，所有账号交易产生封禁、被骗等损失由用户自行承担。</p>
+        <p>本站不收集任何游戏账号密码、实名隐私信息，数据仅本地临时解析。</p>
+      </div>
     </div>
   </div>
+
+  <script>
+    // ============================================================
+    // Tab 切换
+    // ============================================================
+    let currentTab = 'lookup';
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById('tab-lookup').classList.toggle('active', tab === 'lookup');
+      document.getElementById('tab-paste').classList.toggle('active', tab === 'paste');
+      document.getElementById('panel-lookup').style.display = tab === 'lookup' ? '' : 'none';
+      document.getElementById('panel-paste').style.display = tab === 'paste' ? '' : 'none';
+      // 清空结果
+      document.getElementById('result').classList.remove('show');
+      document.getElementById('status-msg').innerHTML = '';
+    }
+
+    // ============================================================
+    // 按编号查询
+    // ============================================================
+    async function doLookup() {
+      const productId = document.getElementById('product-id').value.trim();
+      if (!productId) { alert('请输入商品编号'); return; }
+
+      const btn = document.getElementById('lookup-btn');
+      btn.disabled = true; btn.textContent = '查询中...';
+      document.getElementById('result').classList.remove('show');
+      document.getElementById('status-msg').innerHTML = '<div class="loading">正在查询商品信息...</div>';
+
+      try {
+        const resp = await fetch('/api/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId }),
+        });
+        const result = await resp.json();
+        document.getElementById('status-msg').innerHTML = '';
+
+        if (!result.success) {
+          document.getElementById('status-msg').innerHTML = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
+          return;
+        }
+
+        showResult(result.data);
+        saveHistory(productId, result.data);
+      } catch (err) {
+        document.getElementById('status-msg').innerHTML = '<div class="error-msg">查询失败: ' + err.message + '</div>';
+      } finally {
+        btn.disabled = false; btn.textContent = '估价';
+      }
+    }
+
+    // ============================================================
+    // 粘贴描述估价
+    // ============================================================
+    async function doEvaluate() {
+      const text = document.getElementById('eval-text').value.trim();
+      const price = parseFloat(document.getElementById('eval-price').value) || 0;
+      if (!text) { alert('请输入账号描述文本'); return; }
+
+      const btn = document.getElementById('eval-btn');
+      btn.disabled = true; btn.textContent = '计算中...';
+      document.getElementById('result').classList.remove('show');
+      document.getElementById('status-msg').innerHTML = '<div class="loading">正在计算估值...</div>';
+
+      try {
+        const resp = await fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ showTitle: text, priceInCents: price * 100 }),
+        });
+        const result = await resp.json();
+        document.getElementById('status-msg').innerHTML = '';
+
+        if (!result.success) {
+          document.getElementById('status-msg').innerHTML = '<div class="error-msg">' + (result.error || '估值失败') + '</div>';
+          return;
+        }
+
+        showResult(result.data);
+      } catch (err) {
+        document.getElementById('status-msg').innerHTML = '<div class="error-msg">估值失败: ' + err.message + '</div>';
+      } finally {
+        btn.disabled = false; btn.textContent = '估价';
+      }
+    }
+
+    // ============================================================
+    // 显示结果
+    // ============================================================
+    function showResult(d) {
+      // 摘要
+      const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
+      const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance + '%' : d.costPerformance + '%';
+      let summaryHtml = '';
+      summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
+      summaryHtml += '<div class="label">预估价值</div>';
+      if (d.price && d.price > 0) {
+        summaryHtml += '<div class="ratio ' + ratioClass + '">性价比 ' + ratioText + ' (标价' + d.price + '元)</div>';
+      }
+      document.getElementById('result-summary').innerHTML = summaryHtml;
+
+      // 明细
+      const det = d.details;
+      let detailHtml = '';
+      detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#aaa');
+      detailHtml += resultRow('满命溢价', det.c6Premium + ' 元', '#aaa');
+      detailHtml += resultRow('配队溢价', det.teamPremium + ' 元', '#aaa');
+      detailHtml += resultRow('抽数价值', det.pullValue + ' 元', '#aaa');
+      detailHtml += resultRow('资源价值', det.resourceValue + ' 元', '#aaa');
+      detailHtml += resultRow('黄数系数', 'x' + det.yellowMultiplier, '#aaa');
+      document.getElementById('result-details').innerHTML = detailHtml;
+
+      // 角色标签
+      let charHtml = '<div style="color:#888;font-size:12px;margin-bottom:4px;">角色明细</div><div class="char-tags">';
+      if (det.characters && det.characters.length > 0) {
+        det.characters.forEach(c => {
+          const constStr = c.constellation === 6 ? '满命' : c.constellation + '命';
+          const sigStr = c.hasSignatureWeapon ? ' <span class="sig">+专武</span>' : '';
+          charHtml += '<span class="char-tag ' + c.tier + '">' + constStr + ' ' + c.name + sigStr + ' (' + c.value + '元)</span>';
+        });
+      } else {
+        charHtml += '<span style="color:#666;font-size:12px;">未识别到角色</span>';
+      }
+      charHtml += '</div>';
+      document.getElementById('result-chars').innerHTML = charHtml;
+
+      // 资源
+      const info = d.info || {};
+      let resHtml = '';
+      resHtml += resultRow('星声', info.starSounds || 0, '#666');
+      resHtml += resultRow('月相', info.moonPhases || 0, '#666');
+      resHtml += resultRow('余波珊瑚', info.coral || 0, '#666');
+      resHtml += resultRow('浮金波纹', info.goldenRipples || 0, '#666');
+      resHtml += resultRow('铸潮波纹', info.tideRipples || 0, '#666');
+      resHtml += resultRow('服饰', (info.outfits || 0) + ' 件', '#666');
+      resHtml += resultRow('黄数', info.yellowCount || 0, '#666');
+      document.getElementById('result-resources').innerHTML = resHtml;
+
+      document.getElementById('result').classList.add('show');
+    }
+
+    function resultRow(key, val, color) {
+      return '<div class="result-row"><span class="key">' + key + '</span><span class="val" style="color:' + (color || '#e0e0e0') + ';">' + val + '</span></div>';
+    }
+
+    // ============================================================
+    // 历史记录
+    // ============================================================
+    function saveHistory(productId, data) {
+      let history = [];
+      try { history = JSON.parse(localStorage.getItem('mw_history') || '[]'); } catch(e) {}
+      // 去重
+      history = history.filter(h => h.id !== productId);
+      history.unshift({
+        id: productId,
+        ratio: data.costPerformance,
+        value: data.estimatedValue,
+      });
+      history = history.slice(0, 10);
+      localStorage.setItem('mw_history', JSON.stringify(history));
+      renderHistory();
+    }
+
+    function renderHistory() {
+      let history = [];
+      try { history = JSON.parse(localStorage.getItem('mw_history') || '[]'); } catch(e) {}
+      if (history.length === 0) {
+        document.getElementById('history-section').style.display = 'none';
+        return;
+      }
+      document.getElementById('history-section').style.display = '';
+      let html = '';
+      history.forEach(h => {
+        const ratioText = h.ratio >= 0 ? '+' + h.ratio + '%' : h.ratio + '%';
+        html += '<span class="history-tag" onclick="loadHistory(\\'' + h.id + '\\')">' + h.id + ' (' + ratioText + ')</span>';
+      });
+      document.getElementById('history-tags').innerHTML = html;
+    }
+
+    function loadHistory(productId) {
+      document.getElementById('product-id').value = productId;
+      switchTab('lookup');
+      doLookup();
+    }
+
+    // ============================================================
+    // 初始化
+    // ============================================================
+    renderHistory();
+  </script>
 </body>
 </html>`;
 }
@@ -1103,36 +728,8 @@ function getDashboardHTML() {
 // ============================================================
 app.listen(PORT, () => {
   console.log(`========================================`);
-  console.log(`  鸣潮估价助手 监控服务器已启动`);
+  console.log(`  鸣潮估价助手 已启动`);
   console.log(`  端口: ${PORT}`);
-  console.log(`  仪表板: http://localhost:${PORT}`);
-  console.log(`  性价比阈值: ${config.threshold || 30}%`);
-  console.log(`  通知渠道: ${notify.getConfiguredChannels().join(', ') || '无'}`);
-  console.log(`  模式: 被动接收（油猴脚本上报数据）`);
-  console.log(`  上报接口: POST http://localhost:${PORT}/api/ingest`);
+  console.log(`  访问: http://localhost:${PORT}`);
   console.log(`========================================`);
-
-  // 不再启动定时扫描（WAF拦截），改为油猴脚本主动上报
-  // startMonitorTimer();
-
-  // 启动后立即执行一次扫描
-  console.log('[Server] Starting initial scan...');
-  setTimeout(() => {
-    monitor.scanAccounts().catch(err => {
-      console.error('[Server] Initial scan error:', err.message);
-    });
-  }, 3000);
-});
-
-// 优雅关闭
-process.on('SIGTERM', () => {
-  console.log('[Server] SIGTERM received, shutting down...');
-  if (monitorTimer) clearInterval(monitorTimer);
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('[Server] SIGINT received, shutting down...');
-  if (monitorTimer) clearInterval(monitorTimer);
-  process.exit(0);
 });
