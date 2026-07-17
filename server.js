@@ -48,6 +48,7 @@ app.post('/api/evaluate', (req, res) => {
         outfits: result.info.outfits,
         motorcycles: result.info.motorcycles,
         yellowCount: result.info.yellowCount,
+        pulls: result.info.pulls,
       },
       shortDescription: valueEngine.generateShortDescription(result),
     },
@@ -114,6 +115,7 @@ app.post('/api/lookup', async (req, res) => {
           outfits: result.info.outfits,
           motorcycles: result.info.motorcycles,
           yellowCount: result.info.yellowCount,
+          pulls: result.info.pulls,
         },
         shortDescription: valueEngine.generateShortDescription(result),
         url: `https://www.pxb7.com/buy/10302/detail?productId=${actualProductId}`,
@@ -727,7 +729,7 @@ function getPageHTML() {
       detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#aaa');
       detailHtml += resultRow('满命溢价', det.c6Premium + ' 元', '#aaa');
       detailHtml += resultRow('配队溢价', det.teamPremium + ' 元', '#aaa');
-      detailHtml += resultRow('抽数价值', det.pullValue + ' 元', '#aaa');
+      detailHtml += resultRow('抽数价值', (det.pullValue || 0) + ' 元' + (d.info && d.info.pulls ? '（' + d.info.pulls + '抽）' : ''), '#aaa');
       detailHtml += resultRow('资源价值', det.resourceValue + ' 元', '#aaa');
       detailHtml += resultRow('黄数系数', 'x' + det.yellowMultiplier, '#aaa');
       document.getElementById('result-details').innerHTML = detailHtml;
