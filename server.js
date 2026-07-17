@@ -21,6 +21,7 @@ const PORT = process.env.PORT || 3000;
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // 初始化配置
 const config = monitor.loadConfig();
@@ -1005,6 +1006,94 @@ function getDashboardHTML() {
     // 每 30 秒刷新高性价比列表
     setInterval(loadHotAccounts, 30000);
   </script>
+
+  <!-- QQ群 & 合规声明 -->
+  <style>
+    .footer-section {
+      max-width: 1200px;
+      margin: 0 auto 40px;
+    }
+    .qq-group-card {
+      background: linear-gradient(135deg, #12122a 0%, #1a1a3a 100%);
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-bottom: 16px;
+    }
+    .qq-group-card .qr-wrapper {
+      flex-shrink: 0;
+      width: 140px;
+      height: 140px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 2px solid #2a2a4a;
+    }
+    .qq-group-card .qr-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .qq-group-card .info h3 {
+      font-size: 18px;
+      color: #4ade80;
+      margin-bottom: 8px;
+    }
+    .qq-group-card .info .group-id {
+      font-size: 16px;
+      color: #e0e0e0;
+      margin-bottom: 6px;
+    }
+    .qq-group-card .info .group-id .num {
+      font-weight: bold;
+      color: #60a5fa;
+      font-size: 18px;
+      letter-spacing: 1px;
+    }
+    .qq-group-card .info .desc {
+      font-size: 13px;
+      color: #888;
+      line-height: 1.6;
+    }
+    .disclaimer {
+      background: rgba(233, 69, 96, 0.05);
+      border: 1px solid rgba(233, 69, 96, 0.2);
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-size: 12px;
+      color: #999;
+      line-height: 1.8;
+    }
+    .disclaimer .title {
+      color: #e94560;
+      font-weight: bold;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .disclaimer p { margin: 0; }
+    .disclaimer p + p { margin-top: 4px; }
+  </style>
+
+  <div class="footer-section">
+    <div class="qq-group-card">
+      <div class="qr-wrapper">
+        <img src="/public/qq-group.jpg" alt="QQ群二维码" />
+      </div>
+      <div class="info">
+        <h3>鸣潮账号估价交流群</h3>
+        <div class="group-id">群号：<span class="num">1064412729</span></div>
+        <div class="desc">扫码加入QQ群，交流鸣潮账号估价心得，获取最新行情动态</div>
+      </div>
+    </div>
+    <div class="disclaimer">
+      <div class="title">合规声明</div>
+      <p>本工具仅提供游戏账号行情数据测算参考，不支持、不引导任何账号买卖、转让行为。</p>
+      <p>《鸣潮》官方禁止账号交易，所有账号交易产生封禁、被骗等损失由用户自行承担。</p>
+      <p>本站不收集任何游戏账号密码、实名隐私信息，数据仅本地临时解析。</p>
+    </div>
+  </div>
 </body>
 </html>`;
 }
