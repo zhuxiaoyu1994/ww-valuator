@@ -753,7 +753,7 @@ function getPageHTML() {
         det.characters.forEach(c => {
           const constStr = c.const === 6 ? '满命' : c.const + '命';
           const sigStr = c.hasSig ? ' <span class="sig">+专武</span>' : '';
-          charHtml += '<span class="char-tag ' + c.tier + '">' + constStr + ' ' + c.name + sigStr + '</span>';
+          charHtml += '<span class="char-tag ' + c.tier + '">' + constStr + ' ' + c.name + sigStr + ' (' + c.value + '元)</span>';
         });
       } else {
         charHtml += '<span style="color:#666;font-size:12px;">未识别到角色</span>';
