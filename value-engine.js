@@ -1,831 +1,1018 @@
 /**
  * value-engine.js - 鸣潮账号估值引擎
- * 从油猴脚本移植估值算法，解析 showTitle 文本提取账号信息并计算估值
+ * 从油猴脚本（螃蟹网鸣潮监控助手.user.js）完整移植估值逻辑，
+ * 确保两端估值结果完全一致。
+ *
+ * 对外接口（保持不变）：
+ *   - evaluateWithPrice(showTitle, priceInCents)
+ *   - generateShortDescription(evaluation)
  */
 
 'use strict';
 
 // ============================================================
-// 角色定价配置
+// 角色定价配置（对应油猴脚本 CHAR_TIERS）
 // ============================================================
-const CHARACTER_PRICES = {
-  // S级(50元)
-  '爱弥斯': { price: 50, tier: 'S' },
-  '绯雪': { price: 60, tier: 'S' },
-  '卡提希娅': { price: 35, tier: 'S' },
-  // A级(35元)
-  '琳奈': { price: 30, tier: 'A' },
-  '千咲': { price: 30, tier: 'A' },
-  '穗穗': { price: 0, tier: 'A' },
-  '莫宁': { price: 30, tier: 'A' },
-  '秧秧': { price: 35, tier: 'A' },
-  '弗洛洛': { price: 35, tier: 'A' },
-  '洛瑟菈': { price: 30, tier: 'A' },
-  // B级(25元)
-  '达妮娅': { price: 16, tier: 'B' },
-  '夏空': { price: 12, tier: 'B' },
-  '露西': { price: 30, tier: 'B' },
-  '嘉贝莉娜': { price: 20, tier: 'B' },
-  '奥古斯塔': { price: 15, tier: 'B' },
-  '仇远': { price: 10, tier: 'B' },
-  '尤诺': { price: 10, tier: 'B' },
-  '陆赫斯': { price: 15, tier: 'B' },
-  '赞妮': { price: 10, tier: 'B' },
-  '布兰特': { price: 10, tier: 'B' },
-  '守岸人': { price: 30, tier: 'B' },
-  '西格莉卡': { price: 10, tier: 'B' },
-  // C级(5元)
-  '露帕': { price: 10, tier: 'C' },
-  '珂莱塔': { price: 10, tier: 'C' },
-  '菲比': { price: 10, tier: 'C' },
-  '坎特蕾拉': { price: 10, tier: 'C' },
-  '椿': { price: 10, tier: 'C' },
-  // D级(3元)
-  '忌炎': { price: 2, tier: 'D' },
-  '吟霖': { price: 2, tier: 'D' },
-  '相里要': { price: 2, tier: 'D' },
-  '今汐': { price: 2, tier: 'D' },
-  '长离': { price: 2, tier: 'D' },
-  '折枝': { price: 2, tier: 'D' },
-  '洛可可': { price: 2, tier: 'D' },
-  '丽贝卡': { price: 2, tier: 'D' },
-  // E级(2元)
-  '维里奈': { price: 0, tier: 'E' },
-  '卡卡罗': { price: 0, tier: 'E' },
-  '安可': { price: 0, tier: 'E' },
-  '凌阳': { price: 0, tier: 'E' },
-  '鉴心': { price: 0, tier: 'E' },
+const CHAR_TIERS = {
+  S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '卡提希娅'] },
+  A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '秧秧', '弗洛洛', '洛瑟菈'] },
+  B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '露西', '嘉贝莉娜', '奥古斯塔', '仇远', '尤诺', '陆赫斯', '赞妮', '布兰特', '守岸人', '西格莉卡'] },
+  C: { price: 5, isHot: false, chars: ['露帕', '珂莱塔', '菲比', '坎特蕾拉', '椿'] },
+  D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡'] },
+  E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心'] },
 };
 
 // ============================================================
-// 角色 -> 专武映射表
+// 专武映射（角色名 -> 专武名，对应油猴脚本 SIG_WEAPONS）
 // ============================================================
-const SIGNATURE_WEAPONS = {
-  '爱弥斯': '千古洵流',
-  '绯雪': '永远的启明星',
-  '卡提希娅': '正义的裁决',
-  '弗洛洛': '',
-  '琳奈': '',
-  '守岸人': '',
-  '千咲': '',
-  '穗穗': '',
-  '莫宁': '',
-  '达妮娅': '',
-  '洛瑟菈': '',
-  '夏空': '',
-  '忌炎': '浩境长留',
-  '吟霖': '穿击者-33',
-  '相里要': '飞雷要',
-  '今汐': '',
-  '长离': '',
-  '折枝': '',
+const SIG_WEAPONS = {
+  '忌炎': '苍鳞千嶂', '吟霖': '掣傀之手', '今汐': '时和岁稔', '长离': '赫奕流明',
+  '相里要': '诸方玄枢', '椿': '裁春', '珂莱塔': '死与舞', '折枝': '琼枝冰绡',
+  '守岸人': '星序协响', '洛瑟菈': '存帧', '莫宁': '宙算仪轨', '千咲': '昙切',
+  '爱弥斯': '永远的启明星', '弗洛洛': '幽冥的忘忧章', '卡提希娅': '不屈命定之冠',
+  '尤诺': '万物持存的注释', '夏空': '林间的咏叹调', '赞妮': '焰光裁定',
+  '坎特蕾拉': '海的呢喃', '仇远': '裁竹', '布兰特': '不灭航路', '露帕': '焰痕',
+  '奥古斯塔': '驭冕铸雷之权', '嘉贝莉娜': '光影双生', '西格莉卡': '昭日译注',
+  '达妮娅': '赝作的矮星', '菲比': '和光回唱', '绯雪': '灼霜', '琳奈': '溢彩荧辉',
+  '丽贝卡': '碎骨', '陆赫斯': '白昼之脊', '秧秧': '天之苍苍', '穗穗': '栖霞饮露',
   '露西': '蜃影',
-  '秧秧': '天之苍苍',
+};
+
+// 满命权重（对应油猴脚本 FULL_CONST_WEIGHT）
+const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0.1 };
+
+// ============================================================
+// 估值权重默认值（对应油猴脚本 DEFAULT_WEIGHTS）
+// ============================================================
+const DEFAULT_WEIGHTS = {
+  // 五星武器
+  fiveStarWeapon: 0,       // 每个五星武器基础价（精1）
+  weaponRefineBonus: 2,    // 每级精炼额外加价
+  // 热门角色里程碑倍率
+  hotC0Mult: 1,          // C0+专武 倍率
+  hotC3Mult: 2,          // C3+专武 倍率
+  hotC6Mult: 3,          // C6+专武 倍率
+  hotStepMult: 0.08,     // 过渡命(C1/C2/C4/C5)每命加成倍率
+  hotNoSigMult: 0.5,     // 无专武倍率
+  hotNoSigC6Mult: 0.5,   // C6无专武倍率
+  // 冷门角色加分参数
+  coldStep: 0,           // 每命加价
+  coldC3Bonus: 0,        // C3额外加价
+  coldC6Bonus: 0,        // C6额外加价
+  coldSigBonus: 0,       // 有专武额外加价
+  // 满命溢价（加权满命数档位）
+  c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1 },
+  c6MultiBonus: [
+    { count: 2, bonus: 0.5 },
+    { count: 3, bonus: 1 },
+    { count: 4, bonus: 1.5 },
+    { count: 5, bonus: 2 },
+    { count: 6, bonus: 2.5 },
+    { count: 7, bonus: 3 },
+    { count: 8, bonus: 3.5 },
+    { count: 9, bonus: 4 },
+    { count: 10, bonus: 4.5 },
+  ],
+  // 资源定价
+  outfit: 2,             // 服饰/皮肤单价
+  motoAccessory: 0,      // 摩托饰品单价
+  motoFrame: 10,         // 车架模组单价
+  paint: 0,              // 涂装单价
+  // 满命抽数加成档位（加权满命数 → 抽数价值加成系数）
+  pullC6Bonus: [
+    { count: 1, bonus: 0.3 },
+    { count: 2, bonus: 0.4 },
+    { count: 3, bonus: 0.5 },
+    { count: 4, bonus: 0.6 },
+    { count: 5, bonus: 0.7 },
+  ],
+  // 多配队额外系数
+  teamMultiBonus: [
+    { count: 2, coef: 1.1 },
+    { count: 3, coef: 1.2 },
+    { count: 4, coef: 1.3 },
+    { count: 5, coef: 1.4 },
+    { count: 6, coef: 1.5 },
+    { count: 7, coef: 1.6 },
+    { count: 8, coef: 1.7 },
+    { count: 9, coef: 1.8 },
+    { count: 10, coef: 1.9 },
+  ],
 };
 
 // ============================================================
-// 满命加权系数（按等级）
+// 默认配队列表（对应油猴脚本 DEFAULT_TEAMS）
 // ============================================================
-const C6_WEIGHTS = {
-  'S': 1.0,
-  'A': 0.6,
-  'B': 0.3,
-  'C': 0.2,
-  'D': 0.1,
-  'E': 0.1,
-};
-
-// 满命溢价档位
-const C6_PREMIUM_TIERS = [
-  { threshold: 10, bonus: 4.5 }, // 10+ → +450%
-  { threshold: 9, bonus: 4.0 },  // 9   → +400%
-  { threshold: 8, bonus: 3.5 },  // 8   → +350%
-  { threshold: 7, bonus: 3.0 },  // 7   → +300%
-  { threshold: 6, bonus: 2.5 },  // 6   → +250%
-  { threshold: 5, bonus: 2.0 },  // 5   → +200%
-  { threshold: 4, bonus: 1.5 },  // 4   → +150%
-  { threshold: 3, bonus: 1.0 },  // 3   → +100%
-  { threshold: 2, bonus: 0.5 },  // 2   → +50%
+const DEFAULT_TEAMS = [
+  { name: '绯洛千', members: ['绯雪', '洛瑟菈', '千咲'], multiplier: 1.5 },
+  { name: '日月守', members: ['奥古斯塔', '尤诺', '守岸人'], multiplier: 1.2 },
+  { name: '弗坎守', members: ['弗洛洛', '坎特蕾拉', '守岸人'], multiplier: 1.2 },
+  { name: '爱达千', members: ['爱弥斯', '达妮娅', '千咲'], multiplier: 1.2 },
+  { name: '卡夏千', members: ['卡提希娅', '夏空', '千咲'], multiplier: 1.2 },
+  { name: '露丽守', members: ['露西', '丽贝卡', '守岸人'], multiplier: 1.2 },
+  { name: '西仇守', members: ['西格莉卡', '仇远', '守岸人'], multiplier: 1.2 },
+  { name: '嘉仇守', members: ['嘉贝莉娜', '仇远', '守岸人'], multiplier: 1.2 },
+  { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.5 },
+  { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.2 },
+  { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
 ];
 
-// 配队定义（角色名数组）
-const TEAM_COMPS = [
-  ['绯雪', '洛瑟菈', '千咲'],
-  ['奥古斯塔', '尤诺', '守岸人'],
-  ['弗洛洛', '坎特蕾拉', '守岸人'],
-  ['爱弥斯', '达妮娅', '千咲'],
-  ['卡提希娅', '夏空', '千咲'],
-  ['露西', '丽贝卡', '守岸人'],
-  ['西格莉卡', '仇远', '守岸人'],
-  ['嘉贝莉娜', '仇远', '守岸人'],
-  ['爱弥斯', '莫宁', '琳奈'],
-  ['布兰特', '露帕', '长离'],
-  ['赞妮', '菲比', '守岸人'],
+// ============================================================
+// 默认抽数阶梯定价（对应油猴脚本 DEFAULT_PULL_TIERS）
+// ============================================================
+const DEFAULT_PULL_TIERS = [
+  { minPull: 0, maxPull: 100, perPullPrice: 0.8 },
+  { minPull: 100, maxPull: 200, perPullPrice: 1 },
+  { minPull: 200, maxPull: 300, perPullPrice: 1.2 },
+  { minPull: 300, maxPull: 400, perPullPrice: 1.4 },
+  { minPull: 400, maxPull: 500, perPullPrice: 1.7 },
+  { minPull: 500, maxPull: 600, perPullPrice: 2 },
+  { minPull: 600, maxPull: 700, perPullPrice: 2.3 },
+  { minPull: 700, maxPull: 800, perPullPrice: 2.5 },
+  { minPull: 800, maxPull: 900, perPullPrice: 2.7 },
+  { minPull: 900, maxPull: 1000, perPullPrice: 3 },
+  { minPull: 1000, maxPull: 1100, perPullPrice: 3.2 },
+  { minPull: 1100, maxPull: 1200, perPullPrice: 3.4 },
+  { minPull: 1200, maxPull: 1300, perPullPrice: 3.6 },
+  { minPull: 1300, maxPull: 1400, perPullPrice: 3.8 },
+  { minPull: 1400, maxPull: Infinity, perPullPrice: 4 },
 ];
 
-// 抽数阶梯单价（15档）
-const PULL_TIERS = [
-  { max: 100, price: 0.8 },
-  { max: 200, price: 1.0 },
-  { max: 300, price: 1.2 },
-  { max: 400, price: 1.4 },
-  { max: 500, price: 1.7 },
-  { max: 600, price: 2.0 },
-  { max: 700, price: 2.3 },
-  { max: 800, price: 2.5 },
-  { max: 900, price: 2.7 },
-  { max: 1000, price: 3.0 },
-  { max: 1100, price: 3.2 },
-  { max: 1200, price: 3.4 },
-  { max: 1300, price: 3.6 },
-  { max: 1400, price: 3.8 },
-  { max: Infinity, price: 4.0 },
+// ============================================================
+// 默认黄数阶梯系数（对应油猴脚本 DEFAULT_YELLOW_TIERS）
+// ============================================================
+const DEFAULT_YELLOW_TIERS = [
+  { minYellow: 0, maxYellow: 10, coefficient: 0.5 },
+  { minYellow: 10, maxYellow: 20, coefficient: 0.6 },
+  { minYellow: 20, maxYellow: 30, coefficient: 0.7 },
+  { minYellow: 30, maxYellow: 40, coefficient: 0.8 },
+  { minYellow: 40, maxYellow: 50, coefficient: 0.9 },
+  { minYellow: 50, maxYellow: 60, coefficient: 1 },
+  { minYellow: 60, maxYellow: 70, coefficient: 1.05 },
+  { minYellow: 70, maxYellow: 80, coefficient: 1.1 },
+  { minYellow: 80, maxYellow: 90, coefficient: 1.15 },
+  { minYellow: 90, maxYellow: 100, coefficient: 1.2 },
+  { minYellow: 100, maxYellow: 110, coefficient: 1.25 },
+  { minYellow: 110, maxYellow: 120, coefficient: 1.3 },
+  { minYellow: 120, maxYellow: Infinity, coefficient: 1.35 },
 ];
 
-// 其他资源定价
-const RESOURCE_PRICES = {
-  outfit: 2,        // 服饰 元/件
-  motorcycle: 0,    // 摩托 元/辆
-  carFrame: 10,     // 车架 元/个
-  paint: 0,         // 涂装 元/个
-};
-
-// 抽数满命加成档位（根据加权满命数）
-const PULL_C6_BONUS_TIERS = [
-  { threshold: 1, bonus: 0.3 },
-  { threshold: 2, bonus: 0.4 },
-  { threshold: 3, bonus: 0.5 },
-  { threshold: 4, bonus: 0.6 },
-  { threshold: 5, bonus: 0.7 },
-];
-
-// 默认角色基础定价（按等级）- 用于角色未配置时的回退
+// ============================================================
+// 默认角色价格表（对应油猴脚本 DEFAULT_CHAR_PRICES，按角色名）
+// ============================================================
 const DEFAULT_CHAR_PRICES = {
-  S: 50, A: 35, B: 25, C: 5, D: 3, E: 2,
+  '爱弥斯': 50, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
+  '琳奈': 30, '守岸人': 30, '千咲': 30, '穗穗': 0, '莫宁': 30, '秧秧': 35,
+  '洛瑟菈': 30,
+  '达妮娅': 16, '夏空': 12,
+  '露西': 30, '嘉贝莉娜': 20, '奥古斯塔': 15, '仇远': 10, '尤诺': 10,
+  '陆赫斯': 15, '赞妮': 10, '布兰特': 10, '西格莉卡': 10,
+  '露帕': 10, '珂莱塔': 10, '菲比': 10, '坎特蕾拉': 10, '椿': 10,
+  '忌炎': 2, '吟霖': 2, '相里要': 2, '今汐': 2, '长离': 2, '折枝': 2, '洛可可': 2,
+  '丽贝卡': 2, '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0,
 };
 
-// 默认命座溢价配置（按等级）- 直接在计算中使用
+// ============================================================
+// 默认命座溢价（对应油猴脚本 DEFAULT_CONST_PREMIUMS，按角色名）
+// ============================================================
 const DEFAULT_CONST_PREMIUMS = {
-  S: { base: 1.0, perConst: 0.08, c3Extra: 0.1, c6: 3.0 },
-  A: { base: 1.0, perConst: 0.08, c3Extra: 0.1, c6: 3.0 },
-  B: { base: 1.0, perConst: 0.08, c3Extra: 0.1, c6: 3.0 },
-  C: { base: 1.0, perConst: 0.15, c6: 5.0 },
-  D: { base: 1.0, perConst: 0.15, c6: 5.0 },
-  E: { base: 1.0, perConst: 0.15, c6: 5.0 },
+  '爱弥斯': { '3': 50, '6': 180 },
+  '绯雪': { '2': 50, '3': 80, '6': 200 },
+  '卡提希娅': { '2': 20, '3': 30, '6': 100 },
+  '弗洛洛': { '2': 20, '6': 100 },
+  '奥古斯塔': { '2': 20, '6': 100 },
+  '尤诺': { '6': 100 },
+  '露西': { '3': 50, '6': 100 },
+  '忌炎': { '6': 50 },
+  '守岸人': { '2': 20, '6': 50 },
+  '赞妮': { '2': 20, '6': 100 },
+  '椿': { '6': 50 },
+  '莫宁': { '1': 20 },
+  '珂莱塔': { '6': 50 },
+  '秧秧玄翎': { '3': 100, '6': 200 },
+  '千咲': { '6': 50 },
+  '嘉贝莉娜': { '3': 30 },
+  '陆赫斯': { '6': 100 },
+  '西格莉卡': { '6': 100 },
 };
 
+// 需要专武的角色列表（对应油猴脚本 DEFAULT_NEED_SIG_WEAPONS）
+const DEFAULT_NEED_SIG_WEAPONS = [
+  '爱弥斯', '绯雪', '卡提希娅', '千咲', '今汐', '椿', '忌炎',
+  '嘉贝莉娜', '弗洛洛', '珂莱塔', '西格莉卡', '赞妮', '陆赫斯',
+];
+
 // ============================================================
-// 工具函数
+// 角色名查找表（对应油猴脚本 CHAR_LOOKUP）
+// ============================================================
+const CHAR_LOOKUP = {};
+for (const [tier, info] of Object.entries(CHAR_TIERS)) {
+  for (const name of info.chars) {
+    CHAR_LOOKUP[name] = { tier, price: info.price, isHot: info.isHot };
+  }
+}
+
+// ============================================================
+// 已知段落关键词（对应油猴脚本 SECTION_KEYWORDS）
+// ============================================================
+const SECTION_KEYWORDS = [
+  '五星角色', '五星武器', '余波珊瑚', '浮金波纹', '铸潮波纹',
+  '摩托饰品', '车架模组', '星声', '月相', '服饰', '摩托', '车架', '涂装',
+];
+
+// ============================================================
+// 构建默认权重对象（对应油猴脚本 loadWeights，saved 为空）
+// ============================================================
+
+// 生成默认角色价格表（从 DEFAULT_CHAR_PRICES，回退到 CHAR_TIERS）
+function buildDefaultCharPrices() {
+  const prices = {};
+  for (const tierKey of Object.keys(CHAR_TIERS)) {
+    for (const name of CHAR_TIERS[tierKey].chars) {
+      prices[name] = DEFAULT_CHAR_PRICES[name] != null ? DEFAULT_CHAR_PRICES[name] : CHAR_TIERS[tierKey].price;
+    }
+  }
+  return prices;
+}
+
+// 生成默认配队溢价表（对象格式，从 DEFAULT_TEAMS 转换）
+function buildDefaultTeamPremiums() {
+  const result = {};
+  for (const team of DEFAULT_TEAMS) {
+    result[team.name] = {
+      chars: [...(team.members || [])],
+      multiplier: team.multiplier || 1.0,
+      enabled: true,
+    };
+  }
+  return result;
+}
+
+// 构建默认权重（合并所有默认配置，等价于油猴脚本 loadWeights() 无用户配置时的结果）
+function buildDefaultWeights() {
+  const saved = {};
+  const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
+  w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
+  w.c6MultiBonus = (saved.c6MultiBonus && saved.c6MultiBonus.length) ? saved.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
+  w.pullC6Bonus = (saved.pullC6Bonus && saved.pullC6Bonus.length) ? saved.pullC6Bonus : DEFAULT_WEIGHTS.pullC6Bonus;
+  w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
+  w.pullTiers = (saved.pullTiers && saved.pullTiers.length) ? saved.pullTiers : DEFAULT_PULL_TIERS;
+  w.yellowTiers = (saved.yellowTiers && saved.yellowTiers.length) ? saved.yellowTiers : DEFAULT_YELLOW_TIERS;
+  w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
+  w.constPremiums = Object.assign({}, DEFAULT_CONST_PREMIUMS, saved.constPremiums || {});
+  w.teamPremiums = saved.teamPremiums || buildDefaultTeamPremiums();
+  w.teams = [];
+  for (const teamName of Object.keys(w.teamPremiums)) {
+    const t = w.teamPremiums[teamName];
+    if (t && t.enabled !== false) {
+      w.teams.push({ name: teamName, members: t.chars || [], multiplier: t.multiplier || 1.0 });
+    }
+  }
+  w.needSigWeapons = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  return w;
+}
+
+// 全局权重（等价于油猴脚本中的 weights 全局变量）
+let weights = buildDefaultWeights();
+
+// ============================================================
+// 文本解析辅助函数（对应油猴脚本 extractSection 等）
 // ============================================================
 
 /**
- * 获取所有角色名，按长度降序排列（避免短名误匹配）
+ * 提取文本中某个关键词后的段落内容
  */
-function getSortedCharacterNames() {
-  return Object.keys(CHARACTER_PRICES).sort((a, b) => b.length - a.length);
+function extractSection(text, keyword) {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const others = SECTION_KEYWORDS.filter(k => k !== keyword)
+    .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[：:]');
+  const pattern = escaped + '[：:]\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
+  const match = text.match(new RegExp(pattern));
+  return match ? match[1].trim() : '';
 }
 
 /**
- * 获取所有专武名，按长度降序排列
+ * 从文本中提取数字（关键词: 数字）
  */
-function getSortedWeaponNames() {
-  const weapons = new Set();
-  for (const w of Object.values(SIGNATURE_WEAPONS)) {
-    if (w) weapons.add(w);
-  }
-  return Array.from(weapons).sort((a, b) => b.length - a.length);
-}
-
-/**
- * 从文本中提取数字
- */
-function extractNumber(text) {
-  if (!text || typeof text !== 'string') return 0;
-  const match = text.match(/(\d[\d,]*)/);
-  if (match && match[1]) {
-    return parseInt(match[1].replace(/,/g, ''), 10);
-  }
+function extractNumber(text, keyword) {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = text.match(new RegExp(escaped + '[：:]\\s*(\\d[\\d,]*)', 'i'));
+  if (match) return parseInt(match[1].replace(/,/g, ''));
   return 0;
 }
 
-// ============================================================
-// 解析 showTitle 文本
-// ============================================================
-
 /**
- * 解析账号描述文本，提取角色、武器、资源等信息
- * @param {string} showTitle - 账号描述文本
- * @returns {object} 解析结果
+ * 解析五星角色段落
  */
-function parseAccountInfo(showTitle) {
-  if (!showTitle || typeof showTitle !== 'string') {
-    return createEmptyResult();
+function parseCharacters(section) {
+  const chars = [];
+  if (!section) return chars;
+
+  const items = section.split(/[,，、\s]+/).filter(s => s.length > 0);
+
+  for (const item of items) {
+    let constNum = 0;
+    let name = '';
+
+    // 尝试 "满命XXX"
+    let m = item.match(/^满命(.+)$/);
+    if (m) {
+      constNum = 6;
+      name = m[1];
+    } else {
+      // 尝试 "N命XXX"
+      m = item.match(/^(\d+)命(.+)$/);
+      if (m) {
+        constNum = parseInt(m[1]);
+        name = m[2];
+      } else {
+        // 尝试 "XXX(满命)"
+        m = item.match(/^(.+?)\(满命\)$/);
+        if (m) {
+          name = m[1];
+          constNum = 6;
+        } else {
+          // 尝试 "XXX(N命)"
+          m = item.match(/^(.+?)\((\d+)命\)$/);
+          if (m) {
+            name = m[1];
+            constNum = parseInt(m[2]);
+          } else {
+            // 仅名称
+            name = item;
+            constNum = 0;
+          }
+        }
+      }
+    }
+
+    // 验证是否为已知角色
+    const info = CHAR_LOOKUP[name];
+    if (info) {
+      chars.push({
+        name,
+        const: constNum,
+        tier: info.tier,
+        price: info.price,
+        isHot: info.isHot,
+      });
+    }
   }
 
-  const text = showTitle.trim();
-  const result = createEmptyResult();
+  // 同名角色去重：保留命座最高的
+  const charMap = {};
+  for (const c of chars) {
+    if (!charMap[c.name] || c.const > charMap[c.name].const) {
+      charMap[c.name] = c;
+    }
+  }
+  return Object.values(charMap);
+}
 
-  // 1. 提取资源信息
-  extractResources(text, result);
+/**
+ * 从完整文本中查找角色（无明确段落时的回退方案）
+ */
+function findCharsInText(text) {
+  const chars = [];
+  for (const [tier, info] of Object.entries(CHAR_TIERS)) {
+    for (const name of info.chars) {
+      // "满命" + name
+      if (text.includes('满命' + name)) {
+        chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+        continue;
+      }
+      // "N命" + name
+      let m = text.match(new RegExp('(\\d+)命' + name));
+      if (m) {
+        chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
+        continue;
+      }
+      // name + "(满命)"
+      if (text.includes(name + '(满命)')) {
+        chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+        continue;
+      }
+      // name + "(N命)"
+      m = text.match(new RegExp(name + '\\((\\d+)命\\)'));
+      if (m) {
+        chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
+        continue;
+      }
+      // 仅出现名字
+      if (text.includes(name)) {
+        chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
+      }
+    }
+  }
+  // 去重
+  const charMap = {};
+  for (const c of chars) {
+    if (!charMap[c.name] || c.const > charMap[c.name].const) {
+      charMap[c.name] = c;
+    }
+  }
+  return Object.values(charMap);
+}
 
-  // 2. 提取角色及命座信息
-  extractCharacters(text, result);
+/**
+ * 解析五星武器段落
+ */
+function parseWeapons(section) {
+  const weapons = [];
+  if (!section) return weapons;
+  const items = section.split(/[,，、\s]+/).filter(s => s.length > 0);
+  for (const item of items) {
+    let refine = 1;
+    let name = '';
+    const m = item.match(/^精(\d+)(.+)$/);
+    if (m) {
+      refine = parseInt(m[1]);
+      name = m[2];
+    } else {
+      name = item;
+      refine = 1;
+    }
+    if (name) weapons.push({ name, refine });
+  }
+  return weapons;
+}
 
-  // 3. 提取武器信息
-  extractWeapons(text, result);
+/**
+ * 提取黄数
+ */
+function extractYellowCount(text) {
+  // "N黄" 或 "N黄数"
+  let m = text.match(/(\d+)\s*黄/);
+  if (m) return parseInt(m[1]);
+  // "黄数：N" 或 "黄：N"
+  m = text.match(/黄[数]?[：:]\s*(\d+)/);
+  if (m) return parseInt(m[1]);
+  return 0;
+}
+
+/**
+ * 提取列表段落的条目数量
+ */
+function extractListCount(text, keyword) {
+  const section = extractSection(text, keyword);
+  if (!section) return 0;
+  const items = section.split(/[,，、\s]+/).filter(s => s.length > 0);
+  return items.length;
+}
+
+/**
+ * 从文本中提取某个关键词段落的条目列表（用于服饰/摩托/车架/涂装明细）
+ */
+function extractListItems(text, keyword) {
+  const section = extractSection(text, keyword);
+  if (!section) return [];
+  return section.split(/[,，、\s]+/).filter(s => s.length > 0);
+}
+
+// ============================================================
+// 解析账号描述信息（对应油猴脚本 parseAccountInfo）
+// ============================================================
+function parseAccountInfo(text) {
+  const result = {
+    characters: [],
+    weapons: [],
+    starSound: 0,
+    moonPhase: 0,
+    aftermathCoral: 0,
+    floatGoldRipple: 0,
+    castTideRipple: 0,
+    yellowCount: 0,
+    outfitCount: 0,
+    motoCount: 0,
+    vehicleFrameCount: 0,
+    paintCount: 0,
+    pulls: 0,
+    rawText: text || '',
+  };
+
+  if (!text) return result;
+
+  // 提取五星角色
+  const charSection = extractSection(text, '五星角色');
+  if (charSection) {
+    result.characters = parseCharacters(charSection);
+  }
+  // 回退：直接在全文中查找角色
+  if (result.characters.length === 0) {
+    result.characters = findCharsInText(text);
+  }
+
+  // 提取五星武器
+  const weaponSection = extractSection(text, '五星武器');
+  if (weaponSection) {
+    result.weapons = parseWeapons(weaponSection);
+  }
+
+  // 提取资源数量
+  result.starSound = extractNumber(text, '星声');
+  result.moonPhase = extractNumber(text, '月相');
+  result.aftermathCoral = extractNumber(text, '余波珊瑚');
+  result.floatGoldRipple = extractNumber(text, '浮金波纹');
+  result.castTideRipple = extractNumber(text, '铸潮波纹');
+
+  // 提取黄数
+  result.yellowCount = extractYellowCount(text);
+
+  // 提取服饰、摩托、车架、涂装数量
+  result.outfitCount = extractListCount(text, '服饰');
+  // 摩托只算车架模组（摩托饰品不算摩托），检查所有可能的段落标题
+  result.motoCount = extractListCount(text, '车架模组') + extractListCount(text, '车架') + extractListCount(text, '摩托');
+  // 摩托饰品单独计数（不算摩托）
+  result.motoAccessoryCount = extractListCount(text, '摩托饰品');
+  result.vehicleFrameCount = extractListCount(text, '车架模组') + extractListCount(text, '车架');
+  result.paintCount = extractListCount(text, '涂装');
+
+  // 计算总抽数
+  result.pulls = result.starSound / 160 + result.moonPhase / 160 +
+    result.aftermathCoral / 8 + result.floatGoldRipple + result.castTideRipple;
 
   return result;
 }
 
-/**
- * 创建空结果对象
- */
-function createEmptyResult() {
-  return {
-    characters: [],      // { name, constellation, tier, price, hasSignatureWeapon, weaponName }
-    weapons: [],         // { name, refinement }
-    starSounds: 0,       // 星声
-    moonPhases: 0,       // 月相
-    coral: 0,            // 余波珊瑚
-    goldenRipples: 0,    // 浮金波纹
-    tideRipples: 0,      // 铸潮波纹
-    outfits: 0,          // 服饰数量
-    motorcycles: 0,      // 摩托数量
-    carFrames: 0,        // 车架数量
-    paints: 0,           // 涂装数量
-    yellowCount: 0,      // 黄数
-    rawText: '',
-  };
-}
-
-/**
- * 从文本中提取资源数量
- * 匹配策略：优先匹配 "数字+资源名"（如"500星声"），其次匹配 "资源名:数字" 或 "资源名数字"
- * 避免匹配到下一个资源的数字
- */
-function extractResources(text, result) {
-  result.rawText = text;
-
-  // 星声
-  result.starSounds = extractResourceNumber(text, '星声');
-
-  // 月相
-  result.moonPhases = extractResourceNumber(text, '月相');
-
-  // 余波珊瑚
-  result.coral = extractResourceNumber(text, '余波珊瑚');
-
-  // 浮金波纹
-  result.goldenRipples = extractResourceNumber(text, '浮金波纹');
-
-  // 铸潮波纹
-  result.tideRipples = extractResourceNumber(text, '铸潮波纹');
-
-  // 服饰
-  result.outfits = extractResourceNumber(text, '服饰', '件');
-
-  // 摩托 / 摩托车
-  let motoVal = extractResourceNumber(text, '摩托车', '辆');
-  if (motoVal === 0) motoVal = extractResourceNumber(text, '摩托', '辆');
-  result.motorcycles = motoVal;
-
-  // 车架
-  result.carFrames = extractResourceNumber(text, '车架');
-
-  // 涂装
-  result.paints = extractResourceNumber(text, '涂装');
-
-  // 黄数 - 支持 "黄数XXX", "XXX黄数", "XXX黄"
-  let ym = text.match(/(\d[\d,]*)\s*黄数/);
-  if (ym) {
-    result.yellowCount = extractNumber(ym[1]);
-  } else {
-    ym = text.match(/黄数[：:](\d[\d,]*)/);
-    if (ym) {
-      result.yellowCount = extractNumber(ym[1]);
-    } else {
-      ym = text.match(/黄数(\d[\d,]*)/);
-      if (ym) {
-        result.yellowCount = extractNumber(ym[1]);
-      } else {
-        // "XXX黄" 后面需要跟空格/标点/结尾，避免误匹配"黄数"中的"黄"
-        ym = text.match(/(\d[\d,]*)\s*黄(?:\s|$|，|,|。|\.|件|辆)/);
-        if (ym) result.yellowCount = extractNumber(ym[1]);
-      }
-    }
-  }
-}
-
-/**
- * 通用资源数字提取
- * 优先匹配 "数字+资源名"（如"500星声"），其次匹配 "资源名:数字" 或 "资源名数字"
- * @param {string} text - 全文
- * @param {string} resName - 资源名（如"星声"）
- * @param {string} suffix - 单位后缀（如"件"、"辆"），可选
- * @returns {number} 提取到的数字
- */
-function extractResourceNumber(text, resName, suffix) {
-  suffix = suffix || '';
-  const escapedName = resName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // 1. 优先匹配 "数字 资源名" 如 "500星声" 或 "500 星声"
-  let m = text.match(new RegExp('(\\d[\\d,]*)\\s*' + escapedName + escSuffix + '?'));
-  if (m) return extractNumber(m[1]);
-
-  // 1b. 匹配 "数字 单位 资源名" 如 "3件服饰" 或 "2辆摩托"
-  if (suffix) {
-    m = text.match(new RegExp('(\\d[\\d,]*)\\s*' + escSuffix + '\\s*' + escapedName));
-    if (m) return extractNumber(m[1]);
-  }
-
-  // 2. 匹配 "资源名:数字" 或 "资源名：数字"
-  m = text.match(new RegExp(escapedName + '[：:](\\d[\\d,]*)'));
-  if (m) return extractNumber(m[1]);
-
-  // 3. 匹配 "资源名数字" (紧跟，无空格) 如 "服饰3件" 或 "星声500"
-  m = text.match(new RegExp(escapedName + '(\\d[\\d,]*)' + escSuffix + '?'));
-  if (m) return extractNumber(m[1]);
-
-  // 3b. 匹配 "资源名 数字 单位" 如 "服饰 3件"
-  if (suffix) {
-    m = text.match(new RegExp(escapedName + '\\s*(\\d[\\d,]*)\\s*' + escSuffix));
-    if (m) return extractNumber(m[1]);
-  }
-
-  return 0;
-}
-
-/**
- * 从文本中提取角色及命座信息
- * 支持格式:
- *   "满命椿", "0命忌炎", "6命卡提希娅"
- *   "椿(满命)", "忌炎(0命)", "卡提希娅(C6)"
- *   "满命椿+专武", "0命忌炎(浩境长留)"
- */
-function extractCharacters(text, result) {
-  const charNames = getSortedCharacterNames();
-  const foundChars = [];
-  const matchedPositions = [];
-
-  // 查找所有角色名在文本中的位置
-  for (const name of charNames) {
-    let searchStart = 0;
-    while (true) {
-      const idx = text.indexOf(name, searchStart);
-      if (idx === -1) break;
-
-      // 检查是否与已匹配的角色重叠
-      const end = idx + name.length;
-      let overlaps = false;
-      for (const pos of matchedPositions) {
-        if (idx < pos.end && end > pos.start) {
-          overlaps = true;
-          break;
-        }
-      }
-      if (!overlaps) {
-        matchedPositions.push({ start: idx, end, name });
-      }
-      searchStart = idx + 1;
-    }
-  }
-
-  // 按位置排序
-  matchedPositions.sort((a, b) => a.start - b.start);
-
-  // 为每个角色提取命座和专武信息
-  for (let i = 0; i < matchedPositions.length; i++) {
-    const pos = matchedPositions[i];
-    const charInfo = CHARACTER_PRICES[pos.name];
-    const sigWeapon = SIGNATURE_WEAPONS[pos.name] || '';
-
-    // 提取命座
-    const constellation = extractConstellation(text, pos, i > 0 ? matchedPositions[i - 1] : null);
-
-    // 提取专武信息
-    let hasSignatureWeapon = false;
-    let weaponName = '';
-
-    // 查看角色名后面的文本（到下一个角色名之前）
-    const nextStart = i + 1 < matchedPositions.length ? matchedPositions[i + 1].start : text.length;
-    const afterText = text.substring(pos.end, nextStart);
-    const beforeText = i > 0 ? text.substring(matchedPositions[i - 1].end, pos.start) : text.substring(0, pos.start);
-
-    // 检查 "专武" 关键词
-    if (afterText.includes('专武') || beforeText.includes('专武')) {
-      hasSignatureWeapon = !!sigWeapon;
-      weaponName = sigWeapon;
-    }
-
-    // 检查是否包含专武名称
-    if (sigWeapon) {
-      if (text.includes(sigWeapon)) {
-        hasSignatureWeapon = true;
-        weaponName = sigWeapon;
-      }
-    }
-
-    foundChars.push({
-      name: pos.name,
-      constellation,
-      tier: charInfo.tier,
-      price: charInfo.price,
-      hasSignatureWeapon,
-      weaponName,
-    });
-  }
-
-  result.characters = foundChars;
-}
-
-/**
- * 提取角色的命座数
- * 支持: 满命/C6/6命/0命/C0/1命 等
- */
-function extractConstellation(text, currentPos, prevPos) {
-  // 角色名前面的文本（从上一个角色名结束到当前角色名开始）
-  const lookStart = prevPos ? prevPos.end : Math.max(0, currentPos.start - 10);
-  const beforeText = text.substring(lookStart, currentPos.start);
-
-  // 角色名后面的文本（检查括号内命座）
-  const afterText = text.substring(currentPos.end, Math.min(text.length, currentPos.end + 10));
-
-  // 检查括号内命座: "椿(满命)", "忌炎(0命)", "卡提希娅(C6)"
-  const parenMatch = afterText.match(/^\s*[（(]\s*(满命|满|0|1|2|3|4|5|6|C0|C1|C2|C3|C4|C5|C6|c0|c1|c2|c3|c4|c5|c6)\s*命?\s*[）)]/);
-  if (parenMatch) {
-    return parseConstellationValue(parenMatch[1]);
-  }
-
-  // 检查前面的命座: "满命椿", "0命忌炎", "6命卡提希娅", "C6椿"
-  const beforeMatch = beforeText.match(/(满命|满|0命|1命|2命|3命|4命|5命|6命|0|1|2|3|4|5|6|C0|C1|C2|C3|C4|C5|C6|c0|c1|c2|c3|c4|c5|c6)\s*$/);
-  if (beforeMatch) {
-    return parseConstellationValue(beforeMatch[1]);
-  }
-
-  // 默认 0 命
-  return 0;
-}
-
-/**
- * 解析命座值
- */
-function parseConstellationValue(str) {
-  str = str.trim();
-  if (str === '满命' || str === '满') return 6;
-  // C0-C6 / c0-c6
-  const cMatch = str.match(/^[Cc](\d)$/);
-  if (cMatch) return parseInt(cMatch[1], 10);
-  // 0命-6命 / 0-6
-  const numMatch = str.match(/^(\d)/);
-  if (numMatch) return parseInt(numMatch[1], 10);
-  return 0;
-}
-
-/**
- * 从文本中提取武器及精炼信息
- */
-function extractWeapons(text, result) {
-  const weaponNames = getSortedWeaponNames();
-  const foundWeapons = [];
-
-  for (const wName of weaponNames) {
-    if (text.includes(wName)) {
-      // 查找精炼等级
-      let refinement = 1;
-      const nearbyText = text.substring(
-        Math.max(0, text.indexOf(wName) - 5),
-        Math.min(text.length, text.indexOf(wName) + wName.length + 10)
-      );
-      const refineMatch = nearbyText.match(/精(\d|满)/);
-      if (refineMatch) {
-        refinement = refineMatch[1] === '满' ? 5 : parseInt(refineMatch[1], 10);
-      }
-      foundWeapons.push({ name: wName, refinement });
-    }
-  }
-
-  result.weapons = foundWeapons;
-}
-
 // ============================================================
-// 估值计算
+// 估值计算辅助函数（对应油猴脚本 checkHasSigWeapon 等）
 // ============================================================
 
 /**
- * 计算单个角色的价值
- * @param {object} char - 角色信息
- * @returns {number} 角色价值
+ * 检查角色是否有专武
  */
-function calculateCharacterValue(char) {
-  const { tier, constellation, hasSignatureWeapon } = char;
-  const isHot = ['S', 'A', 'B'].includes(tier);
-  const isCold = ['C', 'D', 'E'].includes(tier);
+function checkHasSigWeapon(charName, weaponNames, weaponSectionText) {
+  const sigName = SIG_WEAPONS[charName];
+  if (!sigName) return false;
+  // 先检查武器列表
+  if (weaponNames && weaponNames.some(w => w === sigName || w.includes(sigName) || sigName.includes(w))) {
+    return true;
+  }
+  // 再检查武器段落文本
+  if (weaponSectionText && weaponSectionText.includes(sigName)) {
+    return true;
+  }
+  // 最后检查全文
+  return false;
+}
 
-  // 角色基础价格：优先使用角色独立定价，否则回退到等级默认定价
-  const price = (char.price !== undefined && char.price !== null)
-    ? char.price
-    : (DEFAULT_CHAR_PRICES[tier] || 0);
-
-  // 命座溢价配置：使用默认配置
-  const constConfig = DEFAULT_CONST_PREMIUMS[tier] || { base: 1.0, perConst: 0.1, c6: 3.0 };
-
-  let constellationMultiplier;
-  let weaponMultiplier;
-
-  if (isHot) {
-    // 热门角色 (S/A/B级)
-    if (constellation === 0) {
-      constellationMultiplier = constConfig.base;
-    } else if (constellation <= 2) {
-      constellationMultiplier = constConfig.base + (constConfig.perConst || 0.08) * constellation;
-    } else if (constellation <= 5) {
-      // C3-C5 额外加成
-      constellationMultiplier = constConfig.base + (constConfig.perConst || 0.08) * constellation + (constConfig.c3Extra || 0.1) * (constellation - 2);
-    } else {
-      // C6 (满命)
-      constellationMultiplier = constConfig.c6 || 3.0;
+/**
+ * 计算角色命座溢价（达到指定命座数时额外加价，只取最高溢价不叠加）
+ */
+function calcConstPremium(charName, constCount, w) {
+  w = w || weights || DEFAULT_WEIGHTS;
+  const premiums = w.constPremiums || {};
+  const charPrem = premiums[charName];
+  if (!charPrem || constCount <= 0) return 0;
+  let maxPrem = 0;
+  for (const bp of Object.keys(charPrem)) {
+    const breakpoint = parseInt(bp);
+    if (!isNaN(breakpoint) && constCount >= breakpoint) {
+      const prem = charPrem[bp] || 0;
+      if (prem > maxPrem) maxPrem = prem;
     }
+  }
+  return maxPrem;
+}
 
-    // 专武倍率：有专武=1.0, 无专武=0.5（从0.15改为0.5）
-    weaponMultiplier = hasSignatureWeapon ? 1.0 : 0.5;
+/**
+ * 计算单个角色价值（从 weights 读取参数，里程碑估值）
+ */
+function getCharValue(char, hasSigWeapon, w) {
+  w = w || weights || DEFAULT_WEIGHTS;
+  // 基础价优先用按角色名的价格表，否则用级别默认价
+  const charPrices = w.charPrices || {};
+  const base = charPrices[char.name] != null ? charPrices[char.name] : char.price;
 
-    // C6 有专武额外倍率
-    if (constellation === 6 && hasSignatureWeapon) {
-      weaponMultiplier = 1.3;
+  if (char.isHot) {
+    // 热门角色：里程碑估值
+    const c0Mult = w.hotC0Mult != null ? w.hotC0Mult : 1.0;
+    const c3Mult = w.hotC3Mult != null ? w.hotC3Mult : 2.0;
+    const c6Mult = w.hotC6Mult != null ? w.hotC6Mult : 3.0;
+    const stepMult = w.hotStepMult != null ? w.hotStepMult : 0.08;
+    const noSigMult = w.hotNoSigMult != null ? w.hotNoSigMult : 0.15;
+    const noSigC6Mult = w.hotNoSigC6Mult != null ? w.hotNoSigC6Mult : 0.25;
+
+    if (!hasSigWeapon) {
+      // 热门角色无专武，大幅贬值
+      if (char.const >= 6) return base * noSigC6Mult;
+      return base * noSigMult;
     }
-    // C6 无专武倍率：0.5（从0.25改为0.5）
-  } else if (isCold) {
-    // 冷门角色 (C/D/E级) - 命座线性递增
-    constellationMultiplier = constConfig.base + (constConfig.perConst || 0.15) * constellation;
-    if (constellation === 6) {
-      // C6: 5倍
-      constellationMultiplier = constConfig.c6 || 5.0;
-    }
-
-    // 专武倍率（保持不变）
-    weaponMultiplier = hasSignatureWeapon ? 1.0 : 0.5;
+    // 有专武：按里程碑计算
+    if (char.const >= 6) return base * c6Mult;
+    if (char.const >= 3) return base * c3Mult;
+    if (char.const >= 1) return base * (c0Mult + char.const * stepMult); // C1/C2/C4/C5 过渡命
+    return base * c0Mult;
   } else {
-    constellationMultiplier = constConfig.base;
-    weaponMultiplier = hasSignatureWeapon ? 1.0 : 0.3;
-  }
+    // 冷门角色：基础价 + 命数加分
+    const coldStep = w.coldStep != null ? w.coldStep : 1;
+    const coldC3Bonus = w.coldC3Bonus != null ? w.coldC3Bonus : 3;
+    const coldC6Bonus = w.coldC6Bonus != null ? w.coldC6Bonus : 5;
+    const coldSigBonus = w.coldSigBonus != null ? w.coldSigBonus : 2;
 
-  return price * constellationMultiplier * weaponMultiplier;
+    let val = base + char.const * coldStep;
+    if (char.const >= 3) val += coldC3Bonus;
+    if (char.const >= 6) val += coldC6Bonus;
+    if (hasSigWeapon) val += coldSigBonus;
+    return val;
+  }
 }
 
 /**
- * 计算满命多角色溢价
- * @param {array} characters - 角色列表
- * @param {number} baseValue - 基础角色总价值
- * @returns {number} 溢价金额
- */
-function calculateC6Premium(characters, baseValue) {
-  // 计算加权满命计数
-  let weightedC6 = 0;
-  for (const char of characters) {
-    if (char.constellation === 6) {
-      weightedC6 += C6_WEIGHTS[char.tier] || 0.1;
-    }
-  }
-
-  // 查找适用的溢价档位
-  for (const tier of C6_PREMIUM_TIERS) {
-    if (weightedC6 >= tier.threshold) {
-      return baseValue * tier.bonus;
-    }
-  }
-
-  return 0;
-}
-
-/**
- * 计算配队溢价
- * @param {array} characters - 角色列表
- * @param {number} baseValue - 基础角色总价值
- * @returns {number} 溢价金额
- */
-function calculateTeamCompPremium(characters, baseValue) {
-  const charNames = new Set(characters.map(c => c.name));
-  let teamsFormed = 0;
-
-  for (const team of TEAM_COMPS) {
-    const allPresent = team.every(name => charNames.has(name));
-    if (allPresent) {
-      teamsFormed++;
-    }
-  }
-
-  if (teamsFormed === 0) return 0;
-
-  // 第一个配队：队员价值 x 0.2
-  // 多个配队：额外 x 1.1^(teamsFormed-1)
-  let premium = baseValue * 0.2;
-  if (teamsFormed > 1) {
-    premium *= Math.pow(1.1, teamsFormed - 1);
-  }
-
-  return premium;
-}
-
-/**
- * 计算抽数价值（阶梯单价）
- * @param {number} pulls - 抽数
- * @returns {number} 抽数价值
+ * 计算抽数阶梯价值（从 weights.pullTiers 读取阶梯）
+ * 按抽数所在阶梯的单价 × 总抽数计算（不分段累计）
  */
 function calculatePullValue(pulls) {
-  if (pulls <= 0) return 0;
-
-  let value = 0;
-  let remaining = pulls;
-  let prevMax = 0;
-
-  for (const tier of PULL_TIERS) {
-    const tierRange = tier.max - prevMax;
-    if (remaining <= 0) break;
-
-    const tierPulls = Math.min(remaining, tierRange);
-    value += tierPulls * tier.price;
-    remaining -= tierPulls;
-    prevMax = tier.max;
+  const tiers = (weights && weights.pullTiers) || DEFAULT_PULL_TIERS;
+  // 去重：相同区间只保留一条（修复历史数据重复问题）
+  const dedupMap = {};
+  for (const t of tiers) {
+    const key = (t.minPull || 0) + '-' + (t.maxPull == null ? 'inf' : t.maxPull);
+    dedupMap[key] = t;
   }
+  const deduped = Object.values(dedupMap);
+  const sorted = [...deduped].sort((a, b) => (a.minPull || 0) - (b.minPull || 0));
 
-  return value;
-}
-
-/**
- * 计算其他资源价值
- * @param {object} info - 解析结果
- * @returns {number} 资源价值
- */
-function calculateResourceValue(info) {
-  let value = 0;
-
-  // 星声: 每1000星声约值2元
-  value += (info.starSounds / 1000) * 2;
-
-  // 月相: 每100月相约值5元
-  value += (info.moonPhases / 100) * 5;
-
-  // 余波珊瑚: 每个0.5元
-  value += info.coral * 0.5;
-
-  // 浮金波纹: 每个0.3元
-  value += info.goldenRipples * 0.3;
-
-  // 铸潮波纹: 每个0.3元
-  value += info.tideRipples * 0.3;
-
-  // 服饰
-  value += info.outfits * RESOURCE_PRICES.outfit;
-
-  // 摩托
-  value += info.motorcycles * RESOURCE_PRICES.motorcycle;
-
-  // 车架
-  value += info.carFrames * RESOURCE_PRICES.carFrame;
-
-  // 涂装
-  value += info.paints * RESOURCE_PRICES.paint;
-
-  return value;
-}
-
-/**
- * 计算黄数系数
- * @param {number} yellowCount - 黄数
- * @returns {number} 系数
- */
-function calculateYellowMultiplier(yellowCount) {
-  if (yellowCount <= 0) return 1.0;
-  if (yellowCount <= 10) return 1.0 + yellowCount * 0.005;      // 0-10: 1.0~1.05
-  if (yellowCount <= 50) return 1.05 + (yellowCount - 10) * 0.003; // 10-50: 1.05~1.17
-  if (yellowCount <= 100) return 1.17 + (yellowCount - 50) * 0.004; // 50-100: 1.17~1.37
-  if (yellowCount <= 200) return 1.37 + (yellowCount - 100) * 0.002; // 100-200: 1.37~1.57
-  return 1.57 + (yellowCount - 200) * 0.001;                     // 200+: 缓慢增长
-}
-
-// ============================================================
-// 主估值函数
-// ============================================================
-
-/**
- * 计算账号估值
- * @param {string} showTitle - 账号描述文本
- * @returns {object} 估值结果
- */
-function evaluateAccount(showTitle) {
-  const info = parseAccountInfo(showTitle);
-
-  // 1. 角色基础价值
-  let characterValue = 0;
-  const charDetails = [];
-  for (const char of info.characters) {
-    const value = calculateCharacterValue(char);
-    characterValue += value;
-    charDetails.push({
-      ...char,
-      value: Math.round(value * 100) / 100,
-    });
-  }
-
-  // 2. 满命多角色溢价
-  const c6Premium = calculateC6Premium(info.characters, characterValue);
-
-  // 3. 配队溢价
-  const teamPremium = calculateTeamCompPremium(info.characters, characterValue);
-
-  // 4. 抽数价值
-  const basePullValue = calculatePullValue(info.yellowCount);
-
-  // 4b. 抽数满命加成：根据加权满命数应用抽数加成系数
-  let weightedC6ForPull = 0;
-  for (const char of info.characters) {
-    if (char.constellation === 6) {
-      weightedC6ForPull += C6_WEIGHTS[char.tier] || 0.1;
-    }
-  }
-  let pullC6Bonus = 0;
-  for (let i = PULL_C6_BONUS_TIERS.length - 1; i >= 0; i--) {
-    if (weightedC6ForPull >= PULL_C6_BONUS_TIERS[i].threshold) {
-      pullC6Bonus = PULL_C6_BONUS_TIERS[i].bonus;
+  // 找到抽数所在的阶梯，按该阶梯单价 × 总抽数计算（不分段累计）
+  let matchedTier = sorted[0] || { minPull: 0, maxPull: Infinity, perPullPrice: 0.8 };
+  for (const tier of sorted) {
+    const minPull = tier.minPull != null ? tier.minPull : 0;
+    const maxPull = (tier.maxPull == null || tier.maxPull === Infinity) ? Infinity : tier.maxPull;
+    if (pulls >= minPull && pulls < maxPull) {
+      matchedTier = { ...tier, minPull, maxPull };
       break;
     }
   }
-  // 抽数总价值 = 基础抽数价值 * (1 + 加成系数)
-  const pullValue = basePullValue * (1 + pullC6Bonus);
 
-  // 5. 其他资源价值
-  const resourceValue = calculateResourceValue(info);
-
-  // 汇总基础价值
-  const baseTotal = characterValue + c6Premium + teamPremium + pullValue + resourceValue;
-
-  // 6. 黄数系数
-  const yellowMultiplier = calculateYellowMultiplier(info.yellowCount);
-
-  // 最终估值
-  const finalValue = baseTotal * yellowMultiplier;
+  const value = pulls * matchedTier.perPullPrice;
+  const matchedMax = (matchedTier.maxPull == null || matchedTier.maxPull === Infinity) ? Infinity : matchedTier.maxPull;
+  const tierLabel = matchedMax === Infinity
+    ? matchedTier.minPull + '抽+'
+    : matchedTier.minPull + '~' + matchedMax + '抽';
 
   return {
-    info,
-    details: {
-      characterValue: Math.round(characterValue * 100) / 100,
-      c6Premium: Math.round(c6Premium * 100) / 100,
-      teamPremium: Math.round(teamPremium * 100) / 100,
-      pullValue: Math.round(pullValue * 100) / 100,
-      pullC6Bonus: Math.round(pullC6Bonus * 100) / 100,
-      weightedC6: Math.round(weightedC6ForPull * 100) / 100,
-      resourceValue: Math.round(resourceValue * 100) / 100,
-      baseTotal: Math.round(baseTotal * 100) / 100,
-      yellowMultiplier: Math.round(yellowMultiplier * 1000) / 1000,
-      finalValue: Math.round(finalValue * 100) / 100,
-      characters: charDetails,
-    },
+    pulls: Math.round(pulls),
+    perPull: matchedTier.perPullPrice,
+    tierLabel: tierLabel,
+    total: Math.round(value),
   };
 }
 
 /**
- * 计算性价比
- * @param {string} showTitle - 账号描述文本
- * @param {number} priceInCents - 标价（分）
- * @returns {object} 包含估值和性价比的结果
+ * 计算黄数系数（从 weights.yellowTiers 读取阶梯）
  */
-function evaluateWithPrice(showTitle, priceInCents) {
-  const evaluation = evaluateAccount(showTitle);
-  const priceInYuan = priceInCents / 100;
+function getYellowCoeff(yellowCount) {
+  const rawTiers = (weights && weights.yellowTiers) || DEFAULT_YELLOW_TIERS;
+  // 去重：相同区间只保留一条（修复历史数据重复问题）
+  const dedupMap = {};
+  for (const t of rawTiers) {
+    const key = (t.minYellow || 0) + '-' + (t.maxYellow == null ? 'inf' : t.maxYellow);
+    dedupMap[key] = t;
+  }
+  const tiers = Object.values(dedupMap);
+  let matchedTier = tiers[0] || { minYellow: 0, maxYellow: Infinity, coefficient: 0.3 };
+  for (const tier of tiers) {
+    const maxYellow = (tier.maxYellow == null || tier.maxYellow === Infinity) ? Infinity : tier.maxYellow;
+    if (yellowCount >= tier.minYellow && yellowCount < maxYellow) {
+      matchedTier = { ...tier, maxYellow };
+      break;
+    }
+  }
+  const tierLabel = matchedTier.maxYellow === Infinity
+    ? matchedTier.minYellow + '黄+'
+    : matchedTier.minYellow + '~' + matchedTier.maxYellow + '黄';
+  return {
+    yellowCount: yellowCount,
+    coefficient: matchedTier.coefficient,
+    tierLabel: tierLabel,
+  };
+}
 
-  let costPerformance = 0;
-  if (priceInYuan > 0) {
-    costPerformance = ((evaluation.details.finalValue - priceInYuan) / priceInYuan) * 100;
+// ============================================================
+// 完整估值计算（对应油猴脚本 calculateValue）
+// ============================================================
+function calculateValue(parsed, price) {
+  const w = weights || DEFAULT_WEIGHTS;
+  const weaponNames = parsed.weapons.map(wp => wp.name);
+  const weaponSectionText = parsed.rawText || '';
+
+  // 满命权重（提前定义，供角色循环中使用）
+  const c6Weights = w.c6TierWeights || FULL_CONST_WEIGHT;
+
+  // 1. 角色价值（构建 charBreakdown / charDetails / hasSignatureWeapons）
+  let charValue = 0;
+  let weightedFullConst = 0;
+  const charBreakdown = [];
+  const charDetails = [];
+  const hasSignatureWeapons = [];
+
+  for (const char of parsed.characters) {
+    const hasSig = checkHasSigWeapon(char.name, weaponNames, weaponSectionText);
+    const val = getCharValue(char, hasSig, w);
+    // 命座溢价（用户自定义的额外加价）
+    const premium = calcConstPremium(char.name, char.const, w);
+    charValue += val + premium;
+    if (hasSig && !hasSignatureWeapons.includes(char.name)) hasSignatureWeapons.push(char.name);
+
+    // 统计加权满命数
+    let fullConstWeightVal = 0;
+    if (char.const >= 6) {
+      fullConstWeightVal = c6Weights[char.tier] != null ? c6Weights[char.tier] : (FULL_CONST_WEIGHT[char.tier] || 0);
+      weightedFullConst += fullConstWeightVal;
+    }
+
+    // 获取专武精炼数（0表示无专武，1-5表示精1-5）
+    let sigRefine = 0;
+    if (hasSig) {
+      const sigName = SIG_WEAPONS[char.name];
+      if (sigName) {
+        const sigWeapon = parsed.weapons.find(function (wp) {
+          return wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name);
+        });
+        if (sigWeapon) sigRefine = sigWeapon.refine || 1;
+      }
+    }
+
+    // 角色估值明细
+    charBreakdown.push({
+      name: char.name,
+      const: char.const,
+      tier: char.tier,
+      isHot: !!char.isHot,
+      hasSig: hasSig,
+      sigRefine: sigRefine,
+      premium: premium,
+      value: Math.round(val + premium),
+    });
+    charDetails.push({
+      name: char.name,
+      const: char.const,
+      tier: char.tier,
+      hasSig: hasSig,
+      value: Math.round(val + premium),
+    });
   }
 
+  // 2. 满命溢价（使用 weights.c6MultiBonus 档位）
+  // 注意：保持与原版一致，溢价以全部角色价值 charValue 为基数
+  let fullConstPremium = 0;
+  const c6BonusNotes = [];
+  const c6BonusRules = w.c6MultiBonus || [];
+  const allC6Chars = charBreakdown.filter(cb => cb.const >= 6 && cb.tier && cb.tier !== 'E');
+  const tierCounts = {};
+  for (const cb of allC6Chars) {
+    tierCounts[cb.tier] = (tierCounts[cb.tier] || 0) + 1;
+  }
+  // 计算满命加成系数（用于满命溢价）
+  let c6BonusMultiplier = 0;
+  if (weightedFullConst >= 2 && c6BonusRules.length > 0) {
+    const sortedRules = [...c6BonusRules].sort((a, b) => a.count - b.count);
+    let lower = null, upper = null;
+    for (const rule of sortedRules) {
+      if (weightedFullConst >= rule.count) lower = rule;
+      else if (!upper) upper = rule;
+    }
+    if (lower && upper) {
+      const ratio = (weightedFullConst - lower.count) / (upper.count - lower.count);
+      c6BonusMultiplier = Math.max(upper.bonus * ratio, lower.bonus);
+    } else if (lower) {
+      c6BonusMultiplier = lower.bonus;
+    }
+  }
+  if (c6BonusMultiplier > 0) {
+    fullConstPremium = charValue * c6BonusMultiplier;
+    const tierSummary = Object.entries(tierCounts)
+      .sort((a, b) => (c6Weights[a[0]] || 0) < (c6Weights[b[0]] || 0) ? 1 : -1)
+      .map(([t, c]) => c + '个' + t + '级').join('+');
+    c6BonusNotes.push('满命(' + tierSummary + ') 加权' + weightedFullConst.toFixed(1) + ' +' + Math.round(c6BonusMultiplier * 100) + '%');
+  }
+
+  // 计算抽数满命加成系数（独立档位 pullC6Bonus）
+  const pullC6Rules = w.pullC6Bonus || [];
+  let pullC6Multiplier = 0;
+  if (weightedFullConst >= 1 && pullC6Rules.length > 0) {
+    const sortedPullRules = [...pullC6Rules].sort((a, b) => a.count - b.count);
+    let plower = null, pupper = null;
+    for (const rule of sortedPullRules) {
+      if (weightedFullConst >= rule.count) plower = rule;
+      else if (!pupper) pupper = rule;
+    }
+    if (plower && pupper) {
+      const pratio = (weightedFullConst - plower.count) / (pupper.count - plower.count);
+      pullC6Multiplier = Math.max(pupper.bonus * pratio, plower.bonus);
+    } else if (plower) {
+      pullC6Multiplier = plower.bonus;
+    }
+  }
+
+  // 3. 配队溢价（使用 weights.teams 和 teamMultiBonus）
+  let teamPremium = 0;
+  const teamBonusNotes = [];
+  const charNames = new Set(parsed.characters.map(c => c.name));
+  const teams = (weights && weights.teams) || DEFAULT_TEAMS;
+  const satisfiedTeams = [];
+
+  for (const team of teams) {
+    const allPresent = team.members.every(m => charNames.has(m));
+    if (allPresent) satisfiedTeams.push(team);
+  }
+
+  // 多配队额外系数（从 teamMultiBonus 读取，去重防止历史数据重复）
+  const rawMultiRules = w.teamMultiBonus || [];
+  const tmDedup = {};
+  for (const r of rawMultiRules) { tmDedup[r.count] = r; }
+  const multiRules = Object.values(tmDedup);
+  let multiTeamCoeff = 1.0;
+  for (const rule of multiRules) {
+    if (satisfiedTeams.length >= rule.count) {
+      multiTeamCoeff = Math.max(multiTeamCoeff, rule.coef);
+    }
+  }
+
+  for (const team of satisfiedTeams) {
+    for (const member of team.members) {
+      const char = parsed.characters.find(c => c.name === member);
+      if (char) {
+        const hasSig = checkHasSigWeapon(member, weaponNames, weaponSectionText);
+        const memberVal = getCharValue(char, hasSig, w);
+        teamPremium += memberVal * (team.multiplier - 1);
+      }
+    }
+  }
+  teamPremium *= multiTeamCoeff;
+  if (satisfiedTeams.length > 0) {
+    const teamNames = satisfiedTeams.map(t => t.name).join('/');
+    teamBonusNotes.push(satisfiedTeams.length + '配队(' + teamNames + ') ×' + multiTeamCoeff);
+  }
+
+  // 4. 抽数价值（基础抽数价值 × (1 + 满命抽数加成系数)）
+  const pullInfo = calculatePullValue(parsed.pulls);
+  const basePullValue = pullInfo.total;
+  // 满命角色多则抽数价值更高：用独立的抽数满命加成系数
+  const pullC6Bonus = Math.round(basePullValue * pullC6Multiplier);
+  const pullValue = basePullValue + pullC6Bonus;
+
+  // 5. 其他资源（提取明细列表，按 weights 单价计价）
+  const outfits = extractListItems(parsed.rawText, '服饰');
+  const motoAccessories = extractListItems(parsed.rawText, '摩托饰品').concat(extractListItems(parsed.rawText, '摩托'));
+  const motoFrames = extractListItems(parsed.rawText, '车架模组').concat(extractListItems(parsed.rawText, '车架'));
+  const paints = extractListItems(parsed.rawText, '涂装');
+
+  const outfitValue = outfits.length * (w.outfit || 0);
+  const motoAccValue = motoAccessories.length * (w.motoAccessory || 0);
+  const motoFrameValue = motoFrames.length * (w.motoFrame || 0);
+  const paintValue = paints.length * (w.paint || 0);
+  const otherResources = outfitValue + motoAccValue + motoFrameValue + paintValue;
+
+  // 武器明细
+  const weaponDetails = parsed.weapons.map(weapon => {
+    const isSig = parsed.characters.some(char =>
+      SIG_WEAPONS[char.name] === weapon.name && hasSignatureWeapons.includes(char.name)
+    );
+    return { name: weapon.name, refine: weapon.refine, isSig: isSig };
+  });
+
+  // 6. 黄数系数（getYellowCoeff 返回对象）
+  const yellowInfo = getYellowCoeff(parsed.yellowCount);
+  const yellowCoeff = yellowInfo.coefficient;
+
+  // 账号等级、四星角色数
+  const levelMatch = (parsed.rawText || '').match(/(\d+)级/);
+  const level = levelMatch ? parseInt(levelMatch[1]) : 1;
+  const fourStarMatch = (parsed.rawText || '').match(/(\d+)个四星角色/);
+  const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
+  const fiveStarChars = parsed.characters.length;
+  const maxConstChars = parsed.characters.filter(c => c.const >= 6).length;
+
+  // 总价值
+  const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
+  const totalValue = totalBeforeYellow * yellowCoeff;
+
+  // 性价比
+  const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
+  const diff = Math.round((totalValue - price) * 100) / 100;
+
   return {
-    ...evaluation,
+    totalValue: Math.round(totalValue * 100) / 100,
+    diff: diff,
+    charValue: Math.round(charValue * 100) / 100,
+    fullConstPremium: Math.round(fullConstPremium * 100) / 100,
+    teamPremium: Math.round(teamPremium * 100) / 100,
+    pullValue: Math.round(pullValue * 100) / 100,
+    otherResources,
+    yellowCoeff,
+    weightedFullConst,
+    satisfiedTeams: satisfiedTeams.map(t => t.name),
+    ratio: Math.round(ratio * 10) / 10,
+    // ===== 明细字段 =====
+    charBreakdown: charBreakdown,
+    charDetails: charDetails,
+    hasSignatureWeapons: hasSignatureWeapons,
+    weaponDetails: weaponDetails,
+    matchedTeams: satisfiedTeams,
+    c6Bonus: { value: Math.round(fullConstPremium), notes: c6BonusNotes },
+    teamBonus: { value: Math.round(teamPremium), notes: teamBonusNotes },
+    pullInfo: {
+      pulls: pullInfo.pulls,
+      perPull: pullInfo.perPull,
+      tierLabel: pullInfo.tierLabel,
+      baseTotal: basePullValue,
+      c6Bonus: pullC6Bonus,
+      c6Multiplier: pullC6Multiplier,
+      total: pullValue,
+    },
+    yellowInfo: yellowInfo,
+    outfits: outfits,
+    motoAccessories: motoAccessories,
+    motoFrames: motoFrames,
+    paints: paints,
+    level: level,
+    fourStarChars: fourStarChars,
+    fiveStarChars: fiveStarChars,
+    maxConstChars: maxConstChars,
+  };
+}
+
+// ============================================================
+// 对外接口
+// ============================================================
+
+/**
+ * 计算账号估值并给出性价比
+ * @param {string} showTitle - 账号描述文本
+ * @param {number} priceInCents - 标价（分）
+ * @returns {object} 估值结果（含 info / details / priceInYuan / costPerformance）
+ */
+function evaluateWithPrice(showTitle, priceInCents) {
+  const parsed = parseAccountInfo(showTitle);
+  const priceInYuan = priceInCents / 100;
+  const cv = calculateValue(parsed, priceInYuan);
+
+  // 性价比
+  let costPerformance = 0;
+  if (priceInYuan > 0) {
+    costPerformance = ((cv.totalValue - priceInYuan) / priceInYuan) * 100;
+  }
+  costPerformance = Math.round(costPerformance * 100) / 100;
+
+  // info：兼容 server.js / monitor.js 的字段名
+  const info = {
+    characters: parsed.characters,
+    weapons: parsed.weapons,
+    starSounds: parsed.starSound,
+    moonPhases: parsed.moonPhase,
+    coral: parsed.aftermathCoral,
+    goldenRipples: parsed.floatGoldRipple,
+    tideRipples: parsed.castTideRipple,
+    yellowCount: parsed.yellowCount,
+    outfits: parsed.outfitCount,
+    motorcycles: parsed.motoCount,
+    pulls: parsed.pulls,
+    rawText: parsed.rawText,
+  };
+
+  // details：兼容 server.js / monitor.js 的字段名，同时保留油猴脚本原始字段
+  const details = {
+    ...cv,
+    finalValue: cv.totalValue,
+    characterValue: cv.charValue,
+    c6Premium: cv.fullConstPremium,
+    teamPremium: cv.teamPremium,
+    pullValue: cv.pullValue,
+    resourceValue: cv.otherResources,
+    yellowMultiplier: cv.yellowCoeff,
+    characters: cv.charBreakdown,
+  };
+
+  return {
+    info,
+    details,
     priceInYuan,
-    costPerformance: Math.round(costPerformance * 100) / 100,
+    costPerformance,
   };
 }
 
 /**
  * 生成账号简短描述（用于通知）
- * @param {object} evaluation - 估值结果
+ * @param {object} evaluation - evaluateWithPrice 的结果
  * @returns {string} 简短描述
  */
 function generateShortDescription(evaluation) {
-  const chars = evaluation.details.characters;
+  const chars = (evaluation.details && evaluation.details.characters) || [];
   if (chars.length === 0) return '无已知角色';
 
   // 取价值最高的前5个角色
   const topChars = [...chars].sort((a, b) => b.value - a.value).slice(0, 5);
   const parts = topChars.map(c => {
-    const constStr = c.constellation === 6 ? '满命' : `${c.constellation}命`;
-    const weaponStr = c.hasSignatureWeapon ? '+专武' : '';
+    const constStr = c.const >= 6 ? '满命' : `${c.const}命`;
+    const weaponStr = c.hasSig ? '+专武' : '';
     return `${constStr}${c.name}${weaponStr}`;
   });
 
   let desc = parts.join(', ');
-  if (evaluation.info.yellowCount > 0) {
-    desc += ` | ${evaluation.info.yellowCount}黄`;
+  const yellowCount = evaluation.info && evaluation.info.yellowCount;
+  if (yellowCount > 0) {
+    desc += ` | ${yellowCount}黄`;
   }
   return desc;
 }
@@ -834,24 +1021,41 @@ function generateShortDescription(evaluation) {
 // 导出
 // ============================================================
 module.exports = {
-  CHARACTER_PRICES,
-  SIGNATURE_WEAPONS,
-  C6_WEIGHTS,
-  C6_PREMIUM_TIERS,
-  PULL_C6_BONUS_TIERS,
-  PULL_TIERS,
-  TEAM_COMPS,
-  RESOURCE_PRICES,
+  // 常量
+  CHAR_TIERS,
+  SIG_WEAPONS,
+  FULL_CONST_WEIGHT,
+  CHAR_LOOKUP,
+  SECTION_KEYWORDS,
+  DEFAULT_WEIGHTS,
+  DEFAULT_TEAMS,
+  DEFAULT_PULL_TIERS,
+  DEFAULT_YELLOW_TIERS,
   DEFAULT_CHAR_PRICES,
   DEFAULT_CONST_PREMIUMS,
+  DEFAULT_NEED_SIG_WEAPONS,
+  // 构建函数
+  buildDefaultCharPrices,
+  buildDefaultTeamPremiums,
+  buildDefaultWeights,
+  // 解析函数
   parseAccountInfo,
-  evaluateAccount,
+  extractSection,
+  extractNumber,
+  parseCharacters,
+  findCharsInText,
+  parseWeapons,
+  extractYellowCount,
+  extractListCount,
+  extractListItems,
+  // 计算函数
+  checkHasSigWeapon,
+  calcConstPremium,
+  getCharValue,
+  calculatePullValue,
+  getYellowCoeff,
+  calculateValue,
+  // 对外接口
   evaluateWithPrice,
   generateShortDescription,
-  calculateCharacterValue,
-  calculateC6Premium,
-  calculateTeamCompPremium,
-  calculatePullValue,
-  calculateResourceValue,
-  calculateYellowMultiplier,
 };

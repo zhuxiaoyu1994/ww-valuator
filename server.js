@@ -55,22 +55,40 @@ app.post('/api/evaluate', (req, res) => {
 });
 
 /**
- * 按商品编号查询 - 从螃蟹网获取商品信息后估价
+ * 按商品编号查询 - 先搜索获取商品信息，再估价
+ * 支持商品编号（如 MEBNB9606）和数字 productId
  */
 app.post('/api/lookup', async (req, res) => {
   const { productId } = req.body;
   if (!productId) {
-    return res.status(400).json({ success: false, error: 'productId is required' });
+    return res.status(400).json({ success: false, error: '请输入商品编号' });
   }
 
   try {
-    const productData = await fetchProductDetail(productId);
+    // 先尝试直接用 detail API（适用于数字 productId）
+    let productData = null;
+    let actualProductId = productId;
+
+    // 如果是纯数字，直接调 detail API
+    if (/^\d+$/.test(String(productId).trim())) {
+      productData = await fetchProductDetail(productId.trim());
+    }
+
+    // 如果 detail API 没找到，用搜索 API 查找
+    if (!productData) {
+      const searchResult = await fetchProductBySearch(productId.trim());
+      if (searchResult) {
+        productData = searchResult;
+        actualProductId = searchResult.productId || productId;
+      }
+    }
+
     if (!productData) {
       return res.json({ success: false, error: '未找到该商品，请检查编号是否正确' });
     }
 
     const showTitle = productData.showTitle || productData.title || '';
-    const priceInCents = productData.price || 0;
+    const priceInCents = (productData.price || 0) * 100; // 搜索API返回的是元，需要转为分
 
     if (!showTitle) {
       return res.json({ success: false, error: '无法获取商品描述信息' });
@@ -80,7 +98,7 @@ app.post('/api/lookup', async (req, res) => {
     res.json({
       success: true,
       data: {
-        productId: productId,
+        productId: actualProductId,
         title: productData.gameName || showTitle.substring(0, 50),
         showTitle: showTitle,
         price: priceInCents / 100,
@@ -98,7 +116,7 @@ app.post('/api/lookup', async (req, res) => {
           yellowCount: result.info.yellowCount,
         },
         shortDescription: valueEngine.generateShortDescription(result),
-        url: `https://www.pxb7.com/buy/10302/detail?productId=${productId}`,
+        url: `https://www.pxb7.com/buy/10302/detail?productId=${actualProductId}`,
       },
     });
   } catch (err) {
@@ -108,7 +126,7 @@ app.post('/api/lookup', async (req, res) => {
 });
 
 /**
- * 从螃蟹网 API 获取商品详情
+ * 从螃蟹网 API 获取商品详情（数字 productId）
  */
 function fetchProductDetail(productId) {
   return new Promise((resolve, reject) => {
@@ -142,6 +160,79 @@ function fetchProductDetail(productId) {
           }
         } catch (e) {
           reject(new Error('解析商品数据失败'));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.setTimeout(10000, () => {
+      req.destroy(new Error('请求超时'));
+    });
+    req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * 通过搜索 API 查找商品（支持商品编号如 MEBNB9606）
+ */
+function fetchProductBySearch(keyword) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({
+      query: String(keyword),
+      gameId: '10302',
+      pageIndex: 1,
+      pageSize: 20,
+      bizProd: 1,
+      type: '4',
+      posType: 1,
+    });
+    const options = {
+      hostname: 'api-pc.pxb7.com',
+      port: 443,
+      path: '/api/search/product/v2/selectSearchPageList',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Origin': 'https://www.pxb7.com',
+        'Referer': 'https://www.pxb7.com/',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.success && json.data) {
+            const list = Array.isArray(json.data) ? json.data : (json.data.list || []);
+            // 精确匹配商品编号
+            const keywordUpper = String(keyword).toUpperCase();
+            let matched = list.find(item =>
+              (item.productUniqueNo || '').toUpperCase() === keywordUpper
+            );
+            // 模糊匹配
+            if (!matched) {
+              matched = list.find(item =>
+                (item.productUniqueNo || '').toUpperCase().includes(keywordUpper) ||
+                String(item.productId || '').includes(keyword)
+              );
+            }
+            // 取第一条
+            if (!matched && list.length > 0) {
+              matched = list[0];
+            }
+            resolve(matched || null);
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          reject(new Error('解析搜索结果失败'));
         }
       });
     });
