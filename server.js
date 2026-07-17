@@ -670,7 +670,7 @@ function getPageHTML() {
           const errorHtml = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
           if (isTimeout) {
             document.getElementById('status-msg').innerHTML = errorHtml +
-              '<div style="text-align:center;margin-top:8px;"><button class="eval-btn" onclick="switchTab(\'paste\')">切换到粘贴描述估价</button></div>';
+              '<div style="text-align:center;margin-top:8px;"><button class="eval-btn" onclick="switchTab(\\'paste\\')">切换到粘贴描述估价</button></div>';
           } else {
             document.getElementById('status-msg').innerHTML = errorHtml;
           }
