@@ -123,7 +123,13 @@ app.post('/api/lookup', async (req, res) => {
     });
   } catch (err) {
     console.error('[Lookup] Error:', err.message);
-    res.json({ success: false, error: '查询失败: ' + err.message });
+    const isTimeout = err.message.includes('超时') || err.code === 'ECONNRESET';
+    res.json({
+      success: false,
+      error: isTimeout
+        ? '查询超时，螃蟹网可能限制了服务器访问。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
+        : '查询失败: ' + err.message,
+    });
   }
 });
 
@@ -660,7 +666,14 @@ function getPageHTML() {
         document.getElementById('status-msg').innerHTML = '';
 
         if (!result.success) {
-          document.getElementById('status-msg').innerHTML = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
+          const isTimeout = result.error && result.error.includes('超时');
+          const errorHtml = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
+          if (isTimeout) {
+            document.getElementById('status-msg').innerHTML = errorHtml +
+              '<div style="text-align:center;margin-top:8px;"><button class="eval-btn" onclick="switchTab(\'paste\')">切换到粘贴描述估价</button></div>';
+          } else {
+            document.getElementById('status-msg').innerHTML = errorHtml;
+          }
           return;
         }
 
