@@ -26,7 +26,7 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 /**
  * 估值接口 - 输入文本返回估值
  */
-app.post('/api/wv-eval', (req, res) => {
+app.post('/api/x9k2-eval', (req, res) => {
   const { showTitle, priceInCents } = req.body;
   if (!showTitle) {
     return res.status(400).json({ success: false, error: 'showTitle is required' });
@@ -59,7 +59,7 @@ app.post('/api/wv-eval', (req, res) => {
  * 按商品编号查询 - 先搜索获取商品信息，再估价
  * 支持商品编号（如 MEBNB9606）和数字 productId
  */
-app.post('/api/wv-find', async (req, res) => {
+app.post('/api/x9k2-find', async (req, res) => {
   const { productId } = req.body;
   if (!productId) {
     return res.status(400).json({ success: false, error: '请输入商品编号' });
@@ -657,7 +657,7 @@ function getPageHTML() {
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在查询商品信息...</div>';
 
       try {
-        const resp = await fetch('/api/wv-find', {
+        const resp = await fetch('/api/x9k2-find', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productId }),
@@ -700,7 +700,7 @@ function getPageHTML() {
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在计算估值...</div>';
 
       try {
-        const resp = await fetch('/api/wv-eval', {
+        const resp = await fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ showTitle: text, priceInCents: price * 100 }),
