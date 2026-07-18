@@ -36,6 +36,7 @@ app.post('/api/x9k2-eval', (req, res) => {
     success: true,
     data: {
       estimatedValue: result.details.finalValue,
+      price: result.priceInYuan,
       priceInYuan: result.priceInYuan,
       costPerformance: result.costPerformance,
       details: result.details,
