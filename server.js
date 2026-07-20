@@ -17,6 +17,9 @@ const PORT = process.env.PORT || 3000;
 // 管理后台密码（可通过环境变量配置）
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'guga2024';
 
+// IP黑名单（可通过环境变量 BLOCKED_IPS 配置，逗号分隔）
+const BLOCKED_IPS = (process.env.BLOCKED_IPS || '216.195.201.153').split(',').map(s => s.trim()).filter(Boolean);
+
 // 查询日志（内存存储，最多保留1000条）
 const queryLogs = [];
 const MAX_LOGS = 1000;
@@ -25,6 +28,16 @@ const MAX_LOGS = 1000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// IP黑名单拦截中间件
+app.use((req, res, next) => {
+  const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  if (BLOCKED_IPS.some(blocked => clientIp === blocked || clientIp.endsWith('.' + blocked))) {
+    console.log('[Blocked] IP: ' + clientIp + ' ' + req.method + ' ' + req.path);
+    return res.status(403).json({ success: false, error: '访问被拒绝' });
+  }
+  next();
+});
 
 // ============================================================
 // API 路由
