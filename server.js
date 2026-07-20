@@ -503,11 +503,34 @@ function getPageHTML() {
       border-radius: 10px;
       overflow: hidden;
       border: 2px solid #2a2a4a;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .qq-group-card .qr-wrapper:hover {
+      transform: scale(1.05);
     }
     .qq-group-card .qr-wrapper img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+    /* 图片放大遮罩层 */
+    .img-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      cursor: zoom-out;
+    }
+    .img-overlay.show { display: flex; }
+    .img-overlay img {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     }
     .qq-group-card .info h3 {
       font-size: 18px;
@@ -627,6 +650,11 @@ function getPageHTML() {
         <p>本站不收集任何游戏账号密码、实名隐私信息，数据仅本地临时解析。</p>
       </div>
     </div>
+  </div>
+
+  <!-- 图片放大遮罩层 -->
+  <div class="img-overlay" id="img-overlay">
+    <img src="/public/qq-group.jpg" alt="QQ群二维码" />
   </div>
 
   <script>
@@ -825,6 +853,19 @@ function getPageHTML() {
     // 初始化
     // ============================================================
     renderHistory();
+
+    // QQ群图片点击放大
+    (function() {
+      var qrWrapper = document.querySelector('.qr-wrapper');
+      var overlay = document.getElementById('img-overlay');
+      if (!qrWrapper || !overlay) return;
+      qrWrapper.addEventListener('click', function() {
+        overlay.classList.add('show');
+      });
+      overlay.addEventListener('click', function() {
+        overlay.classList.remove('show');
+      });
+    })();
   </script>
 </body>
 </html>`;
