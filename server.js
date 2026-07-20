@@ -10,6 +10,7 @@ const path = require('path');
 const https = require('https');
 
 const valueEngine = require('./value-engine');
+const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -55,7 +56,7 @@ app.post('/api/x9k2-eval', (req, res) => {
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
 
   // 记录查询日志
-  queryLogs.unshift({
+  const logEntry = {
     time: new Date().toISOString(),
     type: '粘贴估价',
     ip: clientIp.split(',')[0].trim(),
@@ -66,8 +67,10 @@ app.post('/api/x9k2-eval', (req, res) => {
     yellowCount: result.info.yellowCount,
     pulls: result.info.pulls,
     success: true,
-  });
+  };
+  queryLogs.unshift(logEntry);
   if (queryLogs.length > MAX_LOGS) queryLogs.pop();
+  db.insertLog(logEntry); // 异步写入数据库
 
   res.json({
     success: true,
@@ -137,7 +140,7 @@ app.post('/api/x9k2-find', async (req, res) => {
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
 
     // 记录查询日志
-    queryLogs.unshift({
+    const logEntry = {
       time: new Date().toISOString(),
       type: '编号查询',
       ip: clientIp.split(',')[0].trim(),
@@ -148,8 +151,10 @@ app.post('/api/x9k2-find', async (req, res) => {
       yellowCount: result.info.yellowCount,
       pulls: result.info.pulls,
       success: true,
-    });
+    };
+    queryLogs.unshift(logEntry);
     if (queryLogs.length > MAX_LOGS) queryLogs.pop();
+    db.insertLog(logEntry); // 异步写入数据库
 
     res.json({
       success: true,
@@ -179,15 +184,17 @@ app.post('/api/x9k2-find', async (req, res) => {
   } catch (err) {
     console.error('[Lookup] Error:', err.message);
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-    queryLogs.unshift({
+    const failEntry = {
       time: new Date().toISOString(),
       type: '编号查询',
       ip: clientIp.split(',')[0].trim(),
       input: String(productId),
       error: err.message.substring(0, 100),
       success: false,
-    });
+    };
+    queryLogs.unshift(failEntry);
     if (queryLogs.length > MAX_LOGS) queryLogs.pop();
+    db.insertLog(failEntry);
     const isTimeout = err.message.includes('超时') || err.code === 'ECONNRESET';
     res.json({
       success: false,
@@ -945,11 +952,32 @@ app.get('/admin', (req, res) => {
 });
 
 // 管理后台API - 获取日志
-app.post('/admin/api/logs', (req, res) => {
+app.post('/admin/api/logs', async (req, res) => {
   const { password } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
+
+  // 优先从数据库读取（持久化），回退到内存
+  const dbStats = await db.getStats();
+  if (dbStats) {
+    const logs = await db.queryLogs(500, 0, '');
+    return res.json({
+      success: true,
+      data: {
+        logs: logs,
+        total: dbStats.total,
+        stats: {
+          totalQueries: dbStats.total,
+          successCount: dbStats.success,
+          lookupCount: dbStats.lookup,
+          evalCount: dbStats.eval,
+        },
+      },
+    });
+  }
+
+  // 回退到内存
   res.json({
     success: true,
     data: {
@@ -1187,6 +1215,11 @@ function getAdminPage() {
 // ============================================================
 // 启动服务器
 // ============================================================
+
+// 初始化数据库
+db.initDb();
+db.ensureTable();
+
 app.listen(PORT, () => {
   console.log(`========================================`);
   console.log(`  鸣潮估价助手 已启动`);
