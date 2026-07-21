@@ -249,8 +249,8 @@ function buildDefaultTeamPremiums() {
 }
 
 // 构建默认权重（合并所有默认配置，等价于油猴脚本 loadWeights() 无用户配置时的结果）
-function buildDefaultWeights() {
-  const saved = {};
+function buildDefaultWeights(customWeights) {
+  const saved = customWeights || {};
   const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
   w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
   w.c6MultiBonus = (saved.c6MultiBonus && saved.c6MultiBonus.length) ? saved.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
@@ -269,6 +269,14 @@ function buildDefaultWeights() {
     }
   }
   w.needSigWeapons = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  // 用户自定义系数（前端传入）
+  w.customMultipliers = {
+    global: saved.globalMult || 1,
+    char: saved.charMult || 1,
+    pull: saved.pullMult || 1,
+    c6: saved.c6Mult || 1,
+    yellow: saved.yellowMult || 1,
+  };
   return w;
 }
 
@@ -885,8 +893,16 @@ function calculateValue(parsed, price) {
   const maxConstChars = parsed.characters.filter(c => c.const >= 6).length;
 
   // 总价值
-  const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
-  const totalValue = totalBeforeYellow * yellowCoeff;
+  const cm = w.customMultipliers || { global: 1, char: 1, pull: 1, c6: 1, yellow: 1 };
+  const adjCharValue = charValue * cm.char;
+  const adjPullValue = pullValue * cm.pull;
+  const adjC6Premium = fullConstPremium * cm.c6;
+  const adjTeamPremium = teamPremium; // 配队溢价不单独调整
+  const adjResources = otherResources;
+  // 黄数系数调整：在原 yellowCoeff 基础上按系数调整偏差
+  const adjYellowCoeff = 1 + (yellowCoeff - 1) * cm.yellow;
+  const totalBeforeYellow = adjCharValue + adjC6Premium + adjTeamPremium + adjPullValue + adjResources;
+  const totalValue = totalBeforeYellow * adjYellowCoeff * cm.global;
 
   // 性价比
   const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
@@ -895,12 +911,12 @@ function calculateValue(parsed, price) {
   return {
     totalValue: Math.round(totalValue * 100) / 100,
     diff: diff,
-    charValue: Math.round(charValue * 100) / 100,
-    fullConstPremium: Math.round(fullConstPremium * 100) / 100,
-    teamPremium: Math.round(teamPremium * 100) / 100,
-    pullValue: Math.round(pullValue * 100) / 100,
-    otherResources,
-    yellowCoeff,
+    charValue: Math.round(adjCharValue * 100) / 100,
+    fullConstPremium: Math.round(adjC6Premium * 100) / 100,
+    teamPremium: Math.round(adjTeamPremium * 100) / 100,
+    pullValue: Math.round(adjPullValue * 100) / 100,
+    otherResources: adjResources,
+    yellowCoeff: adjYellowCoeff,
     weightedFullConst,
     satisfiedTeams: satisfiedTeams.map(t => t.name),
     ratio: Math.round(ratio * 10) / 10,
@@ -916,10 +932,10 @@ function calculateValue(parsed, price) {
       pulls: pullInfo.pulls,
       perPull: pullInfo.perPull,
       tierLabel: pullInfo.tierLabel,
-      baseTotal: basePullValue,
+      baseTotal: Math.round(adjPullValue * 100) / 100,
       c6Bonus: pullC6Bonus,
       c6Multiplier: pullC6Multiplier,
-      total: pullValue,
+      total: adjPullValue,
     },
     yellowInfo: yellowInfo,
     outfits: outfits,
@@ -943,10 +959,16 @@ function calculateValue(parsed, price) {
  * @param {number} priceInCents - 标价（分）
  * @returns {object} 估值结果（含 info / details / priceInYuan / costPerformance）
  */
-function evaluateWithPrice(showTitle, priceInCents) {
-  const parsed = parseAccountInfo(showTitle);
-  const priceInYuan = priceInCents / 100;
-  const cv = calculateValue(parsed, priceInYuan);
+function evaluateWithPrice(showTitle, priceInCents, customWeights) {
+  // 临时设置自定义权重
+  const savedWeights = weights;
+  if (customWeights) {
+    weights = buildDefaultWeights(customWeights);
+  }
+  try {
+    const parsed = parseAccountInfo(showTitle);
+    const priceInYuan = priceInCents / 100;
+    const cv = calculateValue(parsed, priceInYuan);
 
   // 性价比
   let costPerformance = 0;
@@ -990,6 +1012,10 @@ function evaluateWithPrice(showTitle, priceInCents) {
     priceInYuan,
     costPerformance,
   };
+  } finally {
+    // 恢复原始权重
+    weights = savedWeights;
+  }
 }
 
 /**
