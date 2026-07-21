@@ -701,12 +701,6 @@ function getPageHTML() {
 </head>
 <body>
   <div class="container">
-    <!-- Top Nav -->
-    <div class="top-nav">
-      <a class="nav-link active" href="/">估价助手</a>
-      <a class="nav-link" href="/monitor">监控助手</a>
-    </div>
-
     <!-- Header -->
     <div class="header">
       <h1>鸣潮账号估价助手</h1>
