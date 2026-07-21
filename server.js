@@ -45,6 +45,19 @@ app.use((req, res, next) => {
 // ============================================================
 
 /**
+ * 默认权重接口 - 返回估值引擎的默认权重配置（供前端设置面板初始化用）
+ */
+app.get('/api/defaults', (req, res) => {
+  try {
+    const defaults = valueEngine.getDefaults();
+    res.json({ success: true, data: defaults });
+  } catch (err) {
+    console.error('[/api/defaults] Error:', err.message);
+    res.status(500).json({ success: false, error: '获取默认权重失败' });
+  }
+});
+
+/**
  * 估值接口 - 输入文本返回估值
  */
 app.post('/api/x9k2-eval', (req, res) => {
@@ -101,7 +114,7 @@ app.post('/api/x9k2-eval', (req, res) => {
  * 支持商品编号（如 MEBNB9606）和数字 productId
  */
 app.post('/api/x9k2-find', async (req, res) => {
-  const { productId } = req.body;
+  const { productId, customWeights } = req.body;
   if (!productId) {
     return res.status(400).json({ success: false, error: '请输入商品编号' });
   }
@@ -136,7 +149,7 @@ app.post('/api/x9k2-find', async (req, res) => {
       return res.json({ success: false, error: '无法获取商品描述信息' });
     }
 
-    const result = valueEngine.evaluateWithPrice(showTitle, priceInCents);
+    const result = valueEngine.evaluateWithPrice(showTitle, priceInCents, customWeights || null);
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
 
     // 记录查询日志
@@ -467,48 +480,6 @@ function getPageHTML() {
       border-top: 1px solid #2a2a4a;
       margin: 10px 0;
     }
-    .rules-card {
-      background: #1a1a3a;
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
-      margin-top: 12px;
-      overflow: hidden;
-    }
-    .rules-header {
-      padding: 14px 20px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 14px;
-      color: #fbbf24;
-      font-weight: 600;
-      user-select: none;
-    }
-    .rules-header:hover { background: #1f1f4a; }
-    .rules-arrow { transition: transform 0.2s; font-size: 12px; }
-    .rules-body { padding: 0 20px 20px; }
-    .rule-item { margin-bottom: 16px; }
-    .rule-item label { font-size: 13px; color: #ccc; display: block; margin-bottom: 6px; }
-    .rule-control { display: flex; align-items: center; gap: 12px; }
-    .rule-control input[type="range"] {
-      flex: 1; height: 6px; -webkit-appearance: none; background: #2a2a4a;
-      border-radius: 3px; outline: none;
-    }
-    .rule-control input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
-      background: #4ade80; cursor: pointer;
-    }
-    .rule-val { font-size: 13px; color: #4ade80; min-width: 40px; text-align: right; font-weight: 600; }
-    .rule-hint { font-size: 11px; color: #666; margin-top: 4px; }
-    .rules-actions { display: flex; gap: 10px; margin-top: 16px; }
-    .rule-btn {
-      flex: 1; padding: 10px; border: 1px solid #2a2a4a; border-radius: 8px;
-      background: transparent; color: #ccc; font-size: 13px; cursor: pointer; transition: all 0.2s;
-    }
-    .rule-btn:hover { border-color: #4ade80; }
-    .rule-btn.primary { background: #4ade80; color: #0f0f23; border-color: #4ade80; font-weight: 600; }
-    .rule-btn.primary:hover { background: #22c55e; }
     .result-summary {
       text-align: center;
       padding: 20px 0;
@@ -689,6 +660,27 @@ function getPageHTML() {
       .price-input { width: 100% !important; }
       .qq-group-card { flex-direction: column; text-align: center; }
     }
+    /* 估值规则设置入口 */
+    .settings-bar {
+      display: flex; justify-content: flex-end; margin-bottom: 10px;
+    }
+    .settings-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border: 1px solid #2a2a4a; border-radius: 8px;
+      background: transparent; color: #fbbf24; font-size: 13px; cursor: pointer;
+      transition: all 0.2s; font-family: inherit;
+    }
+    .settings-btn:hover { border-color: #fbbf24; background: rgba(251,191,36,0.08); }
+    .settings-btn.customized { color: #4ade80; border-color: #4ade80; }
+    .settings-btn.customized:hover { background: rgba(74,222,128,0.08); }
+    /* 估价结果旁的"修改规则"链接 */
+    .adjust-link {
+      display: inline-block; margin-left: 10px; padding: 3px 10px;
+      border: 1px solid #fbbf24; border-radius: 6px; background: transparent;
+      color: #fbbf24; font-size: 12px; cursor: pointer; transition: all 0.2s;
+      font-family: inherit; vertical-align: middle;
+    }
+    .adjust-link:hover { background: rgba(251,191,36,0.1); }
   </style>
 </head>
 <body>
@@ -703,6 +695,11 @@ function getPageHTML() {
     <div class="tabs">
       <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">按编号查询</button>
       <button class="tab-btn" id="tab-paste" onclick="switchTab('paste')">粘贴描述估价</button>
+    </div>
+
+    <!-- 估值规则设置入口 -->
+    <div class="settings-bar">
+      <button class="settings-btn" id="settings-btn" onclick="openValueSettings(reevaluateAfterSettings)">估值规则设置</button>
     </div>
 
     <!-- 按编号查询 -->
@@ -733,60 +730,6 @@ function getPageHTML() {
       <div id="result-chars"></div>
       <div class="result-divider"></div>
       <div id="result-resources"></div>
-    </div>
-
-    <!-- 估值规则调整 -->
-    <div class="rules-card" id="rules-section" style="display:none;">
-      <div class="rules-header" onclick="toggleRules()">
-        <span>估值不准？自定义规则</span>
-        <span class="rules-arrow" id="rules-arrow">▾</span>
-      </div>
-      <div class="rules-body" id="rules-body" style="display:none;">
-        <div class="rule-item">
-          <label>整体调整系数</label>
-          <div class="rule-control">
-            <input type="range" id="rule-global-mult" min="0.5" max="2" step="0.1" value="1" oninput="updateRuleLabel(this,'rule-global-mult-val')">
-            <span class="rule-val" id="rule-global-mult-val">1.0x</span>
-          </div>
-          <div class="rule-hint">最终估值 × 此系数（偏高调低，偏低调高）</div>
-        </div>
-        <div class="rule-item">
-          <label>角色价值系数</label>
-          <div class="rule-control">
-            <input type="range" id="rule-char-mult" min="0.5" max="2" step="0.1" value="1" oninput="updateRuleLabel(this,'rule-char-mult-val')">
-            <span class="rule-val" id="rule-char-mult-val">1.0x</span>
-          </div>
-          <div class="rule-hint">调整角色基础价值的权重</div>
-        </div>
-        <div class="rule-item">
-          <label>抽数价值系数</label>
-          <div class="rule-control">
-            <input type="range" id="rule-pull-mult" min="0.5" max="2" step="0.1" value="1" oninput="updateRuleLabel(this,'rule-pull-mult-val')">
-            <span class="rule-val" id="rule-pull-mult-val">1.0x</span>
-          </div>
-          <div class="rule-hint">调整星声/月相等抽数资源的权重</div>
-        </div>
-        <div class="rule-item">
-          <label>满命溢价系数</label>
-          <div class="rule-control">
-            <input type="range" id="rule-c6-mult" min="0" max="3" step="0.1" value="1" oninput="updateRuleLabel(this,'rule-c6-mult-val')">
-            <span class="rule-val" id="rule-c6-mult-val">1.0x</span>
-          </div>
-          <div class="rule-hint">调整多个满命角色的额外溢价</div>
-        </div>
-        <div class="rule-item">
-          <label>黄数系数</label>
-          <div class="rule-control">
-            <input type="range" id="rule-yellow-mult" min="0.5" max="2" step="0.1" value="1" oninput="updateRuleLabel(this,'rule-yellow-mult-val')">
-            <span class="rule-val" id="rule-yellow-mult-val">1.0x</span>
-          </div>
-          <div class="rule-hint">调整黄数（金数）对总价的影响</div>
-        </div>
-        <div class="rules-actions">
-          <button class="rule-btn" onclick="resetRules()">恢复默认</button>
-          <button class="rule-btn primary" onclick="saveAndReevaluate()">保存并重新估价</button>
-        </div>
-      </div>
     </div>
 
     <!-- Loading/Error -->
@@ -824,7 +767,40 @@ function getPageHTML() {
     <img src="/public/qq-group.jpg" alt="QQ群二维码" />
   </div>
 
+  <script src="/public/value-settings.js"></script>
   <script>
+    // ============================================================
+    // 估值规则设置按钮状态更新
+    // ============================================================
+    function updateSettingsBtnState() {
+      const btn = document.getElementById('settings-btn');
+      if (!btn) return;
+      if (typeof hasCustomWeights === 'function' && hasCustomWeights()) {
+        btn.textContent = '估值规则设置（已自定义）';
+        btn.classList.add('customized');
+      } else {
+        btn.textContent = '估值规则设置';
+        btn.classList.remove('customized');
+      }
+    }
+    // 页面加载后初始化按钮状态
+    (function(){ updateSettingsBtnState(); })();
+
+    // 最近一次按编号查询的商品ID（用于设置保存后重新估价）
+    let lastLookupId = '';
+
+    // 估值规则保存后：更新按钮状态并重新估价（根据当前Tab）
+    function reevaluateAfterSettings() {
+      updateSettingsBtnState();
+      if (currentTab === 'paste') {
+        doEvaluate();
+      } else if (currentTab === 'lookup' && lastLookupId) {
+        // 重新查询编号以应用新规则
+        document.getElementById('product-id').value = lastLookupId;
+        doLookup();
+      }
+    }
+
     // ============================================================
     // Tab 切换
     // ============================================================
@@ -846,6 +822,7 @@ function getPageHTML() {
     async function doLookup() {
       const productId = document.getElementById('product-id').value.trim();
       if (!productId) { alert('请输入商品编号'); return; }
+      lastLookupId = productId;
 
       const btn = document.getElementById('lookup-btn');
       btn.disabled = true; btn.textContent = '查询中...';
@@ -853,10 +830,11 @@ function getPageHTML() {
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在查询商品信息...</div>';
 
       try {
+        const customWeights = (typeof getSavedWeights === 'function') ? getSavedWeights() : null;
         const resp = await fetch('/api/x9k2-find', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId }),
+          body: JSON.stringify({ productId, customWeights }),
         });
         const result = await resp.json();
         document.getElementById('status-msg').innerHTML = '';
@@ -893,11 +871,10 @@ function getPageHTML() {
       const btn = document.getElementById('eval-btn');
       btn.disabled = true; btn.textContent = '计算中...';
       document.getElementById('result').classList.remove('show');
-      document.getElementById('rules-section').style.display = 'none';
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在计算估值...</div>';
 
       try {
-        const customWeights = getCustomWeights();
+        const customWeights = (typeof getSavedWeights === 'function') ? getSavedWeights() : null;
         const resp = await fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -927,7 +904,7 @@ function getPageHTML() {
       const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
       const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance + '%' : d.costPerformance + '%';
       let summaryHtml = '';
-      summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
+      summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元<button class="adjust-link" onclick="openValueSettings(reevaluateAfterSettings)">估值不准？修改估值规则</button></div>';
       summaryHtml += '<div class="label">预估价值</div>';
       if (d.price && d.price > 0) {
         summaryHtml += '<div class="ratio ' + ratioClass + '">性价比 ' + ratioText + ' (标价' + d.price + '元)</div>';
@@ -972,81 +949,10 @@ function getPageHTML() {
       document.getElementById('result-resources').innerHTML = resHtml;
 
       document.getElementById('result').classList.add('show');
-      // 显示规则调整面板
-      document.getElementById('rules-section').style.display = 'block';
-      loadCustomRules();
     }
 
     function resultRow(key, val, color) {
       return '<div class="result-row"><span class="key">' + key + '</span><span class="val" style="color:' + (color || '#e0e0e0') + ';">' + val + '</span></div>';
-    }
-
-    // ============================================================
-    // ============================================================
-    // 估值规则自定义
-    // ============================================================
-    function toggleRules() {
-      const body = document.getElementById('rules-body');
-      const arrow = document.getElementById('rules-arrow');
-      if (body.style.display === 'none') {
-        body.style.display = 'block';
-        arrow.style.transform = 'rotate(180deg)';
-      } else {
-        body.style.display = 'none';
-        arrow.style.transform = '';
-      }
-    }
-
-    function updateRuleLabel(input, labelId) {
-      document.getElementById(labelId).textContent = parseFloat(input.value).toFixed(1) + 'x';
-    }
-
-    function getCustomWeights() {
-      try {
-        const saved = JSON.parse(localStorage.getItem('mw_custom_rules') || '{}');
-        if (!saved || !saved.globalMult) return null;
-        return {
-          globalMult: saved.globalMult || 1,
-          charMult: saved.charMult || 1,
-          pullMult: saved.pullMult || 1,
-          c6Mult: saved.c6Mult || 1,
-          yellowMult: saved.yellowMult || 1,
-        };
-      } catch(e) { return null; }
-    }
-
-    function loadCustomRules() {
-      const rules = getCustomWeights();
-      if (!rules) return;
-      const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; updateRuleLabel(el, id + '-val'); } };
-      set('rule-global-mult', rules.globalMult);
-      set('rule-char-mult', rules.charMult);
-      set('rule-pull-mult', rules.pullMult);
-      set('rule-c6-mult', rules.c6Mult);
-      set('rule-yellow-mult', rules.yellowMult);
-    }
-
-    function resetRules() {
-      localStorage.removeItem('mw_custom_rules');
-      const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; updateRuleLabel(el, id + '-val'); } };
-      set('rule-global-mult', 1);
-      set('rule-char-mult', 1);
-      set('rule-pull-mult', 1);
-      set('rule-c6-mult', 1);
-      set('rule-yellow-mult', 1);
-    }
-
-    function saveAndReevaluate() {
-      const rules = {
-        globalMult: parseFloat(document.getElementById('rule-global-mult').value),
-        charMult: parseFloat(document.getElementById('rule-char-mult').value),
-        pullMult: parseFloat(document.getElementById('rule-pull-mult').value),
-        c6Mult: parseFloat(document.getElementById('rule-c6-mult').value),
-        yellowMult: parseFloat(document.getElementById('rule-yellow-mult').value),
-      };
-      localStorage.setItem('mw_custom_rules', JSON.stringify(rules));
-      // 重新估价
-      doEvaluate();
     }
 
     // ============================================================

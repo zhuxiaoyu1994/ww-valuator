@@ -269,15 +269,45 @@ function buildDefaultWeights(customWeights) {
     }
   }
   w.needSigWeapons = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
-  // 用户自定义系数（前端传入）
-  w.customMultipliers = {
-    global: saved.globalMult || 1,
-    char: saved.charMult || 1,
-    pull: saved.pullMult || 1,
-    c6: saved.c6Mult || 1,
-    yellow: saved.yellowMult || 1,
-  };
   return w;
+}
+
+// 权重标签定义（供设置面板显示用，对应油猴脚本 WEIGHT_LABELS）
+const WEIGHT_LABELS = {
+  fiveStarWeapon: { label: '五星武器(基础)', desc: '每个五星武器基础价（元，精1）' },
+  weaponRefineBonus: { label: '武器精炼加成', desc: '每级精炼额外加价（元，精5=+4×此值）' },
+  hotC0Mult: { label: '热门C0+专武倍率', desc: 'C0+专武 = 基础价 × 此倍率（1.0=100%）' },
+  hotC3Mult: { label: '热门C3+专武倍率', desc: 'C3+专武 = 基础价 × 此倍率（2.0=200%，价值翻倍）' },
+  hotC6Mult: { label: '热门C6+专武倍率', desc: 'C6+专武 = 基础价 × 此倍率（3.0=300%，满命三倍）' },
+  hotStepMult: { label: '热门过渡命倍率', desc: 'C1/C2/C4/C5每命加成 = 基础价 × 此倍率（0.08=8%）' },
+  hotNoSigMult: { label: '热门无专武倍率', desc: '热门角色无专武 = 基础价 × 此倍率（0.15=仅值15%）' },
+  hotNoSigC6Mult: { label: '热门C6无专武倍率', desc: '满命但无专武 = 基础价 × 此倍率（0.25=25%）' },
+  coldStep: { label: '冷门每命加分', desc: '冷门角色每命加此值（元）' },
+  coldC3Bonus: { label: '冷门C3加分', desc: '冷门角色3命额外加此值（元）' },
+  coldC6Bonus: { label: '冷门C6加分', desc: '冷门角色满命额外加此值（元）' },
+  coldSigBonus: { label: '冷门专武加分', desc: '冷门角色有专武额外加此值（元）' },
+  outfit: { label: '服饰/皮肤', desc: '每个服饰/皮肤（元）' },
+  motoAccessory: { label: '摩托饰品', desc: '每个摩托饰品（元）' },
+  motoFrame: { label: '车架模组', desc: '每个车架模组（元）' },
+  paint: { label: '涂装', desc: '每个涂装（元）' },
+};
+
+/**
+ * 获取默认权重配置（供前端 /api/defaults 接口使用）
+ * 返回完整默认权重 + 角色级别表 + 命座溢价 + 配队列表
+ */
+function getDefaults() {
+  return {
+    weights: buildDefaultWeights(),
+    charTiers: CHAR_TIERS,
+    constPremiums: DEFAULT_CONST_PREMIUMS,
+    teams: DEFAULT_TEAMS,
+    pullTiers: DEFAULT_PULL_TIERS,
+    yellowTiers: DEFAULT_YELLOW_TIERS,
+    charPrices: buildDefaultCharPrices(),
+    needSigWeapons: DEFAULT_NEED_SIG_WEAPONS,
+    weightLabels: WEIGHT_LABELS,
+  };
 }
 
 // 全局权重（等价于油猴脚本中的 weights 全局变量）
@@ -892,17 +922,9 @@ function calculateValue(parsed, price) {
   const fiveStarChars = parsed.characters.length;
   const maxConstChars = parsed.characters.filter(c => c.const >= 6).length;
 
-  // 总价值
-  const cm = w.customMultipliers || { global: 1, char: 1, pull: 1, c6: 1, yellow: 1 };
-  const adjCharValue = charValue * cm.char;
-  const adjPullValue = pullValue * cm.pull;
-  const adjC6Premium = fullConstPremium * cm.c6;
-  const adjTeamPremium = teamPremium; // 配队溢价不单独调整
-  const adjResources = otherResources;
-  // 黄数系数调整：在原 yellowCoeff 基础上按系数调整偏差
-  const adjYellowCoeff = 1 + (yellowCoeff - 1) * cm.yellow;
-  const totalBeforeYellow = adjCharValue + adjC6Premium + adjTeamPremium + adjPullValue + adjResources;
-  const totalValue = totalBeforeYellow * adjYellowCoeff * cm.global;
+  // 总价值（各项直接相加后乘以黄数系数，不再使用简单倍率调整）
+  const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
+  const totalValue = totalBeforeYellow * yellowCoeff;
 
   // 性价比
   const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
@@ -911,12 +933,12 @@ function calculateValue(parsed, price) {
   return {
     totalValue: Math.round(totalValue * 100) / 100,
     diff: diff,
-    charValue: Math.round(adjCharValue * 100) / 100,
-    fullConstPremium: Math.round(adjC6Premium * 100) / 100,
-    teamPremium: Math.round(adjTeamPremium * 100) / 100,
-    pullValue: Math.round(adjPullValue * 100) / 100,
-    otherResources: adjResources,
-    yellowCoeff: adjYellowCoeff,
+    charValue: Math.round(charValue * 100) / 100,
+    fullConstPremium: Math.round(fullConstPremium * 100) / 100,
+    teamPremium: Math.round(teamPremium * 100) / 100,
+    pullValue: Math.round(pullValue * 100) / 100,
+    otherResources: otherResources,
+    yellowCoeff: yellowCoeff,
     weightedFullConst,
     satisfiedTeams: satisfiedTeams.map(t => t.name),
     ratio: Math.round(ratio * 10) / 10,
@@ -932,10 +954,10 @@ function calculateValue(parsed, price) {
       pulls: pullInfo.pulls,
       perPull: pullInfo.perPull,
       tierLabel: pullInfo.tierLabel,
-      baseTotal: Math.round(adjPullValue * 100) / 100,
+      baseTotal: Math.round(basePullValue * 100) / 100,
       c6Bonus: pullC6Bonus,
       c6Multiplier: pullC6Multiplier,
-      total: adjPullValue,
+      total: pullValue,
     },
     yellowInfo: yellowInfo,
     outfits: outfits,
@@ -1064,6 +1086,7 @@ module.exports = {
   buildDefaultCharPrices,
   buildDefaultTeamPremiums,
   buildDefaultWeights,
+  getDefaults,
   // 解析函数
   parseAccountInfo,
   extractSection,
