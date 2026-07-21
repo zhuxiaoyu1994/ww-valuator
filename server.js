@@ -497,6 +497,7 @@ function getPageHTML() {
     .result-summary {
       text-align: center;
       padding: 20px 0;
+      position: relative;
     }
     .result-summary .big-value {
       font-size: 36px;
@@ -687,22 +688,18 @@ function getPageHTML() {
     .settings-btn:hover { border-color: #fbbf24; background: rgba(251,191,36,0.08); }
     .settings-btn.customized { color: #4ade80; border-color: #4ade80; }
     .settings-btn.customized:hover { background: rgba(74,222,128,0.08); }
-    /* 估价结果旁的"修改规则"按钮 - 固定右上角 */
+    /* "估值不准"按钮 - 固定在预估价值容器右上角 */
     .adjust-link {
       display: none;
-      position: fixed; top: 16px; right: 20px; z-index: 100;
-      padding: 8px 16px; border: 1px solid #fbbf24; border-radius: 8px;
-      background: rgba(15,15,35,0.95); color: #fbbf24; font-size: 13px;
+      position: absolute; top: 0; right: 0; z-index: 10;
+      padding: 6px 14px; border: 1px solid #fbbf24; border-radius: 8px;
+      background: rgba(15,15,35,0.9); color: #fbbf24; font-size: 12px;
       cursor: pointer; transition: all 0.2s; font-family: inherit;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
-    .adjust-link:hover { background: rgba(251,191,36,0.15); transform: translateY(-1px); }
+    .adjust-link:hover { background: rgba(251,191,36,0.15); }
   </style>
 </head>
 <body>
-  <!-- 右上角"估值不准"按钮 -->
-  <button class="adjust-link" id="adjust-link" onclick="openValueSettings(reevaluateAfterSettings)">估值不准？修改规则</button>
-
   <div class="container">
     <!-- Top Nav -->
     <div class="top-nav">
@@ -838,7 +835,6 @@ function getPageHTML() {
       document.getElementById('panel-paste').style.display = tab === 'paste' ? '' : 'none';
       // 清空结果
       document.getElementById('result').classList.remove('show');
-      document.getElementById('adjust-link').style.display = 'none';
       document.getElementById('status-msg').innerHTML = '';
     }
 
@@ -930,6 +926,7 @@ function getPageHTML() {
       const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
       const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance + '%' : d.costPerformance + '%';
       let summaryHtml = '';
+      summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="openValueSettings(reevaluateAfterSettings)">估值不准？修改规则</button>';
       summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
       summaryHtml += '<div class="label">预估价值</div>';
       if (d.price && d.price > 0) {
@@ -975,8 +972,9 @@ function getPageHTML() {
       document.getElementById('result-resources').innerHTML = resHtml;
 
       document.getElementById('result').classList.add('show');
-      // 显示右上角"估值不准"按钮
-      document.getElementById('adjust-link').style.display = 'block';
+      // 显示"估值不准"按钮
+      const adjustBtn = document.getElementById('adjust-link');
+      if (adjustBtn) adjustBtn.style.display = 'inline-block';
     }
 
     function resultRow(key, val, color) {
