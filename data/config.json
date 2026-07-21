@@ -1,0 +1,14 @@
+{
+  "gameId": "10302",
+  "scanPages": 3,
+  "pageSize": 20,
+  "threshold": 30,
+  "scanInterval": 300000,
+  "maxConcurrent": 2,
+  "batchDelay": 300,
+  "notificationChannels": {
+    "serverchan": false,
+    "bark": false,
+    "dingtalk": false
+  }
+}

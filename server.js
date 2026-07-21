@@ -28,10 +28,7 @@ const MAX_LOGS = 1000;
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// 静态文件路径处理（兼容 Vercel 和本地环境）
-const publicPath = process.env.VERCEL ? path.join(process.cwd(), 'public') : path.join(__dirname, 'public');
-app.use('/public', express.static(publicPath));
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // IP黑名单拦截中间件
 app.use((req, res, next) => {
@@ -1216,18 +1213,24 @@ function getAdminPage() {
 }
 
 // ============================================================
-// 启动服务器（本地环境）或导出（Vercel 环境）
+// 启动服务器
 // ============================================================
 
-// 初始化数据库
-db.initDb();
-db.ensureTable();
+/**
+ * 初始化应用（数据库连接等）
+ * Vercel Serverless 环境调用此函数，不启动 HTTP 监听
+ */
+function initApp() {
+  db.initDb();
+  db.ensureTable();
+}
 
-// 导出 app 供 Vercel 使用
-module.exports = app;
+// 导出 app 和 initApp（供 Vercel 使用）
+module.exports = { app, initApp };
 
-// 本地环境才启动监听
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+// Railway / 本地环境：启动 HTTP 服务器
+if (require.main === module) {
+  initApp();
   app.listen(PORT, () => {
     console.log(`========================================`);
     console.log(`  鸣潮估价助手 已启动`);

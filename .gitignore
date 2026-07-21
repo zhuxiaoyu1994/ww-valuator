@@ -1,5 +1,4 @@
 node_modules/
-.DS_Store
+.env
 *.log
-data/
-value-engine.src.js
+.DS_Store
