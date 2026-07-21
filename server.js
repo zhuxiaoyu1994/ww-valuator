@@ -28,7 +28,10 @@ const MAX_LOGS = 1000;
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// 静态文件路径处理（兼容 Vercel 和本地环境）
+const publicPath = process.env.VERCEL ? path.join(process.cwd(), 'public') : path.join(__dirname, 'public');
+app.use('/public', express.static(publicPath));
 
 // IP黑名单拦截中间件
 app.use((req, res, next) => {
@@ -1213,17 +1216,23 @@ function getAdminPage() {
 }
 
 // ============================================================
-// 启动服务器
+// 启动服务器（本地环境）或导出（Vercel 环境）
 // ============================================================
 
 // 初始化数据库
 db.initDb();
 db.ensureTable();
 
-app.listen(PORT, () => {
-  console.log(`========================================`);
-  console.log(`  鸣潮估价助手 已启动`);
-  console.log(`  端口: ${PORT}`);
-  console.log(`  访问: http://localhost:${PORT}`);
-  console.log(`========================================`);
-});
+// 导出 app 供 Vercel 使用
+module.exports = app;
+
+// 本地环境才启动监听
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`========================================`);
+    console.log(`  鸣潮估价助手 已启动`);
+    console.log(`  端口: ${PORT}`);
+    console.log(`  访问: http://localhost:${PORT}`);
+    console.log(`========================================`);
+  });
+}
