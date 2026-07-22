@@ -216,7 +216,8 @@ for (const [tier, info] of Object.entries(CHAR_TIERS)) {
 // 已知段落关键词（对应油猴脚本 SECTION_KEYWORDS）
 // ============================================================
 const SECTION_KEYWORDS = [
-  '五星角色', '五星武器', '余波珊瑚', '浮金波纹', '铸潮波纹',
+  '五星角色', '四星角色', '五星武器', '地图探索度',
+  '余波珊瑚', '浮金波纹', '铸潮波纹',
   '摩托饰品', '车架模组', '星声', '月相', '服饰', '摩托', '车架', '涂装',
 ];
 
@@ -330,10 +331,19 @@ let _sigWeaponsOverride = null;
 function extractSection(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const others = SECTION_KEYWORDS.filter(k => k !== keyword)
-    .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[：:]');
-  const pattern = escaped + '[：:]\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
-  const match = text.match(new RegExp(pattern));
-  return match ? match[1].trim() : '';
+    .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[（(]\\d+[）)])?(?:[：:]|\\s*\\n)');
+
+  // 格式1: keyword：content（原格式，冒号后同行内容）
+  const pattern1 = escaped + '[：:]\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
+  const match1 = text.match(new RegExp(pattern1));
+  if (match1) return match1[1].trim();
+
+  // 格式2: keyword（N）[：:][\n] content（手机端格式，带数量括号）
+  const pattern2 = escaped + '[（(]\\d+[）)]\\s*[：:]?\\s*\\n?\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
+  const match2 = text.match(new RegExp(pattern2));
+  if (match2) return match2[1].trim();
+
+  return '';
 }
 
 /**
@@ -353,7 +363,7 @@ function parseCharacters(section) {
   const chars = [];
   if (!section) return chars;
 
-  const items = section.split(/[,，、\s]+/).filter(s => s.length > 0);
+  const items = section.split(/[,，、\s;；]+/).filter(s => s.length > 0);
 
   for (const item of items) {
     let constNum = 0;
@@ -465,7 +475,7 @@ function findCharsInText(text) {
 function parseWeapons(section) {
   const weapons = [];
   if (!section) return weapons;
-  const items = section.split(/[,，、\s]+/).filter(s => s.length > 0);
+  const items = section.split(/[,，、\s;；]+/).filter(s => s.length > 0);
   for (const item of items) {
     let refine = 1;
     let name = '';
@@ -548,9 +558,16 @@ function parseAccountInfo(text) {
   }
 
   // 提取五星武器
-  const weaponSection = extractSection(text, '五星武器');
+  let weaponSection = extractSection(text, '五星武器');
   if (weaponSection) {
     result.weapons = parseWeapons(weaponSection);
+  }
+  // 回退：手机端格式只有"武器（N）"标题
+  if (result.weapons.length === 0) {
+    weaponSection = extractSection(text, '武器');
+    if (weaponSection) {
+      result.weapons = parseWeapons(weaponSection);
+    }
   }
 
   // 提取资源数量
