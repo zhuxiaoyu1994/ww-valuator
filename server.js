@@ -45,6 +45,71 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
+// 频率限制 + 自动封禁
+// ============================================================
+const RATE_LIMIT_WINDOW = 5 * 60 * 1000;  // 5分钟窗口
+const RATE_LIMIT_MAX = 12;                 // 每个IP每窗口最多12次API请求
+const AUTO_BAN_THRESHOLD = 3;              // 触发限流3次自动封禁
+const GLOBAL_RATE_LIMIT_MAX = 60;          // 全局每分钟最多60次
+
+const ipRequestRecords = {};  // { ip: { timestamps: [], violations: 0 } }
+const globalRequestTimestamps = [];
+
+function getClientIp(req) {
+  return (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+}
+
+function cleanOldTimestamps(arr, windowMs) {
+  const now = Date.now();
+  while (arr.length > 0 && arr[0] < now - windowMs) {
+    arr.shift();
+  }
+}
+
+// 频率限制中间件（仅作用于 /api/ 路径）
+app.use('/api/', (req, res, next) => {
+  const clientIp = getClientIp(req);
+
+  // 全局频率限制
+  cleanOldTimestamps(globalRequestTimestamps, 60 * 1000);
+  if (globalRequestTimestamps.length >= GLOBAL_RATE_LIMIT_MAX) {
+    console.log('[RateLimit] 全局限流触发');
+    return res.status(429).json({ success: false, error: '服务器繁忙，请稍后再试' });
+  }
+
+  // 单IP频率限制
+  if (!ipRequestRecords[clientIp]) {
+    ipRequestRecords[clientIp] = { timestamps: [], violations: 0 };
+  }
+  const record = ipRequestRecords[clientIp];
+  cleanOldTimestamps(record.timestamps, RATE_LIMIT_WINDOW);
+
+  if (record.timestamps.length >= RATE_LIMIT_MAX) {
+    record.violations++;
+    console.log('[RateLimit] IP: ' + clientIp + ' 违规第' + record.violations + '次');
+
+    // 自动封禁
+    if (record.violations >= AUTO_BAN_THRESHOLD) {
+      if (!blockedIps.includes(clientIp)) {
+        blockedIps.push(clientIp);
+        console.log('[AutoBan] IP: ' + clientIp + ' 已自动封禁（频繁触发限流）');
+      }
+      return res.status(403).json({ success: false, error: '访问被拒绝' });
+    }
+
+    return res.status(429).json({
+      success: false,
+      error: '请求过于频繁，请' + Math.ceil(RATE_LIMIT_WINDOW / 60000) + '分钟后再试',
+    });
+  }
+
+  // 记录本次请求
+  record.timestamps.push(Date.now());
+  globalRequestTimestamps.push(Date.now());
+  next();
+});
+
+// ============================================================
 // API 路由
 // ============================================================
 
