@@ -163,6 +163,7 @@
     var DEFAULT_NEED_SIG_WEAPONS = defaults.needSigWeapons;
     var DEFAULT_CHAR_PRICES = defaults.charPrices;
     var WEIGHT_LABELS = defaults.weightLabels;
+    var SIG_WEAPONS = defaults.sigWeapons || {};
 
     // 创建遮罩与对话框
     var overlay = document.createElement('div');
@@ -207,70 +208,162 @@
     var charSection = document.createElement('div');
     charSection.style.cssText = 'margin-bottom:20px;';
     var charTitle = document.createElement('div');
-    charTitle.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:12px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    charTitle.textContent = '五星角色定价（元/个）';
+    charTitle.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
+    charTitle.textContent = '五星角色定价（角色名 + 专武 + 估值）';
     charSection.appendChild(charTitle);
 
-    var charInputs = {};
+    var charDesc = document.createElement('p');
+    charDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
+    charDesc.innerHTML = '可自由添加、修改、删除角色定价。武器名自动匹配，也可手动修改。<br>S/A/B级为热门角色（按里程碑估值），C/D/E级为冷门角色（仅加分项）。';
+    charSection.appendChild(charDesc);
+
+    // 角色定价数据（可增删改）
+    var charEntries = [];
     var tierLabels = { S: 'S级 热门人权', A: 'A级 热门限定', B: 'B级 温门核心', C: 'C级 冷门限定', D: 'D级 退环境', E: 'E级 常驻五星' };
     var tierColors = { S: '#4ade80', A: '#e94560', B: '#fbbf24', C: '#9ca3af', D: '#6b7280', E: '#4b5563' };
-    for (var tk in CHAR_TIERS) {
-      if (!CHAR_TIERS.hasOwnProperty(tk)) continue;
+    var tierOrder = ['S', 'A', 'B', 'C', 'D', 'E'];
+
+    // 初始化角色列表
+    for (var ti = 0; ti < tierOrder.length; ti++) {
+      var tk = tierOrder[ti];
+      if (!CHAR_TIERS[tk]) continue;
       var tier = CHAR_TIERS[tk];
-      var tierDiv = document.createElement('div');
-      tierDiv.style.cssText = 'margin-bottom:14px;';
-      var tierHeader = document.createElement('div');
-      tierHeader.style.cssText = 'font-size:13px;font-weight:600;color:' + tierColors[tk] + ';margin-bottom:6px;';
-      tierHeader.textContent = tierLabels[tk] + ' （默认 ' + tier.price + '元）';
-      tierDiv.appendChild(tierHeader);
-
-      // 批量修改输入框
-      var batchRow = document.createElement('div');
-      batchRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:8px;';
-      batchRow.innerHTML = '<span style="font-size:11px;color:#888;">批量设为:</span>';
-      var batchInput = document.createElement('input');
-      batchInput.type = 'number';
-      batchInput.placeholder = String(tier.price);
-      batchInput.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;';
-      var batchBtn = document.createElement('button');
-      batchBtn.textContent = '应用';
-      batchBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#2a2a4a;color:#fff;font-size:11px;cursor:pointer;';
-      batchBtn.onclick = function () {
-        var val = parseFloat(batchInput.value);
-        if (!isNaN(val)) {
-          for (var i = 0; i < tier.chars.length; i++) {
-            if (charInputs[tier.chars[i]]) charInputs[tier.chars[i]].value = val;
-          }
-        }
-      };
-      batchRow.appendChild(batchInput);
-      batchRow.appendChild(batchBtn);
-      tierDiv.appendChild(batchRow);
-
-      // 角色网格
-      var grid = document.createElement('div');
-      grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:6px;';
       for (var ci = 0; ci < tier.chars.length; ci++) {
-        (function (name, tierKey) {
-          var cell = document.createElement('div');
-          cell.style.cssText = 'display:flex;align-items:center;gap:4px;';
-          var lbl = document.createElement('span');
-          lbl.style.cssText = 'font-size:12px;color:#ccc;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-          lbl.textContent = name;
-          lbl.title = name;
-          var inp = document.createElement('input');
-          inp.type = 'number';
-          inp.value = w.charPrices[name] != null ? w.charPrices[name] : tier.price;
-          inp.style.cssText = 'width:50px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;';
-          charInputs[name] = inp;
-          cell.appendChild(lbl);
-          cell.appendChild(inp);
-          grid.appendChild(cell);
-        })(tier.chars[ci], tk);
+        var cname = tier.chars[ci];
+        var defaultPrice = DEFAULT_CHAR_PRICES[cname] != null ? DEFAULT_CHAR_PRICES[cname] : tier.price;
+        var userPrice = w.charPrices[cname] != null ? w.charPrices[cname] : defaultPrice;
+        var weapon = SIG_WEAPONS[cname] || '';
+        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk });
       }
-      tierDiv.appendChild(grid);
-      charSection.appendChild(tierDiv);
     }
+
+    var charList = document.createElement('div');
+    charList.style.cssText = 'margin-bottom:12px;max-height:400px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:8px;';
+
+    function renderCharList() {
+      charList.innerHTML = '';
+      // 按级别分组渲染
+      for (var gi = 0; gi < tierOrder.length; gi++) {
+        var gk = tierOrder[gi];
+        var groupEntries = charEntries.filter(function(e) { return e.tier === gk; });
+        if (groupEntries.length === 0) continue;
+
+        var groupHeader = document.createElement('div');
+        groupHeader.style.cssText = 'font-size:12px;font-weight:600;color:' + tierColors[gk] + ';margin:8px 0 4px;padding:2px 4px;';
+        groupHeader.textContent = tierLabels[gk] + '（默认 ' + (CHAR_TIERS[gk] ? CHAR_TIERS[gk].price : 0) + '元）';
+        charList.appendChild(groupHeader);
+
+        for (var ei = 0; ei < groupEntries.length; ei++) {
+          (function(entry) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;border-bottom:1px solid #111128;';
+
+            // 角色名输入
+            var nameInput = document.createElement('input');
+            nameInput.type = 'text'; nameInput.value = entry.name;
+            nameInput.style.cssText = 'flex:1;min-width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
+            nameInput.onchange = function() {
+              entry.name = nameInput.value.trim() || entry.name;
+              // 自动匹配武器
+              if (SIG_WEAPONS[entry.name] && !entry.weapon) {
+                entry.weapon = SIG_WEAPONS[entry.name];
+                weaponInput.value = entry.weapon;
+              }
+            };
+            row.appendChild(nameInput);
+
+            // 武器名输入
+            var weaponInput = document.createElement('input');
+            weaponInput.type = 'text'; weaponInput.value = entry.weapon;
+            weaponInput.placeholder = '专武名';
+            weaponInput.style.cssText = 'flex:1;min-width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
+            weaponInput.onchange = function() { entry.weapon = weaponInput.value.trim(); };
+            row.appendChild(weaponInput);
+
+            // 价格输入
+            var priceInput = document.createElement('input');
+            priceInput.type = 'number'; priceInput.value = entry.price;
+            priceInput.style.cssText = 'width:50px;padding:4px 4px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;';
+            priceInput.onchange = function() { var v = parseFloat(priceInput.value); entry.price = isNaN(v) ? 0 : v; };
+            row.appendChild(priceInput);
+
+            // 元单位
+            var yuanLabel = document.createElement('span');
+            yuanLabel.textContent = '元'; yuanLabel.style.cssText = 'color:#555;font-size:11px;';
+            row.appendChild(yuanLabel);
+
+            // 删除按钮
+            var delBtn = document.createElement('button');
+            delBtn.textContent = '×'; delBtn.title = '删除';
+            delBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:14px;cursor:pointer;line-height:1;';
+            delBtn.onclick = function() {
+              var idx = charEntries.indexOf(entry);
+              if (idx >= 0) { charEntries.splice(idx, 1); renderCharList(); }
+            };
+            row.appendChild(delBtn);
+
+            charList.appendChild(row);
+          })(groupEntries[ei]);
+        }
+      }
+
+      if (charEntries.length === 0) {
+        charList.innerHTML = '<div style="font-size:12px;color:#555;padding:12px;text-align:center;">暂无角色，点击下方"添加角色"按钮</div>';
+      }
+    }
+
+    renderCharList();
+    charSection.appendChild(charList);
+
+    // 添加角色行
+    var addCharRow = document.createElement('div');
+    addCharRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+    var addNameInput = document.createElement('input');
+    addNameInput.type = 'text'; addNameInput.placeholder = '角色名';
+    addNameInput.style.cssText = 'flex:1;min-width:80px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
+    addCharRow.appendChild(addNameInput);
+
+    var addWeaponInput = document.createElement('input');
+    addWeaponInput.type = 'text'; addWeaponInput.placeholder = '专武名（可留空自动匹配）';
+    addWeaponInput.style.cssText = 'flex:1;min-width:80px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
+    addCharRow.appendChild(addWeaponInput);
+
+    var addPriceInput = document.createElement('input');
+    addPriceInput.type = 'number'; addPriceInput.placeholder = '价格'; addPriceInput.value = '15';
+    addPriceInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;';
+    addCharRow.appendChild(addPriceInput);
+
+    // 级别选择
+    var addTierSelect = document.createElement('select');
+    addTierSelect.style.cssText = 'padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
+    for (var ati = 0; ati < tierOrder.length; ati++) {
+      var opt = document.createElement('option');
+      opt.value = tierOrder[ati]; opt.textContent = tierOrder[ati] + '级';
+      addTierSelect.appendChild(opt);
+    }
+    addCharRow.appendChild(addTierSelect);
+
+    var addCharBtn = document.createElement('button');
+    addCharBtn.textContent = '添加角色';
+    addCharBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#e94560;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
+    addCharBtn.onclick = function() {
+      var nm = addNameInput.value.trim();
+      if (!nm) { alert('请输入角色名'); return; }
+      // 检查重复
+      if (charEntries.some(function(e) { return e.name === nm; })) {
+        alert('角色"' + nm + '"已存在'); return;
+      }
+      var wpn = addWeaponInput.value.trim();
+      if (!wpn && SIG_WEAPONS[nm]) wpn = SIG_WEAPONS[nm]; // 自动匹配
+      var pr = parseFloat(addPriceInput.value);
+      if (isNaN(pr)) pr = 15;
+      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value });
+      renderCharList();
+      addNameInput.value = ''; addWeaponInput.value = '';
+    };
+    addCharRow.appendChild(addCharBtn);
+    charSection.appendChild(addCharRow);
+
     dialog.appendChild(charSection);
 
     // ===== 2. 命座溢价 =====
@@ -1179,10 +1272,22 @@
         weightInputs[key].value = DEFAULT_WEIGHTS[key];
       }
       // 重置角色价格
-      for (var name in charInputs) {
-        if (!charInputs.hasOwnProperty(name)) continue;
-        charInputs[name].value = DEFAULT_CHAR_PRICES[name] != null ? DEFAULT_CHAR_PRICES[name] : 15;
+      charEntries.length = 0;
+      for (var rt = 0; rt < tierOrder.length; rt++) {
+        var rtk = tierOrder[rt];
+        if (!CHAR_TIERS[rtk]) continue;
+        var rTier = CHAR_TIERS[rtk];
+        for (var rc = 0; rc < rTier.chars.length; rc++) {
+          var rName = rTier.chars[rc];
+          charEntries.push({
+            name: rName,
+            weapon: SIG_WEAPONS[rName] || '',
+            price: DEFAULT_CHAR_PRICES[rName] != null ? DEFAULT_CHAR_PRICES[rName] : rTier.price,
+            tier: rtk,
+          });
+        }
       }
+      renderCharList();
       // 重置命座溢价
       premEntries.length = 0;
       for (var cpName in DEFAULT_CONST_PREMIUMS) {
@@ -1262,12 +1367,18 @@
 
       // 收集角色价格
       var newCharPrices = {};
-      for (var name in charInputs) {
-        if (!charInputs.hasOwnProperty(name)) continue;
-        var cval = parseFloat(charInputs[name].value);
-        newCharPrices[name] = isNaN(cval) ? (DEFAULT_CHAR_PRICES[name] != null ? DEFAULT_CHAR_PRICES[name] : 15) : cval;
+      var newSigWeapons = {};
+      for (var cei = 0; cei < charEntries.length; cei++) {
+        newCharPrices[charEntries[cei].name] = charEntries[cei].price;
+        if (charEntries[cei].weapon) {
+          newSigWeapons[charEntries[cei].name] = charEntries[cei].weapon;
+        }
       }
       newW.charPrices = newCharPrices;
+      // 如果用户修改了专武映射，保存到权重中
+      if (Object.keys(newSigWeapons).length > 0) {
+        newW.sigWeaponsOverride = newSigWeapons;
+      }
 
       // 收集命座溢价
       var newConstPremiums = {};

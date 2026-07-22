@@ -269,6 +269,10 @@ function buildDefaultWeights(customWeights) {
     }
   }
   w.needSigWeapons = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  // 用户自定义专武映射覆盖
+  if (saved.sigWeaponsOverride) {
+    w.sigWeaponsOverride = saved.sigWeaponsOverride;
+  }
   return w;
 }
 
@@ -300,6 +304,7 @@ function getDefaults() {
   return {
     weights: buildDefaultWeights(),
     charTiers: CHAR_TIERS,
+    sigWeapons: SIG_WEAPONS,
     constPremiums: DEFAULT_CONST_PREMIUMS,
     teams: DEFAULT_TEAMS,
     pullTiers: DEFAULT_PULL_TIERS,
@@ -312,6 +317,8 @@ function getDefaults() {
 
 // 全局权重（等价于油猴脚本中的 weights 全局变量）
 let weights = buildDefaultWeights();
+// 用户自定义专武映射覆盖（运行时由 evaluateWithPrice 设置）
+let _sigWeaponsOverride = null;
 
 // ============================================================
 // 文本解析辅助函数（对应油猴脚本 extractSection 等）
@@ -580,7 +587,7 @@ function parseAccountInfo(text) {
  * 检查角色是否有专武
  */
 function checkHasSigWeapon(charName, weaponNames, weaponSectionText) {
-  const sigName = SIG_WEAPONS[charName];
+  const sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[charName] || SIG_WEAPONS[charName]) : SIG_WEAPONS[charName];
   if (!sigName) return false;
   // 先检查武器列表
   if (weaponNames && weaponNames.some(w => w === sigName || w.includes(sigName) || sigName.includes(w))) {
@@ -762,7 +769,7 @@ function calculateValue(parsed, price) {
     // 获取专武精炼数（0表示无专武，1-5表示精1-5）
     let sigRefine = 0;
     if (hasSig) {
-      const sigName = SIG_WEAPONS[char.name];
+      const sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[char.name] || SIG_WEAPONS[char.name]) : SIG_WEAPONS[char.name];
       if (sigName) {
         const sigWeapon = parsed.weapons.find(function (wp) {
           return wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name);
@@ -904,9 +911,10 @@ function calculateValue(parsed, price) {
 
   // 武器明细
   const weaponDetails = parsed.weapons.map(weapon => {
-    const isSig = parsed.characters.some(char =>
-      SIG_WEAPONS[char.name] === weapon.name && hasSignatureWeapons.includes(char.name)
-    );
+    const isSig = parsed.characters.some(char => {
+      const charSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[char.name] || SIG_WEAPONS[char.name]) : SIG_WEAPONS[char.name];
+      return charSigName === weapon.name && hasSignatureWeapons.includes(char.name);
+    });
     return { name: weapon.name, refine: weapon.refine, isSig: isSig };
   });
 
@@ -984,8 +992,11 @@ function calculateValue(parsed, price) {
 function evaluateWithPrice(showTitle, priceInCents, customWeights) {
   // 临时设置自定义权重
   const savedWeights = weights;
+  const savedSigOverride = _sigWeaponsOverride;
   if (customWeights) {
     weights = buildDefaultWeights(customWeights);
+    // 应用用户自定义专武映射
+    _sigWeaponsOverride = weights.sigWeaponsOverride || null;
   }
   try {
     const parsed = parseAccountInfo(showTitle);
@@ -1037,6 +1048,7 @@ function evaluateWithPrice(showTitle, priceInCents, customWeights) {
   } finally {
     // 恢复原始权重
     weights = savedWeights;
+    _sigWeaponsOverride = savedSigOverride;
   }
 }
 
