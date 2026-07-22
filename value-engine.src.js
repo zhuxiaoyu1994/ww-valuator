@@ -216,9 +216,10 @@ for (const [tier, info] of Object.entries(CHAR_TIERS)) {
 // 已知段落关键词（对应油猴脚本 SECTION_KEYWORDS）
 // ============================================================
 const SECTION_KEYWORDS = [
-  '五星角色', '四星角色', '五星武器', '地图探索度',
-  '余波珊瑚', '浮金波纹', '铸潮波纹',
-  '摩托饰品', '车架模组', '星声', '月相', '服饰', '摩托', '车架', '涂装',
+  '五星角色', '四星角色', '五星武器', '金色武器', '地图探索度',
+  '余波珊瑚', '残振珊瑚', '浮金波纹', '铸潮波纹', '唤声涡纹',
+  '摩托饰品', '车架模组', '星声', '月相', '服饰', '皮肤', '摩托', '车架', '涂装',
+  '数据坞等级', '联觉等级',
 ];
 
 // ============================================================
@@ -331,17 +332,22 @@ let _sigWeaponsOverride = null;
 function extractSection(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const others = SECTION_KEYWORDS.filter(k => k !== keyword)
-    .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[（(]\\d+[）)])?(?:[：:]|\\s*\\n)');
+    .map(k => '【?' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[（(]\\d+[）)])?(?:[：:]|\\s*\\n|】)');
 
   // 格式1: keyword：content（原格式，冒号后同行内容）
   const pattern1 = escaped + '[：:]\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
   const match1 = text.match(new RegExp(pattern1));
   if (match1) return match1[1].trim();
 
-  // 格式2: keyword（N）[：:][\n] content（手机端格式，带数量括号）
+  // 格式2: keyword（N）[：:][\n] content（螃蟹网手机端格式，带数量括号）
   const pattern2 = escaped + '[（(]\\d+[）)]\\s*[：:]?\\s*\\n?\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
   const match2 = text.match(new RegExp(pattern2));
   if (match2) return match2[1].trim();
+
+  // 格式3: 【keyword】[：:]content（盼之手机端格式，方括号包裹关键词）
+  const pattern3 = '【' + escaped + '】\\s*[：:]?\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
+  const match3 = text.match(new RegExp(pattern3));
+  if (match3) return match3[1].trim();
 
   return '';
 }
@@ -351,8 +357,12 @@ function extractSection(text, keyword) {
  */
 function extractNumber(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = text.match(new RegExp(escaped + '[：:]\\s*(\\d[\\d,]*)', 'i'));
-  if (match) return parseInt(match[1].replace(/,/g, ''));
+  // 格式1: keyword：数字
+  const match1 = text.match(new RegExp(escaped + '[：:]\\s*(\\d[\\d,]*)', 'i'));
+  if (match1) return parseInt(match1[1].replace(/,/g, ''));
+  // 格式2: 【keyword】：数字（盼之格式）
+  const match2 = text.match(new RegExp('【' + escaped + '】\\s*[：:]?\\s*(\\d[\\d,]*)', 'i'));
+  if (match2) return parseInt(match2[1].replace(/,/g, ''));
   return 0;
 }
 
@@ -502,6 +512,9 @@ function extractYellowCount(text) {
   // "黄数：N" 或 "黄：N"
   m = text.match(/黄[数]?[：:]\s*(\d+)/);
   if (m) return parseInt(m[1]);
+  // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
+  m = text.match(/【黄[数]?】\s*[：:]?\s*(\d+)/);
+  if (m) return parseInt(m[1]);
   return 0;
 }
 
@@ -562,9 +575,16 @@ function parseAccountInfo(text) {
   if (weaponSection) {
     result.weapons = parseWeapons(weaponSection);
   }
-  // 回退：手机端格式只有"武器（N）"标题
+  // 回退1：螃蟹网手机端格式只有"武器（N）"标题
   if (result.weapons.length === 0) {
     weaponSection = extractSection(text, '武器');
+    if (weaponSection) {
+      result.weapons = parseWeapons(weaponSection);
+    }
+  }
+  // 回退2：盼之手机端格式用"金色武器"
+  if (result.weapons.length === 0) {
+    weaponSection = extractSection(text, '金色武器');
     if (weaponSection) {
       result.weapons = parseWeapons(weaponSection);
     }
@@ -582,6 +602,14 @@ function parseAccountInfo(text) {
 
   // 提取服饰、摩托、车架、涂装数量
   result.outfitCount = extractListCount(text, '服饰');
+  // 回退：盼之格式用"皮肤"
+  if (result.outfitCount === 0) {
+    const skinSection = extractSection(text, '皮肤');
+    if (skinSection) {
+      const skinNum = parseInt(skinSection);
+      result.outfitCount = isNaN(skinNum) ? extractListCount(text, '皮肤') : skinNum;
+    }
+  }
   // 摩托只算车架模组（摩托饰品不算摩托），检查所有可能的段落标题
   result.motoCount = extractListCount(text, '车架模组') + extractListCount(text, '车架') + extractListCount(text, '摩托');
   // 摩托饰品单独计数（不算摩托）
