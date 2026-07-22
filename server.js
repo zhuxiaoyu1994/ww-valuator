@@ -465,6 +465,9 @@ function getPlatformPage() {
     .game-card.wuwa .accent { background: #e94560; }
     .game-card.zzz .accent { background: #ffb84d; }
     .game-card.huan .accent { background: #7c5cff; }
+    .game-card.endfield .accent { background: #4ade80; }
+    .game-card.delta .accent { background: #3b82f6; }
+    .game-card.honor .accent { background: #f0c040; }
 
     /* Icon */
     .game-icon {
@@ -479,6 +482,9 @@ function getPlatformPage() {
     .game-icon.wuwa { background: linear-gradient(135deg, #e94560 0%, #ff6b4a 100%); box-shadow: 0 8px 24px rgba(233, 69, 96, 0.4); }
     .game-icon.zzz { background: linear-gradient(135deg, #ffb84d 0%, #ff8a3d 100%); }
     .game-icon.huan { background: linear-gradient(135deg, #7c5cff 0%, #5b8cff 100%); }
+    .game-icon.endfield { background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); }
+    .game-icon.delta { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+    .game-icon.honor { background: linear-gradient(135deg, #f0c040 0%, #eab308 100%); }
 
     .game-name {
       font-size: 22px;
@@ -490,6 +496,9 @@ function getPlatformPage() {
     .game-card.wuwa .game-name { color: #ff6b7a; }
     .game-card.zzz .game-name { color: #ffb84d; }
     .game-card.huan .game-name { color: #9d7cff; }
+    .game-card.endfield .game-name { color: #4ade80; }
+    .game-card.delta .game-name { color: #60a5fa; }
+    .game-card.honor .game-name { color: #f0c040; }
 
     .game-desc {
       font-size: 13px;
@@ -632,12 +641,47 @@ function getPlatformPage() {
           <div class="coming-soon-text">敬请期待</div>
         </div>
       </div>
+
+      <!-- 明日方舟：终末地 -->
+      <div class="game-card endfield disabled">
+        <div class="accent"></div>
+        <div class="game-icon endfield">终</div>
+        <div class="game-name">明日方舟：终末地</div>
+        <div class="game-desc">账号估价即将上线</div>
+        <span class="status-badge soon">敬请期待</span>
+        <div class="coming-soon-mask">
+          <div class="coming-soon-text">敬请期待</div>
+        </div>
+      </div>
+
+      <!-- 三角洲行动 -->
+      <div class="game-card delta disabled">
+        <div class="accent"></div>
+        <div class="game-icon delta">三</div>
+        <div class="game-name">三角洲行动</div>
+        <div class="game-desc">账号估价即将上线</div>
+        <span class="status-badge soon">敬请期待</span>
+        <div class="coming-soon-mask">
+          <div class="coming-soon-text">敬请期待</div>
+        </div>
+      </div>
+
+      <!-- 王者荣耀 -->
+      <div class="game-card honor disabled">
+        <div class="accent"></div>
+        <div class="game-icon honor">王</div>
+        <div class="game-name">王者荣耀</div>
+        <div class="game-desc">账号估价即将上线</div>
+        <span class="status-badge soon">敬请期待</span>
+        <div class="coming-soon-mask">
+          <div class="coming-soon-text">敬请期待</div>
+        </div>
+      </div>
     </div>
 
     <!-- Footer -->
     <div class="footer">
       <div class="copyright">© 2024 游戏账号估价平台 · 仅供行情参考，不参与任何账号交易</div>
-      <a class="qq-link" href="/monitor">监控助手</a>
     </div>
   </div>
 </body>

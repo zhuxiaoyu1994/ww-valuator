@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang='zh-CN'>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>《鸣潮》官方网站 - Wuthering Waves</title>
+    <link rel="icon" href="https://mc.kurogames.com/static4.0/favicon.ico" />
+    <meta name="viewport"
+        content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0,user-scalable=no" />
+    <meta property="website-type" content="main">
+    	<meta name="keywords" content="鸣潮,鸣潮官网,潮,明朝,明朝官网,鸣潮手游,鸣潮下载,鸣潮安卓,鸣潮iOS,库洛游戏,kurogame,Waves,WutheringWaves,wutheringwaves,鸣潮游戏官网,鸣潮手游官网,鸣潮官网网址,鸣潮官方网站,鸣潮预约,鸣潮公测,鸣潮上线" />
+	<meta property="title" content="《鸣潮》官方网站 - Wuthering Waves" />
+	<meta property="og:title" content="《鸣潮》官方网站 - Wuthering Waves" />
+	<meta property="twitter:title" content="《鸣潮》官方网站 - Wuthering Waves" />
+	<meta name="description" content="《鸣潮》是一款开放世界动作游戏，主打高自由度的动作战斗玩法与丰富多样的开放世界探索。而你，在这个世界苏醒的漂泊者，将在找回记忆、寻找自我身份的同时结识无数的共鸣者同伴，并和伙伴一起踏上跨越悲鸣的旅途。游戏正在持续紧张开发中，更多信息请持续关注我们。" />
+	<meta property="og:description" content="《鸣潮》是一款开放世界动作游戏，主打高自由度的动作战斗玩法与丰富多样的开放世界探索。而你，在这个世界苏醒的漂泊者，将在找回记忆、寻找自我身份的同时结识无数的共鸣者同伴，并和伙伴一起踏上跨越悲鸣的旅途。游戏正在持续紧张开发中，更多信息请持续关注我们。" />
+	<meta property="twitter:description" content="《鸣潮》是一款开放世界动作游戏，主打高自由度的动作战斗玩法与丰富多样的开放世界探索。而你，在这个世界苏醒的漂泊者，将在找回记忆、寻找自我身份的同时结识无数的共鸣者同伴，并和伙伴一起踏上跨越悲鸣的旅途。游戏正在持续紧张开发中，更多信息请持续关注我们。" />
+	<meta property="image" content="/favicon.ico" />
+	<meta property="og:image" content="/favicon.ico" />
+	<meta property="twitter:image" content="/favicon.ico" />
+	<meta name="card" content="summary_large_image" />
+	<meta name="og:card" content="summary_large_image" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta property="type" content="game" />
+	<meta property="og:site_name" content="鸣潮" />
+	<meta property="url" content="/" />
+	<meta property="og:url" content="/" />
+	<meta property="twitter:url" content="/" />
+    <script>
+                window.__INITIAL__={"name":"鸣潮","title":"《鸣潮》官方网站 - Wuthering Waves","keywords":"鸣潮,鸣潮官网,潮,明朝,明朝官网,鸣潮手游,鸣潮下载,鸣潮安卓,鸣潮iOS,库洛游戏,kurogame,Waves,WutheringWaves,wutheringwaves,鸣潮游戏官网,鸣潮手游官网,鸣潮官网网址,鸣潮官方网站,鸣潮预约,鸣潮公测,鸣潮上线","description":"《鸣潮》是一款开放世界动作游戏，主打高自由度的动作战斗玩法与丰富多样的开放世界探索。而你，在这个世界苏醒的漂泊者，将在找回记忆、寻找自我身份的同时结识无数的共鸣者同伴，并和伙伴一起踏上跨越悲鸣的旅途。游戏正在持续紧张开发中，更多信息请持续关注我们。","nav_bar_main":"首页","nav_bar_news":"资讯","nav_bar_info":"情报","nav_bar_role":"共鸣者","nav_bar_video":"影像","nav_bar_community":"社区","nav_bar_gallery":"印记","nav_bar_world":"世界","nav_bar_features":"情报","reservation":"全平台已预约","copyright":"版权信息","hidden":"隐藏","book_now":"立即预约","test_appointment":"共鸣测试招募","close":"关闭","appointment":"预约","confirm":"确认","get_CAPTCHA":"获取验证码","cancel":"取消","appointment_text_by_phone_number":"请各位漂泊者，用手机号登录进行游戏预约。","appointment_text_by_email":"请各位漂泊者，用邮箱号登录进行游戏预约。","input_email":"输入邮箱号","input_phone_number":"输入手机号","input_CAPTCHA":"输入验证码","follow_us":"关注我们","Incorrect_phone_number_format":"手机号格式不正确","Incorrect_email_address_format":"邮箱或者验证码输入有误，请检查","loading":"加载中","loaded":"点击进入官网","download":"下载","moblie_rotate_tips":"为了更好的体验，请将手机/平板竖放后操作~","pre_sign_up_successful":"感谢您的订阅","thank_you_for_subscbing":"感谢您的支持","read_and_tick_the_privacy_policy":"请阅读并勾选隐私协议","back":"返回","news_more":"查看更多","pubdate":"发布于","news_tab_lastest":"最新","news_tab_notice":"公告","news_tab_news":"新闻","news_tab_event":"活动","logout":"退出","published_at:":"发表于：","pin":"置顶","registered":"您已预约过游戏","related_news_title":"相关推荐","benner_text":"活动","scroll_tips":"SCROLL","more":"MORE","back_top":"TOP","regsited":"已预约","finished_register":"您已完成游戏预约","login_expired":"登录已过期，请重新登录","copy_success":"复制成功","pre_register":"立即预约","appointment_text_title":"全球预约人数","appointment_text-des":"*预约数据来自全球官方网站及全球各大应用商店。","appointmtent-fail-msg":"预约失败","login-fail-msg":"登录失败","appointment-success":"订阅关于鸣潮的最新消息和事件！","event-btn":"活动","copy_share_text":"全新开放世界动作游戏《鸣潮》公测预约已正式开启，5月23日开启全球全平台正式公测，同步上线PC、iOS、安卓平台。欢迎漂泊者前往《鸣潮》官方网站进行预约！https://mc.kurogame.com/","login_success":"登录成功","news":"NEWS","world_show":"世界展示","recharge_center":"充值中心","apple_mac_compatible":"支持Apple Mac"}
+                window.__CURRENTLOCALE__="zh"
+                </script>
+    <script>
+
+    </script>
+    <script>
+        ; (function () {
+            var _REG_ = /\/m(?![A-Za-z0-9])/
+            if (
+                !navigator.userAgent.match(
+                    /(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i
+                )
+            ) {
+                if (location.href.match(_REG_)) {
+                    location.replace(location.href.replace(_REG_, ''))
+                }
+            } else {
+                if (!location.href.match(_REG_)) {
+                    location.replace(
+                        location.origin + '/m' + location.pathname + location
+                            .search + location.hash
+                    )
+                }
+            }
+        })()
+
+        if (typeof Proxy !== 'function') {
+            document.write('Please upgrade your browser version.')
+        }
+
+    </script>
+  <script type="module" crossorigin src="https://mc.kurogames.com/static4.0/assets/index-ace5c7b8.js"></script>
+  <link rel="stylesheet" href="https://mc.kurogames.com/static4.0/assets/index-a47fbd31.css">
+  <script type="module">import.meta.url;import("_").catch(()=>1);async function* g(){};window.__vite_is_modern_browser=true;</script>
+  <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
+</head>
+
+<body style="background: #000;">
+    <div id="app"></div>
+    
+  <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
+  <script nomodule crossorigin id="vite-legacy-polyfill" src="https://mc.kurogames.com/static4.0/assets/polyfills-legacy-d4d3d7f9.js"></script>
+  <script nomodule crossorigin id="vite-legacy-entry" data-src="https://mc.kurogames.com/static4.0/assets/index-legacy-5c707911.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
+</body>
+
+</html>
