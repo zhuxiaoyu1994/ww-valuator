@@ -37,7 +37,16 @@ app.use((req, res, next) => {
     return next();
   }
   const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-  if (blockedIps.some(blocked => clientIp === blocked || clientIp.endsWith('.' + blocked))) {
+  // 支持精确匹配、后缀匹配（.xxx）、前缀匹配（xxx.）
+  const isBlocked = blockedIps.some(blocked => {
+    if (clientIp === blocked) return true;
+    if (blocked.startsWith('.') && clientIp.endsWith(blocked)) return true;
+    if (blocked.endsWith('.') && clientIp.startsWith(blocked)) return true;
+    // 支持 CIDR 前缀如 "216.195.201"（匹配 216.195.201.*）
+    if (!blocked.includes(':') && clientIp.startsWith(blocked + '.')) return true;
+    return false;
+  });
+  if (isBlocked) {
     console.log('[Blocked] IP: ' + clientIp + ' ' + req.method + ' ' + req.path);
     return res.status(403).json({ success: false, error: '访问被拒绝' });
   }
@@ -48,11 +57,13 @@ app.use((req, res, next) => {
 // 频率限制 + 自动封禁
 // ============================================================
 const RATE_LIMIT_WINDOW = 5 * 60 * 1000;  // 5分钟窗口
-const RATE_LIMIT_MAX = 12;                 // 每个IP每窗口最多12次API请求
+const RATE_LIMIT_MAX = 6;                  // 每个IP每窗口最多6次API请求（降低以防止慢速绕过）
 const AUTO_BAN_THRESHOLD = 3;              // 触发限流3次自动封禁
-const GLOBAL_RATE_LIMIT_MAX = 60;          // 全局每分钟最多60次
+const GLOBAL_RATE_LIMIT_MAX = 40;          // 全局每分钟最多40次
+const PATTERN_DETECT_COUNT = 5;            // 规律性检测：连续N次请求间隔过小则封禁
+const PATTERN_MIN_INTERVAL = 4 * 60 * 1000; // 规律性检测：间隔小于4分钟视为异常
 
-const ipRequestRecords = {};  // { ip: { timestamps: [], violations: 0 } }
+const ipRequestRecords = {};  // { ip: { timestamps: [], violations: 0, lastTime: 0, patternCount: 0 } }
 const globalRequestTimestamps = [];
 
 function getClientIp(req) {
@@ -79,10 +90,31 @@ app.use('/api/', (req, res, next) => {
 
   // 单IP频率限制
   if (!ipRequestRecords[clientIp]) {
-    ipRequestRecords[clientIp] = { timestamps: [], violations: 0 };
+    ipRequestRecords[clientIp] = { timestamps: [], violations: 0, lastTime: 0, patternCount: 0 };
   }
   const record = ipRequestRecords[clientIp];
+  const now = Date.now();
   cleanOldTimestamps(record.timestamps, RATE_LIMIT_WINDOW);
+
+  // 规律性检测：请求间隔过小（模拟人工但频率稳定）
+  if (record.lastTime > 0) {
+    const interval = now - record.lastTime;
+    if (interval > 0 && interval < PATTERN_MIN_INTERVAL) {
+      record.patternCount++;
+      console.log('[Pattern] IP: ' + clientIp + ' 间隔 ' + Math.round(interval / 1000) + 's，连续快请求计数 ' + record.patternCount);
+      if (record.patternCount >= PATTERN_DETECT_COUNT) {
+        if (!blockedIps.includes(clientIp)) {
+          blockedIps.push(clientIp);
+          console.log('[AutoBan] IP: ' + clientIp + ' 已自动封禁（请求规律异常，疑似脚本）');
+        }
+        return res.status(403).json({ success: false, error: '访问被拒绝' });
+      }
+    } else if (interval >= PATTERN_MIN_INTERVAL) {
+      // 间隔正常，重置规律计数
+      record.patternCount = 0;
+    }
+  }
+  record.lastTime = now;
 
   if (record.timestamps.length >= RATE_LIMIT_MAX) {
     record.violations++;
