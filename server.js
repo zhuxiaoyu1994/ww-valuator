@@ -81,6 +81,11 @@ function cleanOldTimestamps(arr, windowMs) {
 app.use('/api/', (req, res, next) => {
   const clientIp = getClientIp(req);
 
+  // 本地开发环境放行 localhost
+  if (clientIp === '::1' || clientIp === '127.0.0.1' || clientIp === '::ffff:127.0.0.1') {
+    return next();
+  }
+
   // 全局频率限制
   cleanOldTimestamps(globalRequestTimestamps, 60 * 1000);
   if (globalRequestTimestamps.length >= GLOBAL_RATE_LIMIT_MAX) {
