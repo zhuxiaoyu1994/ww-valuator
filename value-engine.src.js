@@ -89,14 +89,14 @@ const DEFAULT_WEIGHTS = {
   // 多配队额外系数
   teamMultiBonus: [
     { count: 2, coef: 1.1 },
-    { count: 3, coef: 1.15 },
-    { count: 4, coef: 1.2 },
-    { count: 5, coef: 1.25 },
-    { count: 6, coef: 1.3 },
-    { count: 7, coef: 1.35 },
-    { count: 8, coef: 1.4 },
-    { count: 9, coef: 1.45 },
-    { count: 10, coef: 1.5 },
+    { count: 3, coef: 1.2 },
+    { count: 4, coef: 1.3 },
+    { count: 5, coef: 1.4 },
+    { count: 6, coef: 1.5 },
+    { count: 7, coef: 1.6 },
+    { count: 8, coef: 1.7 },
+    { count: 9, coef: 1.8 },
+    { count: 10, coef: 1.9 },
   ],
 };
 
@@ -113,7 +113,7 @@ const DEFAULT_TEAMS = [
   { name: '西仇守', members: ['西格莉卡', '仇远', '守岸人'], multiplier: 1.2 },
   { name: '嘉仇守', members: ['嘉贝莉娜', '仇远', '守岸人'], multiplier: 1.2 },
   { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.5 },
-  { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
+  { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.2 },
   { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
 ];
 
@@ -121,21 +121,21 @@ const DEFAULT_TEAMS = [
 // 默认抽数阶梯定价（对应油猴脚本 DEFAULT_PULL_TIERS）
 // ============================================================
 const DEFAULT_PULL_TIERS = [
-  { minPull: 0, maxPull: 100, perPullPrice: 0.7 },
-  { minPull: 100, maxPull: 200, perPullPrice: 0.9 },
-  { minPull: 200, maxPull: 300, perPullPrice: 1.1 },
-  { minPull: 300, maxPull: 400, perPullPrice: 1.3 },
-  { minPull: 400, maxPull: 500, perPullPrice: 1.5 },
-  { minPull: 500, maxPull: 600, perPullPrice: 1.9 },
-  { minPull: 600, maxPull: 700, perPullPrice: 2.1 },
-  { minPull: 700, maxPull: 800, perPullPrice: 2.3 },
-  { minPull: 800, maxPull: 900, perPullPrice: 2.5 },
-  { minPull: 900, maxPull: 1000, perPullPrice: 2.9 },
-  { minPull: 1000, maxPull: 1100, perPullPrice: 3.1 },
-  { minPull: 1100, maxPull: 1200, perPullPrice: 3.3 },
-  { minPull: 1200, maxPull: 1300, perPullPrice: 3.5 },
-  { minPull: 1300, maxPull: 1400, perPullPrice: 3.7 },
-  { minPull: 1400, maxPull: Infinity, perPullPrice: 3.9 },
+  { minPull: 0, maxPull: 100, perPullPrice: 0.8 },
+  { minPull: 100, maxPull: 200, perPullPrice: 1 },
+  { minPull: 200, maxPull: 300, perPullPrice: 1.2 },
+  { minPull: 300, maxPull: 400, perPullPrice: 1.4 },
+  { minPull: 400, maxPull: 500, perPullPrice: 1.7 },
+  { minPull: 500, maxPull: 600, perPullPrice: 2 },
+  { minPull: 600, maxPull: 700, perPullPrice: 2.3 },
+  { minPull: 700, maxPull: 800, perPullPrice: 2.5 },
+  { minPull: 800, maxPull: 900, perPullPrice: 2.7 },
+  { minPull: 900, maxPull: 1000, perPullPrice: 3 },
+  { minPull: 1000, maxPull: 1100, perPullPrice: 3.2 },
+  { minPull: 1100, maxPull: 1200, perPullPrice: 3.4 },
+  { minPull: 1200, maxPull: 1300, perPullPrice: 3.6 },
+  { minPull: 1300, maxPull: 1400, perPullPrice: 3.8 },
+  { minPull: 1400, maxPull: Infinity, perPullPrice: 4 },
 ];
 
 // ============================================================
