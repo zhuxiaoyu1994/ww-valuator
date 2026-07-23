@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.14.1
+// @version      1.14.2
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2384,8 +2384,8 @@
         // Server酱
         '<div style="margin-bottom:12px;padding:10px;background:#16213e;border-radius:8px;">' +
           '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">Server酱（微信推送）</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 sct.ftqq.com 登录后获取 SendKey</div>' +
-          '<input type="text" id="mwServerChanKey" value="' + (pushConfig.serverChanKey || '') + '" placeholder="SendKey" style="width:100%;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 sct.ftqq.com 登录后获取 SendKey，多个Key用逗号或换行分隔</div>' +
+          '<textarea id="mwServerChanKey" placeholder="SendKey1,SendKey2 或每行一个" style="width:100%;height:60px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;resize:vertical;">' + (pushConfig.serverChanKey || '') + '</textarea>' +
         '</div>' +
         // PushPlus
         '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;">' +
@@ -5011,18 +5011,23 @@ function openSettings() {
       } catch (e) { console.error('[鸣潮监控] Bark推送异常:', e); }
     }
 
-    // Server酱推送（微信）
+    // Server酱推送（微信）- 支持多个SendKey
     if (pushConfig.serverChanKey) {
-      try {
-        GM_xmlhttpRequest({
-          method: 'POST',
-          url: 'https://sctapi.ftqq.com/' + pushConfig.serverChanKey + '.send',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          data: 'title=' + encodeURIComponent(title) + '&desp=' + encodeURIComponent(pushBody),
-          onload: function () { console.log('[鸣潮监控] Server酱推送已发送'); },
-          onerror: function (e) { console.error('[鸣潮监控] Server酱推送失败:', e); }
-        });
-      } catch (e) { console.error('[鸣潮监控] Server酱推送异常:', e); }
+      var sckKeys = pushConfig.serverChanKey.split(/[,\n\s]+/).filter(function(k) { return k.trim().length > 0; });
+      sckKeys.forEach(function(key) {
+        key = key.trim();
+        if (!key) return;
+        try {
+          GM_xmlhttpRequest({
+            method: 'POST',
+            url: 'https://sctapi.ftqq.com/' + key + '.send',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            data: 'title=' + encodeURIComponent(title) + '&desp=' + encodeURIComponent(pushBody),
+            onload: function () { console.log('[鸣潮监控] Server酱推送已发送: ' + key.substring(0, 8) + '...'); },
+            onerror: function (e) { console.error('[鸣潮监控] Server酱推送失败:', key.substring(0, 8) + '...', e); }
+          });
+        } catch (e) { console.error('[鸣潮监控] Server酱推送异常:', key.substring(0, 8) + '...', e); }
+      });
     }
 
     // PushPlus推送（微信）- 支持多个Token
