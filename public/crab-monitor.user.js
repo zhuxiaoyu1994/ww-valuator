@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.13.9
+// @version      1.14.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2346,8 +2346,8 @@
         // PushPlus
         '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;">' +
           '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">PushPlus（微信推送）</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 pushplus.plus 登录后获取 Token</div>' +
-          '<input type="text" id="mwPushPlusToken" value="' + (pushConfig.pushPlusToken || '') + '" placeholder="Token" style="width:100%;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 pushplus.plus 登录后获取 Token，多个Token用逗号或换行分隔</div>' +
+          '<textarea id="mwPushPlusToken" placeholder="Token1,Token2 或每行一个" style="width:100%;height:60px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;resize:vertical;">' + (pushConfig.pushPlusToken || '') + '</textarea>' +
         '</div>' +
         // 测试按钮
         '<div style="margin-bottom:16px;text-align:center;">' +
@@ -4981,23 +4981,28 @@ function openSettings() {
       } catch (e) { console.error('[鸣潮监控] Server酱推送异常:', e); }
     }
 
-    // PushPlus推送（微信）
+    // PushPlus推送（微信）- 支持多个Token
     if (pushConfig.pushPlusToken) {
-      try {
-        GM_xmlhttpRequest({
-          method: 'POST',
-          url: 'https://www.pushplus.plus/send',
-          headers: { 'Content-Type': 'application/json' },
-          data: JSON.stringify({
-            token: pushConfig.pushPlusToken,
-            title: title,
-            content: pushBody,
-            template: 'txt'
-          }),
-          onload: function () { console.log('[鸣潮监控] PushPlus推送已发送'); },
-          onerror: function (e) { console.error('[鸣潮监控] PushPlus推送失败:', e); }
-        });
-      } catch (e) { console.error('[鸣潮监控] PushPlus推送异常:', e); }
+      var tokens = pushConfig.pushPlusToken.split(/[,\n\s]+/).filter(function(t) { return t.trim().length > 0; });
+      tokens.forEach(function(token) {
+        token = token.trim();
+        if (!token) return;
+        try {
+          GM_xmlhttpRequest({
+            method: 'POST',
+            url: 'https://www.pushplus.plus/send',
+            headers: { 'Content-Type': 'application/json' },
+            data: JSON.stringify({
+              token: token,
+              title: title,
+              content: pushBody,
+              template: 'txt'
+            }),
+            onload: function () { console.log('[鸣潮监控] PushPlus推送已发送: ' + token.substring(0, 8) + '...'); },
+            onerror: function (e) { console.error('[鸣潮监控] PushPlus推送失败:', token.substring(0, 8) + '...', e); }
+          });
+        } catch (e) { console.error('[鸣潮监控] PushPlus推送异常:', token.substring(0, 8) + '...', e); }
+      });
     }
   }
 
