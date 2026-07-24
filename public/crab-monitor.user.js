@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.14.2
+// @version      1.15.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
+// @match        https://www.pxb7.com/product/*
 // @grant        GM_notification
 // @grant        GM_xmlhttpRequest
 // @connect      api.day.app
@@ -324,6 +325,8 @@
   let threshold = 20;            // 估值阈值(%)
   let notifyRatioThreshold = 40; // 通知性价比阈值(%)
   let notifyDiffThreshold = 200; // 通知差价阈值(元)
+  let autoBuyEnabled = false;   // 自动购买开关
+  let autoBuyDiff = 500;        // 自动购买差价阈值(元)
   let notifyMinValue = 498;      // 通知估值下限(元)，低于此值不通知
   let notifyMinPrice = 0;        // 通知标价下限(元)，低于此值不通知
   let refreshIntervalSec = 30;   // 刷新间隔（秒），可设置
@@ -1630,6 +1633,11 @@
             notifiedIds.push(item.productId);
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
             saveStorage(STORAGE_KEYS.notified, notifiedIds);
+
+            // 自动抢购：差价超过阈值时自动打开商品页
+            if (autoBuyEnabled && valuation.diff >= autoBuyDiff) {
+              autoBuy(item.productId, valuation.diff);
+            }
           }
         }
       }
@@ -2316,6 +2324,17 @@
         '<input type="number" id="mwNotifyDiff" value="' + notifyDiffThreshold + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">差价超过阈值时发送通知</div>' +
+        // 自动购买
+        '<div style="font-size:13px;font-weight:600;color:#e94560;margin-bottom:8px;">自动抢购</div>' +
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwAutoBuyEnabled" ' + (autoBuyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 开启自动抢购</label>' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">自动抢购差价阈值（元）</label>' +
+        '<input type="number" id="mwAutoBuyDiff" value="' + autoBuyDiff + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#f59e0b;margin-bottom:16px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">差价超过阈值时自动打开商品页并点击"立即购买"跳转到确认页，你只需手动扫码支付。需保持螃蟹网登录状态。</div>' +
         // 指定账号通知
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">指定账号通知（须满足全部角色条件）</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，且差价超过阈值才通知</div>' +
@@ -2486,6 +2505,8 @@
       box.querySelector('#mwNotifyCancel').onclick = function () { overlay.remove(); };
       box.querySelector('#mwNotifySave').onclick = function () {
         notifyDiffThreshold = parseFloat(box.querySelector('#mwNotifyDiff').value) || 0;
+        autoBuyEnabled = box.querySelector('#mwAutoBuyEnabled').checked;
+        autoBuyDiff = parseFloat(box.querySelector('#mwAutoBuyDiff').value) || 0;
         notifyMinValue = parseFloat(box.querySelector('#mwNotifyMinValue').value) || 0;
         notifyMinPrice = parseFloat(box.querySelector('#mwNotifyMinPrice').value) || 0;
         var newInterval = parseInt(box.querySelector('#mwRefreshInterval').value) || 60;
@@ -4792,6 +4813,100 @@ function openSettings() {
   }
 
   // ============================================================
+  // 自动抢购
+  // ============================================================
+
+  /**
+   * 自动抢购：打开商品页并自动点击"立即购买"
+   * 通过URL参数传递指令，商品页脚本检测到后自动执行
+   */
+  function autoBuy(productId, diff) {
+    console.log('[鸣潮监控] 自动抢购触发: ' + productId + ' 差价' + diff.toFixed(0) + '元');
+    var buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
+    // 尝试打开新标签页（可能被浏览器拦截，用户需允许弹窗）
+    var win = window.open(buyUrl, '_blank');
+    if (!win) {
+      console.warn('[鸣潮监控] 弹窗被拦截，请允许本站弹窗以使用自动抢购');
+      // 降级：在当前页跳转（会离开监控列表页）
+      // 不自动跳转，仅提示
+      showAlertBanner('自动抢购-弹窗被拦截', '请允许弹窗后重试，或手动点击查看\n差价' + diff.toFixed(0) + '元', productId);
+    } else {
+      showAlertBanner('自动抢购已触发', '已打开商品页并自动点击购买\n差价' + diff.toFixed(0) + '元，请尽快扫码支付', productId);
+      // 急促报警声
+      if (pushConfig.soundAlert) {
+        beepMultiple(8);
+      }
+    }
+  }
+
+  /**
+   * 商品页自动购买逻辑（在商品详情页执行）
+   * 检测URL中的 autobuy=1 参数，自动点击"立即购买"按钮
+   */
+  function initAutoBuyOnProductPage() {
+    var url = window.location.href;
+    if (url.indexOf('autobuy=1') === -1) return;
+
+    console.log('[鸣潮监控] 自动购买模式已激活，等待页面加载完成...');
+
+    // 等待页面加载完成后查找"立即购买"按钮
+    function tryClickBuyButton(attempt) {
+      attempt = attempt || 0;
+      if (attempt > 30) {
+        console.warn('[鸣潮监控] 自动购买：未找到购买按钮（可能已售或页面异常）');
+        return;
+      }
+
+      // 查找"立即购买"按钮（螃蟹网的按钮文字可能是"立即购买"）
+      var buyBtn = null;
+
+      // 方式1：查找包含"立即购买"文字的按钮
+      var allBtns = document.querySelectorAll('button, a, div, span');
+      for (var i = 0; i < allBtns.length; i++) {
+        var el = allBtns[i];
+        var text = (el.textContent || '').trim();
+        if (text === '立即购买' || text === '立即抢购') {
+          buyBtn = el;
+          break;
+        }
+      }
+
+      // 方式2：查找class或id中包含buy/purchase的元素
+      if (!buyBtn) {
+        buyBtn = document.querySelector('[class*="buy-btn"], [class*="purchase"], [class*="submit-order"], [id*="buyBtn"]');
+      }
+
+      if (buyBtn) {
+        console.log('[鸣潮监控] 自动购买：找到购买按钮，1秒后自动点击');
+        setTimeout(function() {
+          buyBtn.click();
+          console.log('[鸣潮监控] 自动购买：已点击购买按钮');
+          // 等待跳转到确认页
+          setTimeout(function() {
+            // 如果还在商品页（没跳转），尝试再次点击
+            if (window.location.href.indexOf('autobuy=1') !== -1) {
+              console.log('[鸣潮监控] 自动购买：页面未跳转，再次尝试');
+              buyBtn.click();
+            }
+          }, 2000);
+        }, 1000);
+      } else {
+        // 未找到按钮，1秒后重试
+        setTimeout(function() { tryClickBuyButton(attempt + 1); }, 1000);
+      }
+    }
+
+    // 页面加载后开始尝试
+    if (document.readyState === 'complete') {
+      setTimeout(function() { tryClickBuyButton(); }, 1500);
+    } else {
+      window.addEventListener('load', function() {
+        setTimeout(function() { tryClickBuyButton(); }, 1500);
+      });
+    }
+  }
+
+  // ============================================================
   // 通知
   // ============================================================
 
@@ -4927,6 +5042,8 @@ function openSettings() {
    * 页面内大横幅提醒
    */
   function showAlertBanner(title, body, productId) {
+    // 清理productId后缀（如降价的 _drop），确保链接正确
+    const cleanId = String(productId).replace(/_drop$/, '');
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
 
@@ -4944,7 +5061,7 @@ function openSettings() {
         '<div style="font-size:16px;font-weight:700;margin-bottom:2px;">' + title + '</div>' +
         '<div style="font-size:13px;opacity:0.9;white-space:pre-line;">' + body + '</div>' +
       '</div>' +
-      '<a href="https://www.pxb7.com/product/' + productId + '/1" target="_blank" ' +
+      '<a href="https://www.pxb7.com/product/' + cleanId + '/1" target="_blank" ' +
         'style="padding:8px 24px;background:#fff;color:#e94560;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;white-space:nowrap;">立即查看</a>' +
       '<button id="mwAlertClose" style="padding:8px 12px;background:rgba(0,0,0,0.3);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:18px;">✕</button>';
     document.body.appendChild(banner);
@@ -4994,7 +5111,9 @@ function openSettings() {
    * 支持：Bark（iOS）、Server酱（微信）、PushPlus（微信）
    */
   function sendPhonePush(title, body, productId) {
-    const pushBody = body + '\n\n详情: https://www.pxb7.com/product/' + productId + '/1';
+    // 清理productId后缀（如降价的 _drop），确保链接正确
+    const cleanId = String(productId).replace(/_drop$/, '');
+    const pushBody = body + '\n\n详情: https://www.pxb7.com/product/' + cleanId + '/1';
 
     // Bark推送（iOS）
     if (pushConfig.barkKey) {
@@ -5292,6 +5411,8 @@ function openSettings() {
       threshold: threshold,
       notifyRatioThreshold: notifyRatioThreshold,
       notifyDiffThreshold: notifyDiffThreshold,
+      autoBuyEnabled: autoBuyEnabled,
+      autoBuyDiff: autoBuyDiff,
       notifyMinValue: notifyMinValue,
       notifyMinPrice: notifyMinPrice,
       refreshIntervalSec: refreshIntervalSec,
@@ -5413,6 +5534,8 @@ function openSettings() {
     notifyEnabled = savedState.notifyEnabled || false;
     notifyRatioThreshold = savedState.notifyRatioThreshold != null ? savedState.notifyRatioThreshold : 30;
     notifyDiffThreshold = savedState.notifyDiffThreshold != null ? savedState.notifyDiffThreshold : 100;
+    autoBuyEnabled = savedState.autoBuyEnabled || false;
+    autoBuyDiff = savedState.autoBuyDiff != null ? savedState.autoBuyDiff : 500;
     notifyMinValue = savedState.notifyMinValue != null ? savedState.notifyMinValue : 200;
     notifyMinPrice = savedState.notifyMinPrice != null ? savedState.notifyMinPrice : 0;
     refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 60;
@@ -5457,6 +5580,13 @@ function openSettings() {
   // 启动
   // ============================================================
 
+  // 商品详情页：仅执行自动购买逻辑，不启动监控面板
+  if (window.location.pathname.indexOf('/product/') !== -1) {
+    initAutoBuyOnProductPage();
+    return;
+  }
+
+  // 列表页：设置请求拦截 + 初始化监控面板
   // 立即设置请求拦截（在页面发请求之前）
   setupInterception();
 
