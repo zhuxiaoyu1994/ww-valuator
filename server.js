@@ -1977,7 +1977,10 @@ function getAdminPage() {
   <div class="dashboard" id="dashboard">
     <div class="header">
       <h1>查询日志</h1>
-      <span class="logout" onclick="logout()">退出</span>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <span class="refresh-btn" onclick="refreshLogs()" id="refresh-btn" style="color:#4ade80;cursor:pointer;font-size:13px;user-select:none;">↻ 刷新</span>
+        <span class="logout" onclick="logout()">退出</span>
+      </div>
     </div>
     <div class="stats">
       <div class="stat-card"><div class="num" id="stat-total">0</div><div class="label">总查询数</div></div>
@@ -2058,6 +2061,32 @@ function getAdminPage() {
   function logout() {
     sessionStorage.removeItem('admin_pw');
     location.reload();
+  }
+
+  async function refreshLogs() {
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) return;
+    const btn = document.getElementById('refresh-btn');
+    btn.textContent = '↻ 刷新中...';
+    btn.style.color = '#888';
+    try {
+      const resp = await fetch('/admin/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        allLogs = result.data.logs;
+        document.getElementById('stat-total').textContent = result.data.stats.totalQueries;
+        document.getElementById('stat-success').textContent = result.data.stats.successCount;
+        document.getElementById('stat-lookup').textContent = result.data.stats.lookupCount;
+        document.getElementById('stat-eval').textContent = result.data.stats.evalCount;
+        renderTable();
+      }
+    } catch (e) { }
+    btn.textContent = '↻ 刷新';
+    btn.style.color = '#4ade80';
   }
 
   function renderTable() {
