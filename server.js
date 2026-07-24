@@ -233,14 +233,54 @@ app.post('/api/x9k2-find', async (req, res) => {
 
 /**
  * 从螃蟹网 API 获取商品详情（数字 productId）
+ * 优先走 Cloudflare Worker 代理（避免服务器IP被封），无配置时直连
  */
+const PXB7_PROXY_URL = process.env.PXB7_PROXY_URL || '';
+
 function fetchProductDetail(productId) {
   return new Promise((resolve, reject) => {
     const postData = JSON.stringify({ productId: String(productId) });
+    const apiPath = '/api/product/web/product/detailPost';
+
+    // 走 CF Worker 代理
+    if (PXB7_PROXY_URL) {
+      const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
+      const proxyReq = https.request(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (json.code === 200 && json.data) {
+              resolve(json.data);
+            } else {
+              resolve(null);
+            }
+          } catch (e) {
+            reject(new Error('解析商品数据失败'));
+          }
+        });
+      });
+      proxyReq.on('error', (err) => reject(err));
+      proxyReq.setTimeout(10000, () => {
+        proxyReq.destroy(new Error('请求超时'));
+      });
+      proxyReq.write(postData);
+      proxyReq.end();
+      return;
+    }
+
+    // 直连螃蟹网（无代理时回退）
     const options = {
       hostname: 'api-pc.pxb7.com',
       port: 443,
-      path: '/api/product/web/product/detailPost',
+      path: apiPath,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -281,6 +321,7 @@ function fetchProductDetail(productId) {
 
 /**
  * 通过搜索 API 查找商品（支持商品编号如 MEBNB9606）
+ * 优先走 Cloudflare Worker 代理，无配置时直连
  */
 function fetchProductBySearch(keyword) {
   return new Promise((resolve, reject) => {
@@ -293,10 +334,64 @@ function fetchProductBySearch(keyword) {
       type: '4',
       posType: 1,
     });
+    const apiPath = '/api/search/product/v2/selectSearchPageList';
+
+    // 处理搜索结果的公共逻辑
+    function handleSearchResult(data) {
+      try {
+        const json = JSON.parse(data);
+        if (json.success && json.data) {
+          const list = Array.isArray(json.data) ? json.data : (json.data.list || []);
+          const keywordUpper = String(keyword).toUpperCase();
+          let matched = list.find(item =>
+            (item.productUniqueNo || '').toUpperCase() === keywordUpper
+          );
+          if (!matched) {
+            matched = list.find(item =>
+              (item.productUniqueNo || '').toUpperCase().includes(keywordUpper) ||
+              String(item.productId || '').includes(keyword)
+            );
+          }
+          if (!matched && list.length > 0) {
+            matched = list[0];
+          }
+          resolve(matched || null);
+        } else {
+          resolve(null);
+        }
+      } catch (e) {
+        reject(new Error('解析搜索结果失败'));
+      }
+    }
+
+    // 走 CF Worker 代理
+    if (PXB7_PROXY_URL) {
+      const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
+      const proxyReq = https.request(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => handleSearchResult(data));
+      });
+      proxyReq.on('error', (err) => reject(err));
+      proxyReq.setTimeout(10000, () => {
+        proxyReq.destroy(new Error('请求超时'));
+      });
+      proxyReq.write(postData);
+      proxyReq.end();
+      return;
+    }
+
+    // 直连螃蟹网（无代理时回退）
     const options = {
       hostname: 'api-pc.pxb7.com',
       port: 443,
-      path: '/api/search/product/v2/selectSearchPageList',
+      path: apiPath,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -312,35 +407,7 @@ function fetchProductBySearch(keyword) {
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          if (json.success && json.data) {
-            const list = Array.isArray(json.data) ? json.data : (json.data.list || []);
-            // 精确匹配商品编号
-            const keywordUpper = String(keyword).toUpperCase();
-            let matched = list.find(item =>
-              (item.productUniqueNo || '').toUpperCase() === keywordUpper
-            );
-            // 模糊匹配
-            if (!matched) {
-              matched = list.find(item =>
-                (item.productUniqueNo || '').toUpperCase().includes(keywordUpper) ||
-                String(item.productId || '').includes(keyword)
-              );
-            }
-            // 取第一条
-            if (!matched && list.length > 0) {
-              matched = list[0];
-            }
-            resolve(matched || null);
-          } else {
-            resolve(null);
-          }
-        } catch (e) {
-          reject(new Error('解析搜索结果失败'));
-        }
-      });
+      res.on('end', () => handleSearchResult(data));
     });
 
     req.on('error', (err) => reject(err));
