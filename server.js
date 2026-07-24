@@ -762,6 +762,31 @@ function getPageHTML() {
       font-size: 14px;
     }
 
+    /* 教学视频 */
+    .tutorial-section {
+      background: rgba(15, 52, 96, 0.3);
+      border: 1px solid rgba(142, 205, 245, 0.15);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+    }
+    .tutorial-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tutorial-icon {
+      color: #e94560;
+      font-size: 14px;
+    }
+    .tutorial-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+
     /* Tabs */
     .tabs {
       display: flex;
@@ -1074,6 +1099,24 @@ function getPageHTML() {
       <a class="back-home" href="/">← 返回首页</a>
       <h1>鸣潮账号估价助手</h1>
       <div class="subtitle">输入螃蟹网商品编号，或粘贴商品描述进行估价</div>
+    </div>
+
+    <!-- 教学视频 -->
+    <div class="tutorial-section">
+      <div class="tutorial-header" onclick="var f=document.getElementById('tutorial-frame');var a=this.querySelector('.tutorial-arrow');if(f.style.display==='none'){f.style.display='block';a.textContent='▲';this.querySelector('.tutorial-label').textContent='收起教程';}else{f.style.display='none';a.textContent='▼';this.querySelector('.tutorial-label').textContent='展开教程';}">
+        <span class="tutorial-icon">▶</span>
+        <span class="tutorial-title">新手必看：鸣潮估价工具使用教程</span>
+        <span class="tutorial-label" style="margin-left:auto;font-size:12px;color:#8ecdf5;cursor:pointer;">展开教程</span>
+        <span class="tutorial-arrow" style="font-size:10px;color:#8ecdf5;">▼</span>
+      </div>
+      <div id="tutorial-frame" style="display:none;margin-top:12px;">
+        <div style="position:relative;padding:56.25% 0 0 0;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+          <iframe src="//player.bilibili.com/player.html?bvid=BV1ueKq6TEgV&autoplay=0&high_quality=1&danmaku=1" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:#666;text-align:center;">
+          <a href="https://www.bilibili.com/video/BV1ueKq6TEgV/" target="_blank" style="color:#8ecdf5;text-decoration:none;">在B站观看完整视频 →</a>
+        </div>
+      </div>
     </div>
 
     <!-- Tabs -->
