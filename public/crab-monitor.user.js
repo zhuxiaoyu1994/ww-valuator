@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.15.0
+// @version      1.15.1
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -70,6 +70,11 @@
 
   // 满命权重
   const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0.1 };
+
+  // 角色名别名（兼容卖家常见错字/异体字）
+  const CHAR_ALIASES = {
+    '爱弥丝': '爱弥斯',
+  };
 
   // ============================================================
   // 估值权重默认值（可被用户在设置面板中覆盖）
@@ -303,6 +308,12 @@
   for (const [tier, info] of Object.entries(CHAR_TIERS)) {
     for (const name of info.chars) {
       CHAR_LOOKUP[name] = { tier, price: info.price, isHot: info.isHot };
+    }
+  }
+  // 注册别名到查找表
+  for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
+    if (CHAR_LOOKUP[canonical]) {
+      CHAR_LOOKUP[alias] = CHAR_LOOKUP[canonical];
     }
   }
 
@@ -594,11 +605,12 @@
         }
       }
 
-      // 验证是否为已知角色
-      const info = CHAR_LOOKUP[name];
+      // 验证是否为已知角色（别名归一化）
+      const canonicalName = CHAR_ALIASES[name] || name;
+      const info = CHAR_LOOKUP[canonicalName];
       if (info) {
         chars.push({
-          name,
+          name: canonicalName,
           const: constNum,
           tier: info.tier,
           price: info.price,
@@ -624,31 +636,40 @@
     const chars = [];
     for (const [tier, info] of Object.entries(CHAR_TIERS)) {
       for (const name of info.chars) {
-        // "满命" + name
-        if (text.includes('满命' + name)) {
-          chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-          continue;
+        // 检查正名和所有别名
+        const namesToCheck = [name];
+        for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
+          if (canonical === name) namesToCheck.push(alias);
         }
-        // "N命" + name
-        let m = text.match(new RegExp('(\\d+)命' + name));
-        if (m) {
-          chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
-          continue;
-        }
-        // name + "(满命)"
-        if (text.includes(name + '(满命)')) {
-          chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-          continue;
-        }
-        // name + "(N命)"
-        m = text.match(new RegExp(name + '\\((\\d+)命\\)'));
-        if (m) {
-          chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
-          continue;
-        }
-        // 仅出现名字
-        if (text.includes(name)) {
-          chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
+        let found = false;
+        for (const checkName of namesToCheck) {
+          // "满命" + name
+          if (text.includes('满命' + checkName)) {
+            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          // "N命" + name
+          const m = text.match(new RegExp('(\\d+)命' + checkName));
+          if (m) {
+            chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          // name + "(满命)"
+          if (text.includes(checkName + '(满命)')) {
+            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          // name + "(N命)"
+          const m2 = text.match(new RegExp(checkName + '\\((\\d+)命\\)'));
+          if (m2) {
+            chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          // 仅出现名字
+          if (text.includes(checkName)) {
+            chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
         }
       }
     }
