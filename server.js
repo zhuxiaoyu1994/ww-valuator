@@ -303,6 +303,7 @@ function fetchProductDetail(productId) {
           'Content-Length': Buffer.byteLength(postData),
         },
       }, (res) => {
+        res.setEncoding('utf8');
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
@@ -345,6 +346,7 @@ function fetchProductDetail(productId) {
     };
 
     const req = https.request(options, (res) => {
+      res.setEncoding('utf8');
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
@@ -425,6 +427,7 @@ function fetchProductBySearch(keyword) {
           'Content-Length': Buffer.byteLength(postData),
         },
       }, (res) => {
+        res.setEncoding('utf8');
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => handleSearchResult(data));
@@ -456,6 +459,7 @@ function fetchProductBySearch(keyword) {
     };
 
     const req = https.request(options, (res) => {
+      res.setEncoding('utf8');
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => handleSearchResult(data));

@@ -76,7 +76,7 @@ export default {
       return new Response(data, {
         status: resp.status,
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Access-Control-Allow-Origin': '*',
         },
       });
