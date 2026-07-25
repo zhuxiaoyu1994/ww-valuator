@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.15.1
+// @version      1.15.2
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -69,7 +69,7 @@
   };
 
   // 满命权重
-  const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0.1 };
+  const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 };
 
   // 角色名别名（兼容卖家常见错字/异体字）
   const CHAR_ALIASES = {
@@ -98,7 +98,7 @@
     coldC6Bonus: 0,        // C6额外加价
     coldSigBonus: 0,       // 有专武额外加价
     // 满命溢价（加权满命数档位）
-    c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1 },
+    c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
     c6MultiBonus: [
       { count: 2, bonus: 0.5 },
       { count: 3, bonus: 1 },

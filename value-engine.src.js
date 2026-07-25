@@ -39,7 +39,7 @@ const SIG_WEAPONS = {
 };
 
 // 满命权重（对应油猴脚本 FULL_CONST_WEIGHT）
-const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0.1 };
+const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 };
 
 // ============================================================
 // 估值权重默认值（对应油猴脚本 DEFAULT_WEIGHTS）
@@ -61,7 +61,7 @@ const DEFAULT_WEIGHTS = {
   coldC6Bonus: 0,        // C6额外加价
   coldSigBonus: 0,       // 有专武额外加价
   // 满命溢价（加权满命数档位）
-  c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1 },
+  c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
   c6MultiBonus: [
     { count: 2, bonus: 0.5 },
     { count: 3, bonus: 1 },
