@@ -3908,7 +3908,7 @@ function openSettings() {
     c6WeightInfo.innerHTML = '<div style="margin-bottom:6px;color:#aaa;">各级别满命权重（可编辑）：</div>';
     var c6WeightRow = document.createElement('div');
     c6WeightRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-    var c6TierList = ['S', 'A', 'B', 'C', 'D'];
+    var c6TierList = ['S', 'A', 'B', 'C', 'D', 'E'];
     for (var ci = 0; ci < c6TierList.length; ci++) {
       (function (t) {
         var wrapper = document.createElement('div');
