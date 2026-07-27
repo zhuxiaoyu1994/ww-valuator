@@ -2399,7 +2399,7 @@
       overlay.id = 'mw-notify-settings-overlay';
       overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100005;display:flex;align-items:center;justify-content:center;';
       const box = document.createElement('div');
-      box.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:24px;width:480px;max-height:85vh;overflow-y:auto;color:#e0e0e0;';
+      box.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:24px 24px 0;width:480px;max-height:85vh;overflow-y:auto;color:#e0e0e0;';
       box.innerHTML =
         '<div style="font-size:16px;font-weight:600;margin-bottom:16px;color:#e94560;">通知设置</div>' +
         // 刷新间隔
@@ -2509,7 +2509,7 @@
           '<button id="mwTestPush" style="padding:8px 24px;border:1px solid #0f3460;border-radius:6px;background:#16213e;color:#10b981;font-size:13px;cursor:pointer;">发送测试通知</button>' +
         '</div>' +
         // 操作按钮（固定底部）
-        '<div style="display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#1a1a2e;padding:12px 24px 16px;margin:0 -24px -24px;border-top:1px solid #0f3460;z-index:5;border-radius:0 0 12px 12px;">' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#1a1a2e;padding:12px 24px 16px;margin:8px -24px 0;border-top:1px solid #0f3460;z-index:5;border-radius:0 0 12px 12px;">' +
         '<button id="mwNotifyCancel" style="padding:8px 20px;border:none;border-radius:6px;background:#333;color:#888;font-size:13px;cursor:pointer;">取消</button>' +
         '<button id="mwNotifySave" style="padding:8px 20px;border:none;border-radius:6px;background:#e94560;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">保存</button></div>';
       overlay.appendChild(box);
@@ -3456,7 +3456,7 @@ function openSettings() {
       'position:relative;' +
       'width:560px;max-width:92vw;max-height:88vh;overflow-y:auto;' +
       'background:#1a1a2e;color:#e0e0e0;border-radius:12px;' +
-      'box-shadow:0 20px 60px rgba(0,0,0,0.6);border:1px solid #0f3460;padding:24px;';
+      'box-shadow:0 20px 60px rgba(0,0,0,0.6);border:1px solid #0f3460;padding:24px 24px 0;';
 
     // 关闭按钮（右上角）
     const closeBtn = document.createElement('div');

@@ -192,7 +192,7 @@
       'position:relative;' +
       'width:560px;max-width:92vw;max-height:88vh;overflow-y:auto;' +
       'background:#12122a;color:#e0e0e0;border-radius:12px;' +
-      'box-shadow:0 20px 60px rgba(0,0,0,0.6);border:1px solid #2a2a4a;padding:24px;';
+      'box-shadow:0 20px 60px rgba(0,0,0,0.6);border:1px solid #2a2a4a;padding:24px 24px 0;';
 
     // 关闭按钮（右上角）
     var closeBtn = document.createElement('div');
@@ -1438,7 +1438,7 @@
 
     // ===== 按钮区 =====
     var btnArea = document.createElement('div');
-    btnArea.style.cssText = 'display:flex;gap:10px;position:sticky;bottom:0;background:#12122a;padding:12px 24px 16px;margin:0 -24px -24px;border-top:1px solid #2a2a4a;z-index:5;border-radius:0 0 12px 12px;';
+    btnArea.style.cssText = 'display:flex;gap:10px;position:sticky;bottom:0;background:#12122a;padding:12px 24px 16px;margin:8px -24px 0;border-top:1px solid #2a2a4a;z-index:5;border-radius:0 0 12px 12px;';
 
     var resetBtn = document.createElement('button');
     resetBtn.textContent = '恢复默认';
