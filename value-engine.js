@@ -1,5 +1,5 @@
 'use strict';
-const CONFIG_VERSION = 0x3, CHAR_TIERS = {
+const CONFIG_VERSION = 0x4, CHAR_TIERS = {
         'S': {
             'price': 0x32,
             'isHot': !![],
@@ -283,12 +283,11 @@ const CONFIG_VERSION = 0x3, CHAR_TIERS = {
             }
         ],
         'flatDiscountRules': [{
-                'chars': [
-                    '爱弥斯',
-                    '绯雪',
-                    '卡提希娅'
+                'tiers': [
+                    'S',
+                    'A'
                 ],
-                'maxConst': 0x3,
+                'maxConst': 0x2,
                 'discount': 0.9
             }]
     }, DEFAULT_TEAMS = [
@@ -721,37 +720,37 @@ const SECTION_KEYWORDS = [
     '联觉等级'
 ];
 function buildDefaultCharPrices() {
-    const _0x7e7878 = {};
-    for (const _0x4efa56 of Object['keys'](CHAR_TIERS)) {
-        for (const _0x2da14b of CHAR_TIERS[_0x4efa56]['chars']) {
-            _0x7e7878[_0x2da14b] = DEFAULT_CHAR_PRICES[_0x2da14b] != null ? DEFAULT_CHAR_PRICES[_0x2da14b] : CHAR_TIERS[_0x4efa56]['price'];
+    const _0x330e9b = {};
+    for (const _0x56f3ea of Object['keys'](CHAR_TIERS)) {
+        for (const _0x4cb695 of CHAR_TIERS[_0x56f3ea]['chars']) {
+            _0x330e9b[_0x4cb695] = DEFAULT_CHAR_PRICES[_0x4cb695] != null ? DEFAULT_CHAR_PRICES[_0x4cb695] : CHAR_TIERS[_0x56f3ea]['price'];
         }
     }
-    return _0x7e7878;
+    return _0x330e9b;
 }
 function buildDefaultTeamPremiums() {
-    const _0x414d70 = {};
-    for (const _0x226d63 of DEFAULT_TEAMS) {
-        _0x414d70[_0x226d63['name']] = {
-            'chars': [..._0x226d63['members'] || []],
-            'multiplier': _0x226d63['multiplier'] || 0x1,
+    const _0x3c27f6 = {};
+    for (const _0x301821 of DEFAULT_TEAMS) {
+        _0x3c27f6[_0x301821['name']] = {
+            'chars': [..._0x301821['members'] || []],
+            'multiplier': _0x301821['multiplier'] || 0x1,
             'enabled': !![]
         };
     }
-    return _0x414d70;
+    return _0x3c27f6;
 }
-function buildDefaultWeights(_0x259f05) {
-    const _0x58b3ec = _0x259f05 || {}, _0x351aa2 = Object['assign']({}, DEFAULT_WEIGHTS, _0x58b3ec);
-    _0x351aa2['c6TierWeights'] = Object['assign']({}, DEFAULT_WEIGHTS['c6TierWeights'], _0x58b3ec['c6TierWeights'] || {}), _0x351aa2['c6MultiBonus'] = _0x58b3ec['c6MultiBonus'] && _0x58b3ec['c6MultiBonus']['length'] ? _0x58b3ec['c6MultiBonus'] : DEFAULT_WEIGHTS['c6MultiBonus'], _0x351aa2['pullC6Bonus'] = _0x58b3ec['pullC6Bonus'] && _0x58b3ec['pullC6Bonus']['length'] ? _0x58b3ec['pullC6Bonus'] : DEFAULT_WEIGHTS['pullC6Bonus'], _0x351aa2['teamMultiBonus'] = _0x58b3ec['teamMultiBonus'] && _0x58b3ec['teamMultiBonus']['length'] ? _0x58b3ec['teamMultiBonus'] : DEFAULT_WEIGHTS['teamMultiBonus'], _0x351aa2['flatDiscountRules'] = _0x58b3ec['flatDiscountRules'] && _0x58b3ec['flatDiscountRules']['length'] ? _0x58b3ec['flatDiscountRules'] : DEFAULT_WEIGHTS['flatDiscountRules'], _0x351aa2['pullTiers'] = _0x58b3ec['pullTiers'] && _0x58b3ec['pullTiers']['length'] ? _0x58b3ec['pullTiers'] : DEFAULT_PULL_TIERS, _0x351aa2['yellowTiers'] = _0x58b3ec['yellowTiers'] && _0x58b3ec['yellowTiers']['length'] ? _0x58b3ec['yellowTiers'] : DEFAULT_YELLOW_TIERS, _0x351aa2['charPrices'] = Object['assign']({}, buildDefaultCharPrices(), _0x58b3ec['charPrices'] || {}), _0x351aa2['constPremiums'] = Object['assign']({}, DEFAULT_CONST_PREMIUMS, _0x58b3ec['constPremiums'] || {}), _0x351aa2['teamPremiums'] = _0x58b3ec['teamPremiums'] || buildDefaultTeamPremiums(), _0x351aa2['teams'] = [];
-    for (const _0x9aeb56 of Object['keys'](_0x351aa2['teamPremiums'])) {
-        const _0x5a1bc9 = _0x351aa2['teamPremiums'][_0x9aeb56];
-        _0x5a1bc9 && _0x5a1bc9['enabled'] !== ![] && _0x351aa2['teams']['push']({
-            'name': _0x9aeb56,
-            'members': _0x5a1bc9['chars'] || [],
-            'multiplier': _0x5a1bc9['multiplier'] || 0x1
+function buildDefaultWeights(_0x312da7) {
+    const _0x105f0a = _0x312da7 || {}, _0x291dba = Object['assign']({}, DEFAULT_WEIGHTS, _0x105f0a);
+    _0x291dba['c6TierWeights'] = Object['assign']({}, DEFAULT_WEIGHTS['c6TierWeights'], _0x105f0a['c6TierWeights'] || {}), _0x291dba['c6MultiBonus'] = _0x105f0a['c6MultiBonus'] && _0x105f0a['c6MultiBonus']['length'] ? _0x105f0a['c6MultiBonus'] : DEFAULT_WEIGHTS['c6MultiBonus'], _0x291dba['pullC6Bonus'] = _0x105f0a['pullC6Bonus'] && _0x105f0a['pullC6Bonus']['length'] ? _0x105f0a['pullC6Bonus'] : DEFAULT_WEIGHTS['pullC6Bonus'], _0x291dba['teamMultiBonus'] = _0x105f0a['teamMultiBonus'] && _0x105f0a['teamMultiBonus']['length'] ? _0x105f0a['teamMultiBonus'] : DEFAULT_WEIGHTS['teamMultiBonus'], _0x291dba['flatDiscountRules'] = _0x105f0a['flatDiscountRules'] && _0x105f0a['flatDiscountRules']['length'] ? _0x105f0a['flatDiscountRules'] : DEFAULT_WEIGHTS['flatDiscountRules'], _0x291dba['pullTiers'] = _0x105f0a['pullTiers'] && _0x105f0a['pullTiers']['length'] ? _0x105f0a['pullTiers'] : DEFAULT_PULL_TIERS, _0x291dba['yellowTiers'] = _0x105f0a['yellowTiers'] && _0x105f0a['yellowTiers']['length'] ? _0x105f0a['yellowTiers'] : DEFAULT_YELLOW_TIERS, _0x291dba['charPrices'] = Object['assign']({}, buildDefaultCharPrices(), _0x105f0a['charPrices'] || {}), _0x291dba['constPremiums'] = Object['assign']({}, DEFAULT_CONST_PREMIUMS, _0x105f0a['constPremiums'] || {}), _0x291dba['teamPremiums'] = _0x105f0a['teamPremiums'] || buildDefaultTeamPremiums(), _0x291dba['teams'] = [];
+    for (const _0xfd84b4 of Object['keys'](_0x291dba['teamPremiums'])) {
+        const _0x3ad9e5 = _0x291dba['teamPremiums'][_0xfd84b4];
+        _0x3ad9e5 && _0x3ad9e5['enabled'] !== ![] && _0x291dba['teams']['push']({
+            'name': _0xfd84b4,
+            'members': _0x3ad9e5['chars'] || [],
+            'multiplier': _0x3ad9e5['multiplier'] || 0x1
         });
     }
-    return _0x351aa2['needSigWeapons'] = _0x58b3ec['needSigWeapons'] || DEFAULT_NEED_SIG_WEAPONS, _0x58b3ec['sigWeaponsOverride'] && (_0x351aa2['sigWeaponsOverride'] = _0x58b3ec['sigWeaponsOverride']), _0x351aa2;
+    return _0x291dba['needSigWeapons'] = _0x105f0a['needSigWeapons'] || DEFAULT_NEED_SIG_WEAPONS, _0x105f0a['sigWeaponsOverride'] && (_0x291dba['sigWeaponsOverride'] = _0x105f0a['sigWeaponsOverride']), _0x291dba;
 }
 const WEIGHT_LABELS = {
     'fiveStarWeapon': {
@@ -835,166 +834,166 @@ function getDefaults() {
     };
 }
 let weights = buildDefaultWeights(), _sigWeaponsOverride = null;
-function extractSection(_0x294750, _0x53e59f) {
-    const _0x5772dc = _0x53e59f['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&'), _0x5518b1 = SECTION_KEYWORDS['filter'](_0x517013 => _0x517013 !== _0x53e59f)['map'](_0xb7351 => '【?' + _0xb7351['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&') + '(?:[（(]\x5cd+[）)])?(?:[：:]|\x5cs*\x5cn|】)'), _0x36e8de = _0x5772dc + '[：:]\x5cs*([\x5cs\x5cS]*?)(?=' + _0x5518b1['join']('|') + '|$)', _0x55c7cb = _0x294750['match'](new RegExp(_0x36e8de));
-    if (_0x55c7cb)
-        return _0x55c7cb[0x1]['trim']();
-    const _0x16a10b = _0x5772dc + '[（(]\x5cd+[）)]\x5cs*[：:]?\x5cs*\x5cn?\x5cs*([\x5cs\x5cS]*?)(?=' + _0x5518b1['join']('|') + '|$)', _0x49bc7e = _0x294750['match'](new RegExp(_0x16a10b));
-    if (_0x49bc7e)
-        return _0x49bc7e[0x1]['trim']();
-    const _0xad5ddf = '【' + _0x5772dc + '】\x5cs*[：:]?\x5cs*([\x5cs\x5cS]*?)(?=' + _0x5518b1['join']('|') + '|$)', _0x16dc18 = _0x294750['match'](new RegExp(_0xad5ddf));
-    if (_0x16dc18)
-        return _0x16dc18[0x1]['trim']();
+function extractSection(_0x4ec3a8, _0x4c8d65) {
+    const _0x4a9353 = _0x4c8d65['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&'), _0x465549 = SECTION_KEYWORDS['filter'](_0x18a70c => _0x18a70c !== _0x4c8d65)['map'](_0x161505 => '【?' + _0x161505['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&') + '(?:[（(]\x5cd+[）)])?(?:[：:]|\x5cs*\x5cn|】)'), _0x29ff46 = _0x4a9353 + '[：:]\x5cs*([\x5cs\x5cS]*?)(?=' + _0x465549['join']('|') + '|$)', _0x47e850 = _0x4ec3a8['match'](new RegExp(_0x29ff46));
+    if (_0x47e850)
+        return _0x47e850[0x1]['trim']();
+    const _0x4a2669 = _0x4a9353 + '[（(]\x5cd+[）)]\x5cs*[：:]?\x5cs*\x5cn?\x5cs*([\x5cs\x5cS]*?)(?=' + _0x465549['join']('|') + '|$)', _0xee7741 = _0x4ec3a8['match'](new RegExp(_0x4a2669));
+    if (_0xee7741)
+        return _0xee7741[0x1]['trim']();
+    const _0x16703c = '【' + _0x4a9353 + '】\x5cs*[：:]?\x5cs*([\x5cs\x5cS]*?)(?=' + _0x465549['join']('|') + '|$)', _0x32f3fb = _0x4ec3a8['match'](new RegExp(_0x16703c));
+    if (_0x32f3fb)
+        return _0x32f3fb[0x1]['trim']();
     return '';
 }
-function extractNumber(_0xf11ba8, _0x47f3c7) {
-    const _0x4ab9e3 = _0x47f3c7['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&'), _0x3e5f21 = _0xf11ba8['match'](new RegExp(_0x4ab9e3 + '[：:]\x5cs*(\x5cd[\x5cd,]*)', 'i'));
-    if (_0x3e5f21)
-        return parseInt(_0x3e5f21[0x1]['replace'](/,/g, ''));
-    const _0x1d5876 = _0xf11ba8['match'](new RegExp('【' + _0x4ab9e3 + '】\x5cs*[：:]?\x5cs*(\x5cd[\x5cd,]*)', 'i'));
-    if (_0x1d5876)
-        return parseInt(_0x1d5876[0x1]['replace'](/,/g, ''));
+function extractNumber(_0x284c06, _0x57c40d) {
+    const _0x537d52 = _0x57c40d['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&'), _0x8ef3d2 = _0x284c06['match'](new RegExp(_0x537d52 + '[：:]\x5cs*(\x5cd[\x5cd,]*)', 'i'));
+    if (_0x8ef3d2)
+        return parseInt(_0x8ef3d2[0x1]['replace'](/,/g, ''));
+    const _0x46302e = _0x284c06['match'](new RegExp('【' + _0x537d52 + '】\x5cs*[：:]?\x5cs*(\x5cd[\x5cd,]*)', 'i'));
+    if (_0x46302e)
+        return parseInt(_0x46302e[0x1]['replace'](/,/g, ''));
     return 0x0;
 }
-function parseCharacters(_0x2afba4) {
-    const _0x2658de = [];
-    if (!_0x2afba4)
-        return _0x2658de;
-    const _0x44fd8e = _0x2afba4['split'](/[,，、\s;；]+/)['filter'](_0x98176f => _0x98176f['length'] > 0x0);
-    for (const _0x2c219f of _0x44fd8e) {
-        let _0x413da4 = 0x0, _0x499143 = '', _0x33dfe6 = _0x2c219f['match'](/^满命(.+)$/);
-        _0x33dfe6 ? (_0x413da4 = 0x6, _0x499143 = _0x33dfe6[0x1]) : (_0x33dfe6 = _0x2c219f['match'](/^(\d+)命(.+)$/), _0x33dfe6 ? (_0x413da4 = parseInt(_0x33dfe6[0x1]), _0x499143 = _0x33dfe6[0x2]) : (_0x33dfe6 = _0x2c219f['match'](/^(.+?)\(满命\)$/), _0x33dfe6 ? (_0x499143 = _0x33dfe6[0x1], _0x413da4 = 0x6) : (_0x33dfe6 = _0x2c219f['match'](/^(.+?)\((\d+)命\)$/), _0x33dfe6 ? (_0x499143 = _0x33dfe6[0x1], _0x413da4 = parseInt(_0x33dfe6[0x2])) : (_0x499143 = _0x2c219f, _0x413da4 = 0x0))));
-        const _0x931c19 = CHAR_ALIASES[_0x499143] || _0x499143, _0x547022 = CHAR_LOOKUP[_0x931c19];
-        _0x547022 && _0x2658de['push']({
-            'name': _0x931c19,
-            'const': _0x413da4,
-            'tier': _0x547022['tier'],
-            'price': _0x547022['price'],
-            'isHot': _0x547022['isHot']
+function parseCharacters(_0x14af49) {
+    const _0x5a9f6e = [];
+    if (!_0x14af49)
+        return _0x5a9f6e;
+    const _0x28354a = _0x14af49['split'](/[,，、\s;；]+/)['filter'](_0x29f695 => _0x29f695['length'] > 0x0);
+    for (const _0x31dd48 of _0x28354a) {
+        let _0x302188 = 0x0, _0xde6a9c = '', _0x3b99fe = _0x31dd48['match'](/^满命(.+)$/);
+        _0x3b99fe ? (_0x302188 = 0x6, _0xde6a9c = _0x3b99fe[0x1]) : (_0x3b99fe = _0x31dd48['match'](/^(\d+)命(.+)$/), _0x3b99fe ? (_0x302188 = parseInt(_0x3b99fe[0x1]), _0xde6a9c = _0x3b99fe[0x2]) : (_0x3b99fe = _0x31dd48['match'](/^(.+?)\(满命\)$/), _0x3b99fe ? (_0xde6a9c = _0x3b99fe[0x1], _0x302188 = 0x6) : (_0x3b99fe = _0x31dd48['match'](/^(.+?)\((\d+)命\)$/), _0x3b99fe ? (_0xde6a9c = _0x3b99fe[0x1], _0x302188 = parseInt(_0x3b99fe[0x2])) : (_0xde6a9c = _0x31dd48, _0x302188 = 0x0))));
+        const _0x15832f = CHAR_ALIASES[_0xde6a9c] || _0xde6a9c, _0x1279d5 = CHAR_LOOKUP[_0x15832f];
+        _0x1279d5 && _0x5a9f6e['push']({
+            'name': _0x15832f,
+            'const': _0x302188,
+            'tier': _0x1279d5['tier'],
+            'price': _0x1279d5['price'],
+            'isHot': _0x1279d5['isHot']
         });
     }
-    const _0x1de581 = {};
-    for (const _0x465bca of _0x2658de) {
-        (!_0x1de581[_0x465bca['name']] || _0x465bca['const'] > _0x1de581[_0x465bca['name']]['const']) && (_0x1de581[_0x465bca['name']] = _0x465bca);
+    const _0x153bab = {};
+    for (const _0x362a4c of _0x5a9f6e) {
+        (!_0x153bab[_0x362a4c['name']] || _0x362a4c['const'] > _0x153bab[_0x362a4c['name']]['const']) && (_0x153bab[_0x362a4c['name']] = _0x362a4c);
     }
-    return Object['values'](_0x1de581);
+    return Object['values'](_0x153bab);
 }
-function findCharsInText(_0x51d5d8) {
-    const _0x66a48e = [];
-    for (const [_0x18a147, _0x5ed649] of Object['entries'](CHAR_TIERS)) {
-        for (const _0x59f23a of _0x5ed649['chars']) {
-            const _0x5ecaa4 = [_0x59f23a];
-            for (const [_0x51e750, _0xdf7fc4] of Object['entries'](CHAR_ALIASES)) {
-                if (_0xdf7fc4 === _0x59f23a)
-                    _0x5ecaa4['push'](_0x51e750);
+function findCharsInText(_0x5becfe) {
+    const _0x5935c3 = [];
+    for (const [_0x576833, _0x53dabf] of Object['entries'](CHAR_TIERS)) {
+        for (const _0x33738f of _0x53dabf['chars']) {
+            const _0x92f1a7 = [_0x33738f];
+            for (const [_0x4a6137, _0xd409f] of Object['entries'](CHAR_ALIASES)) {
+                if (_0xd409f === _0x33738f)
+                    _0x92f1a7['push'](_0x4a6137);
             }
-            let _0x155afd = ![];
-            for (const _0x45c821 of _0x5ecaa4) {
-                if (_0x51d5d8['includes']('满命' + _0x45c821)) {
-                    _0x66a48e['push']({
-                        'name': _0x59f23a,
+            let _0x580c2e = ![];
+            for (const _0x6de2bd of _0x92f1a7) {
+                if (_0x5becfe['includes']('满命' + _0x6de2bd)) {
+                    _0x5935c3['push']({
+                        'name': _0x33738f,
                         'const': 0x6,
-                        'tier': _0x18a147,
-                        'price': _0x5ed649['price'],
-                        'isHot': _0x5ed649['isHot']
-                    }), _0x155afd = !![];
+                        'tier': _0x576833,
+                        'price': _0x53dabf['price'],
+                        'isHot': _0x53dabf['isHot']
+                    }), _0x580c2e = !![];
                     break;
                 }
-                const _0x3405f3 = _0x51d5d8['match'](new RegExp('(\x5cd+)命' + _0x45c821));
-                if (_0x3405f3) {
-                    _0x66a48e['push']({
-                        'name': _0x59f23a,
-                        'const': parseInt(_0x3405f3[0x1]),
-                        'tier': _0x18a147,
-                        'price': _0x5ed649['price'],
-                        'isHot': _0x5ed649['isHot']
-                    }), _0x155afd = !![];
+                const _0x22f406 = _0x5becfe['match'](new RegExp('(\x5cd+)命' + _0x6de2bd));
+                if (_0x22f406) {
+                    _0x5935c3['push']({
+                        'name': _0x33738f,
+                        'const': parseInt(_0x22f406[0x1]),
+                        'tier': _0x576833,
+                        'price': _0x53dabf['price'],
+                        'isHot': _0x53dabf['isHot']
+                    }), _0x580c2e = !![];
                     break;
                 }
-                if (_0x51d5d8['includes'](_0x45c821 + '(满命)')) {
-                    _0x66a48e['push']({
-                        'name': _0x59f23a,
+                if (_0x5becfe['includes'](_0x6de2bd + '(满命)')) {
+                    _0x5935c3['push']({
+                        'name': _0x33738f,
                         'const': 0x6,
-                        'tier': _0x18a147,
-                        'price': _0x5ed649['price'],
-                        'isHot': _0x5ed649['isHot']
-                    }), _0x155afd = !![];
+                        'tier': _0x576833,
+                        'price': _0x53dabf['price'],
+                        'isHot': _0x53dabf['isHot']
+                    }), _0x580c2e = !![];
                     break;
                 }
-                const _0x25174a = _0x51d5d8['match'](new RegExp(_0x45c821 + '\x5c((\x5cd+)命\x5c)'));
-                if (_0x25174a) {
-                    _0x66a48e['push']({
-                        'name': _0x59f23a,
-                        'const': parseInt(_0x25174a[0x1]),
-                        'tier': _0x18a147,
-                        'price': _0x5ed649['price'],
-                        'isHot': _0x5ed649['isHot']
-                    }), _0x155afd = !![];
+                const _0x1bbe87 = _0x5becfe['match'](new RegExp(_0x6de2bd + '\x5c((\x5cd+)命\x5c)'));
+                if (_0x1bbe87) {
+                    _0x5935c3['push']({
+                        'name': _0x33738f,
+                        'const': parseInt(_0x1bbe87[0x1]),
+                        'tier': _0x576833,
+                        'price': _0x53dabf['price'],
+                        'isHot': _0x53dabf['isHot']
+                    }), _0x580c2e = !![];
                     break;
                 }
-                if (_0x51d5d8['includes'](_0x45c821)) {
-                    _0x66a48e['push']({
-                        'name': _0x59f23a,
+                if (_0x5becfe['includes'](_0x6de2bd)) {
+                    _0x5935c3['push']({
+                        'name': _0x33738f,
                         'const': 0x0,
-                        'tier': _0x18a147,
-                        'price': _0x5ed649['price'],
-                        'isHot': _0x5ed649['isHot']
-                    }), _0x155afd = !![];
+                        'tier': _0x576833,
+                        'price': _0x53dabf['price'],
+                        'isHot': _0x53dabf['isHot']
+                    }), _0x580c2e = !![];
                     break;
                 }
             }
         }
     }
-    const _0x4380cc = {};
-    for (const _0x368da5 of _0x66a48e) {
-        (!_0x4380cc[_0x368da5['name']] || _0x368da5['const'] > _0x4380cc[_0x368da5['name']]['const']) && (_0x4380cc[_0x368da5['name']] = _0x368da5);
+    const _0x40a55f = {};
+    for (const _0x58d797 of _0x5935c3) {
+        (!_0x40a55f[_0x58d797['name']] || _0x58d797['const'] > _0x40a55f[_0x58d797['name']]['const']) && (_0x40a55f[_0x58d797['name']] = _0x58d797);
     }
-    return Object['values'](_0x4380cc);
+    return Object['values'](_0x40a55f);
 }
-function parseWeapons(_0x3f4e1d) {
-    const _0x1e1c8b = [];
-    if (!_0x3f4e1d)
-        return _0x1e1c8b;
-    const _0x318d59 = _0x3f4e1d['split'](/[,，、\s;；]+/)['filter'](_0x477646 => _0x477646['length'] > 0x0);
-    for (const _0x3ff1e2 of _0x318d59) {
-        let _0x5a6735 = 0x1, _0x3f5772 = '';
-        const _0x56801e = _0x3ff1e2['match'](/^精(\d+)(.+)$/);
-        _0x56801e ? (_0x5a6735 = parseInt(_0x56801e[0x1]), _0x3f5772 = _0x56801e[0x2]) : (_0x3f5772 = _0x3ff1e2, _0x5a6735 = 0x1);
-        if (_0x3f5772)
-            _0x1e1c8b['push']({
-                'name': _0x3f5772,
-                'refine': _0x5a6735
+function parseWeapons(_0x26bac6) {
+    const _0x57a6f1 = [];
+    if (!_0x26bac6)
+        return _0x57a6f1;
+    const _0x5aacb1 = _0x26bac6['split'](/[,，、\s;；]+/)['filter'](_0x38570b => _0x38570b['length'] > 0x0);
+    for (const _0xdd8281 of _0x5aacb1) {
+        let _0x2bee2b = 0x1, _0x38d4b7 = '';
+        const _0x49c450 = _0xdd8281['match'](/^精(\d+)(.+)$/);
+        _0x49c450 ? (_0x2bee2b = parseInt(_0x49c450[0x1]), _0x38d4b7 = _0x49c450[0x2]) : (_0x38d4b7 = _0xdd8281, _0x2bee2b = 0x1);
+        if (_0x38d4b7)
+            _0x57a6f1['push']({
+                'name': _0x38d4b7,
+                'refine': _0x2bee2b
             });
     }
-    return _0x1e1c8b;
+    return _0x57a6f1;
 }
-function extractYellowCount(_0x29b629) {
-    let _0x3709b3 = _0x29b629['match'](/(\d+)\s*黄/);
-    if (_0x3709b3)
-        return parseInt(_0x3709b3[0x1]);
-    _0x3709b3 = _0x29b629['match'](/黄[数]?[：:]\s*(\d+)/);
-    if (_0x3709b3)
-        return parseInt(_0x3709b3[0x1]);
-    _0x3709b3 = _0x29b629['match'](/【黄[数]?】\s*[：:]?\s*(\d+)/);
-    if (_0x3709b3)
-        return parseInt(_0x3709b3[0x1]);
+function extractYellowCount(_0x4aa25a) {
+    let _0x1892cc = _0x4aa25a['match'](/(\d+)\s*黄/);
+    if (_0x1892cc)
+        return parseInt(_0x1892cc[0x1]);
+    _0x1892cc = _0x4aa25a['match'](/黄[数]?[：:]\s*(\d+)/);
+    if (_0x1892cc)
+        return parseInt(_0x1892cc[0x1]);
+    _0x1892cc = _0x4aa25a['match'](/【黄[数]?】\s*[：:]?\s*(\d+)/);
+    if (_0x1892cc)
+        return parseInt(_0x1892cc[0x1]);
     return 0x0;
 }
-function extractListCount(_0x2e4767, _0x133a15) {
-    const _0x2cbeaf = extractSection(_0x2e4767, _0x133a15);
-    if (!_0x2cbeaf)
+function extractListCount(_0x4f7430, _0x5a10fa) {
+    const _0x2440b7 = extractSection(_0x4f7430, _0x5a10fa);
+    if (!_0x2440b7)
         return 0x0;
-    const _0x373aae = _0x2cbeaf['split'](/[,，、\s]+/)['filter'](_0x2a0bb8 => _0x2a0bb8['length'] > 0x0);
-    return _0x373aae['length'];
+    const _0x485d46 = _0x2440b7['split'](/[,，、\s]+/)['filter'](_0x4f5fec => _0x4f5fec['length'] > 0x0);
+    return _0x485d46['length'];
 }
-function extractListItems(_0x52942c, _0x5bd1a2) {
-    const _0x18850b = extractSection(_0x52942c, _0x5bd1a2);
-    if (!_0x18850b)
+function extractListItems(_0x1501c7, _0x3204ab) {
+    const _0x503d83 = extractSection(_0x1501c7, _0x3204ab);
+    if (!_0x503d83)
         return [];
-    return _0x18850b['split'](/[,，、\s]+/)['filter'](_0x25fc36 => _0x25fc36['length'] > 0x0);
+    return _0x503d83['split'](/[,，、\s]+/)['filter'](_0x217999 => _0x217999['length'] > 0x0);
 }
-function parseAccountInfo(_0x4d065c) {
-    const _0x425fef = {
+function parseAccountInfo(_0x2a2e18) {
+    const _0x51cb00 = {
         'characters': [],
         'weapons': [],
         'starSound': 0x0,
@@ -1008,387 +1007,388 @@ function parseAccountInfo(_0x4d065c) {
         'vehicleFrameCount': 0x0,
         'paintCount': 0x0,
         'pulls': 0x0,
-        'rawText': _0x4d065c || ''
+        'rawText': _0x2a2e18 || ''
     };
-    if (!_0x4d065c)
-        return _0x425fef;
-    const _0x243de3 = extractSection(_0x4d065c, '五星角色');
-    _0x243de3 && (_0x425fef['characters'] = parseCharacters(_0x243de3));
-    _0x425fef['characters']['length'] === 0x0 && (_0x425fef['characters'] = findCharsInText(_0x4d065c));
-    let _0x2ff098 = extractSection(_0x4d065c, '五星武器');
-    _0x2ff098 && (_0x425fef['weapons'] = parseWeapons(_0x2ff098));
-    _0x425fef['weapons']['length'] === 0x0 && (_0x2ff098 = extractSection(_0x4d065c, '武器'), _0x2ff098 && (_0x425fef['weapons'] = parseWeapons(_0x2ff098)));
-    _0x425fef['weapons']['length'] === 0x0 && (_0x2ff098 = extractSection(_0x4d065c, '金色武器'), _0x2ff098 && (_0x425fef['weapons'] = parseWeapons(_0x2ff098)));
-    _0x425fef['starSound'] = extractNumber(_0x4d065c, '星声'), _0x425fef['moonPhase'] = extractNumber(_0x4d065c, '月相'), _0x425fef['aftermathCoral'] = extractNumber(_0x4d065c, '余波珊瑚'), _0x425fef['floatGoldRipple'] = extractNumber(_0x4d065c, '浮金波纹'), _0x425fef['castTideRipple'] = extractNumber(_0x4d065c, '铸潮波纹'), _0x425fef['yellowCount'] = extractYellowCount(_0x4d065c), _0x425fef['outfitCount'] = extractListCount(_0x4d065c, '服饰');
-    if (_0x425fef['outfitCount'] === 0x0) {
-        const _0x1adc71 = extractSection(_0x4d065c, '皮肤');
-        if (_0x1adc71) {
-            const _0x4ad602 = parseInt(_0x1adc71);
-            _0x425fef['outfitCount'] = isNaN(_0x4ad602) ? extractListCount(_0x4d065c, '皮肤') : _0x4ad602;
+    if (!_0x2a2e18)
+        return _0x51cb00;
+    const _0x9fd513 = extractSection(_0x2a2e18, '五星角色');
+    _0x9fd513 && (_0x51cb00['characters'] = parseCharacters(_0x9fd513));
+    _0x51cb00['characters']['length'] === 0x0 && (_0x51cb00['characters'] = findCharsInText(_0x2a2e18));
+    let _0x754169 = extractSection(_0x2a2e18, '五星武器');
+    _0x754169 && (_0x51cb00['weapons'] = parseWeapons(_0x754169));
+    _0x51cb00['weapons']['length'] === 0x0 && (_0x754169 = extractSection(_0x2a2e18, '武器'), _0x754169 && (_0x51cb00['weapons'] = parseWeapons(_0x754169)));
+    _0x51cb00['weapons']['length'] === 0x0 && (_0x754169 = extractSection(_0x2a2e18, '金色武器'), _0x754169 && (_0x51cb00['weapons'] = parseWeapons(_0x754169)));
+    _0x51cb00['starSound'] = extractNumber(_0x2a2e18, '星声'), _0x51cb00['moonPhase'] = extractNumber(_0x2a2e18, '月相'), _0x51cb00['aftermathCoral'] = extractNumber(_0x2a2e18, '余波珊瑚'), _0x51cb00['floatGoldRipple'] = extractNumber(_0x2a2e18, '浮金波纹'), _0x51cb00['castTideRipple'] = extractNumber(_0x2a2e18, '铸潮波纹'), _0x51cb00['yellowCount'] = extractYellowCount(_0x2a2e18), _0x51cb00['outfitCount'] = extractListCount(_0x2a2e18, '服饰');
+    if (_0x51cb00['outfitCount'] === 0x0) {
+        const _0x3b5090 = extractSection(_0x2a2e18, '皮肤');
+        if (_0x3b5090) {
+            const _0x52e1a9 = parseInt(_0x3b5090);
+            _0x51cb00['outfitCount'] = isNaN(_0x52e1a9) ? extractListCount(_0x2a2e18, '皮肤') : _0x52e1a9;
         }
     }
-    return _0x425fef['motoCount'] = extractListCount(_0x4d065c, '车架模组') + extractListCount(_0x4d065c, '车架') + extractListCount(_0x4d065c, '摩托'), _0x425fef['motoAccessoryCount'] = extractListCount(_0x4d065c, '摩托饰品'), _0x425fef['vehicleFrameCount'] = extractListCount(_0x4d065c, '车架模组') + extractListCount(_0x4d065c, '车架'), _0x425fef['paintCount'] = extractListCount(_0x4d065c, '涂装'), _0x425fef['pulls'] = _0x425fef['starSound'] / 0xa0 + _0x425fef['moonPhase'] / 0xa0 + _0x425fef['aftermathCoral'] / 0x8 + _0x425fef['floatGoldRipple'] + _0x425fef['castTideRipple'], _0x425fef;
+    return _0x51cb00['motoCount'] = extractListCount(_0x2a2e18, '车架模组') + extractListCount(_0x2a2e18, '车架') + extractListCount(_0x2a2e18, '摩托'), _0x51cb00['motoAccessoryCount'] = extractListCount(_0x2a2e18, '摩托饰品'), _0x51cb00['vehicleFrameCount'] = extractListCount(_0x2a2e18, '车架模组') + extractListCount(_0x2a2e18, '车架'), _0x51cb00['paintCount'] = extractListCount(_0x2a2e18, '涂装'), _0x51cb00['pulls'] = _0x51cb00['starSound'] / 0xa0 + _0x51cb00['moonPhase'] / 0xa0 + _0x51cb00['aftermathCoral'] / 0x8 + _0x51cb00['floatGoldRipple'] + _0x51cb00['castTideRipple'], _0x51cb00;
 }
-function checkHasSigWeapon(_0x31fe78, _0x1ddff0, _0x409eb5) {
-    const _0x3e7c3e = _sigWeaponsOverride ? _sigWeaponsOverride[_0x31fe78] || SIG_WEAPONS[_0x31fe78] : SIG_WEAPONS[_0x31fe78];
-    if (!_0x3e7c3e)
+function checkHasSigWeapon(_0x4b1525, _0x5cca0c, _0x278217) {
+    const _0x2c9e55 = _sigWeaponsOverride ? _sigWeaponsOverride[_0x4b1525] || SIG_WEAPONS[_0x4b1525] : SIG_WEAPONS[_0x4b1525];
+    if (!_0x2c9e55)
         return ![];
-    if (_0x1ddff0 && _0x1ddff0['some'](_0x35dbcd => _0x35dbcd === _0x3e7c3e || _0x35dbcd['includes'](_0x3e7c3e) || _0x3e7c3e['includes'](_0x35dbcd)))
+    if (_0x5cca0c && _0x5cca0c['some'](_0x1d25a2 => _0x1d25a2 === _0x2c9e55 || _0x1d25a2['includes'](_0x2c9e55) || _0x2c9e55['includes'](_0x1d25a2)))
         return !![];
-    if (_0x409eb5 && _0x409eb5['includes'](_0x3e7c3e))
+    if (_0x278217 && _0x278217['includes'](_0x2c9e55))
         return !![];
     return ![];
 }
-function calcConstPremium(_0x2f718f, _0x3a1b49, _0x165c1d) {
-    _0x165c1d = _0x165c1d || weights || DEFAULT_WEIGHTS;
-    const _0x32a537 = _0x165c1d['constPremiums'] || {}, _0x4731d5 = _0x32a537[_0x2f718f];
-    if (!_0x4731d5 || _0x3a1b49 <= 0x0)
+function calcConstPremium(_0x4f090e, _0x541963, _0x9e971e) {
+    _0x9e971e = _0x9e971e || weights || DEFAULT_WEIGHTS;
+    const _0x1b4584 = _0x9e971e['constPremiums'] || {}, _0x5bc3b9 = _0x1b4584[_0x4f090e];
+    if (!_0x5bc3b9 || _0x541963 <= 0x0)
         return 0x0;
-    let _0x450499 = 0x0;
-    for (const _0x1c14f9 of Object['keys'](_0x4731d5)) {
-        const _0x2d4931 = parseInt(_0x1c14f9);
-        if (!isNaN(_0x2d4931) && _0x3a1b49 >= _0x2d4931) {
-            const _0x4ecc1a = _0x4731d5[_0x1c14f9] || 0x0;
-            if (_0x4ecc1a > _0x450499)
-                _0x450499 = _0x4ecc1a;
+    let _0xd01681 = 0x0;
+    for (const _0x4a5a08 of Object['keys'](_0x5bc3b9)) {
+        const _0x194c5a = parseInt(_0x4a5a08);
+        if (!isNaN(_0x194c5a) && _0x541963 >= _0x194c5a) {
+            const _0x3ece78 = _0x5bc3b9[_0x4a5a08] || 0x0;
+            if (_0x3ece78 > _0xd01681)
+                _0xd01681 = _0x3ece78;
         }
     }
-    return _0x450499;
+    return _0xd01681;
 }
-function getCharValue(_0xcbb484, _0x20a2f3, _0x3545a3) {
-    _0x3545a3 = _0x3545a3 || weights || DEFAULT_WEIGHTS;
-    const _0x34e5c8 = _0x3545a3['charPrices'] || {}, _0x4cf8b2 = _0x34e5c8[_0xcbb484['name']] != null ? _0x34e5c8[_0xcbb484['name']] : _0xcbb484['price'];
-    if (_0xcbb484['isHot']) {
-        const _0x40bf90 = _0x3545a3['hotC0Mult'] != null ? _0x3545a3['hotC0Mult'] : 0x1, _0xc180b1 = _0x3545a3['hotC3Mult'] != null ? _0x3545a3['hotC3Mult'] : 0x2, _0x4944dc = _0x3545a3['hotC6Mult'] != null ? _0x3545a3['hotC6Mult'] : 0x3, _0x2088a3 = _0x3545a3['hotStepMult'] != null ? _0x3545a3['hotStepMult'] : 0.08, _0x361d4e = _0x3545a3['hotNoSigMult'] != null ? _0x3545a3['hotNoSigMult'] : 0.15, _0x302de2 = _0x3545a3['hotNoSigC6Mult'] != null ? _0x3545a3['hotNoSigC6Mult'] : 0.25;
-        if (!_0x20a2f3) {
-            if (_0xcbb484['const'] >= 0x6)
-                return _0x4cf8b2 * _0x302de2;
-            return _0x4cf8b2 * _0x361d4e;
+function getCharValue(_0x349541, _0x246deb, _0x15d57a) {
+    _0x15d57a = _0x15d57a || weights || DEFAULT_WEIGHTS;
+    const _0x5b4325 = _0x15d57a['charPrices'] || {}, _0x1845a4 = _0x5b4325[_0x349541['name']] != null ? _0x5b4325[_0x349541['name']] : _0x349541['price'];
+    if (_0x349541['isHot']) {
+        const _0x1043dd = _0x15d57a['hotC0Mult'] != null ? _0x15d57a['hotC0Mult'] : 0x1, _0x4aeea8 = _0x15d57a['hotC3Mult'] != null ? _0x15d57a['hotC3Mult'] : 0x2, _0x595aeb = _0x15d57a['hotC6Mult'] != null ? _0x15d57a['hotC6Mult'] : 0x3, _0x40e7c7 = _0x15d57a['hotStepMult'] != null ? _0x15d57a['hotStepMult'] : 0.08, _0x33fcfc = _0x15d57a['hotNoSigMult'] != null ? _0x15d57a['hotNoSigMult'] : 0.15, _0x5a1bd3 = _0x15d57a['hotNoSigC6Mult'] != null ? _0x15d57a['hotNoSigC6Mult'] : 0.25;
+        if (!_0x246deb) {
+            if (_0x349541['const'] >= 0x6)
+                return _0x1845a4 * _0x5a1bd3;
+            return _0x1845a4 * _0x33fcfc;
         }
-        if (_0xcbb484['const'] >= 0x6)
-            return _0x4cf8b2 * _0x4944dc;
-        if (_0xcbb484['const'] >= 0x3)
-            return _0x4cf8b2 * _0xc180b1;
-        if (_0xcbb484['const'] >= 0x1)
-            return _0x4cf8b2 * (_0x40bf90 + _0xcbb484['const'] * _0x2088a3);
-        return _0x4cf8b2 * _0x40bf90;
+        if (_0x349541['const'] >= 0x6)
+            return _0x1845a4 * _0x595aeb;
+        if (_0x349541['const'] >= 0x3)
+            return _0x1845a4 * _0x4aeea8;
+        if (_0x349541['const'] >= 0x1)
+            return _0x1845a4 * (_0x1043dd + _0x349541['const'] * _0x40e7c7);
+        return _0x1845a4 * _0x1043dd;
     } else {
-        const _0x2c9964 = _0x3545a3['coldStep'] != null ? _0x3545a3['coldStep'] : 0x1, _0x5e6f62 = _0x3545a3['coldC3Bonus'] != null ? _0x3545a3['coldC3Bonus'] : 0x3, _0x3409c3 = _0x3545a3['coldC6Bonus'] != null ? _0x3545a3['coldC6Bonus'] : 0x5, _0x1b7b50 = _0x3545a3['coldSigBonus'] != null ? _0x3545a3['coldSigBonus'] : 0x2;
-        let _0x246b65 = _0x4cf8b2 + _0xcbb484['const'] * _0x2c9964;
-        if (_0xcbb484['const'] >= 0x3)
-            _0x246b65 += _0x5e6f62;
-        if (_0xcbb484['const'] >= 0x6)
-            _0x246b65 += _0x3409c3;
-        if (_0x20a2f3)
-            _0x246b65 += _0x1b7b50;
-        return _0x246b65;
+        const _0xbdf37a = _0x15d57a['coldStep'] != null ? _0x15d57a['coldStep'] : 0x1, _0x5c08df = _0x15d57a['coldC3Bonus'] != null ? _0x15d57a['coldC3Bonus'] : 0x3, _0xa962d5 = _0x15d57a['coldC6Bonus'] != null ? _0x15d57a['coldC6Bonus'] : 0x5, _0x2a8995 = _0x15d57a['coldSigBonus'] != null ? _0x15d57a['coldSigBonus'] : 0x2;
+        let _0x2a17b6 = _0x1845a4 + _0x349541['const'] * _0xbdf37a;
+        if (_0x349541['const'] >= 0x3)
+            _0x2a17b6 += _0x5c08df;
+        if (_0x349541['const'] >= 0x6)
+            _0x2a17b6 += _0xa962d5;
+        if (_0x246deb)
+            _0x2a17b6 += _0x2a8995;
+        return _0x2a17b6;
     }
 }
-function calculatePullValue(_0xa9e856) {
-    const _0x5874c2 = weights && weights['pullTiers'] || DEFAULT_PULL_TIERS, _0x3284b3 = {};
-    for (const _0xc63c9 of _0x5874c2) {
-        const _0x25d298 = (_0xc63c9['minPull'] || 0x0) + '-' + (_0xc63c9['maxPull'] == null ? 'inf' : _0xc63c9['maxPull']);
-        _0x3284b3[_0x25d298] = _0xc63c9;
+function calculatePullValue(_0x2a2f80) {
+    const _0x49aa57 = weights && weights['pullTiers'] || DEFAULT_PULL_TIERS, _0x568d01 = {};
+    for (const _0x499f8d of _0x49aa57) {
+        const _0xaef227 = (_0x499f8d['minPull'] || 0x0) + '-' + (_0x499f8d['maxPull'] == null ? 'inf' : _0x499f8d['maxPull']);
+        _0x568d01[_0xaef227] = _0x499f8d;
     }
-    const _0x3b8059 = Object['values'](_0x3284b3), _0x4ccc82 = [..._0x3b8059]['sort']((_0x505cf1, _0x418e53) => (_0x505cf1['minPull'] || 0x0) - (_0x418e53['minPull'] || 0x0));
-    let _0x312983 = _0x4ccc82[0x0] || {
+    const _0x40a3c7 = Object['values'](_0x568d01), _0x2ad685 = [..._0x40a3c7]['sort']((_0x178e43, _0x3658b8) => (_0x178e43['minPull'] || 0x0) - (_0x3658b8['minPull'] || 0x0));
+    let _0x50b060 = _0x2ad685[0x0] || {
         'minPull': 0x0,
         'maxPull': Infinity,
         'perPullPrice': 0.8
     };
-    for (const _0xc1ae8c of _0x4ccc82) {
-        const _0x29e802 = _0xc1ae8c['minPull'] != null ? _0xc1ae8c['minPull'] : 0x0, _0xf83712 = _0xc1ae8c['maxPull'] == null || _0xc1ae8c['maxPull'] === Infinity ? Infinity : _0xc1ae8c['maxPull'];
-        if (_0xa9e856 >= _0x29e802 && _0xa9e856 < _0xf83712) {
-            _0x312983 = {
-                ..._0xc1ae8c,
-                'minPull': _0x29e802,
-                'maxPull': _0xf83712
+    for (const _0x2d8ba5 of _0x2ad685) {
+        const _0x2b54ff = _0x2d8ba5['minPull'] != null ? _0x2d8ba5['minPull'] : 0x0, _0xccc23f = _0x2d8ba5['maxPull'] == null || _0x2d8ba5['maxPull'] === Infinity ? Infinity : _0x2d8ba5['maxPull'];
+        if (_0x2a2f80 >= _0x2b54ff && _0x2a2f80 < _0xccc23f) {
+            _0x50b060 = {
+                ..._0x2d8ba5,
+                'minPull': _0x2b54ff,
+                'maxPull': _0xccc23f
             };
             break;
         }
     }
-    const _0x3f0823 = _0xa9e856 * _0x312983['perPullPrice'], _0x43dcde = _0x312983['maxPull'] == null || _0x312983['maxPull'] === Infinity ? Infinity : _0x312983['maxPull'], _0x344d50 = _0x43dcde === Infinity ? _0x312983['minPull'] + '抽+' : _0x312983['minPull'] + '~' + _0x43dcde + '抽';
+    const _0x29d022 = _0x2a2f80 * _0x50b060['perPullPrice'], _0x31e67a = _0x50b060['maxPull'] == null || _0x50b060['maxPull'] === Infinity ? Infinity : _0x50b060['maxPull'], _0x53568d = _0x31e67a === Infinity ? _0x50b060['minPull'] + '抽+' : _0x50b060['minPull'] + '~' + _0x31e67a + '抽';
     return {
-        'pulls': Math['round'](_0xa9e856),
-        'perPull': _0x312983['perPullPrice'],
-        'tierLabel': _0x344d50,
-        'total': Math['round'](_0x3f0823)
+        'pulls': Math['round'](_0x2a2f80),
+        'perPull': _0x50b060['perPullPrice'],
+        'tierLabel': _0x53568d,
+        'total': Math['round'](_0x29d022)
     };
 }
-function getYellowCoeff(_0x5a3717) {
-    const _0x2d33f4 = weights && weights['yellowTiers'] || DEFAULT_YELLOW_TIERS, _0x1b7b3d = {};
-    for (const _0x48e0a2 of _0x2d33f4) {
-        const _0x470fea = (_0x48e0a2['minYellow'] || 0x0) + '-' + (_0x48e0a2['maxYellow'] == null ? 'inf' : _0x48e0a2['maxYellow']);
-        _0x1b7b3d[_0x470fea] = _0x48e0a2;
+function getYellowCoeff(_0x33e8a3) {
+    const _0x21edd6 = weights && weights['yellowTiers'] || DEFAULT_YELLOW_TIERS, _0x5eea1f = {};
+    for (const _0x39c735 of _0x21edd6) {
+        const _0x26d2e9 = (_0x39c735['minYellow'] || 0x0) + '-' + (_0x39c735['maxYellow'] == null ? 'inf' : _0x39c735['maxYellow']);
+        _0x5eea1f[_0x26d2e9] = _0x39c735;
     }
-    const _0x57c383 = Object['values'](_0x1b7b3d);
-    let _0x3bb599 = _0x57c383[0x0] || {
+    const _0x58b9ec = Object['values'](_0x5eea1f);
+    let _0x2eee82 = _0x58b9ec[0x0] || {
         'minYellow': 0x0,
         'maxYellow': Infinity,
         'coefficient': 0.3
     };
-    for (const _0x2593cb of _0x57c383) {
-        const _0x330702 = _0x2593cb['maxYellow'] == null || _0x2593cb['maxYellow'] === Infinity ? Infinity : _0x2593cb['maxYellow'];
-        if (_0x5a3717 >= _0x2593cb['minYellow'] && _0x5a3717 < _0x330702) {
-            _0x3bb599 = {
-                ..._0x2593cb,
-                'maxYellow': _0x330702
+    for (const _0x1e836d of _0x58b9ec) {
+        const _0x2313b0 = _0x1e836d['maxYellow'] == null || _0x1e836d['maxYellow'] === Infinity ? Infinity : _0x1e836d['maxYellow'];
+        if (_0x33e8a3 >= _0x1e836d['minYellow'] && _0x33e8a3 < _0x2313b0) {
+            _0x2eee82 = {
+                ..._0x1e836d,
+                'maxYellow': _0x2313b0
             };
             break;
         }
     }
-    const _0x5ba8c1 = _0x3bb599['maxYellow'] === Infinity ? _0x3bb599['minYellow'] + '黄+' : _0x3bb599['minYellow'] + '~' + _0x3bb599['maxYellow'] + '黄';
+    const _0x40efba = _0x2eee82['maxYellow'] === Infinity ? _0x2eee82['minYellow'] + '黄+' : _0x2eee82['minYellow'] + '~' + _0x2eee82['maxYellow'] + '黄';
     return {
-        'yellowCount': _0x5a3717,
-        'coefficient': _0x3bb599['coefficient'],
-        'tierLabel': _0x5ba8c1
+        'yellowCount': _0x33e8a3,
+        'coefficient': _0x2eee82['coefficient'],
+        'tierLabel': _0x40efba
     };
 }
-function calculateValue(_0x1b42e7, _0x3b19a1) {
-    const _0x31bda6 = weights || DEFAULT_WEIGHTS, _0x460e9b = _0x1b42e7['weapons']['map'](_0x2d086e => _0x2d086e['name']), _0x2bf760 = _0x1b42e7['rawText'] || '', _0x511d16 = _0x31bda6['c6TierWeights'] || FULL_CONST_WEIGHT;
-    let _0x5e0ccc = 0x0, _0x1350f6 = 0x0;
-    const _0x147094 = [], _0x2f4b5e = [], _0x1f43a8 = [];
-    for (const _0x26e30e of _0x1b42e7['characters']) {
-        const _0x1d1f85 = checkHasSigWeapon(_0x26e30e['name'], _0x460e9b, _0x2bf760), _0x2e2932 = getCharValue(_0x26e30e, _0x1d1f85, _0x31bda6), _0x2ac531 = calcConstPremium(_0x26e30e['name'], _0x26e30e['const'], _0x31bda6);
-        _0x5e0ccc += _0x2e2932 + _0x2ac531;
-        if (_0x1d1f85 && !_0x1f43a8['includes'](_0x26e30e['name']))
-            _0x1f43a8['push'](_0x26e30e['name']);
-        let _0x11cc60 = 0x0;
-        _0x26e30e['const'] >= 0x6 && (_0x11cc60 = _0x511d16[_0x26e30e['tier']] != null ? _0x511d16[_0x26e30e['tier']] : FULL_CONST_WEIGHT[_0x26e30e['tier']] || 0x0, _0x1350f6 += _0x11cc60);
-        let _0x5ee4ba = 0x0;
-        if (_0x1d1f85) {
-            const _0x54017a = _sigWeaponsOverride ? _sigWeaponsOverride[_0x26e30e['name']] || SIG_WEAPONS[_0x26e30e['name']] : SIG_WEAPONS[_0x26e30e['name']];
-            if (_0x54017a) {
-                const _0x38e679 = _0x1b42e7['weapons']['find'](function (_0x40318e) {
-                    return _0x40318e['name'] === _0x54017a || _0x40318e['name']['includes'](_0x54017a) || _0x54017a['includes'](_0x40318e['name']);
+function calculateValue(_0x422a7d, _0x59570c) {
+    const _0x6a27bb = weights || DEFAULT_WEIGHTS, _0x48a919 = _0x422a7d['weapons']['map'](_0x5db5e7 => _0x5db5e7['name']), _0x1f52ef = _0x422a7d['rawText'] || '', _0xfbd347 = _0x6a27bb['c6TierWeights'] || FULL_CONST_WEIGHT;
+    let _0x38cbe9 = 0x0, _0x4ca57a = 0x0;
+    const _0x176617 = [], _0x26da79 = [], _0x13b3d0 = [];
+    for (const _0x3fd03b of _0x422a7d['characters']) {
+        const _0x53c8b6 = checkHasSigWeapon(_0x3fd03b['name'], _0x48a919, _0x1f52ef), _0x2b6635 = getCharValue(_0x3fd03b, _0x53c8b6, _0x6a27bb), _0x3f2419 = calcConstPremium(_0x3fd03b['name'], _0x3fd03b['const'], _0x6a27bb);
+        _0x38cbe9 += _0x2b6635 + _0x3f2419;
+        if (_0x53c8b6 && !_0x13b3d0['includes'](_0x3fd03b['name']))
+            _0x13b3d0['push'](_0x3fd03b['name']);
+        let _0x348842 = 0x0;
+        _0x3fd03b['const'] >= 0x6 && (_0x348842 = _0xfbd347[_0x3fd03b['tier']] != null ? _0xfbd347[_0x3fd03b['tier']] : FULL_CONST_WEIGHT[_0x3fd03b['tier']] || 0x0, _0x4ca57a += _0x348842);
+        let _0x3189a8 = 0x0;
+        if (_0x53c8b6) {
+            const _0x551f04 = _sigWeaponsOverride ? _sigWeaponsOverride[_0x3fd03b['name']] || SIG_WEAPONS[_0x3fd03b['name']] : SIG_WEAPONS[_0x3fd03b['name']];
+            if (_0x551f04) {
+                const _0x3490c3 = _0x422a7d['weapons']['find'](function (_0x40e6c2) {
+                    return _0x40e6c2['name'] === _0x551f04 || _0x40e6c2['name']['includes'](_0x551f04) || _0x551f04['includes'](_0x40e6c2['name']);
                 });
-                if (_0x38e679)
-                    _0x5ee4ba = _0x38e679['refine'] || 0x1;
+                if (_0x3490c3)
+                    _0x3189a8 = _0x3490c3['refine'] || 0x1;
             }
         }
-        _0x147094['push']({
-            'name': _0x26e30e['name'],
-            'const': _0x26e30e['const'],
-            'tier': _0x26e30e['tier'],
-            'isHot': !!_0x26e30e['isHot'],
-            'hasSig': _0x1d1f85,
-            'sigRefine': _0x5ee4ba,
-            'premium': _0x2ac531,
-            'value': Math['round'](_0x2e2932 + _0x2ac531)
-        }), _0x2f4b5e['push']({
-            'name': _0x26e30e['name'],
-            'const': _0x26e30e['const'],
-            'tier': _0x26e30e['tier'],
-            'hasSig': _0x1d1f85,
-            'value': Math['round'](_0x2e2932 + _0x2ac531)
+        _0x176617['push']({
+            'name': _0x3fd03b['name'],
+            'const': _0x3fd03b['const'],
+            'tier': _0x3fd03b['tier'],
+            'isHot': !!_0x3fd03b['isHot'],
+            'hasSig': _0x53c8b6,
+            'sigRefine': _0x3189a8,
+            'premium': _0x3f2419,
+            'value': Math['round'](_0x2b6635 + _0x3f2419)
+        }), _0x26da79['push']({
+            'name': _0x3fd03b['name'],
+            'const': _0x3fd03b['const'],
+            'tier': _0x3fd03b['tier'],
+            'hasSig': _0x53c8b6,
+            'value': Math['round'](_0x2b6635 + _0x3f2419)
         });
     }
-    let _0x5240b3 = 0x0;
-    const _0x5934df = [], _0x14b618 = _0x31bda6['c6MultiBonus'] || [], _0x30ded9 = _0x147094['filter'](_0x562737 => _0x562737['const'] >= 0x6 && _0x562737['tier'] && _0x562737['tier'] !== 'E'), _0x3004c7 = {};
-    for (const _0x3e5c79 of _0x30ded9) {
-        _0x3004c7[_0x3e5c79['tier']] = (_0x3004c7[_0x3e5c79['tier']] || 0x0) + 0x1;
+    let _0x49ca30 = 0x0;
+    const _0x110e6b = [], _0x6d2c31 = _0x6a27bb['c6MultiBonus'] || [], _0x4bd39b = _0x176617['filter'](_0x1f507e => _0x1f507e['const'] >= 0x6 && _0x1f507e['tier'] && _0x1f507e['tier'] !== 'E'), _0x31c37c = {};
+    for (const _0x328987 of _0x4bd39b) {
+        _0x31c37c[_0x328987['tier']] = (_0x31c37c[_0x328987['tier']] || 0x0) + 0x1;
     }
-    let _0x2cbea7 = 0x0;
-    if (_0x1350f6 >= 0x2 && _0x14b618['length'] > 0x0) {
-        const _0x4f1d27 = [..._0x14b618]['sort']((_0x253b01, _0x5e735c) => _0x253b01['count'] - _0x5e735c['count']);
-        let _0x45ef06 = null, _0x3ce342 = null;
-        for (const _0x28a130 of _0x4f1d27) {
-            if (_0x1350f6 >= _0x28a130['count'])
-                _0x45ef06 = _0x28a130;
+    let _0xbbf9d7 = 0x0;
+    if (_0x4ca57a >= 0x2 && _0x6d2c31['length'] > 0x0) {
+        const _0x520aa2 = [..._0x6d2c31]['sort']((_0x374abe, _0x3e25ef) => _0x374abe['count'] - _0x3e25ef['count']);
+        let _0x31dc24 = null, _0x3b3b9d = null;
+        for (const _0xc5fa02 of _0x520aa2) {
+            if (_0x4ca57a >= _0xc5fa02['count'])
+                _0x31dc24 = _0xc5fa02;
             else {
-                if (!_0x3ce342)
-                    _0x3ce342 = _0x28a130;
+                if (!_0x3b3b9d)
+                    _0x3b3b9d = _0xc5fa02;
             }
         }
-        if (_0x45ef06 && _0x3ce342) {
-            const _0x36b82e = (_0x1350f6 - _0x45ef06['count']) / (_0x3ce342['count'] - _0x45ef06['count']);
-            _0x2cbea7 = Math['max'](_0x3ce342['bonus'] * _0x36b82e, _0x45ef06['bonus']);
+        if (_0x31dc24 && _0x3b3b9d) {
+            const _0x30df9e = (_0x4ca57a - _0x31dc24['count']) / (_0x3b3b9d['count'] - _0x31dc24['count']);
+            _0xbbf9d7 = Math['max'](_0x3b3b9d['bonus'] * _0x30df9e, _0x31dc24['bonus']);
         } else
-            _0x45ef06 && (_0x2cbea7 = _0x45ef06['bonus']);
+            _0x31dc24 && (_0xbbf9d7 = _0x31dc24['bonus']);
     }
-    if (_0x2cbea7 > 0x0) {
-        _0x5240b3 = _0x5e0ccc * _0x2cbea7;
-        const _0x3ccaa6 = Object['entries'](_0x3004c7)['sort']((_0x281342, _0x1af0bd) => (_0x511d16[_0x281342[0x0]] || 0x0) < (_0x511d16[_0x1af0bd[0x0]] || 0x0) ? 0x1 : -0x1)['map'](([_0x5b1079, _0x142a6e]) => _0x142a6e + '个' + _0x5b1079 + '级')['join']('+');
-        _0x5934df['push']('满命(' + _0x3ccaa6 + ')\x20加权' + _0x1350f6['toFixed'](0x1) + '\x20+' + Math['round'](_0x2cbea7 * 0x64) + '%');
+    if (_0xbbf9d7 > 0x0) {
+        _0x49ca30 = _0x38cbe9 * _0xbbf9d7;
+        const _0x4f6ff0 = Object['entries'](_0x31c37c)['sort']((_0x4dcd36, _0x187781) => (_0xfbd347[_0x4dcd36[0x0]] || 0x0) < (_0xfbd347[_0x187781[0x0]] || 0x0) ? 0x1 : -0x1)['map'](([_0x41e49e, _0x2bb8e0]) => _0x2bb8e0 + '个' + _0x41e49e + '级')['join']('+');
+        _0x110e6b['push']('满命(' + _0x4f6ff0 + ')\x20加权' + _0x4ca57a['toFixed'](0x1) + '\x20+' + Math['round'](_0xbbf9d7 * 0x64) + '%');
     }
-    const _0x4d03b1 = _0x31bda6['pullC6Bonus'] || [];
-    let _0x1ead53 = 0x0;
-    if (_0x1350f6 >= 0x1 && _0x4d03b1['length'] > 0x0) {
-        const _0x49face = [..._0x4d03b1]['sort']((_0x5dc680, _0x543d28) => _0x5dc680['count'] - _0x543d28['count']);
-        let _0x7bfb9b = null, _0x8c4534 = null;
-        for (const _0x23403d of _0x49face) {
-            if (_0x1350f6 >= _0x23403d['count'])
-                _0x7bfb9b = _0x23403d;
+    const _0x1eef14 = _0x6a27bb['pullC6Bonus'] || [];
+    let _0x4c6466 = 0x0;
+    if (_0x4ca57a >= 0x1 && _0x1eef14['length'] > 0x0) {
+        const _0x285140 = [..._0x1eef14]['sort']((_0x4ff76f, _0x871720) => _0x4ff76f['count'] - _0x871720['count']);
+        let _0xd18ffa = null, _0x3a47cc = null;
+        for (const _0x2cd22e of _0x285140) {
+            if (_0x4ca57a >= _0x2cd22e['count'])
+                _0xd18ffa = _0x2cd22e;
             else {
-                if (!_0x8c4534)
-                    _0x8c4534 = _0x23403d;
+                if (!_0x3a47cc)
+                    _0x3a47cc = _0x2cd22e;
             }
         }
-        if (_0x7bfb9b && _0x8c4534) {
-            const _0x260355 = (_0x1350f6 - _0x7bfb9b['count']) / (_0x8c4534['count'] - _0x7bfb9b['count']);
-            _0x1ead53 = Math['max'](_0x8c4534['bonus'] * _0x260355, _0x7bfb9b['bonus']);
+        if (_0xd18ffa && _0x3a47cc) {
+            const _0x283be0 = (_0x4ca57a - _0xd18ffa['count']) / (_0x3a47cc['count'] - _0xd18ffa['count']);
+            _0x4c6466 = Math['max'](_0x3a47cc['bonus'] * _0x283be0, _0xd18ffa['bonus']);
         } else
-            _0x7bfb9b && (_0x1ead53 = _0x7bfb9b['bonus']);
+            _0xd18ffa && (_0x4c6466 = _0xd18ffa['bonus']);
     }
-    let _0x44fb0e = 0x0;
-    const _0x521bd3 = [], _0x19d08a = new Set(_0x1b42e7['characters']['map'](_0x337942 => _0x337942['name'])), _0x431c3c = weights && weights['teams'] || DEFAULT_TEAMS, _0x5a948b = [];
-    for (const _0x1f04d3 of _0x431c3c) {
-        const _0x5a7c62 = _0x1f04d3['members']['every'](_0x4b86da => _0x19d08a['has'](_0x4b86da));
-        if (_0x5a7c62)
-            _0x5a948b['push'](_0x1f04d3);
+    let _0x353e54 = 0x0;
+    const _0x40cd89 = [], _0x472cbd = new Set(_0x422a7d['characters']['map'](_0x47fcfa => _0x47fcfa['name'])), _0x38326a = weights && weights['teams'] || DEFAULT_TEAMS, _0x321445 = [];
+    for (const _0x4754d6 of _0x38326a) {
+        const _0x1eff6e = _0x4754d6['members']['every'](_0x586c1f => _0x472cbd['has'](_0x586c1f));
+        if (_0x1eff6e)
+            _0x321445['push'](_0x4754d6);
     }
-    const _0x28dadd = _0x31bda6['teamMultiBonus'] || [], _0x250de3 = {};
-    for (const _0x4f8910 of _0x28dadd) {
-        _0x250de3[_0x4f8910['count']] = _0x4f8910;
+    const _0x2cfef3 = _0x6a27bb['teamMultiBonus'] || [], _0x1aaad1 = {};
+    for (const _0x5a9efa of _0x2cfef3) {
+        _0x1aaad1[_0x5a9efa['count']] = _0x5a9efa;
     }
-    const _0x4e609d = Object['values'](_0x250de3);
-    let _0x522ac6 = 0x1;
-    for (const _0x268676 of _0x4e609d) {
-        _0x5a948b['length'] >= _0x268676['count'] && (_0x522ac6 = Math['max'](_0x522ac6, _0x268676['coef']));
+    const _0x541d80 = Object['values'](_0x1aaad1);
+    let _0x9c3ccd = 0x1;
+    for (const _0x533f48 of _0x541d80) {
+        _0x321445['length'] >= _0x533f48['count'] && (_0x9c3ccd = Math['max'](_0x9c3ccd, _0x533f48['coef']));
     }
-    for (const _0x5d76a1 of _0x5a948b) {
-        for (const _0x52182e of _0x5d76a1['members']) {
-            const _0x498372 = _0x1b42e7['characters']['find'](_0x44277a => _0x44277a['name'] === _0x52182e);
-            if (_0x498372) {
-                const _0x336c3b = checkHasSigWeapon(_0x52182e, _0x460e9b, _0x2bf760), _0x2a4923 = getCharValue(_0x498372, _0x336c3b, _0x31bda6);
-                _0x44fb0e += _0x2a4923 * (_0x5d76a1['multiplier'] - 0x1);
+    for (const _0x2c557d of _0x321445) {
+        for (const _0x3f5dc3 of _0x2c557d['members']) {
+            const _0x51e6b5 = _0x422a7d['characters']['find'](_0x36790f => _0x36790f['name'] === _0x3f5dc3);
+            if (_0x51e6b5) {
+                const _0x476743 = checkHasSigWeapon(_0x3f5dc3, _0x48a919, _0x1f52ef), _0x305793 = getCharValue(_0x51e6b5, _0x476743, _0x6a27bb);
+                _0x353e54 += _0x305793 * (_0x2c557d['multiplier'] - 0x1);
             }
         }
     }
-    _0x44fb0e *= _0x522ac6;
-    if (_0x5a948b['length'] > 0x0) {
-        const _0x492e49 = _0x5a948b['map'](_0xa924d6 => _0xa924d6['name'])['join']('/');
-        _0x521bd3['push'](_0x5a948b['length'] + '配队(' + _0x492e49 + ')\x20×' + _0x522ac6);
+    _0x353e54 *= _0x9c3ccd;
+    if (_0x321445['length'] > 0x0) {
+        const _0xa27011 = _0x321445['map'](_0x1b73e9 => _0x1b73e9['name'])['join']('/');
+        _0x40cd89['push'](_0x321445['length'] + '配队(' + _0xa27011 + ')\x20×' + _0x9c3ccd);
     }
-    const _0x251b30 = calculatePullValue(_0x1b42e7['pulls']), _0x4eab94 = _0x251b30['total'], _0x14921f = Math['round'](_0x4eab94 * _0x1ead53), _0x1a506c = _0x4eab94 + _0x14921f, _0x3de5c6 = extractListItems(_0x1b42e7['rawText'], '服饰'), _0x46ae57 = extractListItems(_0x1b42e7['rawText'], '摩托饰品')['concat'](extractListItems(_0x1b42e7['rawText'], '摩托')), _0x557108 = extractListItems(_0x1b42e7['rawText'], '车架模组')['concat'](extractListItems(_0x1b42e7['rawText'], '车架')), _0x1e7390 = extractListItems(_0x1b42e7['rawText'], '涂装'), _0x48b541 = _0x3de5c6['length'] * (_0x31bda6['outfit'] || 0x0), _0x798bd9 = _0x46ae57['length'] * (_0x31bda6['motoAccessory'] || 0x0), _0x29cbe0 = _0x557108['length'] * (_0x31bda6['motoFrame'] || 0x0), _0x2e433f = _0x1e7390['length'] * (_0x31bda6['paint'] || 0x0), _0x469cd1 = _0x48b541 + _0x798bd9 + _0x29cbe0 + _0x2e433f, _0x1da9a1 = _0x1b42e7['weapons']['map'](_0x407cac => {
-            const _0x4c0d64 = _0x1b42e7['characters']['some'](_0x369fa7 => {
-                const _0x56193e = _sigWeaponsOverride ? _sigWeaponsOverride[_0x369fa7['name']] || SIG_WEAPONS[_0x369fa7['name']] : SIG_WEAPONS[_0x369fa7['name']];
-                return _0x56193e === _0x407cac['name'] && _0x1f43a8['includes'](_0x369fa7['name']);
+    const _0x25ad78 = calculatePullValue(_0x422a7d['pulls']), _0x327279 = _0x25ad78['total'], _0x1cb3e8 = Math['round'](_0x327279 * _0x4c6466), _0x1e6265 = _0x327279 + _0x1cb3e8, _0x586da3 = extractListItems(_0x422a7d['rawText'], '服饰'), _0x3ebff6 = extractListItems(_0x422a7d['rawText'], '摩托饰品')['concat'](extractListItems(_0x422a7d['rawText'], '摩托')), _0x4cb26e = extractListItems(_0x422a7d['rawText'], '车架模组')['concat'](extractListItems(_0x422a7d['rawText'], '车架')), _0x3d7f35 = extractListItems(_0x422a7d['rawText'], '涂装'), _0x1d4f40 = _0x586da3['length'] * (_0x6a27bb['outfit'] || 0x0), _0x1a9a88 = _0x3ebff6['length'] * (_0x6a27bb['motoAccessory'] || 0x0), _0x5ed8aa = _0x4cb26e['length'] * (_0x6a27bb['motoFrame'] || 0x0), _0x189e7d = _0x3d7f35['length'] * (_0x6a27bb['paint'] || 0x0), _0x21c50a = _0x1d4f40 + _0x1a9a88 + _0x5ed8aa + _0x189e7d, _0x526532 = _0x422a7d['weapons']['map'](_0x484d88 => {
+            const _0x3f420f = _0x422a7d['characters']['some'](_0x2e8c0e => {
+                const _0x1a421a = _sigWeaponsOverride ? _sigWeaponsOverride[_0x2e8c0e['name']] || SIG_WEAPONS[_0x2e8c0e['name']] : SIG_WEAPONS[_0x2e8c0e['name']];
+                return _0x1a421a === _0x484d88['name'] && _0x13b3d0['includes'](_0x2e8c0e['name']);
             });
             return {
-                'name': _0x407cac['name'],
-                'refine': _0x407cac['refine'],
-                'isSig': _0x4c0d64
+                'name': _0x484d88['name'],
+                'refine': _0x484d88['refine'],
+                'isSig': _0x3f420f
             };
-        }), _0x503cd2 = getYellowCoeff(_0x1b42e7['yellowCount']), _0x4f20f2 = _0x503cd2['coefficient'], _0x181a33 = (_0x1b42e7['rawText'] || '')['match'](/(\d+)级/), _0x3fd27d = _0x181a33 ? parseInt(_0x181a33[0x1]) : 0x1, _0x1e62f4 = (_0x1b42e7['rawText'] || '')['match'](/(\d+)个四星角色/), _0xe98924 = _0x1e62f4 ? parseInt(_0x1e62f4[0x1]) : 0x0, _0x254d95 = _0x1b42e7['characters']['length'], _0xb4292f = _0x1b42e7['characters']['filter'](_0x1f8b0a => _0x1f8b0a['const'] >= 0x6)['length'], _0x3ac9dd = _0x5e0ccc + _0x5240b3 + _0x44fb0e + _0x1a506c + _0x469cd1;
-    let _0x55256e = 0x1;
-    const _0x2a27a1 = [], _0x1adc61 = _0x31bda6['flatDiscountRules'] || [];
-    if (_0x1adc61['length'] > 0x0)
-        for (const _0x1ee377 of _0x1adc61) {
-            if (!_0x1ee377['chars'] || _0x1ee377['chars']['length'] === 0x0)
+        }), _0x58061a = getYellowCoeff(_0x422a7d['yellowCount']), _0x5a60d1 = _0x58061a['coefficient'], _0x12d1fe = (_0x422a7d['rawText'] || '')['match'](/(\d+)级/), _0x4b6e2f = _0x12d1fe ? parseInt(_0x12d1fe[0x1]) : 0x1, _0x26e35e = (_0x422a7d['rawText'] || '')['match'](/(\d+)个四星角色/), _0xac252 = _0x26e35e ? parseInt(_0x26e35e[0x1]) : 0x0, _0x35cd49 = _0x422a7d['characters']['length'], _0x59bb1a = _0x422a7d['characters']['filter'](_0x2dfb2a => _0x2dfb2a['const'] >= 0x6)['length'], _0x46ee55 = _0x38cbe9 + _0x49ca30 + _0x353e54 + _0x1e6265 + _0x21c50a;
+    let _0x534247 = 0x1;
+    const _0x48698a = [], _0x55a1c4 = _0x6a27bb['flatDiscountRules'] || [];
+    if (_0x55a1c4['length'] > 0x0)
+        for (const _0x4a421d of _0x55a1c4) {
+            if (!_0x4a421d['tiers'] || _0x4a421d['tiers']['length'] === 0x0)
                 continue;
-            const _0x48ba45 = _0x1ee377['chars']['filter'](_0x2be44f => _0x19d08a['has'](_0x2be44f));
-            if (_0x48ba45['length'] === 0x0)
+            const _0xb29b9c = _0x422a7d['characters']['filter'](_0xfc8ecd => _0x4a421d['tiers']['includes'](_0xfc8ecd['tier']));
+            if (_0xb29b9c['length'] === 0x0)
                 continue;
-            const _0x521493 = _0x1ee377['chars']['every'](_0x1208c6 => {
-                const _0x21d271 = _0x1b42e7['characters']['find'](_0x4ff540 => _0x4ff540['name'] === _0x1208c6);
-                return !_0x21d271 || _0x21d271['const'] <= _0x1ee377['maxConst'];
-            });
-            _0x521493 && (_0x55256e = Math['min'](_0x55256e, _0x1ee377['discount']), _0x2a27a1['push']('低命折扣系数(' + _0x48ba45['join']('/') + '\x20≤' + _0x1ee377['maxConst'] + '命)\x20×' + _0x1ee377['discount']));
+            const _0x79f2fb = _0xb29b9c['every'](_0x146f33 => _0x146f33['const'] <= _0x4a421d['maxConst']);
+            if (_0x79f2fb) {
+                _0x534247 = Math['min'](_0x534247, _0x4a421d['discount']);
+                const _0x301ca9 = _0xb29b9c['map'](_0x449280 => _0x449280['name'] + _0x449280['const'] + '命')['join']('/');
+                _0x48698a['push']('低命折扣系数(' + _0x4a421d['tiers']['join']('+') + '级全≤' + _0x4a421d['maxConst'] + '命:\x20' + _0x301ca9 + ')\x20×' + _0x4a421d['discount']);
+            }
         }
-    const _0x510bd9 = Math['min'](_0x4f20f2, _0x55256e), _0xd79b54 = _0x3ac9dd * _0x510bd9, _0x355da6 = _0x3b19a1 > 0x0 ? (_0xd79b54 - _0x3b19a1) / _0x3b19a1 * 0x64 : 0x0, _0x383458 = Math['round']((_0xd79b54 - _0x3b19a1) * 0x64) / 0x64;
+    const _0x52a147 = Math['min'](_0x5a60d1, _0x534247), _0x4210d2 = _0x46ee55 * _0x52a147, _0x1fd5b9 = _0x59570c > 0x0 ? (_0x4210d2 - _0x59570c) / _0x59570c * 0x64 : 0x0, _0x16d7b3 = Math['round']((_0x4210d2 - _0x59570c) * 0x64) / 0x64;
     return {
-        'totalValue': Math['round'](_0xd79b54 * 0x64) / 0x64,
-        'diff': _0x383458,
-        'charValue': Math['round'](_0x5e0ccc * 0x64) / 0x64,
-        'fullConstPremium': Math['round'](_0x5240b3 * 0x64) / 0x64,
-        'teamPremium': Math['round'](_0x44fb0e * 0x64) / 0x64,
-        'pullValue': Math['round'](_0x1a506c * 0x64) / 0x64,
-        'otherResources': _0x469cd1,
-        'yellowCoeff': _0x4f20f2,
-        'weightedFullConst': _0x1350f6,
-        'satisfiedTeams': _0x5a948b['map'](_0x34a856 => _0x34a856['name']),
-        'ratio': Math['round'](_0x355da6 * 0xa) / 0xa,
-        'charBreakdown': _0x147094,
-        'charDetails': _0x2f4b5e,
-        'hasSignatureWeapons': _0x1f43a8,
-        'weaponDetails': _0x1da9a1,
-        'matchedTeams': _0x5a948b,
+        'totalValue': Math['round'](_0x4210d2 * 0x64) / 0x64,
+        'diff': _0x16d7b3,
+        'charValue': Math['round'](_0x38cbe9 * 0x64) / 0x64,
+        'fullConstPremium': Math['round'](_0x49ca30 * 0x64) / 0x64,
+        'teamPremium': Math['round'](_0x353e54 * 0x64) / 0x64,
+        'pullValue': Math['round'](_0x1e6265 * 0x64) / 0x64,
+        'otherResources': _0x21c50a,
+        'yellowCoeff': _0x5a60d1,
+        'weightedFullConst': _0x4ca57a,
+        'satisfiedTeams': _0x321445['map'](_0x46a279 => _0x46a279['name']),
+        'ratio': Math['round'](_0x1fd5b9 * 0xa) / 0xa,
+        'charBreakdown': _0x176617,
+        'charDetails': _0x26da79,
+        'hasSignatureWeapons': _0x13b3d0,
+        'weaponDetails': _0x526532,
+        'matchedTeams': _0x321445,
         'c6Bonus': {
-            'value': Math['round'](_0x5240b3),
-            'notes': _0x5934df
+            'value': Math['round'](_0x49ca30),
+            'notes': _0x110e6b
         },
         'teamBonus': {
-            'value': Math['round'](_0x44fb0e),
-            'notes': _0x521bd3
+            'value': Math['round'](_0x353e54),
+            'notes': _0x40cd89
         },
         'flatDiscount': {
-            'value': _0x55256e,
-            'notes': _0x2a27a1
+            'value': _0x534247,
+            'notes': _0x48698a
         },
         'pullInfo': {
-            'pulls': _0x251b30['pulls'],
-            'perPull': _0x251b30['perPull'],
-            'tierLabel': _0x251b30['tierLabel'],
-            'baseTotal': Math['round'](_0x4eab94 * 0x64) / 0x64,
-            'c6Bonus': _0x14921f,
-            'c6Multiplier': _0x1ead53,
-            'total': _0x1a506c
+            'pulls': _0x25ad78['pulls'],
+            'perPull': _0x25ad78['perPull'],
+            'tierLabel': _0x25ad78['tierLabel'],
+            'baseTotal': Math['round'](_0x327279 * 0x64) / 0x64,
+            'c6Bonus': _0x1cb3e8,
+            'c6Multiplier': _0x4c6466,
+            'total': _0x1e6265
         },
-        'yellowInfo': _0x503cd2,
-        'outfits': _0x3de5c6,
-        'motoAccessories': _0x46ae57,
-        'motoFrames': _0x557108,
-        'paints': _0x1e7390,
-        'level': _0x3fd27d,
-        'fourStarChars': _0xe98924,
-        'fiveStarChars': _0x254d95,
-        'maxConstChars': _0xb4292f
+        'yellowInfo': _0x58061a,
+        'outfits': _0x586da3,
+        'motoAccessories': _0x3ebff6,
+        'motoFrames': _0x4cb26e,
+        'paints': _0x3d7f35,
+        'level': _0x4b6e2f,
+        'fourStarChars': _0xac252,
+        'fiveStarChars': _0x35cd49,
+        'maxConstChars': _0x59bb1a
     };
 }
-function evaluateWithPrice(_0x30625a, _0x3b4dc3, _0x4ee65e) {
-    const _0x1bd925 = weights, _0x6e8ba2 = _sigWeaponsOverride;
-    _0x4ee65e && (weights = buildDefaultWeights(_0x4ee65e), _sigWeaponsOverride = weights['sigWeaponsOverride'] || null);
+function evaluateWithPrice(_0x4d094e, _0x179f8d, _0x172169) {
+    const _0x9cd8ea = weights, _0x5e20f0 = _sigWeaponsOverride;
+    _0x172169 && (weights = buildDefaultWeights(_0x172169), _sigWeaponsOverride = weights['sigWeaponsOverride'] || null);
     try {
-        const _0x10bb40 = parseAccountInfo(_0x30625a), _0x382152 = _0x3b4dc3 / 0x64, _0x5a9b43 = calculateValue(_0x10bb40, _0x382152);
-        let _0x238fe8 = 0x0;
-        _0x382152 > 0x0 && (_0x238fe8 = (_0x5a9b43['totalValue'] - _0x382152) / _0x382152 * 0x64);
-        _0x238fe8 = Math['round'](_0x238fe8 * 0x64) / 0x64;
-        const _0x5e8990 = {
-                'characters': _0x10bb40['characters'],
-                'weapons': _0x10bb40['weapons'],
-                'starSounds': _0x10bb40['starSound'],
-                'moonPhases': _0x10bb40['moonPhase'],
-                'coral': _0x10bb40['aftermathCoral'],
-                'goldenRipples': _0x10bb40['floatGoldRipple'],
-                'tideRipples': _0x10bb40['castTideRipple'],
-                'yellowCount': _0x10bb40['yellowCount'],
-                'outfits': _0x10bb40['outfitCount'],
-                'motorcycles': _0x10bb40['motoCount'],
-                'pulls': _0x10bb40['pulls'],
-                'rawText': _0x10bb40['rawText']
-            }, _0x11fe3a = {
-                ..._0x5a9b43,
-                'finalValue': _0x5a9b43['totalValue'],
-                'characterValue': _0x5a9b43['charValue'],
-                'c6Premium': _0x5a9b43['fullConstPremium'],
-                'teamPremium': _0x5a9b43['teamPremium'],
-                'pullValue': _0x5a9b43['pullValue'],
-                'resourceValue': _0x5a9b43['otherResources'],
-                'yellowMultiplier': _0x5a9b43['yellowCoeff'],
-                'characters': _0x5a9b43['charBreakdown']
+        const _0x3aca4f = parseAccountInfo(_0x4d094e), _0x1ec045 = _0x179f8d / 0x64, _0xa67bba = calculateValue(_0x3aca4f, _0x1ec045);
+        let _0x31414d = 0x0;
+        _0x1ec045 > 0x0 && (_0x31414d = (_0xa67bba['totalValue'] - _0x1ec045) / _0x1ec045 * 0x64);
+        _0x31414d = Math['round'](_0x31414d * 0x64) / 0x64;
+        const _0x446b35 = {
+                'characters': _0x3aca4f['characters'],
+                'weapons': _0x3aca4f['weapons'],
+                'starSounds': _0x3aca4f['starSound'],
+                'moonPhases': _0x3aca4f['moonPhase'],
+                'coral': _0x3aca4f['aftermathCoral'],
+                'goldenRipples': _0x3aca4f['floatGoldRipple'],
+                'tideRipples': _0x3aca4f['castTideRipple'],
+                'yellowCount': _0x3aca4f['yellowCount'],
+                'outfits': _0x3aca4f['outfitCount'],
+                'motorcycles': _0x3aca4f['motoCount'],
+                'pulls': _0x3aca4f['pulls'],
+                'rawText': _0x3aca4f['rawText']
+            }, _0x43fed2 = {
+                ..._0xa67bba,
+                'finalValue': _0xa67bba['totalValue'],
+                'characterValue': _0xa67bba['charValue'],
+                'c6Premium': _0xa67bba['fullConstPremium'],
+                'teamPremium': _0xa67bba['teamPremium'],
+                'pullValue': _0xa67bba['pullValue'],
+                'resourceValue': _0xa67bba['otherResources'],
+                'yellowMultiplier': _0xa67bba['yellowCoeff'],
+                'characters': _0xa67bba['charBreakdown']
             };
         return {
-            'info': _0x5e8990,
-            'details': _0x11fe3a,
-            'priceInYuan': _0x382152,
-            'costPerformance': _0x238fe8
+            'info': _0x446b35,
+            'details': _0x43fed2,
+            'priceInYuan': _0x1ec045,
+            'costPerformance': _0x31414d
         };
     } finally {
-        weights = _0x1bd925, _sigWeaponsOverride = _0x6e8ba2;
+        weights = _0x9cd8ea, _sigWeaponsOverride = _0x5e20f0;
     }
 }
-function generateShortDescription(_0x4bdb93) {
-    const _0xf5b2d3 = _0x4bdb93['details'] && _0x4bdb93['details']['characters'] || [];
-    if (_0xf5b2d3['length'] === 0x0)
+function generateShortDescription(_0x4a0bd4) {
+    const _0x436090 = _0x4a0bd4['details'] && _0x4a0bd4['details']['characters'] || [];
+    if (_0x436090['length'] === 0x0)
         return '无已知角色';
-    const _0x49815 = [..._0xf5b2d3]['sort']((_0x33c867, _0x14003b) => _0x14003b['value'] - _0x33c867['value'])['slice'](0x0, 0x5), _0x3e3aa4 = _0x49815['map'](_0x4e4895 => {
-            const _0x1d3f64 = _0x4e4895['const'] >= 0x6 ? '满命' : _0x4e4895['const'] + '命', _0x4f4e5c = _0x4e4895['hasSig'] ? '+专武' : '';
-            return '' + _0x1d3f64 + _0x4e4895['name'] + _0x4f4e5c;
+    const _0xe45f0a = [..._0x436090]['sort']((_0x2e8690, _0x498a8c) => _0x498a8c['value'] - _0x2e8690['value'])['slice'](0x0, 0x5), _0x273c23 = _0xe45f0a['map'](_0x31c2ef => {
+            const _0x108412 = _0x31c2ef['const'] >= 0x6 ? '满命' : _0x31c2ef['const'] + '命', _0x5b5130 = _0x31c2ef['hasSig'] ? '+专武' : '';
+            return '' + _0x108412 + _0x31c2ef['name'] + _0x5b5130;
         });
-    let _0x4eb5e9 = _0x3e3aa4['join'](',\x20');
-    const _0x449e60 = _0x4bdb93['info'] && _0x4bdb93['info']['yellowCount'];
-    return _0x449e60 > 0x0 && (_0x4eb5e9 += '\x20|\x20' + _0x449e60 + '黄'), _0x4eb5e9;
+    let _0x430404 = _0x273c23['join'](',\x20');
+    const _0xe48333 = _0x4a0bd4['info'] && _0x4a0bd4['info']['yellowCount'];
+    return _0xe48333 > 0x0 && (_0x430404 += '\x20|\x20' + _0xe48333 + '黄'), _0x430404;
 }
 module['exports'] = {
     'CONFIG_VERSION': CONFIG_VERSION,

@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 3;
+const CONFIG_VERSION = 4;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -111,9 +111,9 @@ const DEFAULT_WEIGHTS = {
     { count: 9, coef: 1.4 },
     { count: 10, coef: 1.45 },
   ],
-  // 低命折扣系数规则（指定角色均不超过N命时，总价值打折）
+  // 低命折扣系数规则（指定级别角色均不超过N命时，总价值打折）
   flatDiscountRules: [
-    { chars: ['爱弥斯', '绯雪', '卡提希娅'], maxConst: 3, discount: 0.9 },
+    { tiers: ['S', 'A'], maxConst: 2, discount: 0.9 },
   ],
 };
 
@@ -1036,24 +1036,22 @@ function calculateValue(parsed, price) {
   // 总价值（各项直接相加后乘以黄数系数，不再使用简单倍率调整）
   const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
 
-  // 低命折扣系数（指定角色均不超过maxConst命时，与黄数系数取较低值）
+  // 低命折扣系数（指定级别角色均不超过maxConst命时，与黄数系数取较低值）
   let flatDiscount = 1;
   const flatDiscountNotes = [];
   const flatRules = w.flatDiscountRules || [];
   if (flatRules.length > 0) {
     for (const rule of flatRules) {
-      if (!rule.chars || rule.chars.length === 0) continue;
-      // 检查账号中是否存在指定的角色
-      const presentChars = rule.chars.filter(c => charNames.has(c));
-      if (presentChars.length === 0) continue;
+      if (!rule.tiers || rule.tiers.length === 0) continue;
+      // 获取账号中属于指定级别的所有角色
+      const tierChars = parsed.characters.filter(c => rule.tiers.includes(c.tier));
+      if (tierChars.length === 0) continue;
       // 检查这些角色是否都没有超过maxConst
-      const allWithinLimit = rule.chars.every(charName => {
-        const char = parsed.characters.find(c => c.name === charName);
-        return !char || char.const <= rule.maxConst;
-      });
+      const allWithinLimit = tierChars.every(c => c.const <= rule.maxConst);
       if (allWithinLimit) {
         flatDiscount = Math.min(flatDiscount, rule.discount);
-        flatDiscountNotes.push('低命折扣系数(' + presentChars.join('/') + ' ≤' + rule.maxConst + '命) ×' + rule.discount);
+        const charSummary = tierChars.map(c => c.name + c.const + '命').join('/');
+        flatDiscountNotes.push('低命折扣系数(' + rule.tiers.join('+') + '级全≤' + rule.maxConst + '命: ' + charSummary + ') ×' + rule.discount);
       }
     }
   }
