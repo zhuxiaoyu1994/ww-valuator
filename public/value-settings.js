@@ -15,6 +15,7 @@
 
   // localStorage 存储键
   var STORAGE_KEY = 'mw_eval_weights';
+  var CONFIG_VERSION_KEY = 'mw_eval_config_version';
 
   // 缓存的默认配置（从 /api/defaults 获取）
   var cachedDefaults = null;
@@ -71,6 +72,7 @@
     w.c6MultiBonus = (s.c6MultiBonus && s.c6MultiBonus.length) ? s.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
     w.pullC6Bonus = (s.pullC6Bonus && s.pullC6Bonus.length) ? s.pullC6Bonus : DEFAULT_WEIGHTS.pullC6Bonus;
     w.teamMultiBonus = (s.teamMultiBonus && s.teamMultiBonus.length) ? s.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
+    w.flatDiscountRules = (s.flatDiscountRules && s.flatDiscountRules.length) ? s.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.pullTiers = (s.pullTiers && s.pullTiers.length) ? s.pullTiers : defaults.pullTiers;
     w.yellowTiers = (s.yellowTiers && s.yellowTiers.length) ? s.yellowTiers : defaults.yellowTiers;
     w.charPrices = Object.assign({}, defaults.charPrices, s.charPrices || {});
@@ -94,9 +96,19 @@
 
   /**
    * 从 localStorage 读取保存的权重，没有则返回 null
+   * 配置版本不匹配时自动清除旧配置
    */
   function getSavedWeights() {
     try {
+      // 配置版本检查
+      var savedVersion = parseInt(localStorage.getItem(CONFIG_VERSION_KEY) || '0', 10);
+      var currentVersion = (cachedDefaults && cachedDefaults.configVersion) || 1;
+      if (savedVersion < currentVersion) {
+        console.log('[value-settings] 配置版本升级(' + savedVersion + '→' + currentVersion + ')，清除旧配置');
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+        return null;
+      }
       var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
       return saved || null;
     } catch (e) {
@@ -112,10 +124,12 @@
   }
 
   /**
-   * 保存权重到 localStorage
+   * 保存权重到 localStorage，同时记录配置版本号
    */
   function saveWeights(w) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+    var currentVersion = (cachedDefaults && cachedDefaults.configVersion) || 1;
+    localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
   }
 
   // ============================================================
@@ -1229,6 +1243,198 @@
     needSigSection.appendChild(needSigDefaultBtn);
     dialog.appendChild(needSigSection);
 
+    // ===== 8.5 低命折扣系数 =====
+    var flatDiscountSection = document.createElement('div');
+    flatDiscountSection.style.cssText = 'margin-bottom:20px;border:1px solid #2a2a4a;border-radius:8px;padding:12px;background:#0a0a1a;';
+    var fdTitle = document.createElement('div');
+    fdTitle.style.cssText = 'font-size:14px;font-weight:600;color:#a78bfa;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
+    fdTitle.textContent = '低命折扣系数（指定角色均不超过N命时，总价值打折）';
+    flatDiscountSection.appendChild(fdTitle);
+    var fdDesc = document.createElement('p');
+    fdDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
+    fdDesc.innerHTML = '当账号中存在指定角色且均不超过设定命座数时，折扣系数与黄数阶梯系数取较低值。如指定[爱弥斯, 绯雪, 卡提希娅]且均≤3命，折扣系数0.9，若黄数系数1.1则取较低值0.9。';
+    flatDiscountSection.appendChild(fdDesc);
+
+    var flatDiscountList = document.createElement('div');
+    flatDiscountList.style.cssText = 'margin-bottom:8px;';
+    var flatDiscountEntries = (w.flatDiscountRules || DEFAULT_WEIGHTS.flatDiscountRules).map(function (e) { return { chars: [].concat(e.chars || []), maxConst: e.maxConst, discount: e.discount }; });
+    function renderFlatDiscountList() {
+      flatDiscountList.innerHTML = '';
+      if (flatDiscountEntries.length === 0) { flatDiscountList.innerHTML = '<div style="font-size:12px;color:#555;padding:4px 0;">暂无低命折扣系数规则，可点击下方"载入默认"</div>'; return; }
+      for (var i = 0; i < flatDiscountEntries.length; i++) {
+        (function (idx) {
+          var e = flatDiscountEntries[idx];
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;font-size:11px;flex-wrap:wrap;';
+          var charsHtml = e.chars.map(function (c) {
+            return '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(167,139,250,0.15);color:#a78bfa;">' + c + '</span>';
+          }).join('<span style="color:#555;font-size:11px;"> + </span>');
+          row.innerHTML =
+            '<span style="display:inline-flex;align-items:center;gap:4px;">' + charsHtml + '</span>' +
+            '<span style="color:#888;font-size:11px;">≤ ' + e.maxConst + '命</span>' +
+            '<span style="color:#4ade80;font-weight:600;font-size:11px;">× ' + e.discount + '</span>' +
+            '<button class="edit-btn" style="margin-left:auto;padding:2px 6px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:10px;cursor:pointer;">编辑</button>' +
+            '<button class="del-btn" style="padding:2px 6px;border:none;border-radius:4px;background:#1a1a3a;color:#e94560;font-size:10px;cursor:pointer;">删除</button>';
+          row.querySelector('.edit-btn').onclick = function () {
+            openFlatDiscountEditDialog(e, function () { renderFlatDiscountList(); });
+          };
+          row.querySelector('.del-btn').onclick = function () { flatDiscountEntries.splice(idx, 1); renderFlatDiscountList(); };
+          flatDiscountList.appendChild(row);
+        })(i);
+      }
+    }
+    function openFlatDiscountEditDialog(e, onDone) {
+      var editOverlay = document.createElement('div');
+      editOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
+      var editBox = document.createElement('div');
+      editBox.style.cssText = 'background:#12122a;border:1px solid #2a2a4a;border-radius:12px;padding:20px;width:340px;color:#e0e0e0;';
+      editBox.innerHTML =
+        '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#a78bfa;">编辑低命折扣系数规则</div>' +
+        '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">角色选择</label>' +
+        '<div style="display:flex;gap:6px;margin-top:4px;" class="char-add-row"><select class="char-select" style="flex:1;padding:6px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;"></select>' +
+        '<button class="add-char-btn" style="padding:6px 10px;border:none;border-radius:4px;background:#a78bfa;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;">添加角色</button></div>' +
+        '<div class="char-tags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;min-height:24px;"></div></div>' +
+        '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">命座上限</label>' +
+        '<input type="number" class="edit-maxconst" value="' + e.maxConst + '" min="0" max="6" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;" /></div>' +
+        '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">折扣系数</label>' +
+        '<input type="number" class="edit-discount" value="' + e.discount + '" min="0.1" max="1" step="0.05" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;" /></div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+        '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#1a1a3a;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
+        '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#a78bfa;color:#0f0f23;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
+      var editChars = [].concat(e.chars);
+      var charSelect = editBox.querySelector('.char-select');
+      var emptyOpt = document.createElement('option');
+      emptyOpt.value = ''; emptyOpt.textContent = '选择角色...';
+      charSelect.appendChild(emptyOpt);
+      for (var cn = 0; cn < allCharNames.length; cn++) {
+        var o = document.createElement('option');
+        o.value = allCharNames[cn]; o.textContent = allCharNames[cn];
+        charSelect.appendChild(o);
+      }
+      var charTagsDiv = editBox.querySelector('.char-tags');
+      function renderEditCharTags() {
+        charTagsDiv.innerHTML = '';
+        if (editChars.length === 0) { charTagsDiv.innerHTML = '<div style="font-size:11px;color:#555;">未选择角色</div>'; return; }
+        for (var ti = 0; ti < editChars.length; ti++) {
+          (function (charName) {
+            var tag = document.createElement('span');
+            tag.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:4px;background:rgba(167,139,250,0.15);color:#a78bfa;display:inline-flex;align-items:center;gap:4px;';
+            tag.innerHTML = charName + ' <button style="border:none;background:none;color:#a78bfa;font-size:12px;cursor:pointer;padding:0;margin-left:2px;">×</button>';
+            tag.querySelector('button').onclick = function () { var di = editChars.indexOf(charName); if (di !== -1) editChars.splice(di, 1); renderEditCharTags(); };
+            charTagsDiv.appendChild(tag);
+          })(editChars[ti]);
+        }
+      }
+      renderEditCharTags();
+      editBox.querySelector('.add-char-btn').onclick = function () {
+        var nm = charSelect.value;
+        if (!nm) { alert('请选择角色'); return; }
+        if (editChars.indexOf(nm) !== -1) { alert('该角色已添加'); return; }
+        editChars.push(nm);
+        charSelect.value = '';
+        renderEditCharTags();
+      };
+      editBox.querySelector('.cancel-btn').onclick = function () { editOverlay.remove(); };
+      editBox.querySelector('.save-btn').onclick = function () {
+        var newMaxConst = parseInt(editBox.querySelector('.edit-maxconst').value);
+        var newDiscount = parseFloat(editBox.querySelector('.edit-discount').value);
+        if (editChars.length === 0) { alert('请至少选择1名角色'); return; }
+        if (isNaN(newMaxConst) || newMaxConst < 0 || newMaxConst > 6) { alert('命座上限需在0-6之间'); return; }
+        if (isNaN(newDiscount) || newDiscount < 0.1 || newDiscount > 1) { alert('折扣系数需在0.1-1之间'); return; }
+        e.chars = editChars; e.maxConst = newMaxConst; e.discount = newDiscount;
+        onDone(); editOverlay.remove();
+      };
+      editOverlay.appendChild(editBox);
+      editOverlay.onclick = function (ev) { if (ev.target === editOverlay) editOverlay.remove(); };
+      document.body.appendChild(editOverlay);
+    }
+    renderFlatDiscountList();
+    flatDiscountSection.appendChild(flatDiscountList);
+    var fdAddRow = document.createElement('div');
+    fdAddRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;';
+    var fdCharSelect = document.createElement('select');
+    fdCharSelect.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;';
+    var fdEmptyOpt = document.createElement('option');
+    fdEmptyOpt.value = ''; fdEmptyOpt.textContent = '选择角色...';
+    fdCharSelect.appendChild(fdEmptyOpt);
+    for (var fdc = 0; fdc < allCharNames.length; fdc++) {
+      var fdOpt = document.createElement('option');
+      fdOpt.value = allCharNames[fdc]; fdOpt.textContent = allCharNames[fdc];
+      fdCharSelect.appendChild(fdOpt);
+    }
+    fdAddRow.appendChild(fdCharSelect);
+    var fdAddCharBtn = document.createElement('button');
+    fdAddCharBtn.textContent = '添加角色';
+    fdAddCharBtn.style.cssText = 'padding:5px 10px;border:none;border-radius:4px;background:#a78bfa;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;';
+    var fdSelectedChars = [];
+    var fdSelectedTagsDiv = document.createElement('div');
+    fdSelectedTagsDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;width:100%;min-height:24px;';
+    function renderFdSelectedTags() {
+      fdSelectedTagsDiv.innerHTML = '';
+      if (fdSelectedChars.length === 0) { fdSelectedTagsDiv.innerHTML = '<div style="font-size:11px;color:#555;">未选择角色</div>'; return; }
+      for (var ti = 0; ti < fdSelectedChars.length; ti++) {
+        (function (charName) {
+          var tag = document.createElement('span');
+          tag.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:4px;background:rgba(167,139,250,0.15);color:#a78bfa;display:inline-flex;align-items:center;gap:4px;';
+          tag.innerHTML = charName + ' <button style="border:none;background:none;color:#a78bfa;font-size:12px;cursor:pointer;padding:0;margin-left:2px;">×</button>';
+          tag.querySelector('button').onclick = function () { var di = fdSelectedChars.indexOf(charName); if (di !== -1) fdSelectedChars.splice(di, 1); renderFdSelectedTags(); };
+          fdSelectedTagsDiv.appendChild(tag);
+        })(fdSelectedChars[ti]);
+      }
+    }
+    renderFdSelectedTags();
+    fdAddCharBtn.onclick = function () {
+      var nm = fdCharSelect.value;
+      if (!nm) { alert('请选择角色'); return; }
+      if (fdSelectedChars.indexOf(nm) !== -1) { alert('该角色已添加'); return; }
+      fdSelectedChars.push(nm);
+      fdCharSelect.value = '';
+      renderFdSelectedTags();
+    };
+    fdAddRow.appendChild(fdAddCharBtn);
+    var fdMaxConstInput = document.createElement('input');
+    fdMaxConstInput.type = 'number'; fdMaxConstInput.min = '0'; fdMaxConstInput.max = '6'; fdMaxConstInput.placeholder = '命座上限';
+    fdMaxConstInput.style.cssText = 'width:70px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
+    fdAddRow.appendChild(fdMaxConstInput);
+    var fdDiscountInput = document.createElement('input');
+    fdDiscountInput.type = 'number'; fdDiscountInput.min = '0.1'; fdDiscountInput.max = '1'; fdDiscountInput.step = '0.05'; fdDiscountInput.placeholder = '折扣';
+    fdDiscountInput.style.cssText = 'width:55px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
+    fdAddRow.appendChild(fdDiscountInput);
+    var fdAddBtn = document.createElement('button');
+    fdAddBtn.textContent = '添加';
+    fdAddBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#a78bfa;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;';
+    fdAddBtn.onclick = function () {
+      if (fdSelectedChars.length === 0) { alert('请至少选择1名角色'); return; }
+      var mc = parseInt(fdMaxConstInput.value);
+      var dc = parseFloat(fdDiscountInput.value);
+      if (isNaN(mc) || mc < 0 || mc > 6) { alert('命座上限需在0-6之间'); return; }
+      if (isNaN(dc) || dc < 0.1 || dc > 1) { alert('折扣系数需在0.1-1之间'); return; }
+      flatDiscountEntries.push({ chars: [].concat(fdSelectedChars), maxConst: mc, discount: dc });
+      renderFlatDiscountList();
+      fdSelectedChars.length = 0; renderFdSelectedTags();
+      fdMaxConstInput.value = ''; fdDiscountInput.value = '';
+    };
+    fdAddRow.appendChild(fdAddBtn);
+    fdAddRow.appendChild(fdSelectedTagsDiv);
+    flatDiscountSection.appendChild(fdAddRow);
+    var fdDefaultBtn = document.createElement('button');
+    fdDefaultBtn.textContent = '载入默认';
+    fdDefaultBtn.style.cssText = 'padding:4px 12px;border:1px solid #a78bfa;border-radius:4px;background:transparent;color:#a78bfa;font-size:11px;cursor:pointer;';
+    fdDefaultBtn.onclick = function () {
+      var defaults = DEFAULT_WEIGHTS.flatDiscountRules || [];
+      for (var di = 0; di < defaults.length; di++) {
+        var exist = flatDiscountEntries.find(function (e) {
+          return e.chars.join(',') === defaults[di].chars.join(',') && e.maxConst === defaults[di].maxConst;
+        });
+        if (!exist) {
+          flatDiscountEntries.push({ chars: [].concat(defaults[di].chars), maxConst: defaults[di].maxConst, discount: defaults[di].discount });
+        }
+      }
+      renderFlatDiscountList();
+    };
+    flatDiscountSection.appendChild(fdDefaultBtn);
+    dialog.appendChild(flatDiscountSection);
+
     // ===== 9. 其他权重 =====
     var weightsSection = document.createElement('div');
     weightsSection.style.cssText = 'margin-bottom:20px;';
@@ -1238,7 +1444,7 @@
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -1342,6 +1548,12 @@
       needSigEntries.length = 0;
       needSigEntries.push.apply(needSigEntries, DEFAULT_NEED_SIG_WEAPONS);
       renderNeedSigList();
+      // 重置低命折扣系数
+      flatDiscountEntries.length = 0;
+      for (var fdi = 0; fdi < DEFAULT_WEIGHTS.flatDiscountRules.length; fdi++) {
+        flatDiscountEntries.push({ chars: [].concat(DEFAULT_WEIGHTS.flatDiscountRules[fdi].chars), maxConst: DEFAULT_WEIGHTS.flatDiscountRules[fdi].maxConst, discount: DEFAULT_WEIGHTS.flatDiscountRules[fdi].discount });
+      }
+      renderFlatDiscountList();
     };
 
     var cancelBtn = document.createElement('button');
@@ -1449,6 +1661,15 @@
       for (var yk in yellowSeen) { if (yellowSeen.hasOwnProperty(yk)) newYellowTiers.push(yellowSeen[yk]); }
       newYellowTiers.sort(function (a, b) { return a.minYellow - b.minYellow; });
       newW.yellowTiers = newYellowTiers;
+
+      // 收集低命折扣系数规则
+      var newFlatDiscountRules = [];
+      for (var fdi2 = 0; fdi2 < flatDiscountEntries.length; fdi2++) {
+        if (flatDiscountEntries[fdi2].chars.length > 0) {
+          newFlatDiscountRules.push({ chars: flatDiscountEntries[fdi2].chars, maxConst: flatDiscountEntries[fdi2].maxConst, discount: flatDiscountEntries[fdi2].discount });
+        }
+      }
+      newW.flatDiscountRules = newFlatDiscountRules;
 
       // 收集需要专武的角色
       newW.needSigWeapons = needSigEntries;

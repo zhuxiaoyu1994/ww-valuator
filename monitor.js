@@ -214,7 +214,7 @@ async function fetchAccountList(page) {
   // 新API参数格式: query, gameId, pageIndex, pageSize, bizProd, type, posType, filterDTOList, combineFilterList
   const paramSets = [
     // 组合1: 新API参数格式
-    { query: "", gameId: config.gameId, pageIndex: page, pageSize: config.pageSize, bizProd: 1, type: "4", posType: 1, filterDTOList: [], combineFilterList: [] },
+    { query: "", gameId: config.gameId, pageIndex: page, pageSize: config.pageSize, bizProd: 1, type: "1", posType: 1, sortType: 2, filterDTOList: [], combineFilterList: [] },
     // 组合2: 简化版本
     { gameId: config.gameId, pageIndex: page, pageSize: config.pageSize },
     // 组合3: 兼容旧参数
@@ -372,10 +372,14 @@ async function scanAccounts() {
 
     console.log(`[Monitor] Total accounts fetched: ${allAccounts.length}`);
 
-    // 2. 过滤出新账号
+    // 2. 过滤出新账号（排除自主截图账号）
     const newAccounts = allAccounts.filter(acc => {
       const productId = acc.productId || acc.id;
-      return productId && !seenIds.has(String(productId));
+      if (!productId || seenIds.has(String(productId))) return false;
+      // 自主截图账号直接过滤，不入库、不入队、不通知
+      const title = acc.showTitle || acc.title || '';
+      if (/自主截图/.test(title)) return false;
+      return true;
     });
 
     console.log(`[Monitor] New accounts to scan: ${newAccounts.length} (already seen: ${allAccounts.length - newAccounts.length})`);

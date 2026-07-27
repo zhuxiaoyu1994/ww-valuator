@@ -1,1 +1,1429 @@
-'use strict';const a0_0xc41068=a0_0x30b2;(function(_0x2ca549,_0x3bdf04){const _0x52d07a=a0_0x30b2,_0x321ffa=_0x2ca549();while(!![]){try{const _0xc8871=parseInt(_0x52d07a(0x1b7))/0x1*(-parseInt(_0x52d07a(0xa6))/0x2)+-parseInt(_0x52d07a(0x1bb))/0x3*(-parseInt(_0x52d07a(0x164))/0x4)+-parseInt(_0x52d07a(0x10f))/0x5*(-parseInt(_0x52d07a(0xac))/0x6)+parseInt(_0x52d07a(0x1dd))/0x7+parseInt(_0x52d07a(0xe2))/0x8+parseInt(_0x52d07a(0x206))/0x9+-parseInt(_0x52d07a(0x12e))/0xa*(parseInt(_0x52d07a(0x15a))/0xb);if(_0xc8871===_0x3bdf04)break;else _0x321ffa['push'](_0x321ffa['shift']());}catch(_0x1ef66f){_0x321ffa['push'](_0x321ffa['shift']());}}}(a0_0x2718,0x570a8));function a0_0x30b2(_0x33a9a4,_0x4d7668){_0x33a9a4=_0x33a9a4-0x88;const _0x2718b8=a0_0x2718();let _0x30b2b7=_0x2718b8[_0x33a9a4];if(a0_0x30b2['CSuPmo']===undefined){var _0x589869=function(_0x32e057){const _0x130681='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let _0x38e3f3='',_0x239c9c='';for(let _0x37b550=0x0,_0x296c97,_0x56200f,_0x5c4043=0x0;_0x56200f=_0x32e057['charAt'](_0x5c4043++);~_0x56200f&&(_0x296c97=_0x37b550%0x4?_0x296c97*0x40+_0x56200f:_0x56200f,_0x37b550++%0x4)?_0x38e3f3+=String['fromCharCode'](0xff&_0x296c97>>(-0x2*_0x37b550&0x6)):0x0){_0x56200f=_0x130681['indexOf'](_0x56200f);}for(let _0x265cc4=0x0,_0x450336=_0x38e3f3['length'];_0x265cc4<_0x450336;_0x265cc4++){_0x239c9c+='%'+('00'+_0x38e3f3['charCodeAt'](_0x265cc4)['toString'](0x10))['slice'](-0x2);}return decodeURIComponent(_0x239c9c);};a0_0x30b2['LQHZgj']=_0x589869,a0_0x30b2['fZdumf']={},a0_0x30b2['CSuPmo']=!![];}const _0x40e1ad=_0x2718b8[0x0],_0x52dc21=_0x33a9a4+_0x40e1ad,_0x5b0207=a0_0x30b2['fZdumf'][_0x52dc21];return!_0x5b0207?(_0x30b2b7=a0_0x30b2['LQHZgj'](_0x30b2b7),a0_0x30b2['fZdumf'][_0x52dc21]=_0x30b2b7):_0x30b2b7=_0x5b0207,_0x30b2b7;}const CHAR_TIERS={'S':{'price':0x32,'isHot':!![],'chars':[a0_0xc41068(0x1e2),'绯雪',a0_0xc41068(0x210)]},'A':{'price':0x23,'isHot':!![],'chars':['琳奈','千咲','穗穗','莫宁',a0_0xc41068(0x101),a0_0xc41068(0x8f),a0_0xc41068(0x165)]},'B':{'price':0x19,'isHot':!![],'chars':['达妮娅','夏空','露西',a0_0xc41068(0xa4),a0_0xc41068(0xa0),'仇远','尤诺',a0_0xc41068(0x9a),'赞妮',a0_0xc41068(0x10a),a0_0xc41068(0x1ff),a0_0xc41068(0x220)]},'C':{'price':0x5,'isHot':![],'chars':['露帕',a0_0xc41068(0x1fb),'菲比',a0_0xc41068(0x21f),'椿']},'D':{'price':0x3,'isHot':![],'chars':['忌炎','吟霖',a0_0xc41068(0x146),'今汐','长离','折枝',a0_0xc41068(0x1e8),a0_0xc41068(0x1ea)]},'E':{'price':0x2,'isHot':![],'chars':['维里奈',a0_0xc41068(0x96),'安可','凌阳','鉴心','秧秧']}},SIG_WEAPONS={'忌炎':a0_0xc41068(0x106),'吟霖':a0_0xc41068(0x143),'今汐':a0_0xc41068(0xb1),'长离':'赫奕流明','相里要':a0_0xc41068(0x138),'椿':'裁春','珂莱塔':'死与舞','折枝':'琼枝冰绡','守岸人':a0_0xc41068(0x158),'洛瑟菈':'存帧','莫宁':a0_0xc41068(0x19b),'千咲':'昙切','爱弥斯':'永远的启明星','弗洛洛':a0_0xc41068(0xb7),'卡提希娅':a0_0xc41068(0x9f),'尤诺':a0_0xc41068(0x139),'夏空':a0_0xc41068(0x1c5),'赞妮':a0_0xc41068(0xf5),'坎特蕾拉':a0_0xc41068(0x182),'仇远':'裁竹','布兰特':a0_0xc41068(0x11f),'露帕':'焰痕','奥古斯塔':a0_0xc41068(0x14d),'嘉贝莉娜':a0_0xc41068(0x17a),'西格莉卡':a0_0xc41068(0x1d5),'达妮娅':a0_0xc41068(0x223),'菲比':a0_0xc41068(0xbf),'绯雪':'灼霜','琳奈':a0_0xc41068(0x15c),'丽贝卡':'碎骨','陆赫斯':a0_0xc41068(0x191),'秧秧玄翎':'天之苍苍','穗穗':a0_0xc41068(0x212),'露西':'蜃影'},FULL_CONST_WEIGHT={'S':0x1,'A':0.6,'B':0.3,'C':0.2,'D':0.1,'E':0x0},DEFAULT_WEIGHTS={'fiveStarWeapon':0x0,'weaponRefineBonus':0x2,'hotC0Mult':0x1,'hotC3Mult':0x2,'hotC6Mult':0x3,'hotStepMult':0.08,'hotNoSigMult':0.5,'hotNoSigC6Mult':0.5,'coldStep':0x0,'coldC3Bonus':0x0,'coldC6Bonus':0x0,'coldSigBonus':0x0,'c6TierWeights':{'S':0x1,'A':0.6,'B':0.3,'C':0.2,'D':0.1,'E':0x0},'c6MultiBonus':[{'count':0x2,'bonus':0.5},{'count':0x3,'bonus':0x1},{'count':0x4,'bonus':1.5},{'count':0x5,'bonus':0x2},{'count':0x6,'bonus':2.5},{'count':0x7,'bonus':0x3},{'count':0x8,'bonus':3.5},{'count':0x9,'bonus':0x4},{'count':0xa,'bonus':4.5}],'outfit':0x2,'motoAccessory':0x0,'motoFrame':0xa,'paint':0x0,'pullC6Bonus':[{'count':0x1,'bonus':0.15},{'count':0x2,'bonus':0.25},{'count':0x3,'bonus':0.35},{'count':0x4,'bonus':0.45},{'count':0x5,'bonus':0.5},{'count':0x6,'bonus':0.55},{'count':0x7,'bonus':0.6},{'count':0x8,'bonus':0.65},{'count':0x9,'bonus':0.7},{'count':0xa,'bonus':0.75},{'count':0xb,'bonus':0.8},{'count':0xc,'bonus':0.85},{'count':0xd,'bonus':0.9},{'count':0xe,'bonus':0.95},{'count':0xf,'bonus':0x1}],'teamMultiBonus':[{'count':0x2,'coef':1.05},{'count':0x3,'coef':1.1},{'count':0x4,'coef':1.15},{'count':0x5,'coef':1.2},{'count':0x6,'coef':1.25},{'count':0x7,'coef':1.3},{'count':0x8,'coef':1.35},{'count':0x9,'coef':1.4},{'count':0xa,'coef':1.45}]},DEFAULT_TEAMS=[{'name':a0_0xc41068(0xd9),'members':['绯雪',a0_0xc41068(0x165),'千咲'],'multiplier':1.5},{'name':a0_0xc41068(0x18a),'members':['奥古斯塔','尤诺','守岸人'],'multiplier':1.2},{'name':'弗坎守','members':[a0_0xc41068(0x8f),a0_0xc41068(0x21f),a0_0xc41068(0x1ff)],'multiplier':1.2},{'name':a0_0xc41068(0x201),'members':[a0_0xc41068(0x1e2),'达妮娅','千咲'],'multiplier':1.2},{'name':a0_0xc41068(0xe0),'members':[a0_0xc41068(0x210),'夏空','千咲'],'multiplier':1.2},{'name':'露丽守','members':['露西','丽贝卡',a0_0xc41068(0x1ff)],'multiplier':1.2},{'name':'西仇守','members':[a0_0xc41068(0x220),'仇远','守岸人'],'multiplier':1.2},{'name':'嘉仇守','members':[a0_0xc41068(0xa4),'仇远',a0_0xc41068(0x1ff)],'multiplier':1.2},{'name':a0_0xc41068(0xe5),'members':[a0_0xc41068(0x1e2),'莫宁','琳奈'],'multiplier':1.5},{'name':a0_0xc41068(0x127),'members':['布兰特','露帕','长离'],'multiplier':1.1},{'name':a0_0xc41068(0x94),'members':['赞妮','菲比',a0_0xc41068(0x1ff)],'multiplier':1.1}],DEFAULT_PULL_TIERS=[{'minPull':0x0,'maxPull':0x64,'perPullPrice':0.7},{'minPull':0x64,'maxPull':0xc8,'perPullPrice':0.9},{'minPull':0xc8,'maxPull':0x12c,'perPullPrice':1.1},{'minPull':0x12c,'maxPull':0x190,'perPullPrice':1.3},{'minPull':0x190,'maxPull':0x1f4,'perPullPrice':1.5},{'minPull':0x1f4,'maxPull':0x258,'perPullPrice':1.8},{'minPull':0x258,'maxPull':0x2bc,'perPullPrice':0x2},{'minPull':0x2bc,'maxPull':0x320,'perPullPrice':2.2},{'minPull':0x320,'maxPull':0x384,'perPullPrice':2.4},{'minPull':0x384,'maxPull':0x3e8,'perPullPrice':2.6},{'minPull':0x3e8,'maxPull':0x44c,'perPullPrice':2.8},{'minPull':0x44c,'maxPull':0x4b0,'perPullPrice':0x3},{'minPull':0x4b0,'maxPull':0x514,'perPullPrice':3.2},{'minPull':0x514,'maxPull':0x578,'perPullPrice':3.5},{'minPull':0x578,'maxPull':0x270f,'perPullPrice':3.7}],DEFAULT_YELLOW_TIERS=[{'minYellow':0x0,'maxYellow':0xa,'coefficient':0.5},{'minYellow':0xa,'maxYellow':0x14,'coefficient':0.6},{'minYellow':0x14,'maxYellow':0x1e,'coefficient':0.7},{'minYellow':0x1e,'maxYellow':0x28,'coefficient':0.8},{'minYellow':0x28,'maxYellow':0x32,'coefficient':0.9},{'minYellow':0x32,'maxYellow':0x3c,'coefficient':0x1},{'minYellow':0x3c,'maxYellow':0x46,'coefficient':1.05},{'minYellow':0x46,'maxYellow':0x50,'coefficient':1.1},{'minYellow':0x50,'maxYellow':0x5a,'coefficient':1.15},{'minYellow':0x5a,'maxYellow':0x64,'coefficient':1.2},{'minYellow':0x64,'maxYellow':0x6e,'coefficient':1.25},{'minYellow':0x6e,'maxYellow':0x78,'coefficient':1.3},{'minYellow':0x78,'maxYellow':0x3e7,'coefficient':1.35}],DEFAULT_CHAR_PRICES={'爱弥斯':0x32,'绯雪':0x3c,'卡提希娅':0x23,'弗洛洛':0x23,'琳奈':0x19,'守岸人':0x14,'千咲':0x19,'穗穗':0x23,'莫宁':0x19,'秧秧玄翎':0x23,'洛瑟菈':0x19,'达妮娅':0xf,'夏空':0xf,'露西':0x14,'嘉贝莉娜':0x12,'奥古斯塔':0x12,'仇远':0xf,'尤诺':0xf,'陆赫斯':0x14,'赞妮':0x12,'布兰特':0xf,'西格莉卡':0x14,'露帕':0xa,'珂莱塔':0xa,'菲比':0xa,'坎特蕾拉':0xa,'椿':0xa,'忌炎':0x2,'吟霖':0x2,'相里要':0x2,'今汐':0x2,'长离':0x2,'折枝':0x2,'洛可可':0x2,'丽贝卡':0x2,'维里奈':0x0,'卡卡罗':0x0,'安可':0x0,'凌阳':0x0,'鉴心':0x0,'秧秧':0x0},DEFAULT_CONST_PREMIUMS={'爱弥斯':{'3':0x32,'6':0xb4},'绯雪':{'2':0x23,'3':0x3c,'6':0xc8},'卡提希娅':{'2':0x14,'3':0x23,'6':0x78},'弗洛洛':{'2':0x14,'6':0x64},'奥古斯塔':{'2':0x14,'6':0x64},'尤诺':{'2':0x14,'6':0x3c},'露西':{'3':0x1e,'6':0x64},'忌炎':{'6':0x1e},'守岸人':{'2':0x14,'6':0x32},'赞妮':{'2':0x14,'6':0x64},'椿':{'6':0x32},'莫宁':{'1':0x14,'6':0x64},'珂莱塔':{'6':0x32},'秧秧玄翎':{'3':0x32,'6':0xa0},'千咲':{'3':0x32,'6':0x64},'嘉贝莉娜':{'3':0x1e,'6':0x64},'陆赫斯':{'6':0x64},'西格莉卡':{'6':0x64},'丽贝卡':{'3':0x14,'6':0x32},'仇远':{'3':0x1e,'6':0x32},'今汐':{'6':0x1e},'吟霖':{'6':0x1e},'坎特蕾拉':{'2':0x1e,'6':0x32},'夏空':{'2':0x14,'3':0x1e,'6':0x32},'布兰特':{'6':0x50},'长离':{'6':0x1e},'相里要':{'6':0x1e},'洛可可':{'6':0x1e},'琳奈':{'6':0x50},'洛瑟菈':{'6':0x50},'折枝':{'6':0x14},'菲比':{'2':0x1e,'6':0x50},'露帕':{'6':0x50},'达妮娅':{'2':0x1e,'6':0x50}},DEFAULT_NEED_SIG_WEAPONS=[a0_0xc41068(0x1e2),'绯雪',a0_0xc41068(0x210),'千咲','今汐','椿','忌炎',a0_0xc41068(0xa4),'弗洛洛',a0_0xc41068(0x1fb),'西格莉卡','赞妮',a0_0xc41068(0x9a)],CHAR_ALIASES={'爱弥丝':a0_0xc41068(0x1e2)},CHAR_LOOKUP={};for(const [tier,info]of Object[a0_0xc41068(0x1d7)](CHAR_TIERS)){for(const name of info[a0_0xc41068(0x199)]){CHAR_LOOKUP[name]={'tier':tier,'price':info[a0_0xc41068(0xa3)],'isHot':info[a0_0xc41068(0x1cf)]};}}for(const [alias,canonical]of Object[a0_0xc41068(0x1d7)](CHAR_ALIASES)){CHAR_LOOKUP[canonical]&&(CHAR_LOOKUP[alias]=CHAR_LOOKUP[canonical]);}const SECTION_KEYWORDS=[a0_0xc41068(0x12c),a0_0xc41068(0xa2),a0_0xc41068(0x111),a0_0xc41068(0x1a4),a0_0xc41068(0x180),a0_0xc41068(0x136),'残振珊瑚',a0_0xc41068(0x1da),a0_0xc41068(0x153),a0_0xc41068(0x175),a0_0xc41068(0x172),a0_0xc41068(0x141),'星声','月相','服饰','皮肤','摩托','车架','涂装','数据坞等级',a0_0xc41068(0xfa)];function buildDefaultCharPrices(){const _0x4e4755=a0_0xc41068,_0x138136={'xaAcA':function(_0x8a6e6f,_0x4cb1be){return _0x8a6e6f&&_0x4cb1be;},'HriPR':function(_0xc42e8c,_0x302a6e){return _0xc42e8c-_0x302a6e;},'IPAwg':function(_0x500687,_0x448628){return _0x500687-_0x448628;},'TipKu':function(_0x4202a1,_0x4fedd9){return _0x4202a1*_0x4fedd9;},'QicJI':function(_0x3dc652,_0x1e4537){return _0x3dc652!==_0x1e4537;},'zefRZ':_0x4e4755(0x204),'EUYCA':_0x4e4755(0x140),'dbtjh':function(_0x4de9fe,_0x18134a){return _0x4de9fe!=_0x18134a;}},_0x431eec={};for(const _0x494a03 of Object[_0x4e4755(0x142)](CHAR_TIERS)){for(const _0x4795a0 of CHAR_TIERS[_0x494a03]['chars']){if(_0x138136[_0x4e4755(0x157)](_0x138136[_0x4e4755(0x159)],_0x138136['EUYCA']))_0x431eec[_0x4795a0]=_0x138136['dbtjh'](DEFAULT_CHAR_PRICES[_0x4795a0],null)?DEFAULT_CHAR_PRICES[_0x4795a0]:CHAR_TIERS[_0x494a03]['price'];else{const _0x3527c9=[..._0x4d1b3c][_0x4e4755(0x14b)]((_0x213610,_0x24d915)=>_0x213610[_0x4e4755(0x16c)]-_0x24d915[_0x4e4755(0x16c)]);let _0x47e9fb=null,_0xe37c80=null;for(const _0xcdab51 of _0x3527c9){if(_0x9d2c61>=_0xcdab51[_0x4e4755(0x16c)])_0x47e9fb=_0xcdab51;else{if(!_0xe37c80)_0xe37c80=_0xcdab51;}}if(_0x138136['xaAcA'](_0x47e9fb,_0xe37c80)){const _0x180831=_0x138136[_0x4e4755(0x1fa)](_0x21faf4,_0x47e9fb[_0x4e4755(0x16c)])/_0x138136[_0x4e4755(0x14a)](_0xe37c80[_0x4e4755(0x16c)],_0x47e9fb['count']);_0x4ddff2=_0xacf93a['max'](_0x138136[_0x4e4755(0x217)](_0xe37c80['bonus'],_0x180831),_0x47e9fb[_0x4e4755(0xf8)]);}else _0x47e9fb&&(_0x3514d5=_0x47e9fb[_0x4e4755(0xf8)]);}}}return _0x431eec;}function buildDefaultTeamPremiums(){const _0x5aee29=a0_0xc41068,_0x433244={};for(const _0x6d8499 of DEFAULT_TEAMS){_0x433244[_0x6d8499[_0x5aee29(0x19c)]]={'chars':[..._0x6d8499[_0x5aee29(0xaa)]||[]],'multiplier':_0x6d8499[_0x5aee29(0x9b)]||0x1,'enabled':!![]};}return _0x433244;}function buildDefaultWeights(_0x1ef29e){const _0xddbde6=a0_0xc41068,_0x544c52={'okbzL':function(_0x3ff507,_0x74199d){return _0x3ff507||_0x74199d;},'RhZVW':function(_0x5bcd69){return _0x5bcd69();},'sVPGH':function(_0x16613a,_0xc87e9c){return _0x16613a!==_0xc87e9c;},'wQKHE':_0xddbde6(0x1ed),'fpQYP':_0xddbde6(0x137)},_0x5c9f61=_0x544c52[_0xddbde6(0x125)](_0x1ef29e,{}),_0x304f80=Object[_0xddbde6(0xc7)]({},DEFAULT_WEIGHTS,_0x5c9f61);_0x304f80[_0xddbde6(0x134)]=Object[_0xddbde6(0xc7)]({},DEFAULT_WEIGHTS[_0xddbde6(0x134)],_0x5c9f61[_0xddbde6(0x134)]||{}),_0x304f80[_0xddbde6(0xeb)]=_0x5c9f61['c6MultiBonus']&&_0x5c9f61['c6MultiBonus'][_0xddbde6(0x88)]?_0x5c9f61['c6MultiBonus']:DEFAULT_WEIGHTS['c6MultiBonus'],_0x304f80[_0xddbde6(0x1d4)]=_0x5c9f61[_0xddbde6(0x1d4)]&&_0x5c9f61[_0xddbde6(0x1d4)][_0xddbde6(0x88)]?_0x5c9f61[_0xddbde6(0x1d4)]:DEFAULT_WEIGHTS[_0xddbde6(0x1d4)],_0x304f80['teamMultiBonus']=_0x5c9f61['teamMultiBonus']&&_0x5c9f61['teamMultiBonus'][_0xddbde6(0x88)]?_0x5c9f61[_0xddbde6(0x135)]:DEFAULT_WEIGHTS[_0xddbde6(0x135)],_0x304f80['pullTiers']=_0x5c9f61[_0xddbde6(0x162)]&&_0x5c9f61[_0xddbde6(0x162)][_0xddbde6(0x88)]?_0x5c9f61['pullTiers']:DEFAULT_PULL_TIERS,_0x304f80[_0xddbde6(0x168)]=_0x5c9f61[_0xddbde6(0x168)]&&_0x5c9f61[_0xddbde6(0x168)][_0xddbde6(0x88)]?_0x5c9f61[_0xddbde6(0x168)]:DEFAULT_YELLOW_TIERS,_0x304f80['charPrices']=Object[_0xddbde6(0xc7)]({},buildDefaultCharPrices(),_0x5c9f61['charPrices']||{}),_0x304f80[_0xddbde6(0xa7)]=Object[_0xddbde6(0xc7)]({},DEFAULT_CONST_PREMIUMS,_0x5c9f61[_0xddbde6(0xa7)]||{}),_0x304f80['teamPremiums']=_0x5c9f61[_0xddbde6(0xdd)]||_0x544c52[_0xddbde6(0x1af)](buildDefaultTeamPremiums),_0x304f80[_0xddbde6(0x185)]=[];for(const _0x25e006 of Object[_0xddbde6(0x142)](_0x304f80[_0xddbde6(0xdd)])){const _0x251ace=_0x304f80[_0xddbde6(0xdd)][_0x25e006];if(_0x251ace&&_0x544c52[_0xddbde6(0x1dc)](_0x251ace[_0xddbde6(0x15e)],![])){if(_0x544c52['wQKHE']!==_0x544c52['fpQYP'])_0x304f80['teams'][_0xddbde6(0x207)]({'name':_0x25e006,'members':_0x251ace[_0xddbde6(0x199)]||[],'multiplier':_0x251ace['multiplier']||0x1});else{const _0x26dfb2=[];if(!_0x574759)return _0x26dfb2;const _0x25063c=_0x21f62e[_0xddbde6(0x226)](/[,，、\s;；]+/)[_0xddbde6(0xda)](_0x45d145=>_0x45d145['length']>0x0);for(const _0x17cf37 of _0x25063c){let _0x1a6f5f=0x1,_0x56d576='';const _0xb78b39=_0x17cf37[_0xddbde6(0x1c3)](/^精(\d+)(.+)$/);_0xb78b39?(_0x1a6f5f=_0x1efd13(_0xb78b39[0x1]),_0x56d576=_0xb78b39[0x2]):(_0x56d576=_0x17cf37,_0x1a6f5f=0x1);if(_0x56d576)_0x26dfb2[_0xddbde6(0x207)]({'name':_0x56d576,'refine':_0x1a6f5f});}return _0x26dfb2;}}}return _0x304f80[_0xddbde6(0x20a)]=_0x5c9f61['needSigWeapons']||DEFAULT_NEED_SIG_WEAPONS,_0x5c9f61[_0xddbde6(0xfc)]&&(_0x304f80[_0xddbde6(0xfc)]=_0x5c9f61['sigWeaponsOverride']),_0x304f80;}const WEIGHT_LABELS={'fiveStarWeapon':{'label':a0_0xc41068(0xfb),'desc':a0_0xc41068(0x22b)},'weaponRefineBonus':{'label':'武器精炼加成','desc':a0_0xc41068(0x203)},'hotC0Mult':{'label':a0_0xc41068(0xee),'desc':a0_0xc41068(0x19f)},'hotC3Mult':{'label':a0_0xc41068(0xd4),'desc':a0_0xc41068(0xdb)},'hotC6Mult':{'label':a0_0xc41068(0x1cc),'desc':'C6+专武\x20=\x20基础价\x20×\x20此倍率（3.0=300%，满命三倍）'},'hotStepMult':{'label':'热门过渡命倍率','desc':a0_0xc41068(0x1ad)},'hotNoSigMult':{'label':a0_0xc41068(0x171),'desc':a0_0xc41068(0xe6)},'hotNoSigC6Mult':{'label':a0_0xc41068(0x11b),'desc':'满命但无专武\x20=\x20基础价\x20×\x20此倍率（0.25=25%）'},'coldStep':{'label':'冷门每命加分','desc':'冷门角色每命加此值（元）'},'coldC3Bonus':{'label':a0_0xc41068(0x22f),'desc':a0_0xc41068(0x13a)},'coldC6Bonus':{'label':a0_0xc41068(0xd6),'desc':'冷门角色满命额外加此值（元）'},'coldSigBonus':{'label':'冷门专武加分','desc':a0_0xc41068(0x13d)},'outfit':{'label':a0_0xc41068(0x13e),'desc':a0_0xc41068(0x17f)},'motoAccessory':{'label':a0_0xc41068(0x172),'desc':a0_0xc41068(0xd2)},'motoFrame':{'label':'车架模组','desc':a0_0xc41068(0xba)},'paint':{'label':'涂装','desc':a0_0xc41068(0xc8)}};function getDefaults(){const _0x443da7=a0_0xc41068,_0x32cf75={'sJcnO':function(_0x1d4ad5){return _0x1d4ad5();},'wFPal':function(_0x3e816b){return _0x3e816b();}};return{'weights':_0x32cf75[_0x443da7(0x1f9)](buildDefaultWeights),'charTiers':CHAR_TIERS,'sigWeapons':SIG_WEAPONS,'constPremiums':DEFAULT_CONST_PREMIUMS,'teams':DEFAULT_TEAMS,'pullTiers':DEFAULT_PULL_TIERS,'yellowTiers':DEFAULT_YELLOW_TIERS,'charPrices':_0x32cf75['wFPal'](buildDefaultCharPrices),'needSigWeapons':DEFAULT_NEED_SIG_WEAPONS,'weightLabels':WEIGHT_LABELS};}function a0_0x2718(){const _0x35c245=['ugLnEfq','B1Lfz1C','u29Mu2G','mta5mtDJz0vKrMm','AMnTu1q','zg50vLy','qKTzuxq','DhjPBq','uNzbA1G','q3LuBfm','Bwf4wwvSBg93','Bwf0y2G','AgT6zNe','5P6x6zE055Qe5zkp5y+56lcd','uhDQqNy','yK12qNy','EfL0rNC','DMfSDwvZ','y2PICfu','BwLUuhvSBa','54oT6zEOqZyR5lIt5Q2M5ycn546h','rwviv1K','zNDqC1e','AxniB3q','veTcvum','ihWG','wKvUsxy','z3HJBvC','ChvSBem2qM9UDxm','5PIT5PEL6k+r5RoO','zejuq3q','zw50CMLLCW','B2vmBMO','y29Szfn0zxa','5RwU6yEr5RoI57Q5','DNrVsfe','C1zqr0G','nZm5nJLxr0npA1G','CgfPBNrdB3vUDa','rLnJBKe','ALf5wK0','B2PXDgy','54IX5BYL5PAV','Ee9KC3K','CMf3vgv4Da','tKvbtKq','ChvSBfzHBhvL','y29Szem2qM9UDxm','5RsB5y+V5y+V','Bw90B0nVDw50','5lI96lsD5y2H','EeXRBKO','uKP3r3O','y3f4uhm','Dg90ywXwywX1zq','Aw5JBhvKzxm','Ag90qZznDwX0','twrPz2W','s0HUCKO','C3rHCLnVDw5K','wfDjCxi','ChvSBhm','y2HHCKjYzwfRzg93BG','kd86w++8IcHDxgqRw++8IsLDkt8OpZPB77YAoL18xhmQxg5844crkq','wgnAyM0','C0PJBK8','shjPufi','54+c6i6X5Agu','wNDWzue','Cg1nsKC','su1RsMe','5A6i5Bk45lQ6','sg5gweu','54IX6l6+5y2d','r3zKDfC','5Q+p57QN57k+54k86AkD5Asw5yQG5lU377Yi5ywd77Ym57k+nt0Rnmox5Q2K5yc877Yj','Dvf2z3u','tMnnB1K','ndu1otu1m216uK5nta','ChvZAa','t1fQswq','uNDLrhm','BMvLzfnPz1DLyxbVBNm','5RUH5zg9ka','CKr4y1O','zNDpvLC','u2fXrwq','s09Xwwi','5y2H5O+q5BIm5AIf','zNLIvuu','5Qcw6zYE6AwU6zYY','yxzcvhK','veTjz1C','EwTwuwi','CMvMAw5L','vgLWs3u','rgnzC1G','z1PvDee','r0LZzLC','C3Hsu2G','r2TKyKO','AM9PBG','AfzwuLO','5z2o54M56jw+5OUj','6kw/5Qc86i6j5y2H','s1rhz1q','y29LzG','6lwD5l2C55Qe55+U5PIF','wu9brwy','zxHWB3j0CW','C3bSAxq','CM91BMq','EMPOv2e','AgfZ','ywjyCvK','5Q+p5lIQ5lQu5PIF5Q2M5zMO5z+656ga5lU377Yi5ywd77Ym57k+mE+8Iq','vgrPu2G','rKjpyLe','Aw5M','5yA36zEOqZpLIQdLIiy','v2HKCgm','BgvUz3rO','Dg9gAxHLza','sNnfvNm','qNDVCM0','uhfbvu4','ueLOseW','rKDTB0i','5BYx5RsB5RsB','zNvSBenVBNn0uhjLBwL1Bq','A1bbChC','DfbPquq','BwfW','6lwE6i+Y5A6i','DMvOAwnSzuzYyw1Lq291BNq','5y2H5y2H572x','Ee9Ku0O','DgrKDuu','s3H0wNi','6zMg6lwR5PAV','BxvSDgLWBgLLCG','DMXAqMG','DvrYwvO','A0r3ve8','5lIn5Bgi5zg95A6A5lMl5yAG','5AwL5y+K5PAV5Agu','44crxhmQw++8MJPDp1XZkIHBxhnCu10QpYKOpZ0','5zUB5PIF6kEs6iMY','ChjPy2u','5zIj6lsD6i6j5AIC','CNvoBgC','mtCYnde0CM9zr1Lt','y29UC3rqCMvTAxvTCW','CfbxANC','D2vWDvm','BwvTyMvYCW','r0Xvsui','mJu2mdm2mLvdwLfyAq','v0nMsLC','BM11EgS','uMPVzum','BgrQuKK','5PE25zkm5Bkb56Iu','s2npDee','EKzit2G','r3jxt0S','rwzhugy','B3v0zML0','5BM95yAL55Qe5B+y5B+N56UG','BhPUqwu','De9LvwO','5Q+p5lIQ6l2M5P625QIH57Ue77Yi5ywd77Yj','Ag90qZnnDwX0','v0nQChi','CvzHzLe','qvbxv2u','5zkm5ywj5zUE5zsX','CgfPBNq','y2HHCMfJDgvYCW','v21HrxO','B1HntKe','y3fhDMu','suPfrKq','z3zgr2e','yxnZAwDU','5Q+p5lIQ5RAc6kof77Yi5ywd77Yj','vMvfA3u','xcqM','BuTKyNu','C29Tzq','uKLevwW','DvHsqMy','sw1KEg8','DgLLCKXHyMvS','EwvSBg93q291BNq','5Q+p5lIQ5PgP5OMy6AwW5zob77Yi5ywd77Yj','Bw9VBLbOyxnL','54oT6zEOqZmR5lIt5Q2M5ycn546h','w++8IcHDxgqRw++8IsLDxhmQw++8MJPDp1XZkLXUp1XZkIHBxhnCu10QpYKOpZ0','5yA36zEOqZBLIQdLIiy','v3DTD3K','tujSsLy','57UV5RsB5y2d','zMLSDgvY','qZmR5lIt5Q2Mid0G5z+656ga5lU3imoxioATPowaJEEoH++8IdiUmd0YmdaL77Ym5lU35yc857+75ycn77Yj','Dg90ywW','DgvHBvbYzw1PDw1Z','Cwfswgy','zxzLCNK','5y2H5Asp5y2d','Aw10wuG','nJyZmti4wNbRwLDt','BwffuLO','C1v2zuK','54IX55cZ6i6R','54oT6zEO6kEs6iMY5PEG5lIt5Q2Mid0G5z+656ga5lU3imoxioATPowaJEEoH++8IdaUmtu95lUf5yc8mtuL77Yj','q3n0uKe','rMDuDhG','t2zkzLu','y29SzfnPz0jVBNvZ','yZznDwX0AujVBNvZ','qLP1qMW','vhrTu20','54oT6zEOqZaR5lIt5Q2M5ycn546h','DLbYAgG','q1L5DeW','rKntDxi','y09zv0u','vwrnAKm','BwLUwwvSBg93','54sW5ywj6kob5A6A','uM9yweS','BujmtxG','yM9UDxm','C2XPy2u','6igu6kEj562j57QN','5lQu5PIF5Q2M5zMOkowFUUEHGcK','C2LNv2vHCg9UC092zxjYAwrL','CunHu1G','B2fLvLq','thvrr1e','zvH6wKK','56EN56EN546e57+o','FcqP','wuPVy2u','wwP5C3a','wM9prLO','6iUn6BoE5y2d5BAc','y3PorM8','y2HHCLzHBhvL','Cxj0AgG','5BId5ywW54M5','tvrTBxa','q2L0y1C','zMXVyxrhB2XKuMLWCgXL','B2TlBu4','nxD1sLbira','v3ndD2q','5lQu5PIF5Q2M5zMO','C0HLyxi','u21dqxu','uLfjzwq','s2LmzuK','C1DLBe4','vKHqu2S','vu5qD1G','svPtCLC','w++8MJPDxhmQkfTCC1XtxsO/ksG/pq','54oT6zEOqZBML6dKUjpMRABLGi3NJOC','DgvHBvbYzw1PDw0','Bw90B0fJy2vZC29YEq','DLryEgq','5lIn54gT6iIQ6lEV','CgjYq3y','CwHkzwe','CKPZuuG','DMfSDwu','zMLUza','B2TIEKW','DgLLCG','5lIj54gR6zIF','y29UC3q','v1vsqMK','sxPnuNe','u1PSvu8','5lQu5PIF6kEs6iMY','yLnKswi','mtaZmgvJuLHKrW','zgv0ywLSCW','v2XisKG','txrRtNC','DKTgvgK','q1fbC3e','yZzuAwvYv2vPz2H0CW','DgvHBu11BhrPqM9UDxm','5l2z5RoI54+k55gA','whbqzKm','6k+45PA5546e5P6I','5lIh54MP5OYb5A2y55Qe5RoO6yEk','5yA36zEO6kEs6iMYm+wrVEMINEwKLUwkOoATPowaVo+8IowfG++8Iq','s3LTrvO','wfHlsgq','5yA36zEO6kEs6iMY5PYj5lIt5Q2M6AkD5Asw5yQG5Q2K5yc877Yi5ywd77Yj','5PYn6AwWl+EARUIcPa','yLz5suq','z1bQu0u','6l2M5P625QIH57Ue','A2v5CW','5O6J5yka5lMl5OMl','6ywn6zIFka','Bw90B0fJy2vZC29YEunVDw50','55U46yEm6kAb','wvbsCeO','Bwf4','w++8MJPDxhmQkfXKw1XKlf0Qkq','svbbD2C','C29YDa','5PEG5BEY55+L6kEs6iMY','6AMT5yAv6zo46zU35lMl5P2d','Bxr1vei','u1HnCNG','Eu5Yrg4','zNbZzuO','ruXzwg0','6zo45R2U5RoI57Q5','ugr2B0e','zwLyEva','koA7OEwrVsK','uwLJsKK','5PIF5BQp5y2p5zon','EMvMuLO','ntm1ntLmqxrVAgi','A3HIC0u','5RQI5B2P6i2N6l6j','t01rtLe','zw5HyMXLza','zNjRsgm','weDrChC','sunmwu4','ChvSBfrPzxjZ','vfjqCMq','nhb5y1vtsW','5RsB55gF6i+i','vxDvwLK','wfr0zfK','EwvSBg93vgLLCNm','yKniDvq','rKLjEgm','rfbyAu8','y291BNq','y2HHCLbYAwnLCW','suvyEfK','txzZzNy','yMLKBu4','54oT6zEO5PEG5lIt5Q2M5ycn546h','5PgP5OMy6AwW5zob','ExHHCxO','vhPjC1K','5zsK5AoW5RAH57Q5','Ag90tM9tAwDdnK11Bhq','rK5bANG','B3rOzxjszxnVDxjJzxm','AMfPA0K','5ywj5B2X5y+m55sF','EejRA3m','xcGOxgqRkEwrVvWP','B3v0zML0q291BNq','BxnYrw8','5Q+p5lIQ5PYn6AwWl+EARUIcPo+8IowfG++8Iq','5zYW5zU+5O6I57sI5BQM','Bwf4uhvSBa','5Rw355Qe5zgI5zAd','uKrdu2W','u2vLDNO','DgvHBxm','CgvYuhvSBfbYAwnL','D2nutwq','wefms1y','BuTfteq','5PEL5PYi5A6i','Ahv6wxi','De1rueW','y2fZDfrPzgvsAxbWBgu','D2vHCg9UCW','AMv5teO','wwLVtfu','55M95PI85lMl6isk','sw5jvxK','tKX5A2W','D21SA1C','wg5OEhG','qvjAt3e','y29SzemZqM9UDxm','rg9zruS','y2HHCNm','Bw90B0zYyw1L','5A6z566x5lUQ6l2O','BMfTzq','DK5SyNq','CMvWBgfJzq','qZaR5lIt5Q2Mid0G5z+656ga5lU3imoxioATPowaJEEoH++8IdeUmd0XmdaL77Yj','AgfZu2LN','Ag90tM9tAwDnDwX0','Aw5MBW','u05eueO','6yEr6iMY5Q2M5zMO','vNndBMS','y29LzMzPy2LLBNq','BhPArhi','zwngtum','EwvSBg93q29LzMy','sffqDMC','CunkqKm','ywz0zxjTyxrOq29YywW','qZeVqZiVqZqVqZxMR4/LKB3LIQdMIjaGpsdLN7RNOydKU7CGW5CG5Q2K5ycn546h77Yimc4Wod04jE+8Iq','wxz1BKi','uMHAvLC','BLjdtKq','Ag90u3rLCe11Bhq','uwnQseK','tNHuvfm','sLvSwu4','vNn0yuC','y29Uy2f0','mLrHs2HLDa'];a0_0x2718=function(){return _0x35c245;};return a0_0x2718();}let weights=buildDefaultWeights(),_sigWeaponsOverride=null;function extractSection(_0x95efe8,_0x198305){const _0x160cb6=a0_0xc41068,_0x14e277={'RIDUl':_0x160cb6(0xca),'EReIZ':_0x160cb6(0x11a),'eiXyP':_0x160cb6(0x102),'RJwGz':function(_0x8f2a7e,_0x515e5d){return _0x8f2a7e+_0x515e5d;},'SaqEd':_0x160cb6(0xd5),'NLKfR':function(_0x39b1e6,_0x4385f4){return _0x39b1e6+_0x4385f4;},'kPApw':function(_0x491520,_0x15c466){return _0x491520+_0x15c466;},'Xnhxx':_0x160cb6(0xa1)},_0x434f6f=_0x198305['replace'](/[.*+?^${}()|[\]\\]/g,_0x14e277[_0x160cb6(0xcd)]),_0x2f342d=SECTION_KEYWORDS[_0x160cb6(0xda)](_0x8d7afb=>_0x8d7afb!==_0x198305)[_0x160cb6(0x93)](_0x3dae18=>'【?'+_0x3dae18[_0x160cb6(0x19e)](/[.*+?^${}()|[\]\\]/g,_0x160cb6(0xca))+_0x160cb6(0x1f7)),_0x577495=_0x434f6f+_0x14e277['EReIZ']+_0x2f342d[_0x160cb6(0x21d)]('|')+_0x14e277[_0x160cb6(0x155)],_0x2ad437=_0x95efe8[_0x160cb6(0x1c3)](new RegExp(_0x577495));if(_0x2ad437)return _0x2ad437[0x1][_0x160cb6(0x1bf)]();const _0x4ca987=_0x14e277[_0x160cb6(0x1ec)](_0x434f6f+_0x14e277[_0x160cb6(0x20e)]+_0x2f342d['join']('|'),_0x14e277[_0x160cb6(0x155)]),_0x59699e=_0x95efe8['match'](new RegExp(_0x4ca987));if(_0x59699e)return _0x59699e[0x1]['trim']();const _0x31f63d=_0x14e277[_0x160cb6(0x1ec)](_0x14e277['NLKfR'](_0x14e277[_0x160cb6(0x91)]('【',_0x434f6f)+_0x14e277[_0x160cb6(0x195)],_0x2f342d[_0x160cb6(0x21d)]('|')),_0x160cb6(0x102)),_0x3665f3=_0x95efe8[_0x160cb6(0x1c3)](new RegExp(_0x31f63d));if(_0x3665f3)return _0x3665f3[0x1]['trim']();return'';}function extractNumber(_0x2e9a8a,_0x5a27cc){const _0x5896e8=a0_0xc41068,_0x28a4c3={'plYom':_0x5896e8(0xca),'KcOtA':_0x5896e8(0x149),'haFYg':function(_0x2d3a4f,_0x7b384b){return _0x2d3a4f(_0x7b384b);},'SNDPJ':function(_0xd14c0e,_0x2a84b2){return _0xd14c0e+_0x2a84b2;},'mKdbu':'】\x5cs*[：:]?\x5cs*(\x5cd[\x5cd,]*)','Whdpc':function(_0x3384df,_0x251b76){return _0x3384df(_0x251b76);}},_0x1ba0a7=_0x5a27cc[_0x5896e8(0x19e)](/[.*+?^${}()|[\]\\]/g,_0x28a4c3['plYom']),_0x2d4c98=_0x2e9a8a['match'](new RegExp(_0x1ba0a7+_0x28a4c3[_0x5896e8(0xb2)],'i'));if(_0x2d4c98)return _0x28a4c3['haFYg'](parseInt,_0x2d4c98[0x1][_0x5896e8(0x19e)](/,/g,''));const _0x4b26f0=_0x2e9a8a[_0x5896e8(0x1c3)](new RegExp(_0x28a4c3[_0x5896e8(0x1a3)](_0x28a4c3[_0x5896e8(0x1a3)]('【',_0x1ba0a7),_0x28a4c3[_0x5896e8(0xcb)]),'i'));if(_0x4b26f0)return _0x28a4c3[_0x5896e8(0x230)](parseInt,_0x4b26f0[0x1][_0x5896e8(0x19e)](/,/g,''));return 0x0;}function parseCharacters(_0x55a88d){const _0x5c709d=a0_0xc41068,_0x3a3265={'KHnrJ':function(_0x200cca,_0x2d3fdf){return _0x200cca/_0x2d3fdf;},'CBJBh':function(_0x2ddaa4,_0x2dcd81){return _0x2ddaa4-_0x2dcd81;},'MtkNw':function(_0x56a55f,_0x41e01f){return _0x56a55f*_0x41e01f;},'PdvoA':function(_0x40d324,_0x2b4f15){return _0x40d324!==_0x2b4f15;},'euCZf':_0x5c709d(0x99),'BKYQt':_0x5c709d(0x12d),'ojqtf':function(_0x35dc12,_0x52ef89){return _0x35dc12!==_0x52ef89;},'ApIWx':_0x5c709d(0xff),'UdMjC':_0x5c709d(0x17e),'bWVGa':_0x5c709d(0x17b),'KiLeI':function(_0x4ee3c1,_0x49e74c){return _0x4ee3c1===_0x49e74c;},'pmMJG':'lqqhQ','RiKov':function(_0x2c5357,_0x5b19d1){return _0x2c5357(_0x5b19d1);},'ruNlg':function(_0x518a82,_0x55c982){return _0x518a82>_0x55c982;}},_0x509bb7=[];if(!_0x55a88d)return _0x509bb7;const _0x2e4adb=_0x55a88d[_0x5c709d(0x226)](/[,，、\s;；]+/)[_0x5c709d(0xda)](_0x5e0100=>_0x5e0100['length']>0x0);for(const _0x18309d of _0x2e4adb){let _0xa9a5eb=0x0,_0x5a7ec5='',_0x47613c=_0x18309d[_0x5c709d(0x1c3)](/^满命(.+)$/);if(_0x47613c)_0xa9a5eb=0x6,_0x5a7ec5=_0x47613c[0x1];else{if(_0x3a3265[_0x5c709d(0x154)](_0x3a3265['euCZf'],_0x3a3265[_0x5c709d(0x1be)])){_0x47613c=_0x18309d[_0x5c709d(0x1c3)](/^(\d+)命(.+)$/);if(_0x47613c)_0x3a3265[_0x5c709d(0x1e1)](_0x3a3265['ApIWx'],_0x3a3265[_0x5c709d(0xf3)])?(_0xa9a5eb=parseInt(_0x47613c[0x1]),_0x5a7ec5=_0x47613c[0x2]):(_0x12fdb1=_0x30ef04[0x1],_0xb2cab=_0x135ceb(_0x4b906f[0x2]));else{_0x47613c=_0x18309d['match'](/^(.+?)\(满命\)$/);if(_0x47613c){if(_0x3a3265[_0x5c709d(0x154)](_0x5c709d(0x21e),_0x3a3265['bWVGa']))_0x5a7ec5=_0x47613c[0x1],_0xa9a5eb=0x6;else return!![];}else _0x47613c=_0x18309d[_0x5c709d(0x1c3)](/^(.+?)\((\d+)命\)$/),_0x47613c?_0x3a3265[_0x5c709d(0x115)](_0x3a3265['pmMJG'],_0x3a3265[_0x5c709d(0x1fd)])?(_0x5a7ec5=_0x47613c[0x1],_0xa9a5eb=_0x3a3265['RiKov'](parseInt,_0x47613c[0x2])):_0x593b9e[_0x33e489[_0x5c709d(0x19c)]]=_0x2fc2d1:(_0x5a7ec5=_0x18309d,_0xa9a5eb=0x0);}}else{const _0x309749=_0x3a3265[_0x5c709d(0x1f2)](_0x5374c4-_0x1eeaec['count'],_0x3a3265['CBJBh'](_0x2d9025['count'],_0x302bf1[_0x5c709d(0x16c)]));_0x3fdb5b=_0x92ff69[_0x5c709d(0x148)](_0x3a3265[_0x5c709d(0x131)](_0x4502b8[_0x5c709d(0xf8)],_0x309749),_0x4b1d4a[_0x5c709d(0xf8)]);}}const _0x5ab4d0=CHAR_ALIASES[_0x5a7ec5]||_0x5a7ec5,_0xfe9c18=CHAR_LOOKUP[_0x5ab4d0];_0xfe9c18&&_0x509bb7[_0x5c709d(0x207)]({'name':_0x5ab4d0,'const':_0xa9a5eb,'tier':_0xfe9c18[_0x5c709d(0x126)],'price':_0xfe9c18[_0x5c709d(0xa3)],'isHot':_0xfe9c18[_0x5c709d(0x1cf)]});}const _0x366de5={};for(const _0x48debe of _0x509bb7){(!_0x366de5[_0x48debe['name']]||_0x3a3265[_0x5c709d(0xa5)](_0x48debe[_0x5c709d(0x128)],_0x366de5[_0x48debe[_0x5c709d(0x19c)]][_0x5c709d(0x128)]))&&(_0x366de5[_0x48debe[_0x5c709d(0x19c)]]=_0x48debe);}return Object['values'](_0x366de5);}function findCharsInText(_0x64bc72){const _0x33d64d=a0_0xc41068,_0x1a9980={'jQyZM':function(_0xf71a65,_0x18704f){return _0xf71a65>=_0x18704f;},'rJsQH':function(_0x49ad6e,_0x48f011){return _0x49ad6e===_0x48f011;},'huzYr':function(_0x10b623,_0x561e1a){return _0x10b623!==_0x561e1a;},'zwbnk':_0x33d64d(0x1eb),'PwjBv':function(_0x40e3ef,_0x5b237a){return _0x40e3ef+_0x5b237a;},'Bworm':'(\x5cd+)命','IJEFD':function(_0xcd51d2,_0x344f9e){return _0xcd51d2!==_0x344f9e;},'WmaEz':_0x33d64d(0x11e),'ldjRI':function(_0x556c12,_0x251f8b){return _0x556c12(_0x251f8b);},'RweDs':function(_0xc7921f,_0x501538){return _0xc7921f+_0x501538;},'qLwac':_0x33d64d(0x156),'hkzfq':function(_0x142d0d,_0x22c5ae){return _0x142d0d>_0x22c5ae;}},_0x56843d=[];for(const [_0x5c7dcd,_0x2fefbc]of Object[_0x33d64d(0x1d7)](CHAR_TIERS)){for(const _0x125256 of _0x2fefbc[_0x33d64d(0x199)]){const _0x484c87=[_0x125256];for(const [_0xfb99e,_0x1342ab]of Object[_0x33d64d(0x1d7)](CHAR_ALIASES)){if(_0x1a9980[_0x33d64d(0x122)](_0x1342ab,_0x125256))_0x484c87[_0x33d64d(0x207)](_0xfb99e);}let _0x49439b=![];for(const _0x900946 of _0x484c87){if(_0x1a9980[_0x33d64d(0x18b)](_0x33d64d(0x1eb),_0x1a9980['zwbnk'])){if(_0x1a9980[_0x33d64d(0x1e0)](_0x3da008,_0x2076c2[_0x33d64d(0x16c)]))_0x41e91a=_0x19f04a;else{if(!_0x2229e0)_0x451c7e=_0x148915;}}else{if(_0x64bc72[_0x33d64d(0x1ef)]('满命'+_0x900946)){_0x56843d['push']({'name':_0x125256,'const':0x6,'tier':_0x5c7dcd,'price':_0x2fefbc[_0x33d64d(0xa3)],'isHot':_0x2fefbc[_0x33d64d(0x1cf)]}),_0x49439b=!![];break;}const _0x2f5c2b=_0x64bc72[_0x33d64d(0x1c3)](new RegExp(_0x1a9980[_0x33d64d(0x1c6)](_0x1a9980[_0x33d64d(0x8b)],_0x900946)));if(_0x2f5c2b){if(_0x1a9980[_0x33d64d(0xc5)](_0x1a9980['WmaEz'],_0x1a9980[_0x33d64d(0xc2)]))_0x4929a0['teams']['push']({'name':_0x33a10a,'members':_0x5f4786[_0x33d64d(0x199)]||[],'multiplier':_0x2be003[_0x33d64d(0x9b)]||0x1});else{_0x56843d[_0x33d64d(0x207)]({'name':_0x125256,'const':_0x1a9980[_0x33d64d(0xb0)](parseInt,_0x2f5c2b[0x1]),'tier':_0x5c7dcd,'price':_0x2fefbc[_0x33d64d(0xa3)],'isHot':_0x2fefbc['isHot']}),_0x49439b=!![];break;}}if(_0x64bc72[_0x33d64d(0x1ef)](_0x1a9980[_0x33d64d(0x209)](_0x900946,_0x1a9980['qLwac']))){_0x56843d[_0x33d64d(0x207)]({'name':_0x125256,'const':0x6,'tier':_0x5c7dcd,'price':_0x2fefbc[_0x33d64d(0xa3)],'isHot':_0x2fefbc['isHot']}),_0x49439b=!![];break;}const _0x2d8336=_0x64bc72[_0x33d64d(0x1c3)](new RegExp(_0x900946+_0x33d64d(0x17c)));if(_0x2d8336){_0x56843d[_0x33d64d(0x207)]({'name':_0x125256,'const':_0x1a9980[_0x33d64d(0xb0)](parseInt,_0x2d8336[0x1]),'tier':_0x5c7dcd,'price':_0x2fefbc['price'],'isHot':_0x2fefbc[_0x33d64d(0x1cf)]}),_0x49439b=!![];break;}if(_0x64bc72['includes'](_0x900946)){_0x56843d[_0x33d64d(0x207)]({'name':_0x125256,'const':0x0,'tier':_0x5c7dcd,'price':_0x2fefbc[_0x33d64d(0xa3)],'isHot':_0x2fefbc['isHot']}),_0x49439b=!![];break;}}}}}const _0x1ea1fd={};for(const _0x1de488 of _0x56843d){(!_0x1ea1fd[_0x1de488[_0x33d64d(0x19c)]]||_0x1a9980[_0x33d64d(0x1c4)](_0x1de488[_0x33d64d(0x128)],_0x1ea1fd[_0x1de488[_0x33d64d(0x19c)]][_0x33d64d(0x128)]))&&(_0x1ea1fd[_0x1de488[_0x33d64d(0x19c)]]=_0x1de488);}return Object['values'](_0x1ea1fd);}function parseWeapons(_0x3444cc){const _0x46e9f8=a0_0xc41068,_0x11582d={'ZEnIv':function(_0x5b6b6b,_0x120ea5){return _0x5b6b6b>_0x120ea5;},'imtYH':function(_0x158b6d,_0x3718bb){return _0x158b6d!==_0x3718bb;},'YvunB':_0x46e9f8(0x1e5),'WgRRq':function(_0x356f5c,_0x409c58){return _0x356f5c(_0x409c58);},'RvtsC':function(_0x273bdf,_0x1694b0){return _0x273bdf===_0x1694b0;},'ZoOFZ':_0x46e9f8(0x1bc),'nmuxk':_0x46e9f8(0x109)},_0xdf6ae3=[];if(!_0x3444cc)return _0xdf6ae3;const _0x112b81=_0x3444cc[_0x46e9f8(0x226)](/[,，、\s;；]+/)[_0x46e9f8(0xda)](_0x478dbf=>_0x478dbf[_0x46e9f8(0x88)]>0x0);for(const _0x59a7dd of _0x112b81){if(_0x11582d[_0x46e9f8(0xe1)](_0x11582d[_0x46e9f8(0x1ae)],_0x11582d[_0x46e9f8(0x1ae)]))_0x1e85a2[_0x4449e1[_0x46e9f8(0x19c)]]={'chars':[..._0x426f33[_0x46e9f8(0xaa)]||[]],'multiplier':_0xb0a0a9[_0x46e9f8(0x9b)]||0x1,'enabled':!![]};else{let _0x543cb2=0x1,_0x2566db='';const _0x2ec2e2=_0x59a7dd['match'](/^精(\d+)(.+)$/);_0x2ec2e2?(_0x543cb2=_0x11582d['WgRRq'](parseInt,_0x2ec2e2[0x1]),_0x2566db=_0x2ec2e2[0x2]):_0x11582d['RvtsC'](_0x11582d[_0x46e9f8(0x105)],_0x11582d[_0x46e9f8(0xae)])?(!_0x494fe0[_0x348a17['name']]||DQMneA[_0x46e9f8(0x1d2)](_0x1598a3['const'],_0x382f36[_0x29d6e6[_0x46e9f8(0x19c)]][_0x46e9f8(0x128)]))&&(_0x26d019[_0x5b7ecd[_0x46e9f8(0x19c)]]=_0x34f296):(_0x2566db=_0x59a7dd,_0x543cb2=0x1);if(_0x2566db)_0xdf6ae3['push']({'name':_0x2566db,'refine':_0x543cb2});}}return _0xdf6ae3;}function extractYellowCount(_0x11a632){const _0x1a2d34=a0_0xc41068,_0x210e8f={'XALKV':function(_0x2ac090,_0x28e714){return _0x2ac090(_0x28e714);},'qCJBC':function(_0x39c037,_0x3cf528){return _0x39c037(_0x3cf528);}};let _0x543fe9=_0x11a632['match'](/(\d+)\s*黄/);if(_0x543fe9)return parseInt(_0x543fe9[0x1]);_0x543fe9=_0x11a632[_0x1a2d34(0x1c3)](/黄[数]?[：:]\s*(\d+)/);if(_0x543fe9)return _0x210e8f[_0x1a2d34(0x188)](parseInt,_0x543fe9[0x1]);_0x543fe9=_0x11a632[_0x1a2d34(0x1c3)](/【黄[数]?】\s*[：:]?\s*(\d+)/);if(_0x543fe9)return _0x210e8f[_0x1a2d34(0x1ab)](parseInt,_0x543fe9[0x1]);return 0x0;}function extractListCount(_0x10e1e6,_0x329cd5){const _0xa12b0a=a0_0xc41068,_0x83722d={'FIIxc':function(_0x4eec39,_0x5aa2fd,_0x461d5a){return _0x4eec39(_0x5aa2fd,_0x461d5a);}},_0x458df8=_0x83722d[_0xa12b0a(0x16a)](extractSection,_0x10e1e6,_0x329cd5);if(!_0x458df8)return 0x0;const _0x206a1a=_0x458df8[_0xa12b0a(0x226)](/[,，、\s]+/)[_0xa12b0a(0xda)](_0x2cfc60=>_0x2cfc60[_0xa12b0a(0x88)]>0x0);return _0x206a1a[_0xa12b0a(0x88)];}function extractListItems(_0x20ae86,_0x36e6ff){const _0x160e0c=a0_0xc41068,_0x1a220f={'fwPsQ':function(_0x4ccf93,_0x2c2312,_0x19956f){return _0x4ccf93(_0x2c2312,_0x19956f);}},_0x5cc635=_0x1a220f[_0x160e0c(0x1ce)](extractSection,_0x20ae86,_0x36e6ff);if(!_0x5cc635)return[];return _0x5cc635[_0x160e0c(0x226)](/[,，、\s]+/)[_0x160e0c(0xda)](_0x50b2da=>_0x50b2da[_0x160e0c(0x88)]>0x0);}function parseAccountInfo(_0x296d17){const _0xc7aab4=a0_0xc41068,_0x52ee40={'OQjId':function(_0x4a6555,_0xbf6489){return _0x4a6555===_0xbf6489;},'XcZbm':function(_0x3a8375,_0x173f74){return _0x3a8375===_0x173f74;},'qVafQ':function(_0xc2afc9,_0x69b852){return _0xc2afc9(_0x69b852);},'IzMRq':function(_0xb1ddec,_0x13fc45,_0x9cb73a){return _0xb1ddec(_0x13fc45,_0x9cb73a);},'EUHXD':_0xc7aab4(0x12c),'wepuS':function(_0x34a777,_0xcb7e9e){return _0x34a777===_0xcb7e9e;},'QcjHI':_0xc7aab4(0x111),'rDxcZ':function(_0x24f0ea,_0x38a3a7){return _0x24f0ea===_0x38a3a7;},'hahcI':function(_0x26aa13,_0x4bac11){return _0x26aa13!==_0x4bac11;},'bidmN':'xjPIt','TKBUC':function(_0x49c583,_0x16b660,_0x22c42d){return _0x49c583(_0x16b660,_0x22c42d);},'CitcW':function(_0x29c3eb,_0x33bef3,_0x1d1bfe){return _0x29c3eb(_0x33bef3,_0x1d1bfe);},'KOqYb':_0xc7aab4(0x136),'fwOVW':_0xc7aab4(0x1da),'FNAjx':function(_0xbf4852,_0x213603,_0x7c0ed){return _0xbf4852(_0x213603,_0x7c0ed);},'VsCnk':'铸潮波纹','gbqyP':function(_0x2c924f,_0x598c0d,_0x3bba7d){return _0x2c924f(_0x598c0d,_0x3bba7d);},'mtuTB':function(_0x1b33da,_0x1c9e17){return _0x1b33da!==_0x1c9e17;},'pbrCv':_0xc7aab4(0x200),'qaRXf':function(_0x1225ab,_0x4e63c5){return _0x1225ab(_0x4e63c5);},'DcYsX':function(_0x467d55,_0x21be5f){return _0x467d55+_0x21be5f;},'SZlUO':function(_0x16b5f7,_0x50aa3b,_0x372aa6){return _0x16b5f7(_0x50aa3b,_0x372aa6);},'yxaqz':'车架模组','Dfaxq':_0xc7aab4(0x172),'Yjysp':function(_0x5ed678,_0x310573){return _0x5ed678+_0x310573;},'GkdbJ':function(_0x25c5d9,_0x5ca947,_0x55d913){return _0x25c5d9(_0x5ca947,_0x55d913);},'wmlkW':function(_0x593b7b,_0x3581ea,_0x71cd6c){return _0x593b7b(_0x3581ea,_0x71cd6c);},'PiMxT':function(_0x50057c,_0x2aa467){return _0x50057c+_0x2aa467;},'tPiAD':function(_0x4b0e58,_0x355604){return _0x4b0e58/_0x355604;}},_0x148759={'characters':[],'weapons':[],'starSound':0x0,'moonPhase':0x0,'aftermathCoral':0x0,'floatGoldRipple':0x0,'castTideRipple':0x0,'yellowCount':0x0,'outfitCount':0x0,'motoCount':0x0,'vehicleFrameCount':0x0,'paintCount':0x0,'pulls':0x0,'rawText':_0x296d17||''};if(!_0x296d17)return _0x148759;const _0x51d004=_0x52ee40[_0xc7aab4(0x12a)](extractSection,_0x296d17,_0x52ee40['EUHXD']);_0x51d004&&(_0x148759['characters']=_0x52ee40[_0xc7aab4(0xbd)](parseCharacters,_0x51d004));_0x52ee40[_0xc7aab4(0xa9)](_0x148759[_0xc7aab4(0xc1)]['length'],0x0)&&(_0x148759[_0xc7aab4(0xc1)]=_0x52ee40[_0xc7aab4(0xbd)](findCharsInText,_0x296d17));let _0x1169c1=_0x52ee40[_0xc7aab4(0x12a)](extractSection,_0x296d17,_0x52ee40[_0xc7aab4(0x1b2)]);_0x1169c1&&(_0x148759[_0xc7aab4(0x18e)]=_0x52ee40[_0xc7aab4(0xbd)](parseWeapons,_0x1169c1));if(_0x52ee40[_0xc7aab4(0x20c)](_0x148759[_0xc7aab4(0x18e)][_0xc7aab4(0x88)],0x0)){if(_0x52ee40['hahcI'](_0x52ee40['bidmN'],_0x52ee40[_0xc7aab4(0x170)])){const _0xeb9536=_0x2769ee?_0x4434af[_0x1a2cc7[_0xc7aab4(0x19c)]]||_0x46b72b[_0xbd0d6a[_0xc7aab4(0x19c)]]:_0x2816a4[_0x4be352[_0xc7aab4(0x19c)]];return _0x52ee40[_0xc7aab4(0x208)](_0xeb9536,_0x30d939['name'])&&_0x451992[_0xc7aab4(0x1ef)](_0xbe2210[_0xc7aab4(0x19c)]);}else{_0x1169c1=_0x52ee40[_0xc7aab4(0x12a)](extractSection,_0x296d17,'武器');if(_0x1169c1){if(_0x52ee40['rDxcZ'](_0xc7aab4(0x15f),_0xc7aab4(0xc3))){if(VQuGog[_0xc7aab4(0x1f8)](_0x347f43,_0x585f98))_0x1fdae8[_0xc7aab4(0x207)](_0x4e4406);}else _0x148759[_0xc7aab4(0x18e)]=_0x52ee40[_0xc7aab4(0xbd)](parseWeapons,_0x1169c1);}}}_0x52ee40[_0xc7aab4(0x1f8)](_0x148759['weapons']['length'],0x0)&&(_0x1169c1=_0x52ee40[_0xc7aab4(0x1d0)](extractSection,_0x296d17,_0xc7aab4(0x1a4)),_0x1169c1&&(_0x148759[_0xc7aab4(0x18e)]=_0x52ee40[_0xc7aab4(0xbd)](parseWeapons,_0x1169c1)));_0x148759[_0xc7aab4(0x1f3)]=_0x52ee40[_0xc7aab4(0x10c)](extractNumber,_0x296d17,'星声'),_0x148759[_0xc7aab4(0xd3)]=extractNumber(_0x296d17,'月相'),_0x148759[_0xc7aab4(0x1ac)]=_0x52ee40[_0xc7aab4(0x10c)](extractNumber,_0x296d17,_0x52ee40[_0xc7aab4(0x20f)]),_0x148759[_0xc7aab4(0x10d)]=_0x52ee40[_0xc7aab4(0x1d0)](extractNumber,_0x296d17,_0x52ee40[_0xc7aab4(0x20d)]),_0x148759[_0xc7aab4(0x18d)]=_0x52ee40[_0xc7aab4(0x177)](extractNumber,_0x296d17,_0x52ee40[_0xc7aab4(0x1a5)]),_0x148759[_0xc7aab4(0xd1)]=extractYellowCount(_0x296d17),_0x148759['outfitCount']=_0x52ee40['CitcW'](extractListCount,_0x296d17,'服饰');if(_0x148759[_0xc7aab4(0x17d)]===0x0){const _0x1df4c8=_0x52ee40['gbqyP'](extractSection,_0x296d17,'皮肤');if(_0x1df4c8){if(_0x52ee40[_0xc7aab4(0x14e)](_0x52ee40[_0xc7aab4(0x120)],_0xc7aab4(0x200)))_0x5cd880=_0x2f5ebd[_0xc7aab4(0x1c3)](/^(.+?)\((\d+)命\)$/),_0x3558cd?(_0x1c8743=_0x34c481[0x1],_0x4391d6=VQuGog[_0xc7aab4(0xbd)](_0x56a319,_0x2df850[0x2])):(_0x128457=_0x4a9dd8,_0x505e78=0x0);else{const _0x1755a5=_0x52ee40['qaRXf'](parseInt,_0x1df4c8);_0x148759[_0xc7aab4(0x17d)]=_0x52ee40[_0xc7aab4(0xde)](isNaN,_0x1755a5)?_0x52ee40['IzMRq'](extractListCount,_0x296d17,'皮肤'):_0x1755a5;}}}return _0x148759['motoCount']=_0x52ee40[_0xc7aab4(0x218)](_0x52ee40[_0xc7aab4(0x12b)](extractListCount,_0x296d17,_0x52ee40[_0xc7aab4(0x173)])+_0x52ee40[_0xc7aab4(0x12b)](extractListCount,_0x296d17,'车架'),_0x52ee40[_0xc7aab4(0x10c)](extractListCount,_0x296d17,'摩托')),_0x148759[_0xc7aab4(0x145)]=extractListCount(_0x296d17,_0x52ee40['Dfaxq']),_0x148759[_0xc7aab4(0x95)]=_0x52ee40[_0xc7aab4(0x104)](_0x52ee40['GkdbJ'](extractListCount,_0x296d17,_0x52ee40[_0xc7aab4(0x173)]),_0x52ee40[_0xc7aab4(0x21c)](extractListCount,_0x296d17,'车架')),_0x148759[_0xc7aab4(0x1de)]=_0x52ee40[_0xc7aab4(0x194)](extractListCount,_0x296d17,'涂装'),_0x148759[_0xc7aab4(0x1f5)]=_0x52ee40[_0xc7aab4(0x1b8)](_0x52ee40[_0xc7aab4(0x1b8)](_0x52ee40[_0xc7aab4(0x104)](_0x148759[_0xc7aab4(0x1f3)]/0xa0,_0x52ee40[_0xc7aab4(0x92)](_0x148759['moonPhase'],0xa0)),_0x52ee40['tPiAD'](_0x148759[_0xc7aab4(0x1ac)],0x8)),_0x148759[_0xc7aab4(0x10d)])+_0x148759[_0xc7aab4(0x18d)],_0x148759;}function checkHasSigWeapon(_0x402856,_0x54d763,_0x163ae1){const _0x525936=a0_0xc41068,_0x42b272=_sigWeaponsOverride?_sigWeaponsOverride[_0x402856]||SIG_WEAPONS[_0x402856]:SIG_WEAPONS[_0x402856];if(!_0x42b272)return![];if(_0x54d763&&_0x54d763[_0x525936(0xcc)](_0x620c59=>_0x620c59===_0x42b272||_0x620c59[_0x525936(0x1ef)](_0x42b272)||_0x42b272['includes'](_0x620c59)))return!![];if(_0x163ae1&&_0x163ae1[_0x525936(0x1ef)](_0x42b272))return!![];return![];}function calcConstPremium(_0x39ad9f,_0x3aed99,_0x1516a4){const _0x1db3e8=a0_0xc41068,_0x95c1b={'UwUZY':function(_0x33ab4b,_0x735498){return _0x33ab4b(_0x735498);},'yNrDn':function(_0x3362f3,_0x480d80){return _0x3362f3(_0x480d80);},'XWIqr':function(_0x1fd145,_0x519837){return _0x1fd145!==_0x519837;},'vKFTi':_0x1db3e8(0x14f),'oaeVT':function(_0x460cc5,_0x5ce9e6){return _0x460cc5>_0x5ce9e6;}};_0x1516a4=_0x1516a4||weights||DEFAULT_WEIGHTS;const _0x5bb3b5=_0x1516a4[_0x1db3e8(0xa7)]||{},_0x99e68b=_0x5bb3b5[_0x39ad9f];if(!_0x99e68b||_0x3aed99<=0x0)return 0x0;let _0x42db6e=0x0;for(const _0x29bd2d of Object[_0x1db3e8(0x142)](_0x99e68b)){const _0x194a60=_0x95c1b[_0x1db3e8(0x166)](parseInt,_0x29bd2d);if(!_0x95c1b[_0x1db3e8(0x150)](isNaN,_0x194a60)&&_0x3aed99>=_0x194a60){if(_0x95c1b[_0x1db3e8(0x1f4)](_0x1db3e8(0x14f),_0x95c1b[_0x1db3e8(0x132)]))_0x4261f3[_0x1db3e8(0xfc)]=_0x4bf5d3[_0x1db3e8(0xfc)];else{const _0x2f4caf=_0x99e68b[_0x29bd2d]||0x0;if(_0x95c1b[_0x1db3e8(0xfe)](_0x2f4caf,_0x42db6e))_0x42db6e=_0x2f4caf;}}}return _0x42db6e;}function getCharValue(_0x562338,_0x33d2a9,_0x5a65aa){const _0x3147ae=a0_0xc41068,_0x44da2e={'WURBi':function(_0x53d6a9,_0x55fb60){return _0x53d6a9!=_0x55fb60;},'RjoeC':function(_0x15e5b6,_0x3b6ba4){return _0x15e5b6!=_0x3b6ba4;},'XGQpw':function(_0x3977a4,_0x120f3e){return _0x3977a4!=_0x120f3e;},'APWWe':function(_0x1d538b,_0x158909){return _0x1d538b!==_0x158909;},'gZUtA':_0x3147ae(0x187),'ykVQb':function(_0x403834,_0x7628c){return _0x403834*_0x7628c;},'ARZOq':function(_0x45c141,_0x59732d){return _0x45c141*_0x59732d;},'abXqY':function(_0x227231,_0x10223){return _0x227231>=_0x10223;},'lznAe':function(_0x2f4073,_0x1ea05e){return _0x2f4073*_0x1ea05e;},'ELYXm':function(_0xd34853,_0x2cdd76){return _0xd34853>=_0x2cdd76;},'OfJfU':function(_0x147eb2,_0x3f44c7){return _0x147eb2*_0x3f44c7;},'DRnuQ':function(_0x1f58d8,_0x55801d){return _0x1f58d8*_0x55801d;},'TRPrd':function(_0x57dc34,_0x40ad58){return _0x57dc34!=_0x40ad58;},'xOdSJ':function(_0xe6094d,_0x5dd989){return _0xe6094d!=_0x5dd989;},'MBlJV':function(_0x419c59,_0x181988){return _0x419c59+_0x181988;},'Wwmwy':function(_0x1cb326,_0x5e0f9c){return _0x1cb326>=_0x5e0f9c;}};_0x5a65aa=_0x5a65aa||weights||DEFAULT_WEIGHTS;const _0x52d8d2=_0x5a65aa[_0x3147ae(0x16d)]||{},_0x20ac6b=_0x44da2e['WURBi'](_0x52d8d2[_0x562338[_0x3147ae(0x19c)]],null)?_0x52d8d2[_0x562338[_0x3147ae(0x19c)]]:_0x562338['price'];if(_0x562338[_0x3147ae(0x1cf)]){const _0x21189c=_0x44da2e[_0x3147ae(0x129)](_0x5a65aa['hotC0Mult'],null)?_0x5a65aa['hotC0Mult']:0x1,_0x2cc635=_0x44da2e[_0x3147ae(0x129)](_0x5a65aa[_0x3147ae(0xbb)],null)?_0x5a65aa[_0x3147ae(0xbb)]:0x2,_0x136c6b=_0x44da2e['RjoeC'](_0x5a65aa['hotC6Mult'],null)?_0x5a65aa[_0x3147ae(0x1f0)]:0x3,_0x33c6a5=_0x44da2e[_0x3147ae(0xaf)](_0x5a65aa['hotStepMult'],null)?_0x5a65aa[_0x3147ae(0x1b1)]:0.08,_0x5b03a8=_0x5a65aa[_0x3147ae(0x1a1)]!=null?_0x5a65aa[_0x3147ae(0x1a1)]:0.15,_0x2ca215=_0x44da2e[_0x3147ae(0x160)](_0x5a65aa[_0x3147ae(0x176)],null)?_0x5a65aa['hotNoSigC6Mult']:0.25;if(!_0x33d2a9){if(_0x44da2e[_0x3147ae(0xbe)](_0x44da2e[_0x3147ae(0x219)],_0x3147ae(0xf7))){if(_0x562338[_0x3147ae(0x128)]>=0x6)return _0x44da2e[_0x3147ae(0x215)](_0x20ac6b,_0x2ca215);return _0x44da2e[_0x3147ae(0x196)](_0x20ac6b,_0x5b03a8);}else{const _0x197e3d=_0x2ea398[_0x3147ae(0xaa)][_0x3147ae(0xdf)](_0x2cab84=>_0x1e0bc6[_0x3147ae(0x229)](_0x2cab84));if(_0x197e3d)_0x1330e8['push'](_0x5cfc5b);}}if(_0x44da2e[_0x3147ae(0x22a)](_0x562338[_0x3147ae(0x128)],0x6))return _0x44da2e[_0x3147ae(0xb8)](_0x20ac6b,_0x136c6b);if(_0x44da2e[_0x3147ae(0x152)](_0x562338[_0x3147ae(0x128)],0x3))return _0x44da2e[_0x3147ae(0x215)](_0x20ac6b,_0x2cc635);if(_0x562338[_0x3147ae(0x128)]>=0x1)return _0x20ac6b*(_0x21189c+_0x44da2e[_0x3147ae(0xe9)](_0x562338[_0x3147ae(0x128)],_0x33c6a5));return _0x44da2e['DRnuQ'](_0x20ac6b,_0x21189c);}else{const _0x4c400f=_0x44da2e['WURBi'](_0x5a65aa[_0x3147ae(0x1d9)],null)?_0x5a65aa[_0x3147ae(0x1d9)]:0x1,_0x5380f6=_0x44da2e[_0x3147ae(0x163)](_0x5a65aa[_0x3147ae(0x197)],null)?_0x5a65aa['coldC3Bonus']:0x3,_0x1198b0=_0x44da2e[_0x3147ae(0x97)](_0x5a65aa['coldC6Bonus'],null)?_0x5a65aa[_0x3147ae(0x1e7)]:0x5,_0x2567b0=_0x5a65aa[_0x3147ae(0xea)]!=null?_0x5a65aa[_0x3147ae(0xea)]:0x2;let _0x1cf48c=_0x44da2e[_0x3147ae(0xd8)](_0x20ac6b,_0x44da2e[_0x3147ae(0x215)](_0x562338[_0x3147ae(0x128)],_0x4c400f));if(_0x44da2e[_0x3147ae(0x22a)](_0x562338[_0x3147ae(0x128)],0x3))_0x1cf48c+=_0x5380f6;if(_0x44da2e[_0x3147ae(0xd7)](_0x562338['const'],0x6))_0x1cf48c+=_0x1198b0;if(_0x33d2a9)_0x1cf48c+=_0x2567b0;return _0x1cf48c;}}function calculatePullValue(_0xef7345){const _0x39cc2f=a0_0xc41068,_0x2dc357={'maERZ':function(_0x10c27e,_0x1b579d){return _0x10c27e+_0x1b579d;},'Mvsfv':function(_0xcba9f4,_0x1fb83c){return _0xcba9f4==_0x1fb83c;},'vlZBh':_0x39cc2f(0x22e),'GvdtW':'NSQbH','zFHOh':function(_0x128b4e,_0x327f1e){return _0x128b4e!=_0x327f1e;},'wXijH':function(_0x242aea,_0x4e8e63){return _0x242aea==_0x4e8e63;},'VeEku':function(_0x5a0755,_0x26ad24){return _0x5a0755===_0x26ad24;},'oeLnj':function(_0x4dd0f4,_0x42292a){return _0x4dd0f4>=_0x42292a;},'IMkJa':function(_0xaec666,_0x52d979){return _0xaec666<_0x52d979;},'qCaSX':function(_0x2b8b46,_0x18f688){return _0x2b8b46*_0x18f688;},'CQAsq':function(_0x1ddc81,_0x5719f0){return _0x1ddc81===_0x5719f0;},'VstaG':function(_0x1d380d,_0x3c10b0){return _0x1d380d+_0x3c10b0;},'epyCu':function(_0x391895,_0x100813){return _0x391895+_0x100813;}},_0x1d6b8f=weights&&weights[_0x39cc2f(0x162)]||DEFAULT_PULL_TIERS,_0x38ffdd={};for(const _0x18145b of _0x1d6b8f){const _0x173eec=_0x2dc357[_0x39cc2f(0xe3)]((_0x18145b[_0x39cc2f(0x1cb)]||0x0)+'-',_0x2dc357[_0x39cc2f(0x16f)](_0x18145b[_0x39cc2f(0x181)],null)?_0x2dc357[_0x39cc2f(0x9c)]:_0x18145b[_0x39cc2f(0x181)]);_0x38ffdd[_0x173eec]=_0x18145b;}const _0x205a23=Object[_0x39cc2f(0x1c9)](_0x38ffdd),_0xbafae1=[..._0x205a23][_0x39cc2f(0x14b)]((_0x4092e0,_0x5b49dc)=>(_0x4092e0[_0x39cc2f(0x1cb)]||0x0)-(_0x5b49dc[_0x39cc2f(0x1cb)]||0x0));let _0x432000=_0xbafae1[0x0]||{'minPull':0x0,'maxPull':Infinity,'perPullPrice':0.8};for(const _0x1231ff of _0xbafae1){if(_0x2dc357[_0x39cc2f(0x202)]===_0x2dc357[_0x39cc2f(0x202)]){const _0x3ba3b9=_0x2dc357[_0x39cc2f(0xb3)](_0x1231ff['minPull'],null)?_0x1231ff['minPull']:0x0,_0x421302=_0x2dc357['wXijH'](_0x1231ff[_0x39cc2f(0x181)],null)||_0x2dc357[_0x39cc2f(0xc9)](_0x1231ff['maxPull'],Infinity)?Infinity:_0x1231ff[_0x39cc2f(0x181)];if(_0x2dc357[_0x39cc2f(0x1d8)](_0xef7345,_0x3ba3b9)&&_0x2dc357[_0x39cc2f(0x1fe)](_0xef7345,_0x421302)){_0x432000={..._0x1231ff,'minPull':_0x3ba3b9,'maxPull':_0x421302};break;}}else _0x44e39b[_0x2b6635]={'tier':_0x188f31,'price':_0x48c598[_0x39cc2f(0xa3)],'isHot':_0x3824c3[_0x39cc2f(0x1cf)]};}const _0x1d8721=_0x2dc357[_0x39cc2f(0xfd)](_0xef7345,_0x432000[_0x39cc2f(0x186)]),_0x513838=_0x2dc357[_0x39cc2f(0x16f)](_0x432000[_0x39cc2f(0x181)],null)||_0x2dc357[_0x39cc2f(0x133)](_0x432000[_0x39cc2f(0x181)],Infinity)?Infinity:_0x432000[_0x39cc2f(0x181)],_0x2ead1c=_0x2dc357[_0x39cc2f(0xc9)](_0x513838,Infinity)?_0x2dc357['VstaG'](_0x432000[_0x39cc2f(0x1cb)],'抽+'):_0x2dc357['epyCu'](_0x2dc357[_0x39cc2f(0x1b5)](_0x432000[_0x39cc2f(0x1cb)],'~'),_0x513838)+'抽';return{'pulls':Math[_0x39cc2f(0x227)](_0xef7345),'perPull':_0x432000['perPullPrice'],'tierLabel':_0x2ead1c,'total':Math[_0x39cc2f(0x227)](_0x1d8721)};}function getYellowCoeff(_0x455f69){const _0x63e0f6=a0_0xc41068,_0x3764e2={'GLUIB':_0x63e0f6(0xca),'PIhHL':function(_0x4ef5c2,_0x3f53b3){return _0x4ef5c2+_0x3f53b3;},'XTtdY':_0x63e0f6(0x11a),'avBTy':_0x63e0f6(0x102),'BZuBl':'[（(]\x5cd+[）)]\x5cs*[：:]?\x5cs*\x5cn?\x5cs*([\x5cs\x5cS]*?)(?=','cjbpU':_0x63e0f6(0xa1),'SmCAu':function(_0x4d7747,_0x23722b){return _0x4d7747!==_0x23722b;},'XrsOP':_0x63e0f6(0x1bd),'Mdigl':function(_0x2f8f5e,_0x18751f){return _0x2f8f5e+_0x18751f;},'RIBRs':function(_0x4fb4d5,_0x304039){return _0x4fb4d5==_0x304039;},'ICLYN':function(_0x3cf5f8,_0xfe39f2){return _0x3cf5f8==_0xfe39f2;},'TdiSh':function(_0x1533cb,_0x2e8284){return _0x1533cb===_0x2e8284;},'ZDztm':function(_0x37a9ec,_0x5112d0){return _0x37a9ec>=_0x5112d0;},'sUveI':function(_0x197163,_0x143396){return _0x197163<_0x143396;},'YioLU':_0x63e0f6(0x114),'YOAEf':function(_0x3cf181,_0x18cac9){return _0x3cf181===_0x18cac9;},'GrWOK':function(_0x64e6ae,_0x165ce2){return _0x64e6ae+_0x165ce2;},'OMQNQ':function(_0x496b99,_0x324179){return _0x496b99+_0x324179;}},_0x4e029f=weights&&weights[_0x63e0f6(0x168)]||DEFAULT_YELLOW_TIERS,_0x392fd5={};for(const _0x4b2f06 of _0x4e029f){if(_0x3764e2[_0x63e0f6(0x113)](_0x3764e2['XrsOP'],'WpEWV')){const _0x1e6ba5=_0x3764e2[_0x63e0f6(0x8d)](_0x3764e2[_0x63e0f6(0x1f1)](_0x4b2f06['minYellow']||0x0,'-'),_0x3764e2['RIBRs'](_0x4b2f06[_0x63e0f6(0x1c2)],null)?_0x63e0f6(0x22e):_0x4b2f06[_0x63e0f6(0x1c2)]);_0x392fd5[_0x1e6ba5]=_0x4b2f06;}else{const _0x3792bb=_0x46540a[_0x63e0f6(0x19e)](/[.*+?^${}()|[\]\\]/g,dJlzXO[_0x63e0f6(0xab)]),_0x5ac7c9=_0x1b593e['filter'](_0x2ed44e=>_0x2ed44e!==_0x445b18)[_0x63e0f6(0x93)](_0x5ddd5e=>'【?'+_0x5ddd5e[_0x63e0f6(0x19e)](/[.*+?^${}()|[\]\\]/g,_0x63e0f6(0xca))+_0x63e0f6(0x1f7)),_0x148abc=dJlzXO[_0x63e0f6(0x8d)](dJlzXO[_0x63e0f6(0x8d)](dJlzXO[_0x63e0f6(0x8d)](_0x3792bb,dJlzXO[_0x63e0f6(0x167)]),_0x5ac7c9['join']('|')),dJlzXO[_0x63e0f6(0x213)]),_0x33096c=_0x301df3[_0x63e0f6(0x1c3)](new _0xe95ad3(_0x148abc));if(_0x33096c)return _0x33096c[0x1][_0x63e0f6(0x1bf)]();const _0x2f36ce=dJlzXO[_0x63e0f6(0x8d)](_0x3792bb,dJlzXO[_0x63e0f6(0xec)])+_0x5ac7c9[_0x63e0f6(0x21d)]('|')+dJlzXO[_0x63e0f6(0x213)],_0xcd405d=_0x6e39dd[_0x63e0f6(0x1c3)](new _0x756deb(_0x2f36ce));if(_0xcd405d)return _0xcd405d[0x1]['trim']();const _0x2617ab=dJlzXO[_0x63e0f6(0x8d)](dJlzXO[_0x63e0f6(0x8d)]('【'+_0x3792bb+dJlzXO[_0x63e0f6(0x1ca)],_0x5ac7c9[_0x63e0f6(0x21d)]('|')),dJlzXO['avBTy']),_0x356aa1=_0x4e949c[_0x63e0f6(0x1c3)](new _0x3ff46d(_0x2617ab));if(_0x356aa1)return _0x356aa1[0x1][_0x63e0f6(0x1bf)]();return'';}}const _0x3bca4a=Object[_0x63e0f6(0x1c9)](_0x392fd5);let _0xbc6e38=_0x3bca4a[0x0]||{'minYellow':0x0,'maxYellow':Infinity,'coefficient':0.3};for(const _0x3e8970 of _0x3bca4a){const _0x3ef612=_0x3764e2[_0x63e0f6(0x161)](_0x3e8970[_0x63e0f6(0x1c2)],null)||_0x3764e2[_0x63e0f6(0x22c)](_0x3e8970[_0x63e0f6(0x1c2)],Infinity)?Infinity:_0x3e8970['maxYellow'];if(_0x3764e2['ZDztm'](_0x455f69,_0x3e8970['minYellow'])&&_0x3764e2[_0x63e0f6(0xe4)](_0x455f69,_0x3ef612)){if(_0x3764e2[_0x63e0f6(0x22c)](_0x63e0f6(0x192),_0x3764e2[_0x63e0f6(0x190)]))_0x43a53e=_0x2577dc(_0x4273aa[0x1]),_0x49651d=_0x27da7f[0x2];else{_0xbc6e38={..._0x3e8970,'maxYellow':_0x3ef612};break;}}}const _0x12024c=_0x3764e2[_0x63e0f6(0x224)](_0xbc6e38[_0x63e0f6(0x1c2)],Infinity)?_0x3764e2[_0x63e0f6(0xb4)](_0xbc6e38[_0x63e0f6(0xf4)],'黄+'):_0x3764e2[_0x63e0f6(0x8d)](_0x3764e2[_0x63e0f6(0x15d)](_0xbc6e38[_0x63e0f6(0xf4)],'~'),_0xbc6e38[_0x63e0f6(0x1c2)])+'黄';return{'yellowCount':_0x455f69,'coefficient':_0xbc6e38[_0x63e0f6(0x1a6)],'tierLabel':_0x12024c};}function calculateValue(_0x30a064,_0x4cfb98){const _0x3ce63e=a0_0xc41068,_0x212105={'CYytL':function(_0x32d524,_0x1b33dd){return _0x32d524===_0x1b33dd;},'kDwTO':function(_0x4d19e6,_0x247e91){return _0x4d19e6===_0x247e91;},'VHPSk':function(_0x1b7857,_0x514594){return _0x1b7857(_0x514594);},'FgTtx':function(_0x330398,_0x20f9d1,_0x19e78a){return _0x330398(_0x20f9d1,_0x19e78a);},'LTJHa':function(_0x5a964b,_0x471f63){return _0x5a964b(_0x471f63);},'JsEVs':function(_0xd3949){return _0xd3949();},'FScnA':function(_0x51b8c0,_0x48ff6b){return _0x51b8c0*_0x48ff6b;},'RoXXK':function(_0x89172a,_0xa78c4e){return _0x89172a+_0xa78c4e;},'TzIsY':function(_0x3dfb8e,_0x1da2ce){return _0x3dfb8e+_0x1da2ce;},'KTGgT':function(_0x14af61,_0x210abe){return _0x14af61+_0x210abe;},'nRCND':function(_0x1e7856,_0x571e66){return _0x1e7856+_0x571e66;},'EeHWY':_0x3ce63e(0x20b),'Seevz':')\x20加权','jQJGT':function(_0x20eb71,_0x91df63){return _0x20eb71*_0x91df63;},'eXzZI':function(_0x12bffb,_0x25f0b2){return _0x12bffb(_0x25f0b2);},'YPRpJ':function(_0x427984,_0x5eecef){return _0x427984>_0x5eecef;},'tMQPL':function(_0x3b54c9,_0x141135){return _0x3b54c9||_0x141135;},'NcMoY':function(_0x4037b8,_0x6c0a16,_0x458097,_0x3bf4ec){return _0x4037b8(_0x6c0a16,_0x458097,_0x3bf4ec);},'oYEgW':function(_0x42b8cc,_0x158888){return _0x42b8cc+_0x158888;},'ezWJC':function(_0x1e0bdb,_0xb976a8){return _0x1e0bdb>=_0xb976a8;},'IZSrW':_0x3ce63e(0x116),'vNlbt':function(_0x4b858e,_0x111569){return _0x4b858e!=_0x111569;},'LfOGt':function(_0x503937,_0xa37e46){return _0x503937===_0xa37e46;},'JUlYN':_0x3ce63e(0x18f),'oORog':'pHvSu','IEXxY':function(_0x48bd43,_0xa0bc5){return _0x48bd43+_0xa0bc5;},'WlHJH':_0x3ce63e(0x151),'GIsfW':function(_0x207400,_0x1ada19){return _0x207400+_0x1ada19;},'uGijG':_0x3ce63e(0x1c8),'DPXiO':_0x3ce63e(0x8c),'ZVFFe':function(_0x50d545,_0x41ec5c){return _0x50d545!==_0x41ec5c;},'UNPwX':_0x3ce63e(0x169),'TKIgW':function(_0x2955ca,_0x260a24){return _0x2955ca-_0x260a24;},'pQNOo':function(_0x40bf3a,_0x4bf264){return _0x40bf3a!==_0x4bf264;},'lzZDr':'krTEp','TtmSm':function(_0x16bc8c,_0x27b49d){return _0x16bc8c+_0x27b49d;},'WsCwd':function(_0x599c95,_0x232291){return _0x599c95+_0x232291;},'WCjpr':function(_0x208f00,_0x28b8a7){return _0x208f00/_0x28b8a7;},'WCfJW':function(_0x1dc379,_0x369e4f){return _0x1dc379-_0x369e4f;},'uXRBf':function(_0x3a0167,_0x5a9e9a){return _0x3a0167-_0x5a9e9a;},'jaikI':function(_0x3a38ec,_0x3ba70c){return _0x3a38ec!==_0x3ba70c;},'dBTCt':'oLkjM','XXKHd':_0x3ce63e(0x228),'sHear':function(_0x1d651a,_0x363728){return _0x1d651a!==_0x363728;},'CstRA':_0x3ce63e(0x1aa),'SofSh':_0x3ce63e(0x198),'ohiQD':function(_0xf090c5,_0x5c982b){return _0xf090c5!==_0x5c982b;},'uTrYZ':_0x3ce63e(0x1c0),'qhJea':function(_0x5a1f4f,_0x2bbfcb,_0x89f86e,_0x522130){return _0x5a1f4f(_0x2bbfcb,_0x89f86e,_0x522130);},'sCIGG':function(_0x3bb15e,_0x55b448){return _0x3bb15e*_0x55b448;},'vtoHQ':function(_0x59d71b,_0x3ac71e){return _0x59d71b>_0x3ac71e;},'ecFMC':_0x3ce63e(0x1e3),'okKmN':function(_0x2d1384,_0xe0277f){return _0x2d1384+_0xe0277f;},'mKELD':function(_0x4defb3,_0x3f6506){return _0x4defb3+_0x3f6506;},'sxRSh':function(_0x25711a,_0x369471){return _0x25711a+_0x369471;},'NxTTS':_0x3ce63e(0x144),'rtQoA':_0x3ce63e(0x141),'cqGve':function(_0x1fcfb8,_0x72dbec,_0x2a5d95){return _0x1fcfb8(_0x72dbec,_0x2a5d95);},'gvFGa':function(_0x143f0f,_0x3f671d){return _0x143f0f*_0x3f671d;},'FVBwW':function(_0x5a509b,_0x13ceb3){return _0x5a509b+_0x13ceb3;},'gxcmW':function(_0x5fc265,_0x5afb25){return _0x5fc265(_0x5afb25);},'tOeUj':function(_0x4c66b9,_0x5e54c9){return _0x4c66b9+_0x5e54c9;},'EfGPf':function(_0x3f5cbc,_0x4a5721){return _0x3f5cbc+_0x4a5721;},'ubRaa':function(_0x22759a,_0x1a7c36){return _0x22759a*_0x1a7c36;},'RDCSl':function(_0x2ae7d5,_0x450fc3){return _0x2ae7d5>_0x450fc3;},'uvpoG':function(_0x578bfd,_0x479330){return _0x578bfd-_0x479330;},'bMvBv':function(_0x5523e1,_0x7ea8ea){return _0x5523e1*_0x7ea8ea;},'FCSur':function(_0x47ea1b,_0x1947ae){return _0x47ea1b*_0x1947ae;},'SJvFu':function(_0x237488,_0x50b961){return _0x237488/_0x50b961;},'rEUTN':function(_0x28ede3,_0x1e1266){return _0x28ede3*_0x1e1266;},'laBLm':function(_0x4f896f,_0x3c3fb1){return _0x4f896f*_0x3c3fb1;},'KymEZ':function(_0x492cc5,_0x543831){return _0x492cc5/_0x543831;}},_0x1d699f=_0x212105[_0x3ce63e(0x18c)](weights,DEFAULT_WEIGHTS),_0x4bbd6b=_0x30a064['weapons'][_0x3ce63e(0x93)](_0xcbde7d=>_0xcbde7d[_0x3ce63e(0x19c)]),_0xaf467b=_0x30a064[_0x3ce63e(0x1e4)]||'',_0x345357=_0x1d699f[_0x3ce63e(0x134)]||FULL_CONST_WEIGHT;let _0x301fe8=0x0,_0x1b47c8=0x0;const _0x2544cb=[],_0x3f39ae=[],_0x353a27=[];for(const _0x3ec213 of _0x30a064[_0x3ce63e(0xc1)]){const _0x73449d=checkHasSigWeapon(_0x3ec213['name'],_0x4bbd6b,_0xaf467b),_0x394f62=getCharValue(_0x3ec213,_0x73449d,_0x1d699f),_0x114265=_0x212105[_0x3ce63e(0x205)](calcConstPremium,_0x3ec213['name'],_0x3ec213[_0x3ce63e(0x128)],_0x1d699f);_0x301fe8+=_0x212105[_0x3ce63e(0x1b9)](_0x394f62,_0x114265);if(_0x73449d&&!_0x353a27[_0x3ce63e(0x1ef)](_0x3ec213['name']))_0x353a27[_0x3ce63e(0x207)](_0x3ec213[_0x3ce63e(0x19c)]);let _0x39dd98=0x0;if(_0x212105['ezWJC'](_0x3ec213['const'],0x6)){if(_0x212105[_0x3ce63e(0x119)]===_0x3ce63e(0x116))_0x39dd98=_0x212105[_0x3ce63e(0x19d)](_0x345357[_0x3ec213[_0x3ce63e(0x126)]],null)?_0x345357[_0x3ec213[_0x3ce63e(0x126)]]:FULL_CONST_WEIGHT[_0x3ec213['tier']]||0x0,_0x1b47c8+=_0x39dd98;else{const _0x2015e7=_0x18aaaa[_0x3ce63e(0x18e)][_0x3ce63e(0x124)](function(_0x5545e8){const _0x3d0e8e=_0x3ce63e;return _0x212105[_0x3d0e8e(0xf0)](_0x5545e8['name'],_0x162844)||_0x5545e8[_0x3d0e8e(0x19c)]['includes'](_0x34a8b5)||_0x572c3a[_0x3d0e8e(0x1ef)](_0x5545e8[_0x3d0e8e(0x19c)]);});if(_0x2015e7)_0x5496b4=_0x2015e7[_0x3ce63e(0x216)]||0x1;}}let _0x5dd303=0x0;if(_0x73449d){if(_0x212105['LfOGt'](_0x212105[_0x3ce63e(0x1b4)],_0x212105['oORog']))for(const _0x11aeee of _0x24cffb[_0x3ce63e(0x199)]){_0x32adda[_0x11aeee]={'tier':_0x1e195f,'price':_0x339d41[_0x3ce63e(0xa3)],'isHot':_0x13dc12[_0x3ce63e(0x1cf)]};}else{const _0x2a5ae8=_sigWeaponsOverride?_sigWeaponsOverride[_0x3ec213[_0x3ce63e(0x19c)]]||SIG_WEAPONS[_0x3ec213['name']]:SIG_WEAPONS[_0x3ec213[_0x3ce63e(0x19c)]];if(_0x2a5ae8){const _0x4f4aa7=_0x30a064[_0x3ce63e(0x18e)]['find'](function(_0x504f06){const _0xdedef9=_0x3ce63e;return _0x212105[_0xdedef9(0x9e)](_0x504f06['name'],_0x2a5ae8)||_0x504f06[_0xdedef9(0x19c)][_0xdedef9(0x1ef)](_0x2a5ae8)||_0x2a5ae8[_0xdedef9(0x1ef)](_0x504f06[_0xdedef9(0x19c)]);});if(_0x4f4aa7)_0x5dd303=_0x4f4aa7['refine']||0x1;}}}_0x2544cb['push']({'name':_0x3ec213[_0x3ce63e(0x19c)],'const':_0x3ec213[_0x3ce63e(0x128)],'tier':_0x3ec213[_0x3ce63e(0x126)],'isHot':!!_0x3ec213[_0x3ce63e(0x1cf)],'hasSig':_0x73449d,'sigRefine':_0x5dd303,'premium':_0x114265,'value':Math[_0x3ce63e(0x227)](_0x212105[_0x3ce63e(0x16e)](_0x394f62,_0x114265))}),_0x3f39ae['push']({'name':_0x3ec213[_0x3ce63e(0x19c)],'const':_0x3ec213[_0x3ce63e(0x128)],'tier':_0x3ec213[_0x3ce63e(0x126)],'hasSig':_0x73449d,'value':Math[_0x3ce63e(0x227)](_0x212105[_0x3ce63e(0x1b0)](_0x394f62,_0x114265))});}let _0x5114c9=0x0;const _0x1a464d=[],_0x3949f9=_0x1d699f[_0x3ce63e(0xeb)]||[],_0x24fab1=_0x2544cb[_0x3ce63e(0xda)](_0x5b79b3=>_0x5b79b3[_0x3ce63e(0x128)]>=0x6&&_0x5b79b3[_0x3ce63e(0x126)]&&_0x5b79b3['tier']!=='E'),_0x40547a={};for(const _0xd65d34 of _0x24fab1){if(_0x212105[_0x3ce63e(0xf0)](_0x212105[_0x3ce63e(0x130)],_0x3ce63e(0x211))){const _0x3b60d1=YMdMJY[_0x3ce63e(0x117)](_0x151037,_0x4cdab2);_0x3a083b['outfitCount']=_0xd7453e(_0x3b60d1)?YMdMJY[_0x3ce63e(0xe8)](_0x3b3dc2,_0x1ee38b,'皮肤'):_0x3b60d1;}else _0x40547a[_0xd65d34[_0x3ce63e(0x126)]]=_0x212105[_0x3ce63e(0x21a)](_0x40547a[_0xd65d34['tier']]||0x0,0x1);}let _0x4d4cc1=0x0;if(_0x1b47c8>=0x2&&_0x212105['YPRpJ'](_0x3949f9[_0x3ce63e(0x88)],0x0)){if(_0x3ce63e(0x1c8)!==_0x212105['uGijG'])_0x306019[_0x3ce63e(0xc1)]=YMdMJY['LTJHa'](_0x3fff9f,_0x7ebd2b);else{const _0x3f1649=[..._0x3949f9][_0x3ce63e(0x14b)]((_0x476e96,_0x2728dd)=>_0x476e96[_0x3ce63e(0x16c)]-_0x2728dd[_0x3ce63e(0x16c)]);let _0x4d6a6c=null,_0x5b66e3=null;for(const _0x1b648b of _0x3f1649){if(_0x212105[_0x3ce63e(0x9e)](_0x212105[_0x3ce63e(0x16b)],'hOMfB'))return{'weights':_0x25a385(),'charTiers':_0x336094,'sigWeapons':_0x553c06,'constPremiums':_0xcb383,'teams':_0x32af84,'pullTiers':_0x33ad09,'yellowTiers':_0x271217,'charPrices':YMdMJY[_0x3ce63e(0x8a)](_0x3b394c),'needSigWeapons':_0xec77ef,'weightLabels':_0x566444};else{if(_0x1b47c8>=_0x1b648b[_0x3ce63e(0x16c)])_0x4d6a6c=_0x1b648b;else{if(!_0x5b66e3)_0x5b66e3=_0x1b648b;}}}if(_0x4d6a6c&&_0x5b66e3){if(_0x212105['ZVFFe'](_0x212105[_0x3ce63e(0x118)],_0x212105['UNPwX'])){const _0x2ee6e2=_0x2bc9d7[_0x3ce63e(0xc1)][_0x3ce63e(0xcc)](_0x383d3b=>{const _0x1f9c70=_0x3ce63e,_0x5b4263=_0x2722ec?_0x117864[_0x383d3b[_0x1f9c70(0x19c)]]||_0x4e3500[_0x383d3b[_0x1f9c70(0x19c)]]:_0x5a5b2f[_0x383d3b['name']];return _0x5b4263===_0x362623[_0x1f9c70(0x19c)]&&_0x518eec[_0x1f9c70(0x1ef)](_0x383d3b[_0x1f9c70(0x19c)]);});return{'name':_0x177566[_0x3ce63e(0x19c)],'refine':_0x28d815[_0x3ce63e(0x216)],'isSig':_0x2ee6e2};}else{const _0x201cd3=_0x212105[_0x3ce63e(0x214)](_0x1b47c8,_0x4d6a6c[_0x3ce63e(0x16c)])/_0x212105['TKIgW'](_0x5b66e3[_0x3ce63e(0x16c)],_0x4d6a6c[_0x3ce63e(0x16c)]);_0x4d4cc1=Math[_0x3ce63e(0x148)](_0x212105['jQJGT'](_0x5b66e3[_0x3ce63e(0xf8)],_0x201cd3),_0x4d6a6c[_0x3ce63e(0xf8)]);}}else{if(_0x4d6a6c){if(_0x212105['pQNOo'](_0x212105['lzZDr'],_0x212105[_0x3ce63e(0x1a7)])){if(_0xb31ef9[_0x3ce63e(0x128)]>=0x6)return YMdMJY[_0x3ce63e(0x1df)](_0x3905f3,_0x39e8ac);return YMdMJY['FScnA'](_0x5aad34,_0x205ecc);}else _0x4d4cc1=_0x4d6a6c[_0x3ce63e(0xf8)];}}}}if(_0x212105['YPRpJ'](_0x4d4cc1,0x0)){_0x5114c9=_0x301fe8*_0x4d4cc1;const _0x5dbea8=Object[_0x3ce63e(0x1d7)](_0x40547a)[_0x3ce63e(0x14b)]((_0x3f00f8,_0x328566)=>(_0x345357[_0x3f00f8[0x0]]||0x0)<(_0x345357[_0x328566[0x0]]||0x0)?0x1:-0x1)['map'](([_0x5240ef,_0x29b064])=>_0x29b064+'个'+_0x5240ef+'级')['join']('+');_0x1a464d['push'](_0x212105[_0x3ce63e(0x174)](_0x212105[_0x3ce63e(0xed)](_0x212105[_0x3ce63e(0x174)](_0x212105[_0x3ce63e(0x110)](_0x212105[_0x3ce63e(0x174)](_0x212105['EeHWY'],_0x5dbea8)+')\x20加权',_0x1b47c8['toFixed'](0x1)),'\x20+'),Math[_0x3ce63e(0x227)](_0x212105['FScnA'](_0x4d4cc1,0x64))),'%'));}const _0x20627c=_0x1d699f[_0x3ce63e(0x1d4)]||[];let _0x51eeeb=0x0;if(_0x1b47c8>=0x1&&_0x212105[_0x3ce63e(0x147)](_0x20627c[_0x3ce63e(0x88)],0x0)){const _0x4627e2=[..._0x20627c]['sort']((_0x3d1a21,_0x46d7fb)=>_0x3d1a21[_0x3ce63e(0x16c)]-_0x46d7fb[_0x3ce63e(0x16c)]);let _0x687c21=null,_0x149bd9=null;for(const _0x2818c7 of _0x4627e2){if(_0x212105['ezWJC'](_0x1b47c8,_0x2818c7[_0x3ce63e(0x16c)]))_0x687c21=_0x2818c7;else{if(!_0x149bd9)_0x149bd9=_0x2818c7;}}if(_0x687c21&&_0x149bd9){const _0x10d881=_0x212105['WCjpr'](_0x212105[_0x3ce63e(0xad)](_0x1b47c8,_0x687c21[_0x3ce63e(0x16c)]),_0x212105[_0x3ce63e(0xce)](_0x149bd9[_0x3ce63e(0x16c)],_0x687c21[_0x3ce63e(0x16c)]));_0x51eeeb=Math['max'](_0x212105[_0x3ce63e(0x1df)](_0x149bd9[_0x3ce63e(0xf8)],_0x10d881),_0x687c21[_0x3ce63e(0xf8)]);}else{if(_0x687c21){if(_0x212105[_0x3ce63e(0x179)](_0x212105[_0x3ce63e(0x1d6)],_0x212105[_0x3ce63e(0x13c)]))_0x51eeeb=_0x687c21[_0x3ce63e(0xf8)];else{const _0x34a4a2=_0x54ab23(_0x34a716,_0x22d228);if(!_0x34a4a2)return[];return _0x34a4a2[_0x3ce63e(0x226)](/[,，、\s]+/)[_0x3ce63e(0xda)](_0x8ed4d8=>_0x8ed4d8[_0x3ce63e(0x88)]>0x0);}}}}let _0x50a3f1=0x0;const _0x7c88be=[],_0x26708d=new Set(_0x30a064['characters'][_0x3ce63e(0x93)](_0x5e0eb4=>_0x5e0eb4['name'])),_0x187b72=weights&&weights['teams']||DEFAULT_TEAMS,_0x20759d=[];for(const _0x540ece of _0x187b72){if(_0x212105[_0x3ce63e(0x112)](_0x212105['CstRA'],_0x212105[_0x3ce63e(0xe7)]))_0x415691[_0x3ce63e(0x88)]>=_0x54de96[_0x3ce63e(0x16c)]&&(_0x2654a5=_0x3a2beb[_0x3ce63e(0x148)](_0xaea367,_0x5d66e0[_0x3ce63e(0x222)]));else{const _0xdc4d4a=_0x540ece[_0x3ce63e(0xaa)]['every'](_0x38708d=>_0x26708d[_0x3ce63e(0x229)](_0x38708d));if(_0xdc4d4a)_0x20759d[_0x3ce63e(0x207)](_0x540ece);}}const _0x5597b5=_0x1d699f[_0x3ce63e(0x135)]||[],_0x5d63da={};for(const _0x5c7600 of _0x5597b5){_0x5d63da[_0x5c7600['count']]=_0x5c7600;}const _0x5bedba=Object[_0x3ce63e(0x1c9)](_0x5d63da);let _0x516296=0x1;for(const _0x25b69b of _0x5bedba){if(_0x212105[_0x3ce63e(0x9e)](_0x212105[_0x3ce63e(0x1ba)],'DoYEK'))_0x20759d['length']>=_0x25b69b[_0x3ce63e(0x16c)]&&(_0x516296=Math[_0x3ce63e(0x148)](_0x516296,_0x25b69b['coef']));else{_0x4ff96d=_0x212105[_0x3ce63e(0x1df)](_0x50ee8c,_0x5be56b);const _0xe218ce=_0x5e2da9[_0x3ce63e(0x1d7)](_0x554d9e)[_0x3ce63e(0x14b)]((_0x2b0c2b,_0x417322)=>(_0x40991e[_0x2b0c2b[0x0]]||0x0)<(_0x19a801[_0x417322[0x0]]||0x0)?0x1:-0x1)[_0x3ce63e(0x93)](([_0x5839bf,_0x26d69c])=>_0x26d69c+'个'+_0x5839bf+'级')[_0x3ce63e(0x21d)]('+');_0x535a8e[_0x3ce63e(0x207)](_0x212105[_0x3ce63e(0xf6)](_0x212105[_0x3ce63e(0x174)](_0x212105[_0x3ce63e(0x174)](_0x212105[_0x3ce63e(0x221)](_0x212105[_0x3ce63e(0x1b0)](_0x212105[_0x3ce63e(0x1cd)]+_0xe218ce,_0x212105[_0x3ce63e(0x184)]),_0x2d08eb[_0x3ce63e(0x89)](0x1)),'\x20+'),_0x4ea47d[_0x3ce63e(0x227)](_0x212105['jQJGT'](_0x307f78,0x64))),'%'));}}for(const _0x163c9a of _0x20759d){for(const _0x55ea66 of _0x163c9a[_0x3ce63e(0xaa)]){const _0x933571=_0x30a064['characters'][_0x3ce63e(0x124)](_0x546e50=>_0x546e50[_0x3ce63e(0x19c)]===_0x55ea66);if(_0x933571){if(_0x212105['ohiQD'](_0x212105[_0x3ce63e(0x9d)],_0x212105[_0x3ce63e(0x9d)])){const _0x35bece=YMdMJY[_0x3ce63e(0x100)](_0x2bfeeb,_0x111ff8);if(!YMdMJY[_0x3ce63e(0x100)](_0x4cfbe4,_0x35bece)&&_0x5428e6>=_0x35bece){const _0x36f6e9=_0x187bf6[_0x1b20d6]||0x0;if(YMdMJY[_0x3ce63e(0x147)](_0x36f6e9,_0x5c8897))_0x51b825=_0x36f6e9;}}else{const _0x16f37f=checkHasSigWeapon(_0x55ea66,_0x4bbd6b,_0xaf467b),_0x5e2bad=_0x212105[_0x3ce63e(0x121)](getCharValue,_0x933571,_0x16f37f,_0x1d699f);_0x50a3f1+=_0x212105['sCIGG'](_0x5e2bad,_0x212105[_0x3ce63e(0xad)](_0x163c9a[_0x3ce63e(0x9b)],0x1));}}}}_0x50a3f1*=_0x516296;if(_0x212105[_0x3ce63e(0x1db)](_0x20759d['length'],0x0)){if(_0x212105[_0x3ce63e(0x1a8)]===_0x3ce63e(0x1e3)){const _0x579de3=_0x20759d[_0x3ce63e(0x93)](_0x544566=>_0x544566['name'])[_0x3ce63e(0x21d)]('/');_0x7c88be[_0x3ce63e(0x207)](_0x212105[_0x3ce63e(0x10e)](_0x212105[_0x3ce63e(0x189)](_0x212105[_0x3ce63e(0x21b)](_0x20759d[_0x3ce63e(0x88)],_0x212105[_0x3ce63e(0x1b3)]),_0x579de3)+')\x20×',_0x516296));}else _0x444e24[_0x53d032]&&(_0x2aa8ce[_0x263a9f]=_0x6e8e39[_0x2f150c]);}const _0x4dbde1=_0x212105[_0x3ce63e(0x117)](calculatePullValue,_0x30a064[_0x3ce63e(0x1f5)]),_0x3107f2=_0x4dbde1[_0x3ce63e(0xdc)],_0x241082=Math[_0x3ce63e(0x227)](_0x212105[_0x3ce63e(0x1df)](_0x3107f2,_0x51eeeb)),_0x420cdf=_0x3107f2+_0x241082,_0x530e55=_0x212105[_0x3ce63e(0xe8)](extractListItems,_0x30a064['rawText'],'服饰'),_0x290692=extractListItems(_0x30a064[_0x3ce63e(0x1e4)],_0x3ce63e(0x172))[_0x3ce63e(0x1b6)](_0x212105[_0x3ce63e(0xe8)](extractListItems,_0x30a064[_0x3ce63e(0x1e4)],'摩托')),_0xe6b53c=_0x212105[_0x3ce63e(0xe8)](extractListItems,_0x30a064['rawText'],_0x212105['rtQoA'])[_0x3ce63e(0x1b6)](_0x212105[_0x3ce63e(0xe8)](extractListItems,_0x30a064[_0x3ce63e(0x1e4)],'车架')),_0x31f6c2=_0x212105[_0x3ce63e(0xc4)](extractListItems,_0x30a064[_0x3ce63e(0x1e4)],'涂装'),_0x11fc25=_0x212105['sCIGG'](_0x530e55[_0x3ce63e(0x88)],_0x1d699f[_0x3ce63e(0xb6)]||0x0),_0x285d59=_0x290692[_0x3ce63e(0x88)]*(_0x1d699f[_0x3ce63e(0x11d)]||0x0),_0x522239=_0xe6b53c[_0x3ce63e(0x88)]*(_0x1d699f[_0x3ce63e(0x19a)]||0x0),_0x2fb7e0=_0x212105[_0x3ce63e(0xc6)](_0x31f6c2[_0x3ce63e(0x88)],_0x1d699f[_0x3ce63e(0xc0)]||0x0),_0x45ce85=_0x212105[_0x3ce63e(0xed)](_0x212105[_0x3ce63e(0xed)](_0x212105['FVBwW'](_0x11fc25,_0x285d59),_0x522239),_0x2fb7e0),_0x50a462=_0x30a064[_0x3ce63e(0x18e)]['map'](_0x14d44e=>{const _0x256e79=_0x3ce63e,_0x33a70e={'adWDf':function(_0x13bff0,_0x47edf8){return _0x13bff0===_0x47edf8;}},_0xfc3b9c=_0x30a064[_0x256e79(0xc1)][_0x256e79(0xcc)](_0x3f85f2=>{const _0x46cbbc=_0x256e79,_0x287901=_sigWeaponsOverride?_sigWeaponsOverride[_0x3f85f2[_0x46cbbc(0x19c)]]||SIG_WEAPONS[_0x3f85f2['name']]:SIG_WEAPONS[_0x3f85f2[_0x46cbbc(0x19c)]];return _0x33a70e['adWDf'](_0x287901,_0x14d44e[_0x46cbbc(0x19c)])&&_0x353a27['includes'](_0x3f85f2['name']);});return{'name':_0x14d44e['name'],'refine':_0x14d44e['refine'],'isSig':_0xfc3b9c};}),_0x2b256e=_0x212105[_0x3ce63e(0x1d3)](getYellowCoeff,_0x30a064[_0x3ce63e(0xd1)]),_0x30ba1e=_0x2b256e['coefficient'],_0x3d2604=(_0x30a064['rawText']||'')[_0x3ce63e(0x1c3)](/(\d+)级/),_0x1c9796=_0x3d2604?_0x212105[_0x3ce63e(0x117)](parseInt,_0x3d2604[0x1]):0x1,_0x379fa2=(_0x30a064[_0x3ce63e(0x1e4)]||'')['match'](/(\d+)个四星角色/),_0x36901d=_0x379fa2?_0x212105[_0x3ce63e(0x100)](parseInt,_0x379fa2[0x1]):0x0,_0x451674=_0x30a064[_0x3ce63e(0xc1)]['length'],_0x5478fc=_0x30a064[_0x3ce63e(0xc1)][_0x3ce63e(0xda)](_0x4dd8f1=>_0x4dd8f1[_0x3ce63e(0x128)]>=0x6)[_0x3ce63e(0x88)],_0x112102=_0x212105[_0x3ce63e(0xb9)](_0x212105[_0x3ce63e(0x1b9)](_0x212105[_0x3ce63e(0xb5)](_0x301fe8,_0x5114c9),_0x50a3f1),_0x420cdf)+_0x45ce85,_0x3afd9a=_0x212105['ubRaa'](_0x112102,_0x30ba1e),_0x961adf=_0x212105[_0x3ce63e(0x183)](_0x4cfb98,0x0)?_0x212105['uvpoG'](_0x3afd9a,_0x4cfb98)/_0x4cfb98*0x64:0x0,_0x169fc9=Math[_0x3ce63e(0x227)](_0x212105[_0x3ce63e(0x1c7)](_0x3afd9a-_0x4cfb98,0x64))/0x64;return{'totalValue':_0x212105[_0x3ce63e(0xbc)](Math[_0x3ce63e(0x227)](_0x212105[_0x3ce63e(0xf1)](_0x3afd9a,0x64)),0x64),'diff':_0x169fc9,'charValue':_0x212105['SJvFu'](Math['round'](_0x301fe8*0x64),0x64),'fullConstPremium':Math[_0x3ce63e(0x227)](_0x212105['gvFGa'](_0x5114c9,0x64))/0x64,'teamPremium':Math[_0x3ce63e(0x227)](_0x212105['rEUTN'](_0x50a3f1,0x64))/0x64,'pullValue':Math[_0x3ce63e(0x227)](_0x212105['laBLm'](_0x420cdf,0x64))/0x64,'otherResources':_0x45ce85,'yellowCoeff':_0x30ba1e,'weightedFullConst':_0x1b47c8,'satisfiedTeams':_0x20759d[_0x3ce63e(0x93)](_0x412902=>_0x412902['name']),'ratio':Math[_0x3ce63e(0x227)](_0x961adf*0xa)/0xa,'charBreakdown':_0x2544cb,'charDetails':_0x3f39ae,'hasSignatureWeapons':_0x353a27,'weaponDetails':_0x50a462,'matchedTeams':_0x20759d,'c6Bonus':{'value':Math[_0x3ce63e(0x227)](_0x5114c9),'notes':_0x1a464d},'teamBonus':{'value':Math[_0x3ce63e(0x227)](_0x50a3f1),'notes':_0x7c88be},'pullInfo':{'pulls':_0x4dbde1[_0x3ce63e(0x1f5)],'perPull':_0x4dbde1['perPull'],'tierLabel':_0x4dbde1[_0x3ce63e(0xd0)],'baseTotal':_0x212105[_0x3ce63e(0x13b)](Math[_0x3ce63e(0x227)](_0x212105[_0x3ce63e(0xc6)](_0x3107f2,0x64)),0x64),'c6Bonus':_0x241082,'c6Multiplier':_0x51eeeb,'total':_0x420cdf},'yellowInfo':_0x2b256e,'outfits':_0x530e55,'motoAccessories':_0x290692,'motoFrames':_0xe6b53c,'paints':_0x31f6c2,'level':_0x1c9796,'fourStarChars':_0x36901d,'fiveStarChars':_0x451674,'maxConstChars':_0x5478fc};}function evaluateWithPrice(_0x49975c,_0x887f90,_0x13727a){const _0x537a4f=a0_0xc41068,_0x1dcd74={'NLykl':function(_0x2964e0,_0x2a6fa1){return _0x2964e0(_0x2a6fa1);},'CwqiM':function(_0x528667,_0x21d16f){return _0x528667/_0x21d16f;},'cOYWE':function(_0x5cc723,_0x3ec23c,_0x2cdcd8){return _0x5cc723(_0x3ec23c,_0x2cdcd8);},'FGmoB':function(_0x5e4009,_0x5b5685){return _0x5e4009>_0x5b5685;},'FBObQ':function(_0x235bb2,_0x2b5164){return _0x235bb2*_0x2b5164;},'ZwpeA':function(_0x2edfac,_0x195c5d){return _0x2edfac-_0x195c5d;},'YJoce':function(_0x38fe2a,_0x5ebca2){return _0x38fe2a/_0x5ebca2;},'kxbsE':function(_0x127e98,_0x151150){return _0x127e98!==_0x151150;},'UUKsd':_0x537a4f(0x107),'CyTlS':function(_0x3b8db0,_0x508faf){return _0x3b8db0(_0x508faf);},'gfxxC':function(_0x28bd6b,_0x489734,_0x34b14c){return _0x28bd6b(_0x489734,_0x34b14c);},'OYLDP':function(_0x194597,_0x38cddf){return _0x194597*_0x38cddf;},'tdduE':function(_0x72fd33,_0x2775fb){return _0x72fd33===_0x2775fb;},'vPrhh':_0x537a4f(0x13f)},_0x4c0c19=weights,_0x3c82df=_sigWeaponsOverride;if(_0x13727a){if(_0x1dcd74[_0x537a4f(0x15b)](_0x537a4f(0x107),_0x1dcd74['UUKsd'])){const _0x29634b=_0x1dcd74[_0x537a4f(0x193)](_0xc9825f,_0x1acf4e),_0x1066aa=_0x1dcd74['CwqiM'](_0x2dda84,0x64),_0x3bb761=_0x1dcd74[_0x537a4f(0xf2)](_0x5c327c,_0x29634b,_0x1066aa);let _0x46d6c8=0x0;_0x1dcd74[_0x537a4f(0x8e)](_0x1066aa,0x0)&&(_0x46d6c8=_0x1dcd74[_0x537a4f(0x22d)](_0x1dcd74['CwqiM'](_0x1dcd74[_0x537a4f(0x1fc)](_0x3bb761[_0x537a4f(0x1ee)],_0x1066aa),_0x1066aa),0x64));_0x46d6c8=_0x1dcd74[_0x537a4f(0x103)](_0x1735f9[_0x537a4f(0x227)](_0x1dcd74['FBObQ'](_0x46d6c8,0x64)),0x64);const _0x343331={'characters':_0x29634b[_0x537a4f(0xc1)],'weapons':_0x29634b[_0x537a4f(0x18e)],'starSounds':_0x29634b['starSound'],'moonPhases':_0x29634b[_0x537a4f(0xd3)],'coral':_0x29634b['aftermathCoral'],'goldenRipples':_0x29634b[_0x537a4f(0x10d)],'tideRipples':_0x29634b['castTideRipple'],'yellowCount':_0x29634b[_0x537a4f(0xd1)],'outfits':_0x29634b[_0x537a4f(0x17d)],'motorcycles':_0x29634b['motoCount'],'pulls':_0x29634b['pulls'],'rawText':_0x29634b[_0x537a4f(0x1e4)]},_0x2c3a46={..._0x3bb761,'finalValue':_0x3bb761[_0x537a4f(0x1ee)],'characterValue':_0x3bb761[_0x537a4f(0x108)],'c6Premium':_0x3bb761[_0x537a4f(0x90)],'teamPremium':_0x3bb761[_0x537a4f(0x11c)],'pullValue':_0x3bb761[_0x537a4f(0x1e6)],'resourceValue':_0x3bb761['otherResources'],'yellowMultiplier':_0x3bb761[_0x537a4f(0x1a9)],'characters':_0x3bb761[_0x537a4f(0x1f6)]};return{'info':_0x343331,'details':_0x2c3a46,'priceInYuan':_0x1066aa,'costPerformance':_0x46d6c8};}else weights=buildDefaultWeights(_0x13727a),_sigWeaponsOverride=weights[_0x537a4f(0xfc)]||null;}try{const _0x19f05c=_0x1dcd74[_0x537a4f(0x1c1)](parseAccountInfo,_0x49975c),_0x1728ba=_0x887f90/0x64,_0x47e24b=_0x1dcd74['gfxxC'](calculateValue,_0x19f05c,_0x1728ba);let _0x2acdb5=0x0;_0x1dcd74['FGmoB'](_0x1728ba,0x0)&&(_0x2acdb5=_0x1dcd74[_0x537a4f(0x22d)](_0x1dcd74['ZwpeA'](_0x47e24b['totalValue'],_0x1728ba)/_0x1728ba,0x64));_0x2acdb5=_0x1dcd74[_0x537a4f(0x103)](Math['round'](_0x1dcd74['OYLDP'](_0x2acdb5,0x64)),0x64);const _0x4701c6={'characters':_0x19f05c[_0x537a4f(0xc1)],'weapons':_0x19f05c['weapons'],'starSounds':_0x19f05c['starSound'],'moonPhases':_0x19f05c[_0x537a4f(0xd3)],'coral':_0x19f05c[_0x537a4f(0x1ac)],'goldenRipples':_0x19f05c['floatGoldRipple'],'tideRipples':_0x19f05c[_0x537a4f(0x18d)],'yellowCount':_0x19f05c[_0x537a4f(0xd1)],'outfits':_0x19f05c[_0x537a4f(0x17d)],'motorcycles':_0x19f05c[_0x537a4f(0x1e9)],'pulls':_0x19f05c[_0x537a4f(0x1f5)],'rawText':_0x19f05c[_0x537a4f(0x1e4)]},_0x49c49b={..._0x47e24b,'finalValue':_0x47e24b['totalValue'],'characterValue':_0x47e24b[_0x537a4f(0x108)],'c6Premium':_0x47e24b[_0x537a4f(0x90)],'teamPremium':_0x47e24b[_0x537a4f(0x11c)],'pullValue':_0x47e24b['pullValue'],'resourceValue':_0x47e24b[_0x537a4f(0x178)],'yellowMultiplier':_0x47e24b[_0x537a4f(0x1a9)],'characters':_0x47e24b['charBreakdown']};return{'info':_0x4701c6,'details':_0x49c49b,'priceInYuan':_0x1728ba,'costPerformance':_0x2acdb5};}finally{if(_0x1dcd74[_0x537a4f(0x98)](_0x537a4f(0x13f),_0x1dcd74[_0x537a4f(0xef)]))weights=_0x4c0c19,_sigWeaponsOverride=_0x3c82df;else{const _0x25210e=_0x3ebbd6(_0xa20fe7,_0x4d6e39);if(!_0x25210e)return 0x0;const _0x2b65da=_0x25210e[_0x537a4f(0x226)](/[,，、\s]+/)['filter'](_0x5deda0=>_0x5deda0[_0x537a4f(0x88)]>0x0);return _0x2b65da[_0x537a4f(0x88)];}}}function generateShortDescription(_0x21d059){const _0x28233a=a0_0xc41068,_0x49214a={'MTmmp':function(_0x505391,_0x46369d){return _0x505391>=_0x46369d;},'pPWjw':function(_0x1e1dd9,_0x496d8c){return _0x1e1dd9===_0x496d8c;},'Imdxo':function(_0x299d5c,_0xec0cb){return _0x299d5c>_0xec0cb;}},_0x4e5071=_0x21d059[_0x28233a(0x12f)]&&_0x21d059[_0x28233a(0x12f)][_0x28233a(0xc1)]||[];if(_0x49214a[_0x28233a(0xa8)](_0x4e5071[_0x28233a(0x88)],0x0))return _0x28233a(0x14c);const _0x81e96f=[..._0x4e5071][_0x28233a(0x14b)]((_0x49fcbd,_0x1d7a8f)=>_0x1d7a8f[_0x28233a(0x123)]-_0x49fcbd[_0x28233a(0x123)])[_0x28233a(0xf9)](0x0,0x5),_0x18b131=_0x81e96f[_0x28233a(0x93)](_0x19dba3=>{const _0x453429=_0x28233a,_0x4b0015=_0x49214a[_0x453429(0x10b)](_0x19dba3['const'],0x6)?'满命':_0x19dba3[_0x453429(0x128)]+'命',_0xf192aa=_0x19dba3[_0x453429(0x1a0)]?'+专武':'';return''+_0x4b0015+_0x19dba3[_0x453429(0x19c)]+_0xf192aa;});let _0xe76b8e=_0x18b131[_0x28233a(0x21d)](',\x20');const _0x266e80=_0x21d059[_0x28233a(0x1a2)]&&_0x21d059[_0x28233a(0x1a2)][_0x28233a(0xd1)];return _0x49214a[_0x28233a(0xcf)](_0x266e80,0x0)&&(_0xe76b8e+=_0x28233a(0x1d1)+_0x266e80+'黄'),_0xe76b8e;}module[a0_0xc41068(0x225)]={'CHAR_TIERS':CHAR_TIERS,'SIG_WEAPONS':SIG_WEAPONS,'FULL_CONST_WEIGHT':FULL_CONST_WEIGHT,'CHAR_LOOKUP':CHAR_LOOKUP,'CHAR_ALIASES':CHAR_ALIASES,'SECTION_KEYWORDS':SECTION_KEYWORDS,'DEFAULT_WEIGHTS':DEFAULT_WEIGHTS,'DEFAULT_TEAMS':DEFAULT_TEAMS,'DEFAULT_PULL_TIERS':DEFAULT_PULL_TIERS,'DEFAULT_YELLOW_TIERS':DEFAULT_YELLOW_TIERS,'DEFAULT_CHAR_PRICES':DEFAULT_CHAR_PRICES,'DEFAULT_CONST_PREMIUMS':DEFAULT_CONST_PREMIUMS,'DEFAULT_NEED_SIG_WEAPONS':DEFAULT_NEED_SIG_WEAPONS,'buildDefaultCharPrices':buildDefaultCharPrices,'buildDefaultTeamPremiums':buildDefaultTeamPremiums,'buildDefaultWeights':buildDefaultWeights,'getDefaults':getDefaults,'parseAccountInfo':parseAccountInfo,'extractSection':extractSection,'extractNumber':extractNumber,'parseCharacters':parseCharacters,'findCharsInText':findCharsInText,'parseWeapons':parseWeapons,'extractYellowCount':extractYellowCount,'extractListCount':extractListCount,'extractListItems':extractListItems,'checkHasSigWeapon':checkHasSigWeapon,'calcConstPremium':calcConstPremium,'getCharValue':getCharValue,'calculatePullValue':calculatePullValue,'getYellowCoeff':getYellowCoeff,'calculateValue':calculateValue,'evaluateWithPrice':evaluateWithPrice,'generateShortDescription':generateShortDescription};
+'use strict';
+const CONFIG_VERSION = 0x3, CHAR_TIERS = {
+        'S': {
+            'price': 0x32,
+            'isHot': !![],
+            'chars': [
+                '爱弥斯',
+                '绯雪',
+                '卡提希娅'
+            ]
+        },
+        'A': {
+            'price': 0x23,
+            'isHot': !![],
+            'chars': [
+                '琳奈',
+                '千咲',
+                '穗穗',
+                '莫宁',
+                '秧秧玄翎',
+                '弗洛洛',
+                '洛瑟菈'
+            ]
+        },
+        'B': {
+            'price': 0x19,
+            'isHot': !![],
+            'chars': [
+                '达妮娅',
+                '夏空',
+                '露西',
+                '嘉贝莉娜',
+                '奥古斯塔',
+                '仇远',
+                '尤诺',
+                '陆赫斯',
+                '赞妮',
+                '布兰特',
+                '守岸人',
+                '西格莉卡'
+            ]
+        },
+        'C': {
+            'price': 0x5,
+            'isHot': ![],
+            'chars': [
+                '露帕',
+                '珂莱塔',
+                '菲比',
+                '坎特蕾拉',
+                '椿'
+            ]
+        },
+        'D': {
+            'price': 0x3,
+            'isHot': ![],
+            'chars': [
+                '忌炎',
+                '吟霖',
+                '相里要',
+                '今汐',
+                '长离',
+                '折枝',
+                '洛可可',
+                '丽贝卡'
+            ]
+        },
+        'E': {
+            'price': 0x2,
+            'isHot': ![],
+            'chars': [
+                '维里奈',
+                '卡卡罗',
+                '安可',
+                '凌阳',
+                '鉴心',
+                '秧秧'
+            ]
+        }
+    }, SIG_WEAPONS = {
+        '忌炎': '苍鳞千嶂',
+        '吟霖': '掣傀之手',
+        '今汐': '时和岁稔',
+        '长离': '赫奕流明',
+        '相里要': '诸方玄枢',
+        '椿': '裁春',
+        '珂莱塔': '死与舞',
+        '折枝': '琼枝冰绡',
+        '守岸人': '星序协响',
+        '洛瑟菈': '存帧',
+        '莫宁': '宙算仪轨',
+        '千咲': '昙切',
+        '爱弥斯': '永远的启明星',
+        '弗洛洛': '幽冥的忘忧章',
+        '卡提希娅': '不屈命定之冠',
+        '尤诺': '万物持存的注释',
+        '夏空': '林间的咏叹调',
+        '赞妮': '焰光裁定',
+        '坎特蕾拉': '海的呢喃',
+        '仇远': '裁竹',
+        '布兰特': '不灭航路',
+        '露帕': '焰痕',
+        '奥古斯塔': '驭冕铸雷之权',
+        '嘉贝莉娜': '光影双生',
+        '西格莉卡': '昭日译注',
+        '达妮娅': '赝作的矮星',
+        '菲比': '和光回唱',
+        '绯雪': '灼霜',
+        '琳奈': '溢彩荧辉',
+        '丽贝卡': '碎骨',
+        '陆赫斯': '白昼之脊',
+        '秧秧玄翎': '天之苍苍',
+        '穗穗': '栖霞饮露',
+        '露西': '蜃影'
+    }, FULL_CONST_WEIGHT = {
+        'S': 0x1,
+        'A': 0.6,
+        'B': 0.3,
+        'C': 0.2,
+        'D': 0.1,
+        'E': 0x0
+    }, DEFAULT_WEIGHTS = {
+        'fiveStarWeapon': 0x0,
+        'weaponRefineBonus': 0x2,
+        'hotC0Mult': 0x1,
+        'hotC3Mult': 0x2,
+        'hotC6Mult': 0x3,
+        'hotStepMult': 0.08,
+        'hotNoSigMult': 0.5,
+        'hotNoSigC6Mult': 0.5,
+        'coldStep': 0x0,
+        'coldC3Bonus': 0x0,
+        'coldC6Bonus': 0x0,
+        'coldSigBonus': 0x0,
+        'c6TierWeights': {
+            'S': 0x1,
+            'A': 0.6,
+            'B': 0.3,
+            'C': 0.2,
+            'D': 0.1,
+            'E': 0x0
+        },
+        'c6MultiBonus': [
+            {
+                'count': 0x2,
+                'bonus': 0.5
+            },
+            {
+                'count': 0x3,
+                'bonus': 0x1
+            },
+            {
+                'count': 0x4,
+                'bonus': 1.5
+            },
+            {
+                'count': 0x5,
+                'bonus': 0x2
+            },
+            {
+                'count': 0x6,
+                'bonus': 2.5
+            },
+            {
+                'count': 0x7,
+                'bonus': 0x3
+            },
+            {
+                'count': 0x8,
+                'bonus': 3.5
+            },
+            {
+                'count': 0x9,
+                'bonus': 0x4
+            },
+            {
+                'count': 0xa,
+                'bonus': 4.5
+            }
+        ],
+        'outfit': 0x2,
+        'motoAccessory': 0x0,
+        'motoFrame': 0xa,
+        'paint': 0x0,
+        'pullC6Bonus': [
+            {
+                'count': 0x1,
+                'bonus': 0.15
+            },
+            {
+                'count': 0x2,
+                'bonus': 0.25
+            },
+            {
+                'count': 0x3,
+                'bonus': 0.35
+            },
+            {
+                'count': 0x4,
+                'bonus': 0.45
+            },
+            {
+                'count': 0x5,
+                'bonus': 0.5
+            },
+            {
+                'count': 0x6,
+                'bonus': 0.55
+            },
+            {
+                'count': 0x7,
+                'bonus': 0.6
+            },
+            {
+                'count': 0x8,
+                'bonus': 0.65
+            },
+            {
+                'count': 0x9,
+                'bonus': 0.7
+            },
+            {
+                'count': 0xa,
+                'bonus': 0.75
+            },
+            {
+                'count': 0xb,
+                'bonus': 0.8
+            },
+            {
+                'count': 0xc,
+                'bonus': 0.85
+            },
+            {
+                'count': 0xd,
+                'bonus': 0.9
+            },
+            {
+                'count': 0xe,
+                'bonus': 0.95
+            },
+            {
+                'count': 0xf,
+                'bonus': 0x1
+            }
+        ],
+        'teamMultiBonus': [
+            {
+                'count': 0x2,
+                'coef': 1.05
+            },
+            {
+                'count': 0x3,
+                'coef': 1.1
+            },
+            {
+                'count': 0x4,
+                'coef': 1.15
+            },
+            {
+                'count': 0x5,
+                'coef': 1.2
+            },
+            {
+                'count': 0x6,
+                'coef': 1.25
+            },
+            {
+                'count': 0x7,
+                'coef': 1.3
+            },
+            {
+                'count': 0x8,
+                'coef': 1.35
+            },
+            {
+                'count': 0x9,
+                'coef': 1.4
+            },
+            {
+                'count': 0xa,
+                'coef': 1.45
+            }
+        ],
+        'flatDiscountRules': [{
+                'chars': [
+                    '爱弥斯',
+                    '绯雪',
+                    '卡提希娅'
+                ],
+                'maxConst': 0x3,
+                'discount': 0.9
+            }]
+    }, DEFAULT_TEAMS = [
+        {
+            'name': '绯洛千',
+            'members': [
+                '绯雪',
+                '洛瑟菈',
+                '千咲'
+            ],
+            'multiplier': 1.5
+        },
+        {
+            'name': '日月守',
+            'members': [
+                '奥古斯塔',
+                '尤诺',
+                '守岸人'
+            ],
+            'multiplier': 1.2
+        },
+        {
+            'name': '弗坎守',
+            'members': [
+                '弗洛洛',
+                '坎特蕾拉',
+                '守岸人'
+            ],
+            'multiplier': 1.2
+        },
+        {
+            'name': '爱达千',
+            'members': [
+                '爱弥斯',
+                '达妮娅',
+                '千咲'
+            ],
+            'multiplier': 1.2
+        },
+        {
+            'name': '卡夏千',
+            'members': [
+                '卡提希娅',
+                '夏空',
+                '千咲'
+            ],
+            'multiplier': 1.2
+        },
+        {
+            'name': '露丽守',
+            'members': [
+                '露西',
+                '丽贝卡',
+                '守岸人'
+            ],
+            'multiplier': 1.2
+        },
+        {
+            'name': '西仇守',
+            'members': [
+                '西格莉卡',
+                '仇远',
+                '守岸人'
+            ],
+            'multiplier': 1.2
+        },
+        {
+            'name': '嘉仇守',
+            'members': [
+                '嘉贝莉娜',
+                '仇远',
+                '守岸人'
+            ],
+            'multiplier': 1.2
+        },
+        {
+            'name': '爱琳莫',
+            'members': [
+                '爱弥斯',
+                '莫宁',
+                '琳奈'
+            ],
+            'multiplier': 1.5
+        },
+        {
+            'name': '三火队',
+            'members': [
+                '布兰特',
+                '露帕',
+                '长离'
+            ],
+            'multiplier': 1.1
+        },
+        {
+            'name': '赞菲守',
+            'members': [
+                '赞妮',
+                '菲比',
+                '守岸人'
+            ],
+            'multiplier': 1.1
+        }
+    ], DEFAULT_PULL_TIERS = [
+        {
+            'minPull': 0x0,
+            'maxPull': 0x64,
+            'perPullPrice': 0.7
+        },
+        {
+            'minPull': 0x64,
+            'maxPull': 0xc8,
+            'perPullPrice': 0.9
+        },
+        {
+            'minPull': 0xc8,
+            'maxPull': 0x12c,
+            'perPullPrice': 1.1
+        },
+        {
+            'minPull': 0x12c,
+            'maxPull': 0x190,
+            'perPullPrice': 1.3
+        },
+        {
+            'minPull': 0x190,
+            'maxPull': 0x1f4,
+            'perPullPrice': 1.5
+        },
+        {
+            'minPull': 0x1f4,
+            'maxPull': 0x258,
+            'perPullPrice': 1.8
+        },
+        {
+            'minPull': 0x258,
+            'maxPull': 0x2bc,
+            'perPullPrice': 0x2
+        },
+        {
+            'minPull': 0x2bc,
+            'maxPull': 0x320,
+            'perPullPrice': 2.2
+        },
+        {
+            'minPull': 0x320,
+            'maxPull': 0x384,
+            'perPullPrice': 2.4
+        },
+        {
+            'minPull': 0x384,
+            'maxPull': 0x3e8,
+            'perPullPrice': 2.6
+        },
+        {
+            'minPull': 0x3e8,
+            'maxPull': 0x44c,
+            'perPullPrice': 2.8
+        },
+        {
+            'minPull': 0x44c,
+            'maxPull': 0x4b0,
+            'perPullPrice': 0x3
+        },
+        {
+            'minPull': 0x4b0,
+            'maxPull': 0x514,
+            'perPullPrice': 3.2
+        },
+        {
+            'minPull': 0x514,
+            'maxPull': 0x578,
+            'perPullPrice': 3.5
+        },
+        {
+            'minPull': 0x578,
+            'maxPull': 0x270f,
+            'perPullPrice': 3.7
+        }
+    ], DEFAULT_YELLOW_TIERS = [
+        {
+            'minYellow': 0x0,
+            'maxYellow': 0xa,
+            'coefficient': 0.5
+        },
+        {
+            'minYellow': 0xa,
+            'maxYellow': 0x14,
+            'coefficient': 0.6
+        },
+        {
+            'minYellow': 0x14,
+            'maxYellow': 0x1e,
+            'coefficient': 0.7
+        },
+        {
+            'minYellow': 0x1e,
+            'maxYellow': 0x28,
+            'coefficient': 0.8
+        },
+        {
+            'minYellow': 0x28,
+            'maxYellow': 0x32,
+            'coefficient': 0.9
+        },
+        {
+            'minYellow': 0x32,
+            'maxYellow': 0x3c,
+            'coefficient': 0x1
+        },
+        {
+            'minYellow': 0x3c,
+            'maxYellow': 0x46,
+            'coefficient': 1.05
+        },
+        {
+            'minYellow': 0x46,
+            'maxYellow': 0x50,
+            'coefficient': 1.1
+        },
+        {
+            'minYellow': 0x50,
+            'maxYellow': 0x5a,
+            'coefficient': 1.15
+        },
+        {
+            'minYellow': 0x5a,
+            'maxYellow': 0x64,
+            'coefficient': 1.2
+        },
+        {
+            'minYellow': 0x64,
+            'maxYellow': 0x6e,
+            'coefficient': 1.25
+        },
+        {
+            'minYellow': 0x6e,
+            'maxYellow': 0x78,
+            'coefficient': 1.3
+        },
+        {
+            'minYellow': 0x78,
+            'maxYellow': 0x3e7,
+            'coefficient': 1.35
+        }
+    ], DEFAULT_CHAR_PRICES = {
+        '爱弥斯': 0x32,
+        '绯雪': 0x3c,
+        '卡提希娅': 0x23,
+        '弗洛洛': 0x23,
+        '琳奈': 0x19,
+        '守岸人': 0x14,
+        '千咲': 0x19,
+        '穗穗': 0x23,
+        '莫宁': 0x19,
+        '秧秧玄翎': 0x23,
+        '洛瑟菈': 0x19,
+        '达妮娅': 0xf,
+        '夏空': 0xf,
+        '露西': 0x14,
+        '嘉贝莉娜': 0x12,
+        '奥古斯塔': 0x12,
+        '仇远': 0xf,
+        '尤诺': 0xf,
+        '陆赫斯': 0x14,
+        '赞妮': 0x12,
+        '布兰特': 0xf,
+        '西格莉卡': 0x14,
+        '露帕': 0xa,
+        '珂莱塔': 0xa,
+        '菲比': 0xa,
+        '坎特蕾拉': 0xa,
+        '椿': 0xa,
+        '忌炎': 0x2,
+        '吟霖': 0x2,
+        '相里要': 0x2,
+        '今汐': 0x2,
+        '长离': 0x2,
+        '折枝': 0x2,
+        '洛可可': 0x2,
+        '丽贝卡': 0x2,
+        '维里奈': 0x0,
+        '卡卡罗': 0x0,
+        '安可': 0x0,
+        '凌阳': 0x0,
+        '鉴心': 0x0,
+        '秧秧': 0x0
+    }, DEFAULT_CONST_PREMIUMS = {
+        '爱弥斯': {
+            '3': 0x32,
+            '6': 0xb4
+        },
+        '绯雪': {
+            '2': 0x23,
+            '3': 0x3c,
+            '6': 0xc8
+        },
+        '卡提希娅': {
+            '2': 0x14,
+            '3': 0x23,
+            '6': 0x78
+        },
+        '弗洛洛': {
+            '2': 0x14,
+            '6': 0x64
+        },
+        '奥古斯塔': {
+            '2': 0x14,
+            '6': 0x64
+        },
+        '尤诺': {
+            '2': 0x14,
+            '6': 0x3c
+        },
+        '露西': {
+            '3': 0x1e,
+            '6': 0x64
+        },
+        '忌炎': { '6': 0x1e },
+        '守岸人': {
+            '2': 0x14,
+            '6': 0x32
+        },
+        '赞妮': {
+            '2': 0x14,
+            '6': 0x64
+        },
+        '椿': { '6': 0x32 },
+        '莫宁': {
+            '1': 0x14,
+            '6': 0x64
+        },
+        '珂莱塔': { '6': 0x32 },
+        '秧秧玄翎': {
+            '3': 0x32,
+            '6': 0xa0
+        },
+        '千咲': {
+            '3': 0x32,
+            '6': 0x64
+        },
+        '嘉贝莉娜': {
+            '3': 0x1e,
+            '6': 0x64
+        },
+        '陆赫斯': { '6': 0x64 },
+        '西格莉卡': { '6': 0x64 },
+        '丽贝卡': {
+            '3': 0x14,
+            '6': 0x32
+        },
+        '仇远': {
+            '3': 0x1e,
+            '6': 0x32
+        },
+        '今汐': { '6': 0x1e },
+        '吟霖': { '6': 0x1e },
+        '坎特蕾拉': {
+            '2': 0x1e,
+            '6': 0x32
+        },
+        '夏空': {
+            '2': 0x14,
+            '3': 0x1e,
+            '6': 0x32
+        },
+        '布兰特': { '6': 0x50 },
+        '长离': { '6': 0x1e },
+        '相里要': { '6': 0x1e },
+        '洛可可': { '6': 0x1e },
+        '琳奈': { '6': 0x50 },
+        '洛瑟菈': { '6': 0x50 },
+        '折枝': { '6': 0x14 },
+        '菲比': {
+            '2': 0x1e,
+            '6': 0x50
+        },
+        '露帕': { '6': 0x50 },
+        '达妮娅': {
+            '2': 0x1e,
+            '6': 0x50
+        }
+    }, DEFAULT_NEED_SIG_WEAPONS = [
+        '爱弥斯',
+        '绯雪',
+        '卡提希娅',
+        '千咲',
+        '今汐',
+        '椿',
+        '忌炎',
+        '嘉贝莉娜',
+        '弗洛洛',
+        '珂莱塔',
+        '西格莉卡',
+        '赞妮',
+        '陆赫斯'
+    ], CHAR_ALIASES = { '爱弥丝': '爱弥斯' }, CHAR_LOOKUP = {};
+for (const [tier, info] of Object['entries'](CHAR_TIERS)) {
+    for (const name of info['chars']) {
+        CHAR_LOOKUP[name] = {
+            'tier': tier,
+            'price': info['price'],
+            'isHot': info['isHot']
+        };
+    }
+}
+for (const [alias, canonical] of Object['entries'](CHAR_ALIASES)) {
+    CHAR_LOOKUP[canonical] && (CHAR_LOOKUP[alias] = CHAR_LOOKUP[canonical]);
+}
+const SECTION_KEYWORDS = [
+    '五星角色',
+    '四星角色',
+    '五星武器',
+    '金色武器',
+    '地图探索度',
+    '余波珊瑚',
+    '残振珊瑚',
+    '浮金波纹',
+    '铸潮波纹',
+    '唤声涡纹',
+    '摩托饰品',
+    '车架模组',
+    '星声',
+    '月相',
+    '服饰',
+    '皮肤',
+    '摩托',
+    '车架',
+    '涂装',
+    '数据坞等级',
+    '联觉等级'
+];
+function buildDefaultCharPrices() {
+    const _0x7e7878 = {};
+    for (const _0x4efa56 of Object['keys'](CHAR_TIERS)) {
+        for (const _0x2da14b of CHAR_TIERS[_0x4efa56]['chars']) {
+            _0x7e7878[_0x2da14b] = DEFAULT_CHAR_PRICES[_0x2da14b] != null ? DEFAULT_CHAR_PRICES[_0x2da14b] : CHAR_TIERS[_0x4efa56]['price'];
+        }
+    }
+    return _0x7e7878;
+}
+function buildDefaultTeamPremiums() {
+    const _0x414d70 = {};
+    for (const _0x226d63 of DEFAULT_TEAMS) {
+        _0x414d70[_0x226d63['name']] = {
+            'chars': [..._0x226d63['members'] || []],
+            'multiplier': _0x226d63['multiplier'] || 0x1,
+            'enabled': !![]
+        };
+    }
+    return _0x414d70;
+}
+function buildDefaultWeights(_0x259f05) {
+    const _0x58b3ec = _0x259f05 || {}, _0x351aa2 = Object['assign']({}, DEFAULT_WEIGHTS, _0x58b3ec);
+    _0x351aa2['c6TierWeights'] = Object['assign']({}, DEFAULT_WEIGHTS['c6TierWeights'], _0x58b3ec['c6TierWeights'] || {}), _0x351aa2['c6MultiBonus'] = _0x58b3ec['c6MultiBonus'] && _0x58b3ec['c6MultiBonus']['length'] ? _0x58b3ec['c6MultiBonus'] : DEFAULT_WEIGHTS['c6MultiBonus'], _0x351aa2['pullC6Bonus'] = _0x58b3ec['pullC6Bonus'] && _0x58b3ec['pullC6Bonus']['length'] ? _0x58b3ec['pullC6Bonus'] : DEFAULT_WEIGHTS['pullC6Bonus'], _0x351aa2['teamMultiBonus'] = _0x58b3ec['teamMultiBonus'] && _0x58b3ec['teamMultiBonus']['length'] ? _0x58b3ec['teamMultiBonus'] : DEFAULT_WEIGHTS['teamMultiBonus'], _0x351aa2['flatDiscountRules'] = _0x58b3ec['flatDiscountRules'] && _0x58b3ec['flatDiscountRules']['length'] ? _0x58b3ec['flatDiscountRules'] : DEFAULT_WEIGHTS['flatDiscountRules'], _0x351aa2['pullTiers'] = _0x58b3ec['pullTiers'] && _0x58b3ec['pullTiers']['length'] ? _0x58b3ec['pullTiers'] : DEFAULT_PULL_TIERS, _0x351aa2['yellowTiers'] = _0x58b3ec['yellowTiers'] && _0x58b3ec['yellowTiers']['length'] ? _0x58b3ec['yellowTiers'] : DEFAULT_YELLOW_TIERS, _0x351aa2['charPrices'] = Object['assign']({}, buildDefaultCharPrices(), _0x58b3ec['charPrices'] || {}), _0x351aa2['constPremiums'] = Object['assign']({}, DEFAULT_CONST_PREMIUMS, _0x58b3ec['constPremiums'] || {}), _0x351aa2['teamPremiums'] = _0x58b3ec['teamPremiums'] || buildDefaultTeamPremiums(), _0x351aa2['teams'] = [];
+    for (const _0x9aeb56 of Object['keys'](_0x351aa2['teamPremiums'])) {
+        const _0x5a1bc9 = _0x351aa2['teamPremiums'][_0x9aeb56];
+        _0x5a1bc9 && _0x5a1bc9['enabled'] !== ![] && _0x351aa2['teams']['push']({
+            'name': _0x9aeb56,
+            'members': _0x5a1bc9['chars'] || [],
+            'multiplier': _0x5a1bc9['multiplier'] || 0x1
+        });
+    }
+    return _0x351aa2['needSigWeapons'] = _0x58b3ec['needSigWeapons'] || DEFAULT_NEED_SIG_WEAPONS, _0x58b3ec['sigWeaponsOverride'] && (_0x351aa2['sigWeaponsOverride'] = _0x58b3ec['sigWeaponsOverride']), _0x351aa2;
+}
+const WEIGHT_LABELS = {
+    'fiveStarWeapon': {
+        'label': '五星武器(基础)',
+        'desc': '每个五星武器基础价（元，精1）'
+    },
+    'weaponRefineBonus': {
+        'label': '武器精炼加成',
+        'desc': '每级精炼额外加价（元，精5=+4×此值）'
+    },
+    'hotC0Mult': {
+        'label': '热门C0+专武倍率',
+        'desc': 'C0+专武\x20=\x20基础价\x20×\x20此倍率（1.0=100%）'
+    },
+    'hotC3Mult': {
+        'label': '热门C3+专武倍率',
+        'desc': 'C3+专武\x20=\x20基础价\x20×\x20此倍率（2.0=200%，价值翻倍）'
+    },
+    'hotC6Mult': {
+        'label': '热门C6+专武倍率',
+        'desc': 'C6+专武\x20=\x20基础价\x20×\x20此倍率（3.0=300%，满命三倍）'
+    },
+    'hotStepMult': {
+        'label': '热门过渡命倍率',
+        'desc': 'C1/C2/C4/C5每命加成\x20=\x20基础价\x20×\x20此倍率（0.08=8%）'
+    },
+    'hotNoSigMult': {
+        'label': '热门无专武倍率',
+        'desc': '热门角色无专武\x20=\x20基础价\x20×\x20此倍率（0.15=仅值15%）'
+    },
+    'hotNoSigC6Mult': {
+        'label': '热门C6无专武倍率',
+        'desc': '满命但无专武\x20=\x20基础价\x20×\x20此倍率（0.25=25%）'
+    },
+    'coldStep': {
+        'label': '冷门每命加分',
+        'desc': '冷门角色每命加此值（元）'
+    },
+    'coldC3Bonus': {
+        'label': '冷门C3加分',
+        'desc': '冷门角色3命额外加此值（元）'
+    },
+    'coldC6Bonus': {
+        'label': '冷门C6加分',
+        'desc': '冷门角色满命额外加此值（元）'
+    },
+    'coldSigBonus': {
+        'label': '冷门专武加分',
+        'desc': '冷门角色有专武额外加此值（元）'
+    },
+    'outfit': {
+        'label': '服饰/皮肤',
+        'desc': '每个服饰/皮肤（元）'
+    },
+    'motoAccessory': {
+        'label': '摩托饰品',
+        'desc': '每个摩托饰品（元）'
+    },
+    'motoFrame': {
+        'label': '车架模组',
+        'desc': '每个车架模组（元）'
+    },
+    'paint': {
+        'label': '涂装',
+        'desc': '每个涂装（元）'
+    }
+};
+function getDefaults() {
+    return {
+        'configVersion': CONFIG_VERSION,
+        'weights': buildDefaultWeights(),
+        'charTiers': CHAR_TIERS,
+        'sigWeapons': SIG_WEAPONS,
+        'constPremiums': DEFAULT_CONST_PREMIUMS,
+        'teams': DEFAULT_TEAMS,
+        'pullTiers': DEFAULT_PULL_TIERS,
+        'yellowTiers': DEFAULT_YELLOW_TIERS,
+        'charPrices': buildDefaultCharPrices(),
+        'needSigWeapons': DEFAULT_NEED_SIG_WEAPONS,
+        'weightLabels': WEIGHT_LABELS
+    };
+}
+let weights = buildDefaultWeights(), _sigWeaponsOverride = null;
+function extractSection(_0x294750, _0x53e59f) {
+    const _0x5772dc = _0x53e59f['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&'), _0x5518b1 = SECTION_KEYWORDS['filter'](_0x517013 => _0x517013 !== _0x53e59f)['map'](_0xb7351 => '【?' + _0xb7351['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&') + '(?:[（(]\x5cd+[）)])?(?:[：:]|\x5cs*\x5cn|】)'), _0x36e8de = _0x5772dc + '[：:]\x5cs*([\x5cs\x5cS]*?)(?=' + _0x5518b1['join']('|') + '|$)', _0x55c7cb = _0x294750['match'](new RegExp(_0x36e8de));
+    if (_0x55c7cb)
+        return _0x55c7cb[0x1]['trim']();
+    const _0x16a10b = _0x5772dc + '[（(]\x5cd+[）)]\x5cs*[：:]?\x5cs*\x5cn?\x5cs*([\x5cs\x5cS]*?)(?=' + _0x5518b1['join']('|') + '|$)', _0x49bc7e = _0x294750['match'](new RegExp(_0x16a10b));
+    if (_0x49bc7e)
+        return _0x49bc7e[0x1]['trim']();
+    const _0xad5ddf = '【' + _0x5772dc + '】\x5cs*[：:]?\x5cs*([\x5cs\x5cS]*?)(?=' + _0x5518b1['join']('|') + '|$)', _0x16dc18 = _0x294750['match'](new RegExp(_0xad5ddf));
+    if (_0x16dc18)
+        return _0x16dc18[0x1]['trim']();
+    return '';
+}
+function extractNumber(_0xf11ba8, _0x47f3c7) {
+    const _0x4ab9e3 = _0x47f3c7['replace'](/[.*+?^${}()|[\]\\]/g, '\x5c$&'), _0x3e5f21 = _0xf11ba8['match'](new RegExp(_0x4ab9e3 + '[：:]\x5cs*(\x5cd[\x5cd,]*)', 'i'));
+    if (_0x3e5f21)
+        return parseInt(_0x3e5f21[0x1]['replace'](/,/g, ''));
+    const _0x1d5876 = _0xf11ba8['match'](new RegExp('【' + _0x4ab9e3 + '】\x5cs*[：:]?\x5cs*(\x5cd[\x5cd,]*)', 'i'));
+    if (_0x1d5876)
+        return parseInt(_0x1d5876[0x1]['replace'](/,/g, ''));
+    return 0x0;
+}
+function parseCharacters(_0x2afba4) {
+    const _0x2658de = [];
+    if (!_0x2afba4)
+        return _0x2658de;
+    const _0x44fd8e = _0x2afba4['split'](/[,，、\s;；]+/)['filter'](_0x98176f => _0x98176f['length'] > 0x0);
+    for (const _0x2c219f of _0x44fd8e) {
+        let _0x413da4 = 0x0, _0x499143 = '', _0x33dfe6 = _0x2c219f['match'](/^满命(.+)$/);
+        _0x33dfe6 ? (_0x413da4 = 0x6, _0x499143 = _0x33dfe6[0x1]) : (_0x33dfe6 = _0x2c219f['match'](/^(\d+)命(.+)$/), _0x33dfe6 ? (_0x413da4 = parseInt(_0x33dfe6[0x1]), _0x499143 = _0x33dfe6[0x2]) : (_0x33dfe6 = _0x2c219f['match'](/^(.+?)\(满命\)$/), _0x33dfe6 ? (_0x499143 = _0x33dfe6[0x1], _0x413da4 = 0x6) : (_0x33dfe6 = _0x2c219f['match'](/^(.+?)\((\d+)命\)$/), _0x33dfe6 ? (_0x499143 = _0x33dfe6[0x1], _0x413da4 = parseInt(_0x33dfe6[0x2])) : (_0x499143 = _0x2c219f, _0x413da4 = 0x0))));
+        const _0x931c19 = CHAR_ALIASES[_0x499143] || _0x499143, _0x547022 = CHAR_LOOKUP[_0x931c19];
+        _0x547022 && _0x2658de['push']({
+            'name': _0x931c19,
+            'const': _0x413da4,
+            'tier': _0x547022['tier'],
+            'price': _0x547022['price'],
+            'isHot': _0x547022['isHot']
+        });
+    }
+    const _0x1de581 = {};
+    for (const _0x465bca of _0x2658de) {
+        (!_0x1de581[_0x465bca['name']] || _0x465bca['const'] > _0x1de581[_0x465bca['name']]['const']) && (_0x1de581[_0x465bca['name']] = _0x465bca);
+    }
+    return Object['values'](_0x1de581);
+}
+function findCharsInText(_0x51d5d8) {
+    const _0x66a48e = [];
+    for (const [_0x18a147, _0x5ed649] of Object['entries'](CHAR_TIERS)) {
+        for (const _0x59f23a of _0x5ed649['chars']) {
+            const _0x5ecaa4 = [_0x59f23a];
+            for (const [_0x51e750, _0xdf7fc4] of Object['entries'](CHAR_ALIASES)) {
+                if (_0xdf7fc4 === _0x59f23a)
+                    _0x5ecaa4['push'](_0x51e750);
+            }
+            let _0x155afd = ![];
+            for (const _0x45c821 of _0x5ecaa4) {
+                if (_0x51d5d8['includes']('满命' + _0x45c821)) {
+                    _0x66a48e['push']({
+                        'name': _0x59f23a,
+                        'const': 0x6,
+                        'tier': _0x18a147,
+                        'price': _0x5ed649['price'],
+                        'isHot': _0x5ed649['isHot']
+                    }), _0x155afd = !![];
+                    break;
+                }
+                const _0x3405f3 = _0x51d5d8['match'](new RegExp('(\x5cd+)命' + _0x45c821));
+                if (_0x3405f3) {
+                    _0x66a48e['push']({
+                        'name': _0x59f23a,
+                        'const': parseInt(_0x3405f3[0x1]),
+                        'tier': _0x18a147,
+                        'price': _0x5ed649['price'],
+                        'isHot': _0x5ed649['isHot']
+                    }), _0x155afd = !![];
+                    break;
+                }
+                if (_0x51d5d8['includes'](_0x45c821 + '(满命)')) {
+                    _0x66a48e['push']({
+                        'name': _0x59f23a,
+                        'const': 0x6,
+                        'tier': _0x18a147,
+                        'price': _0x5ed649['price'],
+                        'isHot': _0x5ed649['isHot']
+                    }), _0x155afd = !![];
+                    break;
+                }
+                const _0x25174a = _0x51d5d8['match'](new RegExp(_0x45c821 + '\x5c((\x5cd+)命\x5c)'));
+                if (_0x25174a) {
+                    _0x66a48e['push']({
+                        'name': _0x59f23a,
+                        'const': parseInt(_0x25174a[0x1]),
+                        'tier': _0x18a147,
+                        'price': _0x5ed649['price'],
+                        'isHot': _0x5ed649['isHot']
+                    }), _0x155afd = !![];
+                    break;
+                }
+                if (_0x51d5d8['includes'](_0x45c821)) {
+                    _0x66a48e['push']({
+                        'name': _0x59f23a,
+                        'const': 0x0,
+                        'tier': _0x18a147,
+                        'price': _0x5ed649['price'],
+                        'isHot': _0x5ed649['isHot']
+                    }), _0x155afd = !![];
+                    break;
+                }
+            }
+        }
+    }
+    const _0x4380cc = {};
+    for (const _0x368da5 of _0x66a48e) {
+        (!_0x4380cc[_0x368da5['name']] || _0x368da5['const'] > _0x4380cc[_0x368da5['name']]['const']) && (_0x4380cc[_0x368da5['name']] = _0x368da5);
+    }
+    return Object['values'](_0x4380cc);
+}
+function parseWeapons(_0x3f4e1d) {
+    const _0x1e1c8b = [];
+    if (!_0x3f4e1d)
+        return _0x1e1c8b;
+    const _0x318d59 = _0x3f4e1d['split'](/[,，、\s;；]+/)['filter'](_0x477646 => _0x477646['length'] > 0x0);
+    for (const _0x3ff1e2 of _0x318d59) {
+        let _0x5a6735 = 0x1, _0x3f5772 = '';
+        const _0x56801e = _0x3ff1e2['match'](/^精(\d+)(.+)$/);
+        _0x56801e ? (_0x5a6735 = parseInt(_0x56801e[0x1]), _0x3f5772 = _0x56801e[0x2]) : (_0x3f5772 = _0x3ff1e2, _0x5a6735 = 0x1);
+        if (_0x3f5772)
+            _0x1e1c8b['push']({
+                'name': _0x3f5772,
+                'refine': _0x5a6735
+            });
+    }
+    return _0x1e1c8b;
+}
+function extractYellowCount(_0x29b629) {
+    let _0x3709b3 = _0x29b629['match'](/(\d+)\s*黄/);
+    if (_0x3709b3)
+        return parseInt(_0x3709b3[0x1]);
+    _0x3709b3 = _0x29b629['match'](/黄[数]?[：:]\s*(\d+)/);
+    if (_0x3709b3)
+        return parseInt(_0x3709b3[0x1]);
+    _0x3709b3 = _0x29b629['match'](/【黄[数]?】\s*[：:]?\s*(\d+)/);
+    if (_0x3709b3)
+        return parseInt(_0x3709b3[0x1]);
+    return 0x0;
+}
+function extractListCount(_0x2e4767, _0x133a15) {
+    const _0x2cbeaf = extractSection(_0x2e4767, _0x133a15);
+    if (!_0x2cbeaf)
+        return 0x0;
+    const _0x373aae = _0x2cbeaf['split'](/[,，、\s]+/)['filter'](_0x2a0bb8 => _0x2a0bb8['length'] > 0x0);
+    return _0x373aae['length'];
+}
+function extractListItems(_0x52942c, _0x5bd1a2) {
+    const _0x18850b = extractSection(_0x52942c, _0x5bd1a2);
+    if (!_0x18850b)
+        return [];
+    return _0x18850b['split'](/[,，、\s]+/)['filter'](_0x25fc36 => _0x25fc36['length'] > 0x0);
+}
+function parseAccountInfo(_0x4d065c) {
+    const _0x425fef = {
+        'characters': [],
+        'weapons': [],
+        'starSound': 0x0,
+        'moonPhase': 0x0,
+        'aftermathCoral': 0x0,
+        'floatGoldRipple': 0x0,
+        'castTideRipple': 0x0,
+        'yellowCount': 0x0,
+        'outfitCount': 0x0,
+        'motoCount': 0x0,
+        'vehicleFrameCount': 0x0,
+        'paintCount': 0x0,
+        'pulls': 0x0,
+        'rawText': _0x4d065c || ''
+    };
+    if (!_0x4d065c)
+        return _0x425fef;
+    const _0x243de3 = extractSection(_0x4d065c, '五星角色');
+    _0x243de3 && (_0x425fef['characters'] = parseCharacters(_0x243de3));
+    _0x425fef['characters']['length'] === 0x0 && (_0x425fef['characters'] = findCharsInText(_0x4d065c));
+    let _0x2ff098 = extractSection(_0x4d065c, '五星武器');
+    _0x2ff098 && (_0x425fef['weapons'] = parseWeapons(_0x2ff098));
+    _0x425fef['weapons']['length'] === 0x0 && (_0x2ff098 = extractSection(_0x4d065c, '武器'), _0x2ff098 && (_0x425fef['weapons'] = parseWeapons(_0x2ff098)));
+    _0x425fef['weapons']['length'] === 0x0 && (_0x2ff098 = extractSection(_0x4d065c, '金色武器'), _0x2ff098 && (_0x425fef['weapons'] = parseWeapons(_0x2ff098)));
+    _0x425fef['starSound'] = extractNumber(_0x4d065c, '星声'), _0x425fef['moonPhase'] = extractNumber(_0x4d065c, '月相'), _0x425fef['aftermathCoral'] = extractNumber(_0x4d065c, '余波珊瑚'), _0x425fef['floatGoldRipple'] = extractNumber(_0x4d065c, '浮金波纹'), _0x425fef['castTideRipple'] = extractNumber(_0x4d065c, '铸潮波纹'), _0x425fef['yellowCount'] = extractYellowCount(_0x4d065c), _0x425fef['outfitCount'] = extractListCount(_0x4d065c, '服饰');
+    if (_0x425fef['outfitCount'] === 0x0) {
+        const _0x1adc71 = extractSection(_0x4d065c, '皮肤');
+        if (_0x1adc71) {
+            const _0x4ad602 = parseInt(_0x1adc71);
+            _0x425fef['outfitCount'] = isNaN(_0x4ad602) ? extractListCount(_0x4d065c, '皮肤') : _0x4ad602;
+        }
+    }
+    return _0x425fef['motoCount'] = extractListCount(_0x4d065c, '车架模组') + extractListCount(_0x4d065c, '车架') + extractListCount(_0x4d065c, '摩托'), _0x425fef['motoAccessoryCount'] = extractListCount(_0x4d065c, '摩托饰品'), _0x425fef['vehicleFrameCount'] = extractListCount(_0x4d065c, '车架模组') + extractListCount(_0x4d065c, '车架'), _0x425fef['paintCount'] = extractListCount(_0x4d065c, '涂装'), _0x425fef['pulls'] = _0x425fef['starSound'] / 0xa0 + _0x425fef['moonPhase'] / 0xa0 + _0x425fef['aftermathCoral'] / 0x8 + _0x425fef['floatGoldRipple'] + _0x425fef['castTideRipple'], _0x425fef;
+}
+function checkHasSigWeapon(_0x31fe78, _0x1ddff0, _0x409eb5) {
+    const _0x3e7c3e = _sigWeaponsOverride ? _sigWeaponsOverride[_0x31fe78] || SIG_WEAPONS[_0x31fe78] : SIG_WEAPONS[_0x31fe78];
+    if (!_0x3e7c3e)
+        return ![];
+    if (_0x1ddff0 && _0x1ddff0['some'](_0x35dbcd => _0x35dbcd === _0x3e7c3e || _0x35dbcd['includes'](_0x3e7c3e) || _0x3e7c3e['includes'](_0x35dbcd)))
+        return !![];
+    if (_0x409eb5 && _0x409eb5['includes'](_0x3e7c3e))
+        return !![];
+    return ![];
+}
+function calcConstPremium(_0x2f718f, _0x3a1b49, _0x165c1d) {
+    _0x165c1d = _0x165c1d || weights || DEFAULT_WEIGHTS;
+    const _0x32a537 = _0x165c1d['constPremiums'] || {}, _0x4731d5 = _0x32a537[_0x2f718f];
+    if (!_0x4731d5 || _0x3a1b49 <= 0x0)
+        return 0x0;
+    let _0x450499 = 0x0;
+    for (const _0x1c14f9 of Object['keys'](_0x4731d5)) {
+        const _0x2d4931 = parseInt(_0x1c14f9);
+        if (!isNaN(_0x2d4931) && _0x3a1b49 >= _0x2d4931) {
+            const _0x4ecc1a = _0x4731d5[_0x1c14f9] || 0x0;
+            if (_0x4ecc1a > _0x450499)
+                _0x450499 = _0x4ecc1a;
+        }
+    }
+    return _0x450499;
+}
+function getCharValue(_0xcbb484, _0x20a2f3, _0x3545a3) {
+    _0x3545a3 = _0x3545a3 || weights || DEFAULT_WEIGHTS;
+    const _0x34e5c8 = _0x3545a3['charPrices'] || {}, _0x4cf8b2 = _0x34e5c8[_0xcbb484['name']] != null ? _0x34e5c8[_0xcbb484['name']] : _0xcbb484['price'];
+    if (_0xcbb484['isHot']) {
+        const _0x40bf90 = _0x3545a3['hotC0Mult'] != null ? _0x3545a3['hotC0Mult'] : 0x1, _0xc180b1 = _0x3545a3['hotC3Mult'] != null ? _0x3545a3['hotC3Mult'] : 0x2, _0x4944dc = _0x3545a3['hotC6Mult'] != null ? _0x3545a3['hotC6Mult'] : 0x3, _0x2088a3 = _0x3545a3['hotStepMult'] != null ? _0x3545a3['hotStepMult'] : 0.08, _0x361d4e = _0x3545a3['hotNoSigMult'] != null ? _0x3545a3['hotNoSigMult'] : 0.15, _0x302de2 = _0x3545a3['hotNoSigC6Mult'] != null ? _0x3545a3['hotNoSigC6Mult'] : 0.25;
+        if (!_0x20a2f3) {
+            if (_0xcbb484['const'] >= 0x6)
+                return _0x4cf8b2 * _0x302de2;
+            return _0x4cf8b2 * _0x361d4e;
+        }
+        if (_0xcbb484['const'] >= 0x6)
+            return _0x4cf8b2 * _0x4944dc;
+        if (_0xcbb484['const'] >= 0x3)
+            return _0x4cf8b2 * _0xc180b1;
+        if (_0xcbb484['const'] >= 0x1)
+            return _0x4cf8b2 * (_0x40bf90 + _0xcbb484['const'] * _0x2088a3);
+        return _0x4cf8b2 * _0x40bf90;
+    } else {
+        const _0x2c9964 = _0x3545a3['coldStep'] != null ? _0x3545a3['coldStep'] : 0x1, _0x5e6f62 = _0x3545a3['coldC3Bonus'] != null ? _0x3545a3['coldC3Bonus'] : 0x3, _0x3409c3 = _0x3545a3['coldC6Bonus'] != null ? _0x3545a3['coldC6Bonus'] : 0x5, _0x1b7b50 = _0x3545a3['coldSigBonus'] != null ? _0x3545a3['coldSigBonus'] : 0x2;
+        let _0x246b65 = _0x4cf8b2 + _0xcbb484['const'] * _0x2c9964;
+        if (_0xcbb484['const'] >= 0x3)
+            _0x246b65 += _0x5e6f62;
+        if (_0xcbb484['const'] >= 0x6)
+            _0x246b65 += _0x3409c3;
+        if (_0x20a2f3)
+            _0x246b65 += _0x1b7b50;
+        return _0x246b65;
+    }
+}
+function calculatePullValue(_0xa9e856) {
+    const _0x5874c2 = weights && weights['pullTiers'] || DEFAULT_PULL_TIERS, _0x3284b3 = {};
+    for (const _0xc63c9 of _0x5874c2) {
+        const _0x25d298 = (_0xc63c9['minPull'] || 0x0) + '-' + (_0xc63c9['maxPull'] == null ? 'inf' : _0xc63c9['maxPull']);
+        _0x3284b3[_0x25d298] = _0xc63c9;
+    }
+    const _0x3b8059 = Object['values'](_0x3284b3), _0x4ccc82 = [..._0x3b8059]['sort']((_0x505cf1, _0x418e53) => (_0x505cf1['minPull'] || 0x0) - (_0x418e53['minPull'] || 0x0));
+    let _0x312983 = _0x4ccc82[0x0] || {
+        'minPull': 0x0,
+        'maxPull': Infinity,
+        'perPullPrice': 0.8
+    };
+    for (const _0xc1ae8c of _0x4ccc82) {
+        const _0x29e802 = _0xc1ae8c['minPull'] != null ? _0xc1ae8c['minPull'] : 0x0, _0xf83712 = _0xc1ae8c['maxPull'] == null || _0xc1ae8c['maxPull'] === Infinity ? Infinity : _0xc1ae8c['maxPull'];
+        if (_0xa9e856 >= _0x29e802 && _0xa9e856 < _0xf83712) {
+            _0x312983 = {
+                ..._0xc1ae8c,
+                'minPull': _0x29e802,
+                'maxPull': _0xf83712
+            };
+            break;
+        }
+    }
+    const _0x3f0823 = _0xa9e856 * _0x312983['perPullPrice'], _0x43dcde = _0x312983['maxPull'] == null || _0x312983['maxPull'] === Infinity ? Infinity : _0x312983['maxPull'], _0x344d50 = _0x43dcde === Infinity ? _0x312983['minPull'] + '抽+' : _0x312983['minPull'] + '~' + _0x43dcde + '抽';
+    return {
+        'pulls': Math['round'](_0xa9e856),
+        'perPull': _0x312983['perPullPrice'],
+        'tierLabel': _0x344d50,
+        'total': Math['round'](_0x3f0823)
+    };
+}
+function getYellowCoeff(_0x5a3717) {
+    const _0x2d33f4 = weights && weights['yellowTiers'] || DEFAULT_YELLOW_TIERS, _0x1b7b3d = {};
+    for (const _0x48e0a2 of _0x2d33f4) {
+        const _0x470fea = (_0x48e0a2['minYellow'] || 0x0) + '-' + (_0x48e0a2['maxYellow'] == null ? 'inf' : _0x48e0a2['maxYellow']);
+        _0x1b7b3d[_0x470fea] = _0x48e0a2;
+    }
+    const _0x57c383 = Object['values'](_0x1b7b3d);
+    let _0x3bb599 = _0x57c383[0x0] || {
+        'minYellow': 0x0,
+        'maxYellow': Infinity,
+        'coefficient': 0.3
+    };
+    for (const _0x2593cb of _0x57c383) {
+        const _0x330702 = _0x2593cb['maxYellow'] == null || _0x2593cb['maxYellow'] === Infinity ? Infinity : _0x2593cb['maxYellow'];
+        if (_0x5a3717 >= _0x2593cb['minYellow'] && _0x5a3717 < _0x330702) {
+            _0x3bb599 = {
+                ..._0x2593cb,
+                'maxYellow': _0x330702
+            };
+            break;
+        }
+    }
+    const _0x5ba8c1 = _0x3bb599['maxYellow'] === Infinity ? _0x3bb599['minYellow'] + '黄+' : _0x3bb599['minYellow'] + '~' + _0x3bb599['maxYellow'] + '黄';
+    return {
+        'yellowCount': _0x5a3717,
+        'coefficient': _0x3bb599['coefficient'],
+        'tierLabel': _0x5ba8c1
+    };
+}
+function calculateValue(_0x1b42e7, _0x3b19a1) {
+    const _0x31bda6 = weights || DEFAULT_WEIGHTS, _0x460e9b = _0x1b42e7['weapons']['map'](_0x2d086e => _0x2d086e['name']), _0x2bf760 = _0x1b42e7['rawText'] || '', _0x511d16 = _0x31bda6['c6TierWeights'] || FULL_CONST_WEIGHT;
+    let _0x5e0ccc = 0x0, _0x1350f6 = 0x0;
+    const _0x147094 = [], _0x2f4b5e = [], _0x1f43a8 = [];
+    for (const _0x26e30e of _0x1b42e7['characters']) {
+        const _0x1d1f85 = checkHasSigWeapon(_0x26e30e['name'], _0x460e9b, _0x2bf760), _0x2e2932 = getCharValue(_0x26e30e, _0x1d1f85, _0x31bda6), _0x2ac531 = calcConstPremium(_0x26e30e['name'], _0x26e30e['const'], _0x31bda6);
+        _0x5e0ccc += _0x2e2932 + _0x2ac531;
+        if (_0x1d1f85 && !_0x1f43a8['includes'](_0x26e30e['name']))
+            _0x1f43a8['push'](_0x26e30e['name']);
+        let _0x11cc60 = 0x0;
+        _0x26e30e['const'] >= 0x6 && (_0x11cc60 = _0x511d16[_0x26e30e['tier']] != null ? _0x511d16[_0x26e30e['tier']] : FULL_CONST_WEIGHT[_0x26e30e['tier']] || 0x0, _0x1350f6 += _0x11cc60);
+        let _0x5ee4ba = 0x0;
+        if (_0x1d1f85) {
+            const _0x54017a = _sigWeaponsOverride ? _sigWeaponsOverride[_0x26e30e['name']] || SIG_WEAPONS[_0x26e30e['name']] : SIG_WEAPONS[_0x26e30e['name']];
+            if (_0x54017a) {
+                const _0x38e679 = _0x1b42e7['weapons']['find'](function (_0x40318e) {
+                    return _0x40318e['name'] === _0x54017a || _0x40318e['name']['includes'](_0x54017a) || _0x54017a['includes'](_0x40318e['name']);
+                });
+                if (_0x38e679)
+                    _0x5ee4ba = _0x38e679['refine'] || 0x1;
+            }
+        }
+        _0x147094['push']({
+            'name': _0x26e30e['name'],
+            'const': _0x26e30e['const'],
+            'tier': _0x26e30e['tier'],
+            'isHot': !!_0x26e30e['isHot'],
+            'hasSig': _0x1d1f85,
+            'sigRefine': _0x5ee4ba,
+            'premium': _0x2ac531,
+            'value': Math['round'](_0x2e2932 + _0x2ac531)
+        }), _0x2f4b5e['push']({
+            'name': _0x26e30e['name'],
+            'const': _0x26e30e['const'],
+            'tier': _0x26e30e['tier'],
+            'hasSig': _0x1d1f85,
+            'value': Math['round'](_0x2e2932 + _0x2ac531)
+        });
+    }
+    let _0x5240b3 = 0x0;
+    const _0x5934df = [], _0x14b618 = _0x31bda6['c6MultiBonus'] || [], _0x30ded9 = _0x147094['filter'](_0x562737 => _0x562737['const'] >= 0x6 && _0x562737['tier'] && _0x562737['tier'] !== 'E'), _0x3004c7 = {};
+    for (const _0x3e5c79 of _0x30ded9) {
+        _0x3004c7[_0x3e5c79['tier']] = (_0x3004c7[_0x3e5c79['tier']] || 0x0) + 0x1;
+    }
+    let _0x2cbea7 = 0x0;
+    if (_0x1350f6 >= 0x2 && _0x14b618['length'] > 0x0) {
+        const _0x4f1d27 = [..._0x14b618]['sort']((_0x253b01, _0x5e735c) => _0x253b01['count'] - _0x5e735c['count']);
+        let _0x45ef06 = null, _0x3ce342 = null;
+        for (const _0x28a130 of _0x4f1d27) {
+            if (_0x1350f6 >= _0x28a130['count'])
+                _0x45ef06 = _0x28a130;
+            else {
+                if (!_0x3ce342)
+                    _0x3ce342 = _0x28a130;
+            }
+        }
+        if (_0x45ef06 && _0x3ce342) {
+            const _0x36b82e = (_0x1350f6 - _0x45ef06['count']) / (_0x3ce342['count'] - _0x45ef06['count']);
+            _0x2cbea7 = Math['max'](_0x3ce342['bonus'] * _0x36b82e, _0x45ef06['bonus']);
+        } else
+            _0x45ef06 && (_0x2cbea7 = _0x45ef06['bonus']);
+    }
+    if (_0x2cbea7 > 0x0) {
+        _0x5240b3 = _0x5e0ccc * _0x2cbea7;
+        const _0x3ccaa6 = Object['entries'](_0x3004c7)['sort']((_0x281342, _0x1af0bd) => (_0x511d16[_0x281342[0x0]] || 0x0) < (_0x511d16[_0x1af0bd[0x0]] || 0x0) ? 0x1 : -0x1)['map'](([_0x5b1079, _0x142a6e]) => _0x142a6e + '个' + _0x5b1079 + '级')['join']('+');
+        _0x5934df['push']('满命(' + _0x3ccaa6 + ')\x20加权' + _0x1350f6['toFixed'](0x1) + '\x20+' + Math['round'](_0x2cbea7 * 0x64) + '%');
+    }
+    const _0x4d03b1 = _0x31bda6['pullC6Bonus'] || [];
+    let _0x1ead53 = 0x0;
+    if (_0x1350f6 >= 0x1 && _0x4d03b1['length'] > 0x0) {
+        const _0x49face = [..._0x4d03b1]['sort']((_0x5dc680, _0x543d28) => _0x5dc680['count'] - _0x543d28['count']);
+        let _0x7bfb9b = null, _0x8c4534 = null;
+        for (const _0x23403d of _0x49face) {
+            if (_0x1350f6 >= _0x23403d['count'])
+                _0x7bfb9b = _0x23403d;
+            else {
+                if (!_0x8c4534)
+                    _0x8c4534 = _0x23403d;
+            }
+        }
+        if (_0x7bfb9b && _0x8c4534) {
+            const _0x260355 = (_0x1350f6 - _0x7bfb9b['count']) / (_0x8c4534['count'] - _0x7bfb9b['count']);
+            _0x1ead53 = Math['max'](_0x8c4534['bonus'] * _0x260355, _0x7bfb9b['bonus']);
+        } else
+            _0x7bfb9b && (_0x1ead53 = _0x7bfb9b['bonus']);
+    }
+    let _0x44fb0e = 0x0;
+    const _0x521bd3 = [], _0x19d08a = new Set(_0x1b42e7['characters']['map'](_0x337942 => _0x337942['name'])), _0x431c3c = weights && weights['teams'] || DEFAULT_TEAMS, _0x5a948b = [];
+    for (const _0x1f04d3 of _0x431c3c) {
+        const _0x5a7c62 = _0x1f04d3['members']['every'](_0x4b86da => _0x19d08a['has'](_0x4b86da));
+        if (_0x5a7c62)
+            _0x5a948b['push'](_0x1f04d3);
+    }
+    const _0x28dadd = _0x31bda6['teamMultiBonus'] || [], _0x250de3 = {};
+    for (const _0x4f8910 of _0x28dadd) {
+        _0x250de3[_0x4f8910['count']] = _0x4f8910;
+    }
+    const _0x4e609d = Object['values'](_0x250de3);
+    let _0x522ac6 = 0x1;
+    for (const _0x268676 of _0x4e609d) {
+        _0x5a948b['length'] >= _0x268676['count'] && (_0x522ac6 = Math['max'](_0x522ac6, _0x268676['coef']));
+    }
+    for (const _0x5d76a1 of _0x5a948b) {
+        for (const _0x52182e of _0x5d76a1['members']) {
+            const _0x498372 = _0x1b42e7['characters']['find'](_0x44277a => _0x44277a['name'] === _0x52182e);
+            if (_0x498372) {
+                const _0x336c3b = checkHasSigWeapon(_0x52182e, _0x460e9b, _0x2bf760), _0x2a4923 = getCharValue(_0x498372, _0x336c3b, _0x31bda6);
+                _0x44fb0e += _0x2a4923 * (_0x5d76a1['multiplier'] - 0x1);
+            }
+        }
+    }
+    _0x44fb0e *= _0x522ac6;
+    if (_0x5a948b['length'] > 0x0) {
+        const _0x492e49 = _0x5a948b['map'](_0xa924d6 => _0xa924d6['name'])['join']('/');
+        _0x521bd3['push'](_0x5a948b['length'] + '配队(' + _0x492e49 + ')\x20×' + _0x522ac6);
+    }
+    const _0x251b30 = calculatePullValue(_0x1b42e7['pulls']), _0x4eab94 = _0x251b30['total'], _0x14921f = Math['round'](_0x4eab94 * _0x1ead53), _0x1a506c = _0x4eab94 + _0x14921f, _0x3de5c6 = extractListItems(_0x1b42e7['rawText'], '服饰'), _0x46ae57 = extractListItems(_0x1b42e7['rawText'], '摩托饰品')['concat'](extractListItems(_0x1b42e7['rawText'], '摩托')), _0x557108 = extractListItems(_0x1b42e7['rawText'], '车架模组')['concat'](extractListItems(_0x1b42e7['rawText'], '车架')), _0x1e7390 = extractListItems(_0x1b42e7['rawText'], '涂装'), _0x48b541 = _0x3de5c6['length'] * (_0x31bda6['outfit'] || 0x0), _0x798bd9 = _0x46ae57['length'] * (_0x31bda6['motoAccessory'] || 0x0), _0x29cbe0 = _0x557108['length'] * (_0x31bda6['motoFrame'] || 0x0), _0x2e433f = _0x1e7390['length'] * (_0x31bda6['paint'] || 0x0), _0x469cd1 = _0x48b541 + _0x798bd9 + _0x29cbe0 + _0x2e433f, _0x1da9a1 = _0x1b42e7['weapons']['map'](_0x407cac => {
+            const _0x4c0d64 = _0x1b42e7['characters']['some'](_0x369fa7 => {
+                const _0x56193e = _sigWeaponsOverride ? _sigWeaponsOverride[_0x369fa7['name']] || SIG_WEAPONS[_0x369fa7['name']] : SIG_WEAPONS[_0x369fa7['name']];
+                return _0x56193e === _0x407cac['name'] && _0x1f43a8['includes'](_0x369fa7['name']);
+            });
+            return {
+                'name': _0x407cac['name'],
+                'refine': _0x407cac['refine'],
+                'isSig': _0x4c0d64
+            };
+        }), _0x503cd2 = getYellowCoeff(_0x1b42e7['yellowCount']), _0x4f20f2 = _0x503cd2['coefficient'], _0x181a33 = (_0x1b42e7['rawText'] || '')['match'](/(\d+)级/), _0x3fd27d = _0x181a33 ? parseInt(_0x181a33[0x1]) : 0x1, _0x1e62f4 = (_0x1b42e7['rawText'] || '')['match'](/(\d+)个四星角色/), _0xe98924 = _0x1e62f4 ? parseInt(_0x1e62f4[0x1]) : 0x0, _0x254d95 = _0x1b42e7['characters']['length'], _0xb4292f = _0x1b42e7['characters']['filter'](_0x1f8b0a => _0x1f8b0a['const'] >= 0x6)['length'], _0x3ac9dd = _0x5e0ccc + _0x5240b3 + _0x44fb0e + _0x1a506c + _0x469cd1;
+    let _0x55256e = 0x1;
+    const _0x2a27a1 = [], _0x1adc61 = _0x31bda6['flatDiscountRules'] || [];
+    if (_0x1adc61['length'] > 0x0)
+        for (const _0x1ee377 of _0x1adc61) {
+            if (!_0x1ee377['chars'] || _0x1ee377['chars']['length'] === 0x0)
+                continue;
+            const _0x48ba45 = _0x1ee377['chars']['filter'](_0x2be44f => _0x19d08a['has'](_0x2be44f));
+            if (_0x48ba45['length'] === 0x0)
+                continue;
+            const _0x521493 = _0x1ee377['chars']['every'](_0x1208c6 => {
+                const _0x21d271 = _0x1b42e7['characters']['find'](_0x4ff540 => _0x4ff540['name'] === _0x1208c6);
+                return !_0x21d271 || _0x21d271['const'] <= _0x1ee377['maxConst'];
+            });
+            _0x521493 && (_0x55256e = Math['min'](_0x55256e, _0x1ee377['discount']), _0x2a27a1['push']('低命折扣系数(' + _0x48ba45['join']('/') + '\x20≤' + _0x1ee377['maxConst'] + '命)\x20×' + _0x1ee377['discount']));
+        }
+    const _0x510bd9 = Math['min'](_0x4f20f2, _0x55256e), _0xd79b54 = _0x3ac9dd * _0x510bd9, _0x355da6 = _0x3b19a1 > 0x0 ? (_0xd79b54 - _0x3b19a1) / _0x3b19a1 * 0x64 : 0x0, _0x383458 = Math['round']((_0xd79b54 - _0x3b19a1) * 0x64) / 0x64;
+    return {
+        'totalValue': Math['round'](_0xd79b54 * 0x64) / 0x64,
+        'diff': _0x383458,
+        'charValue': Math['round'](_0x5e0ccc * 0x64) / 0x64,
+        'fullConstPremium': Math['round'](_0x5240b3 * 0x64) / 0x64,
+        'teamPremium': Math['round'](_0x44fb0e * 0x64) / 0x64,
+        'pullValue': Math['round'](_0x1a506c * 0x64) / 0x64,
+        'otherResources': _0x469cd1,
+        'yellowCoeff': _0x4f20f2,
+        'weightedFullConst': _0x1350f6,
+        'satisfiedTeams': _0x5a948b['map'](_0x34a856 => _0x34a856['name']),
+        'ratio': Math['round'](_0x355da6 * 0xa) / 0xa,
+        'charBreakdown': _0x147094,
+        'charDetails': _0x2f4b5e,
+        'hasSignatureWeapons': _0x1f43a8,
+        'weaponDetails': _0x1da9a1,
+        'matchedTeams': _0x5a948b,
+        'c6Bonus': {
+            'value': Math['round'](_0x5240b3),
+            'notes': _0x5934df
+        },
+        'teamBonus': {
+            'value': Math['round'](_0x44fb0e),
+            'notes': _0x521bd3
+        },
+        'flatDiscount': {
+            'value': _0x55256e,
+            'notes': _0x2a27a1
+        },
+        'pullInfo': {
+            'pulls': _0x251b30['pulls'],
+            'perPull': _0x251b30['perPull'],
+            'tierLabel': _0x251b30['tierLabel'],
+            'baseTotal': Math['round'](_0x4eab94 * 0x64) / 0x64,
+            'c6Bonus': _0x14921f,
+            'c6Multiplier': _0x1ead53,
+            'total': _0x1a506c
+        },
+        'yellowInfo': _0x503cd2,
+        'outfits': _0x3de5c6,
+        'motoAccessories': _0x46ae57,
+        'motoFrames': _0x557108,
+        'paints': _0x1e7390,
+        'level': _0x3fd27d,
+        'fourStarChars': _0xe98924,
+        'fiveStarChars': _0x254d95,
+        'maxConstChars': _0xb4292f
+    };
+}
+function evaluateWithPrice(_0x30625a, _0x3b4dc3, _0x4ee65e) {
+    const _0x1bd925 = weights, _0x6e8ba2 = _sigWeaponsOverride;
+    _0x4ee65e && (weights = buildDefaultWeights(_0x4ee65e), _sigWeaponsOverride = weights['sigWeaponsOverride'] || null);
+    try {
+        const _0x10bb40 = parseAccountInfo(_0x30625a), _0x382152 = _0x3b4dc3 / 0x64, _0x5a9b43 = calculateValue(_0x10bb40, _0x382152);
+        let _0x238fe8 = 0x0;
+        _0x382152 > 0x0 && (_0x238fe8 = (_0x5a9b43['totalValue'] - _0x382152) / _0x382152 * 0x64);
+        _0x238fe8 = Math['round'](_0x238fe8 * 0x64) / 0x64;
+        const _0x5e8990 = {
+                'characters': _0x10bb40['characters'],
+                'weapons': _0x10bb40['weapons'],
+                'starSounds': _0x10bb40['starSound'],
+                'moonPhases': _0x10bb40['moonPhase'],
+                'coral': _0x10bb40['aftermathCoral'],
+                'goldenRipples': _0x10bb40['floatGoldRipple'],
+                'tideRipples': _0x10bb40['castTideRipple'],
+                'yellowCount': _0x10bb40['yellowCount'],
+                'outfits': _0x10bb40['outfitCount'],
+                'motorcycles': _0x10bb40['motoCount'],
+                'pulls': _0x10bb40['pulls'],
+                'rawText': _0x10bb40['rawText']
+            }, _0x11fe3a = {
+                ..._0x5a9b43,
+                'finalValue': _0x5a9b43['totalValue'],
+                'characterValue': _0x5a9b43['charValue'],
+                'c6Premium': _0x5a9b43['fullConstPremium'],
+                'teamPremium': _0x5a9b43['teamPremium'],
+                'pullValue': _0x5a9b43['pullValue'],
+                'resourceValue': _0x5a9b43['otherResources'],
+                'yellowMultiplier': _0x5a9b43['yellowCoeff'],
+                'characters': _0x5a9b43['charBreakdown']
+            };
+        return {
+            'info': _0x5e8990,
+            'details': _0x11fe3a,
+            'priceInYuan': _0x382152,
+            'costPerformance': _0x238fe8
+        };
+    } finally {
+        weights = _0x1bd925, _sigWeaponsOverride = _0x6e8ba2;
+    }
+}
+function generateShortDescription(_0x4bdb93) {
+    const _0xf5b2d3 = _0x4bdb93['details'] && _0x4bdb93['details']['characters'] || [];
+    if (_0xf5b2d3['length'] === 0x0)
+        return '无已知角色';
+    const _0x49815 = [..._0xf5b2d3]['sort']((_0x33c867, _0x14003b) => _0x14003b['value'] - _0x33c867['value'])['slice'](0x0, 0x5), _0x3e3aa4 = _0x49815['map'](_0x4e4895 => {
+            const _0x1d3f64 = _0x4e4895['const'] >= 0x6 ? '满命' : _0x4e4895['const'] + '命', _0x4f4e5c = _0x4e4895['hasSig'] ? '+专武' : '';
+            return '' + _0x1d3f64 + _0x4e4895['name'] + _0x4f4e5c;
+        });
+    let _0x4eb5e9 = _0x3e3aa4['join'](',\x20');
+    const _0x449e60 = _0x4bdb93['info'] && _0x4bdb93['info']['yellowCount'];
+    return _0x449e60 > 0x0 && (_0x4eb5e9 += '\x20|\x20' + _0x449e60 + '黄'), _0x4eb5e9;
+}
+module['exports'] = {
+    'CONFIG_VERSION': CONFIG_VERSION,
+    'CHAR_TIERS': CHAR_TIERS,
+    'SIG_WEAPONS': SIG_WEAPONS,
+    'FULL_CONST_WEIGHT': FULL_CONST_WEIGHT,
+    'CHAR_LOOKUP': CHAR_LOOKUP,
+    'CHAR_ALIASES': CHAR_ALIASES,
+    'SECTION_KEYWORDS': SECTION_KEYWORDS,
+    'DEFAULT_WEIGHTS': DEFAULT_WEIGHTS,
+    'DEFAULT_TEAMS': DEFAULT_TEAMS,
+    'DEFAULT_PULL_TIERS': DEFAULT_PULL_TIERS,
+    'DEFAULT_YELLOW_TIERS': DEFAULT_YELLOW_TIERS,
+    'DEFAULT_CHAR_PRICES': DEFAULT_CHAR_PRICES,
+    'DEFAULT_CONST_PREMIUMS': DEFAULT_CONST_PREMIUMS,
+    'DEFAULT_NEED_SIG_WEAPONS': DEFAULT_NEED_SIG_WEAPONS,
+    'buildDefaultCharPrices': buildDefaultCharPrices,
+    'buildDefaultTeamPremiums': buildDefaultTeamPremiums,
+    'buildDefaultWeights': buildDefaultWeights,
+    'getDefaults': getDefaults,
+    'parseAccountInfo': parseAccountInfo,
+    'extractSection': extractSection,
+    'extractNumber': extractNumber,
+    'parseCharacters': parseCharacters,
+    'findCharsInText': findCharsInText,
+    'parseWeapons': parseWeapons,
+    'extractYellowCount': extractYellowCount,
+    'extractListCount': extractListCount,
+    'extractListItems': extractListItems,
+    'checkHasSigWeapon': checkHasSigWeapon,
+    'calcConstPremium': calcConstPremium,
+    'getCharValue': getCharValue,
+    'calculatePullValue': calculatePullValue,
+    'getYellowCoeff': getYellowCoeff,
+    'calculateValue': calculateValue,
+    'evaluateWithPrice': evaluateWithPrice,
+    'generateShortDescription': generateShortDescription
+};

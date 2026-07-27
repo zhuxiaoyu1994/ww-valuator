@@ -10,6 +10,9 @@
 
 'use strict';
 
+// 配置版本号（递增后强制覆盖用户旧配置）
+const CONFIG_VERSION = 3;
+
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
 // ============================================================
@@ -107,6 +110,10 @@ const DEFAULT_WEIGHTS = {
     { count: 8, coef: 1.35 },
     { count: 9, coef: 1.4 },
     { count: 10, coef: 1.45 },
+  ],
+  // 低命折扣系数规则（指定角色均不超过N命时，总价值打折）
+  flatDiscountRules: [
+    { chars: ['爱弥斯', '绯雪', '卡提希娅'], maxConst: 3, discount: 0.9 },
   ],
 };
 
@@ -297,6 +304,7 @@ function buildDefaultWeights(customWeights) {
   w.c6MultiBonus = (saved.c6MultiBonus && saved.c6MultiBonus.length) ? saved.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
   w.pullC6Bonus = (saved.pullC6Bonus && saved.pullC6Bonus.length) ? saved.pullC6Bonus : DEFAULT_WEIGHTS.pullC6Bonus;
   w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
+  w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
   w.pullTiers = (saved.pullTiers && saved.pullTiers.length) ? saved.pullTiers : DEFAULT_PULL_TIERS;
   w.yellowTiers = (saved.yellowTiers && saved.yellowTiers.length) ? saved.yellowTiers : DEFAULT_YELLOW_TIERS;
   w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
@@ -343,6 +351,7 @@ const WEIGHT_LABELS = {
  */
 function getDefaults() {
   return {
+    configVersion: CONFIG_VERSION,
     weights: buildDefaultWeights(),
     charTiers: CHAR_TIERS,
     sigWeapons: SIG_WEAPONS,
@@ -1026,7 +1035,32 @@ function calculateValue(parsed, price) {
 
   // 总价值（各项直接相加后乘以黄数系数，不再使用简单倍率调整）
   const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
-  const totalValue = totalBeforeYellow * yellowCoeff;
+
+  // 低命折扣系数（指定角色均不超过maxConst命时，与黄数系数取较低值）
+  let flatDiscount = 1;
+  const flatDiscountNotes = [];
+  const flatRules = w.flatDiscountRules || [];
+  if (flatRules.length > 0) {
+    for (const rule of flatRules) {
+      if (!rule.chars || rule.chars.length === 0) continue;
+      // 检查账号中是否存在指定的角色
+      const presentChars = rule.chars.filter(c => charNames.has(c));
+      if (presentChars.length === 0) continue;
+      // 检查这些角色是否都没有超过maxConst
+      const allWithinLimit = rule.chars.every(charName => {
+        const char = parsed.characters.find(c => c.name === charName);
+        return !char || char.const <= rule.maxConst;
+      });
+      if (allWithinLimit) {
+        flatDiscount = Math.min(flatDiscount, rule.discount);
+        flatDiscountNotes.push('低命折扣系数(' + presentChars.join('/') + ' ≤' + rule.maxConst + '命) ×' + rule.discount);
+      }
+    }
+  }
+
+  // 低命折扣系数与黄数系数取较低值（不重复计算）
+  const finalCoeff = Math.min(yellowCoeff, flatDiscount);
+  const totalValue = totalBeforeYellow * finalCoeff;
 
   // 性价比
   const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
@@ -1052,6 +1086,7 @@ function calculateValue(parsed, price) {
     matchedTeams: satisfiedTeams,
     c6Bonus: { value: Math.round(fullConstPremium), notes: c6BonusNotes },
     teamBonus: { value: Math.round(teamPremium), notes: teamBonusNotes },
+    flatDiscount: { value: flatDiscount, notes: flatDiscountNotes },    // 低命折扣系数信息
     pullInfo: {
       pulls: pullInfo.pulls,
       perPull: pullInfo.perPull,
@@ -1176,6 +1211,7 @@ function generateShortDescription(evaluation) {
 // ============================================================
 module.exports = {
   // 常量
+  CONFIG_VERSION,
   CHAR_TIERS,
   SIG_WEAPONS,
   FULL_CONST_WEIGHT,
