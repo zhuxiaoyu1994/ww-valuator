@@ -2509,7 +2509,7 @@
           '<button id="mwTestPush" style="padding:8px 24px;border:1px solid #0f3460;border-radius:6px;background:#16213e;color:#10b981;font-size:13px;cursor:pointer;">发送测试通知</button>' +
         '</div>' +
         // 操作按钮（固定底部）
-        '<div style="display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#1a1a2e;padding:12px 24px 16px;margin:8px -24px -24px;border-top:1px solid #0f3460;z-index:5;border-radius:0 0 12px 12px;">' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#1a1a2e;padding:12px 24px 16px;margin:0 -24px -24px;border-top:1px solid #0f3460;z-index:5;border-radius:0 0 12px 12px;">' +
         '<button id="mwNotifyCancel" style="padding:8px 20px;border:none;border-radius:6px;background:#333;color:#888;font-size:13px;cursor:pointer;">取消</button>' +
         '<button id="mwNotifySave" style="padding:8px 20px;border:none;border-radius:6px;background:#e94560;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">保存</button></div>';
       overlay.appendChild(box);
