@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.16.0
+// @version      1.20.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2074,10 +2074,10 @@
         .mw-row-gold td {
           background: rgba(245, 158, 11, 0.10);
         }
-        /* 统一颜色规则：<-20%红色, -20%~20%灰色, 20%~50%橙色, >50%绿色 */
+        /* 颜色规则：差价>200绿色, 0~200黄色, -200~0灰色, <-200红色 */
         .mw-color-red { color: #ef4444; }
         .mw-color-gray { color: #8888aa; }
-        .mw-color-orange { color: #f59e0b; font-weight: bold; }
+        .mw-color-yellow { color: #fbbf24; font-weight: bold; }
         .mw-color-green { color: #10b981; font-weight: bold; }
         .mw-char-tag {
           display: inline-block;
@@ -2508,8 +2508,8 @@
         '<div style="margin-bottom:16px;text-align:center;">' +
           '<button id="mwTestPush" style="padding:8px 24px;border:1px solid #0f3460;border-radius:6px;background:#16213e;color:#10b981;font-size:13px;cursor:pointer;">发送测试通知</button>' +
         '</div>' +
-        // 操作按钮
-        '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+        // 操作按钮（固定底部）
+        '<div style="display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#1a1a2e;padding:12px 24px 16px;margin:8px -24px -24px;border-top:1px solid #0f3460;z-index:5;border-radius:0 0 12px 12px;">' +
         '<button id="mwNotifyCancel" style="padding:8px 20px;border:none;border-radius:6px;background:#333;color:#888;font-size:13px;cursor:pointer;">取消</button>' +
         '<button id="mwNotifySave" style="padding:8px 20px;border:none;border-radius:6px;background:#e94560;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">保存</button></div>';
       overlay.appendChild(box);
@@ -2896,11 +2896,11 @@
       const isPositive = diff > 0;
       const isGold = ratio > threshold;
 
-      // 统一颜色规则：<-20%红色, -20%~20%灰色, 20%~50%橙色, >50%绿色
-      function getColorClass(ratio) {
-        if (ratio < -20) return 'mw-color-red';
-        if (ratio < 20) return 'mw-color-gray';
-        if (ratio < 50) return 'mw-color-orange';
+      // 颜色规则：差价>200绿色, 0~200黄色, -200~0灰色, <-200红色
+      function getColorClass(diff) {
+        if (diff < -200) return 'mw-color-red';
+        if (diff < 0) return 'mw-color-gray';
+        if (diff < 200) return 'mw-color-yellow';
         return 'mw-color-green';
       }
 
@@ -2909,9 +2909,9 @@
       if (ratio > threshold) rowClass = 'mw-row-gold';
       else if (isPositive) rowClass = 'mw-row-positive';
 
-      // 差价和性价比使用统一颜色规则
-      const diffColorClass = getColorClass(ratio);
-      const ratioColorClass = getColorClass(ratio);
+      // 差价和性价比使用基于差价的统一颜色规则
+      const diffColorClass = getColorClass(diff);
+      const ratioColorClass = getColorClass(diff);
 
       // 上架时间
       const listDate = new Date(row.listTime);
@@ -3159,6 +3159,7 @@
     const pullInfo = v.pullInfo || { pulls: 0, perPull: 0, baseTotal: 0, c6Bonus: 0, c6Multiplier: 0, total: 0, tierLabel: '' };
     const yellowInfo = v.yellowInfo || { yellowCount: 0, coefficient: 1, tierLabel: '' };
     const teamBonus = v.teamBonus || { value: 0, notes: [] };
+    const flatDiscount = v.flatDiscount || { value: 1, notes: [] };
     const matchedTeams = v.matchedTeams || [];
 
     const outfitVal = outfits.length * (w.outfit || 0);
@@ -3228,16 +3229,22 @@
       '<div style="font-size:12px;color:#e94560;font-weight:600;">' + c6Bonus.notes.join('，') + '</div>' +
       '<div style="font-size:11px;color:#888;margin-top:2px;">满命角色难度递增，额外加成 ' + c6Bonus.value + '元</div></div>' : '';
 
-    // 黄数阶梯系数
-    const yellowHTML = (yellowInfo.yellowCount > 0) ?
+    // 生效系数：低命折扣与黄数系数取较低值，只显示生效的那个
+    const flatActive = (flatDiscount.value < 1 && flatDiscount.notes.length > 0 && flatDiscount.value < yellowInfo.coefficient);
+    const yellowHTML = (!flatActive && yellowInfo.yellowCount > 0) ?
       '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">' +
       '<div style="font-size:12px;color:#f59e0b;font-weight:600;">黄数系数：' + yellowInfo.yellowCount + '黄 [' + yellowInfo.tierLabel + '] × ' + yellowInfo.coefficient + '</div>' +
       '<div style="font-size:11px;color:#888;margin-top:2px;">最终估值乘以此系数</div></div>' : '';
 
+    const flatDiscountHTML = (flatActive) ?
+      '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(167,139,250,0.1);border-radius:6px;border-left:3px solid #a78bfa;">' +
+      '<div style="font-size:12px;color:#a78bfa;font-weight:600;">低命折扣系数：× ' + flatDiscount.value + '</div>' +
+      '<div style="font-size:11px;color:#888;margin-top:2px;">' + flatDiscount.notes.join('，') + '，最终估值乘以此系数</div></div>' : '';
+
     return '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'Noto Sans CJK SC\',sans-serif;">' +
       // 标题栏
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #0f3460;">' +
-        '<div><span style="font-size:16px;font-weight:700;color:' + color + ';">' + (ratio >= 0 ? '+' : '') + ratio + '%</span>' +
+        '<div><span style="font-size:16px;font-weight:700;color:' + color + ';">' + (ratio >= 0 ? '+' : '') + ratio.toFixed(2) + '%</span>' +
         '<span style="margin-left:8px;font-size:12px;padding:2px 8px;border-radius:4px;background:' + color + ';color:#fff;font-weight:600;">' + getRatioLabel(ratio) + '</span></div>' +
         '<div><a href="' + productLink + '" target="_blank" style="font-size:11px;color:#6a9fff;text-decoration:none;cursor:pointer;" title="点击查看账号详情">' + (row.productUniqueNo || String(row.productId).slice(-6)) + ' 🔗</a>' +
         '<span id="mw-hover-close" style="font-size:18px;color:#666;cursor:pointer;line-height:1;padding:2px 6px;margin-left:8px;border-radius:4px;">✕</span></div>' +
@@ -3285,6 +3292,7 @@
         '<th style="padding:3px 0 3px 8px;text-align:right;color:#555;font-weight:400;font-size:10px;">价值</th>' +
         '</tr></thead><tbody>' + resRowsHTML + '</tbody></table></div>' : '') +
       yellowHTML +
+      flatDiscountHTML +
       '</div>';
   }
 

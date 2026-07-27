@@ -1438,7 +1438,7 @@
 
     // ===== 按钮区 =====
     var btnArea = document.createElement('div');
-    btnArea.style.cssText = 'display:flex;gap:10px;';
+    btnArea.style.cssText = 'display:flex;gap:10px;position:sticky;bottom:0;background:#12122a;padding:12px 24px 16px;margin:8px -24px -24px;border-top:1px solid #2a2a4a;z-index:5;border-radius:0 0 12px 12px;';
 
     var resetBtn = document.createElement('button');
     resetBtn.textContent = '恢复默认';

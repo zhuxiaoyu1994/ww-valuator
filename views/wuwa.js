@@ -633,7 +633,7 @@ function getPageHTML() {
     function showResult(d) {
       // 摘要
       const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
-      const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance + '%' : d.costPerformance + '%';
+      const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(2) + '%' : d.costPerformance.toFixed(2) + '%';
       let summaryHtml = '';
       summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="openValueSettings(reevaluateAfterSettings)">估值不准？修改规则</button>';
       summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
@@ -651,7 +651,15 @@ function getPageHTML() {
       detailHtml += resultRow('配队溢价', det.teamPremium + ' 元', '#aaa');
       detailHtml += resultRow('抽数价值', (det.pullValue || 0) + ' 元' + (d.info && d.info.pulls ? '（' + d.info.pulls + '抽）' : ''), '#aaa');
       detailHtml += resultRow('资源价值', det.resourceValue + ' 元', '#aaa');
-      detailHtml += resultRow('黄数系数', 'x' + det.yellowMultiplier, '#aaa');
+      // 生效系数：低命折扣与黄数系数取较低值，只显示生效的那个
+      const yi = det.yellowInfo || {};
+      const fd = det.flatDiscount || { value: 1, notes: [] };
+      const flatActive = (fd.value < 1 && fd.notes && fd.notes.length > 0 && fd.value < (yi.coefficient || 1));
+      if (flatActive) {
+        detailHtml += resultRow('低命折扣系数', '× ' + fd.value + '（' + fd.notes.join('，') + '）', '#a78bfa');
+      } else if (yi.yellowCount > 0) {
+        detailHtml += resultRow('黄数系数', yi.yellowCount + '黄 [' + (yi.tierLabel || '') + '] × ' + yi.coefficient, '#f59e0b');
+      }
       document.getElementById('result-details').innerHTML = detailHtml;
 
       // 角色标签
