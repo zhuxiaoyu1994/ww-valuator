@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.20.0
+// @version      1.21.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -1757,13 +1757,8 @@
       tableData.push(row);
     }
 
-    // 排序：按差价降序
-    sortTableData();
-
-    // 限制最大行数
-    if (tableData.length > CONFIG.maxTableRows) {
-      tableData = tableData.slice(0, CONFIG.maxTableRows);
-    }
+    // 限制最大行数：始终按差价降序截断，确保高价值数据不被误删
+    trimTableData();
 
     const saved = saveTableData();
     // 只有表格数据成功保存（或精简后保存），才同步 seenIds
@@ -1771,6 +1766,7 @@
     if (saved) {
       saveStorage(STORAGE_KEYS.seen, seenIds);
     }
+    sortTableData();
     refreshTableDisplay();
     updateStatusText();
   }
@@ -1782,21 +1778,40 @@
     const row = tableData.find(r => r.productId === productId);
     if (row) {
       Object.assign(row, updates);
-      sortTableData();
       saveTableData();
+      sortTableData();
       refreshTableDisplay();
     } else {
       // 行不存在（可能被挤出），重新创建
       console.log('[鸣潮监控] 行不存在，重新创建:', productId);
       tableData.push(Object.assign({ productId: productId }, updates));
-      sortTableData();
-      // 限制最大行数
-      if (tableData.length > CONFIG.maxTableRows) {
-        tableData = tableData.slice(0, CONFIG.maxTableRows);
-      }
+      trimTableData();
       saveTableData();
+      sortTableData();
       refreshTableDisplay();
     }
+  }
+
+  /**
+   * 截断表格数据：始终按差价降序排序后截断，确保低价值数据被移除
+   * 截断后恢复用户当前的排序方式用于显示
+   */
+  function trimTableData() {
+    if (tableData.length <= CONFIG.maxTableRows) return;
+    // 按差价降序排序，保留差价最大的行
+    tableData.sort((a, b) => {
+      const diffA = (a.value || 0) - (a.price || 0);
+      const diffB = (b.value || 0) - (b.price || 0);
+      return diffB - diffA;
+    });
+    const removed = tableData.slice(CONFIG.maxTableRows);
+    tableData = tableData.slice(0, CONFIG.maxTableRows);
+    // 同步移除被截断行的 seenIds，保持一致
+    if (removed.length > 0) {
+      const removedIds = new Set(removed.map(r => r.productId));
+      seenIds = seenIds.filter(id => !removedIds.has(id));
+    }
+    console.log('[鸣潮监控] 表格截断：移除' + removed.length + '条低差价数据');
   }
 
   // 排序状态：默认按差价降序
