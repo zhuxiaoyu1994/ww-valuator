@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.21.0
+// @version      1.22.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -331,8 +331,8 @@
     refreshInterval: 60000,      // 列表刷新间隔 60秒
     detailInterval: 4000,        // 详情API调用间隔 4秒
     detailRateLimit: 15,         // 详情API每分钟限制
-    maxTableRows: 1000,           // 表格最大行数
-    maxSeenIds: 5000,            // 已见ID最大数量
+    maxTableRows: 2000,           // 表格最大行数
+    maxSeenIds: 10000,            // 已见ID最大数量
     maxNotifiedIds: 500,         // 已通知ID最大数量
     scanPages: 3,                // 默认扫描页数
   };
@@ -1536,6 +1536,14 @@
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
 
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) {
+      seenIds.push(productId);
+      if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+      saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
     // 添加到表格
     addTableRow({
       productId,
@@ -1632,6 +1640,19 @@
         // 重新解析和估值
         const parsed = parseAccountInfo(showTitle);
         const valuation = calculateValue(parsed, price);
+
+        // 详估后估值低于300，从表格移除
+        if (valuation.totalValue < 300) {
+          const idx = tableData.findIndex(r => r.productId === item.productId);
+          if (idx >= 0) {
+            tableData.splice(idx, 1);
+            saveTableData();
+            sortTableData();
+            refreshTableDisplay();
+            updateStatusText();
+          }
+          return;
+        }
 
         // 更新表格行
         updateTableRow(item.productId, {
@@ -1798,7 +1819,7 @@
    */
   function trimTableData() {
     if (tableData.length <= CONFIG.maxTableRows) return;
-    // 清理优先级：1.估值低于500的优先清理 2.差价最低的优先清理
+    // 清理优先级：1.估值低于500的优先清理 2.差价最低的优先清理（估值<300的已不入库）
     const CLEAN_THRESHOLD = 500;
     tableData.sort((a, b) => {
       const valA = a.value || 0;
