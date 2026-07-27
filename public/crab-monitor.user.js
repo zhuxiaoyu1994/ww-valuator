@@ -1798,10 +1798,18 @@
    */
   function trimTableData() {
     if (tableData.length <= CONFIG.maxTableRows) return;
-    // 按差价降序排序，保留差价最大的行
+    // 清理优先级：1.估值低于500的优先清理 2.差价最低的优先清理
+    const CLEAN_THRESHOLD = 500;
     tableData.sort((a, b) => {
-      const diffA = (a.value || 0) - (a.price || 0);
-      const diffB = (b.value || 0) - (b.price || 0);
+      const valA = a.value || 0;
+      const valB = b.value || 0;
+      const lowA = valA < CLEAN_THRESHOLD ? 1 : 0;
+      const lowB = valB < CLEAN_THRESHOLD ? 1 : 0;
+      // 估值低的排后面（优先被清理）
+      if (lowA !== lowB) return lowA - lowB;
+      // 同组内按差价降序，差价低的排后面（优先被清理）
+      const diffA = valA - (a.price || 0);
+      const diffB = valB - (b.price || 0);
       return diffB - diffA;
     });
     const removed = tableData.slice(CONFIG.maxTableRows);
