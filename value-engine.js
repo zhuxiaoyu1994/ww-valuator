@@ -1,5 +1,5 @@
 'use strict';
-const CONFIG_VERSION = 0x4, CHAR_TIERS = {
+const CONFIG_VERSION = 0x5, CHAR_TIERS = {
         'S': {
             'price': 0x32,
             'isHot': !![],
@@ -389,6 +389,15 @@ const CONFIG_VERSION = 0x4, CHAR_TIERS = {
                 '守岸人'
             ],
             'multiplier': 1.1
+        },
+        {
+            'name': '绯洛穗',
+            'members': [
+                '绯雪',
+                '洛瑟菈',
+                '穗穗'
+            ],
+            'multiplier': 1.6
         }
     ], DEFAULT_PULL_TIERS = [
         {
@@ -529,11 +538,101 @@ const CONFIG_VERSION = 0x4, CHAR_TIERS = {
         },
         {
             'minYellow': 0x78,
-            'maxYellow': 0x3e7,
+            'maxYellow': 0x82,
             'coefficient': 1.35
+        },
+        {
+            'minYellow': 0x82,
+            'maxYellow': 0x8c,
+            'coefficient': 1.4
+        },
+        {
+            'minYellow': 0x8c,
+            'maxYellow': 0x96,
+            'coefficient': 1.45
+        },
+        {
+            'minYellow': 0x96,
+            'maxYellow': 0xa0,
+            'coefficient': 1.5
+        },
+        {
+            'minYellow': 0xa0,
+            'maxYellow': 0xaa,
+            'coefficient': 1.55
+        },
+        {
+            'minYellow': 0xaa,
+            'maxYellow': 0xb4,
+            'coefficient': 1.6
+        },
+        {
+            'minYellow': 0xb4,
+            'maxYellow': 0xbe,
+            'coefficient': 1.65
+        },
+        {
+            'minYellow': 0xbe,
+            'maxYellow': 0xc8,
+            'coefficient': 1.7
+        },
+        {
+            'minYellow': 0xc8,
+            'maxYellow': 0xd2,
+            'coefficient': 1.75
+        },
+        {
+            'minYellow': 0xd2,
+            'maxYellow': 0xdc,
+            'coefficient': 1.8
+        },
+        {
+            'minYellow': 0xdc,
+            'maxYellow': 0xe6,
+            'coefficient': 1.85
+        },
+        {
+            'minYellow': 0xe6,
+            'maxYellow': 0xf0,
+            'coefficient': 1.9
+        },
+        {
+            'minYellow': 0xf0,
+            'maxYellow': 0xfa,
+            'coefficient': 1.95
+        },
+        {
+            'minYellow': 0xfa,
+            'maxYellow': 0x104,
+            'coefficient': 0x2
+        },
+        {
+            'minYellow': 0x104,
+            'maxYellow': 0x10e,
+            'coefficient': 2.05
+        },
+        {
+            'minYellow': 0x10e,
+            'maxYellow': 0x118,
+            'coefficient': 2.1
+        },
+        {
+            'minYellow': 0x118,
+            'maxYellow': 0x122,
+            'coefficient': 2.15
+        },
+        {
+            'minYellow': 0x122,
+            'maxYellow': 0x12c,
+            'coefficient': 2.2
+        },
+        {
+            'minYellow': 0x12c,
+            'maxYellow': 0x3e7,
+            'coefficient': 2.25
         }
     ], DEFAULT_CHAR_PRICES = {
-        '爱弥斯': 0x32,
+        '爱弥斯': 0x2d,
         '绯雪': 0x3c,
         '卡提希娅': 0x23,
         '弗洛洛': 0x23,
@@ -668,6 +767,10 @@ const CONFIG_VERSION = 0x4, CHAR_TIERS = {
         '达妮娅': {
             '2': 0x1e,
             '6': 0x50
+        },
+        '穗穗': {
+            '2': 0x32,
+            '6': 0x78
         }
     }, DEFAULT_NEED_SIG_WEAPONS = [
         '爱弥斯',

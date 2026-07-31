@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.22.0
+// @version      1.25.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -18,7 +18,7 @@
   'use strict';
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 4;
+  const CONFIG_VERSION = 5;
 
   // ============================================================
   // 常量定义
@@ -167,6 +167,7 @@
     { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.5 },
     { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
     { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
+    { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.6 },
   ];
 
   // 默认抽数阶梯定价
@@ -202,12 +203,30 @@
     { minYellow: 90, maxYellow: 100, coefficient: 1.2 },
     { minYellow: 100, maxYellow: 110, coefficient: 1.25 },
     { minYellow: 110, maxYellow: 120, coefficient: 1.3 },
-    { minYellow: 120, maxYellow: 999, coefficient: 1.35 },
+    { minYellow: 120, maxYellow: 130, coefficient: 1.35 },
+    { minYellow: 130, maxYellow: 140, coefficient: 1.4 },
+    { minYellow: 140, maxYellow: 150, coefficient: 1.45 },
+    { minYellow: 150, maxYellow: 160, coefficient: 1.5 },
+    { minYellow: 160, maxYellow: 170, coefficient: 1.55 },
+    { minYellow: 170, maxYellow: 180, coefficient: 1.6 },
+    { minYellow: 180, maxYellow: 190, coefficient: 1.65 },
+    { minYellow: 190, maxYellow: 200, coefficient: 1.7 },
+    { minYellow: 200, maxYellow: 210, coefficient: 1.75 },
+    { minYellow: 210, maxYellow: 220, coefficient: 1.8 },
+    { minYellow: 220, maxYellow: 230, coefficient: 1.85 },
+    { minYellow: 230, maxYellow: 240, coefficient: 1.9 },
+    { minYellow: 240, maxYellow: 250, coefficient: 1.95 },
+    { minYellow: 250, maxYellow: 260, coefficient: 2 },
+    { minYellow: 260, maxYellow: 270, coefficient: 2.05 },
+    { minYellow: 270, maxYellow: 280, coefficient: 2.1 },
+    { minYellow: 280, maxYellow: 290, coefficient: 2.15 },
+    { minYellow: 290, maxYellow: 300, coefficient: 2.2 },
+    { minYellow: 300, maxYellow: 999, coefficient: 2.25 },
   ];
 
   // 默认角色价格表（用户自定义）
   const DEFAULT_CHAR_PRICES = {
-    '爱弥斯': 50, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
+    '爱弥斯': 45, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
     '琳奈': 25, '守岸人': 20, '千咲': 25, '穗穗': 35, '莫宁': 25, '秧秧玄翎': 35,
     '洛瑟菈': 25,
     '达妮娅': 15, '夏空': 15,
@@ -254,6 +273,7 @@
     '菲比': { '2': 30, '6': 80 },
     '露帕': { '6': 80 },
     '达妮娅': { '2': 30, '6': 80 },
+    '穗穗': { '2': 50, '6': 120 },
   };
 
   // 生成默认角色价格表（从 DEFAULT_CHAR_PRICES，回退到 CHAR_TIERS）
@@ -331,8 +351,8 @@
     refreshInterval: 60000,      // 列表刷新间隔 60秒
     detailInterval: 4000,        // 详情API调用间隔 4秒
     detailRateLimit: 15,         // 详情API每分钟限制
-    maxTableRows: 2000,           // 表格最大行数
-    maxSeenIds: 10000,            // 已见ID最大数量
+    maxTableRows: 1200,           // 表格最大行数
+    maxSeenIds: 5000,              // 已见ID最大数量
     maxNotifiedIds: 500,         // 已通知ID最大数量
     scanPages: 3,                // 默认扫描页数
   };
@@ -365,6 +385,8 @@
   let tableData = [];            // 表格数据
   let seenIds = [];              // 已扫描productId
   let notifiedIds = [];          // 已通知productId
+  let batchMode = false;          // 批量处理模式：跳过逐条保存和刷新
+  let hasNewRulesAvailable = false;
   let monitorRunning = false;    // 监控开关
   let notifyEnabled = false;     // 通知开关
   let threshold = 20;            // 估值阈值(%)
@@ -500,8 +522,13 @@
     // 配置版本检查：版本号不匹配时清除旧配置，强制使用新默认值
     const savedVersion = loadStorage(STORAGE_KEYS.configVersion, 0);
     if (savedVersion < CONFIG_VERSION) {
-      console.log('[鸣潮监控] 配置版本升级(' + savedVersion + '→' + CONFIG_VERSION + ')，清除旧配置');
-      localStorage.removeItem(STORAGE_KEYS.weights);
+      const hasCustomConfig = loadStorage(STORAGE_KEYS.weights, null) != null;
+      if (hasCustomConfig) {
+        hasNewRulesAvailable = true;
+        console.log('[鸣潮监控] 检测到新规则版本(' + savedVersion + '→' + CONFIG_VERSION + ')，用户有自定义配置，已提醒');
+      } else {
+        console.log('[鸣潮监控] 配置版本升级(' + savedVersion + '→' + CONFIG_VERSION + ')，使用最新默认值');
+      }
       saveStorage(STORAGE_KEYS.configVersion, CONFIG_VERSION);
     }
 
@@ -862,6 +889,36 @@
       result.aftermathCoral / 8 + result.floatGoldRipple + result.castTideRipple;
 
     return result;
+  }
+
+  /**
+   * 生成内容指纹：基于账号内容特征（不含productId和price）
+   * 同一账号重复上架（新productId）时指纹相同，用于去重合并
+   */
+  function generateFingerprint(parsed) {
+    const parts = [];
+    // 角色：名称+命座（按名称排序确保一致性）
+    const chars = [...parsed.characters]
+      .map(c => c.name + 'c' + c.const)
+      .sort();
+    parts.push('ch:' + chars.join(','));
+    // 武器：名称+精炼（按名称排序）
+    const weapons = [...parsed.weapons]
+      .map(w => w.name + 'r' + (w.refine || 0))
+      .sort();
+    parts.push('wp:' + weapons.join(','));
+    // 资源数量（精确数值，唯一性强）
+    parts.push('ss:' + parsed.starSound);
+    parts.push('mp:' + parsed.moonPhase);
+    parts.push('ac:' + parsed.aftermathCoral);
+    parts.push('fg:' + parsed.floatGoldRipple);
+    parts.push('ct:' + parsed.castTideRipple);
+    // 黄数、服饰、摩托、涂装
+    parts.push('yc:' + parsed.yellowCount);
+    parts.push('of:' + parsed.outfitCount);
+    parts.push('mo:' + parsed.motoCount);
+    parts.push('pa:' + parsed.paintCount);
+    return parts.join('|');
   }
 
   /**
@@ -1469,9 +1526,20 @@
       updateStatusText();
     }
 
+    // 批量处理：跳过逐条保存和刷新，处理完后统一执行一次
+    batchMode = true;
     for (const item of list) {
       processProduct(item);
     }
+    batchMode = false;
+
+    // 统一执行一次截断、保存、排序和刷新
+    trimTableData();
+    saveTableData();
+    saveStorage(STORAGE_KEYS.seen, seenIds);
+    sortTableData();
+    refreshTableDisplay();
+    updateStatusText();
   }
 
   /**
@@ -1503,9 +1571,11 @@
         }
         existRow.priceDrop = (existRow.priceDrop || 0) + (oldPrice - price);
         existRow.status = '降价';
-        sortTableData();
-        saveTableData();
-        refreshTableDisplay();
+        if (!batchMode) {
+          sortTableData();
+          saveTableData();
+          refreshTableDisplay();
+        }
         console.log('[鸣潮监控] 降价: ' + (existRow.productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
 
         // 降价通知（如果估值仍满足通知条件）
@@ -1540,7 +1610,48 @@
     if (valuation.totalValue < 300) {
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
-      saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
+    // 内容指纹去重：同一账号重复上架（新productId）时合并到已有行
+    const fingerprint = generateFingerprint(parsed);
+    const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
+    if (dupRow) {
+      // 标记新ID为已见，避免重复进详情队列
+      seenIds.push(productId);
+      if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+      // 如果新标价更低，更新价格（相当于降价）
+      if (price < dupRow.price) {
+        if (!dupRow.priceHistory) dupRow.priceHistory = [];
+        dupRow.priceHistory.push({ price: dupRow.price, time: Date.now() });
+        const oldPrice = dupRow.price;
+        dupRow.price = price;
+        dupRow.productId = productId; // 切换到新链接
+        if (dupRow.productUniqueNo) dupRow.productUniqueNo = productUniqueNo;
+        dupRow.ratio = ((dupRow.value - price) / price) * 100;
+        dupRow.priceDrop = (dupRow.priceDrop || 0) + (oldPrice - price);
+        dupRow.status = '降价';
+        dupRow.listTime = typeof listTime === 'number' ? listTime : Date.now();
+        if (!batchMode) {
+          sortTableData();
+          saveTableData();
+          refreshTableDisplay();
+        }
+        console.log('[鸣潮监控] 重复上架合并(降价): ' + (productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
+        // 降价通知
+        if (notifyEnabled && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+            (dupRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
+          const dropMsg = '降价¥' + (oldPrice - price).toFixed(0) + ' ' + (dupRow.productUniqueNo || '') +
+            ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) + ' 估值¥' + (dupRow.value || 0).toFixed(0);
+          notify(productId + '_drop', '降价提醒 ' + dupRow.ratio.toFixed(1) + '%', dropMsg);
+          notifiedIds.push(productId + '_drop');
+          if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+        }
+      } else {
+        if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      }
       return;
     }
 
@@ -1548,6 +1659,7 @@
     addTableRow({
       productId,
       productUniqueNo,
+      fingerprint,
       showTitle,
       price,
       value: valuation.totalValue,
@@ -1778,6 +1890,9 @@
       tableData.push(row);
     }
 
+    // 批量模式下跳过截断、保存和刷新，由调用方统一处理
+    if (batchMode) return;
+
     // 限制最大行数：始终按差价降序截断，确保高价值数据不被误删
     trimTableData();
 
@@ -1805,7 +1920,11 @@
     } else {
       // 行不存在（可能被挤出），重新创建
       console.log('[鸣潮监控] 行不存在，重新创建:', productId);
-      tableData.push(Object.assign({ productId: productId }, updates));
+      tableData.push(Object.assign({
+        productId: productId,
+        listTime: Date.now(),
+        firstSeen: Date.now(),
+      }, updates));
       trimTableData();
       saveTableData();
       sortTableData();
@@ -1819,8 +1938,8 @@
    */
   function trimTableData() {
     if (tableData.length <= CONFIG.maxTableRows) return;
-    // 清理优先级：1.估值低于500的优先清理 2.差价最低的优先清理（估值<300的已不入库）
-    const CLEAN_THRESHOLD = 500;
+    // 清理优先级：1.估值低于600的优先清理 2.时间越久越优先清理（估值<300的已不入库）
+    const CLEAN_THRESHOLD = 600;
     tableData.sort((a, b) => {
       const valA = a.value || 0;
       const valB = b.value || 0;
@@ -1828,10 +1947,10 @@
       const lowB = valB < CLEAN_THRESHOLD ? 1 : 0;
       // 估值低的排后面（优先被清理）
       if (lowA !== lowB) return lowA - lowB;
-      // 同组内按差价降序，差价低的排后面（优先被清理）
-      const diffA = valA - (a.price || 0);
-      const diffB = valB - (b.price || 0);
-      return diffB - diffA;
+      // 同组内按时间升序，时间越早的排后面（优先被清理）
+      const timeA = a.firstSeen || a.listTime || 0;
+      const timeB = b.firstSeen || b.listTime || 0;
+      return timeA - timeB;
     });
     const removed = tableData.slice(CONFIG.maxTableRows);
     tableData = tableData.slice(0, CONFIG.maxTableRows);
@@ -1840,7 +1959,7 @@
       const removedIds = new Set(removed.map(r => r.productId));
       seenIds = seenIds.filter(id => !removedIds.has(id));
     }
-    console.log('[鸣潮监控] 表格截断：移除' + removed.length + '条低差价数据');
+    console.log('[鸣潮监控] 表格截断：移除' + removed.length + '条旧数据');
   }
 
   // 排序状态：默认按差价降序
@@ -2957,10 +3076,16 @@
       const diffColorClass = getColorClass(diff);
       const ratioColorClass = getColorClass(diff);
 
-      // 上架时间
-      const listDate = new Date(row.listTime);
-      const listStr = listDate.getMonth() + 1 + '/' + listDate.getDate() + ' ' +
-        String(listDate.getHours()).padStart(2, '0') + ':' + String(listDate.getMinutes()).padStart(2, '0');
+      // 上架时间（回退到 firstSeen，均无效则显示"未知"）
+      const rawTime = row.listTime || row.firstSeen;
+      let listStr;
+      if (rawTime && !isNaN(new Date(rawTime).getTime())) {
+        const listDate = new Date(rawTime);
+        listStr = listDate.getMonth() + 1 + '/' + listDate.getDate() + ' ' +
+          String(listDate.getHours()).padStart(2, '0') + ':' + String(listDate.getMinutes()).padStart(2, '0');
+      } else {
+        listStr = '未知';
+      }
 
       // 角色标签（改进2：按级别排序显示）
       const charsHtml = buildCharTagsHTML(row);
@@ -4813,9 +4938,13 @@ function openSettings() {
     btnArea.style.cssText = 'display:flex;gap:10px;';
 
     var resetBtn = document.createElement('button');
-    resetBtn.textContent = '恢复默认';
+    resetBtn.textContent = '加载最新规则';
     resetBtn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;background:#333;color:#ccc;font-size:14px;font-weight:600;cursor:pointer;';
     resetBtn.onclick = function () {
+      var hasCustom = loadStorage(STORAGE_KEYS.weights, null) != null;
+      if (hasCustom && !confirm('检测到您有自定义配置，加载最新规则将覆盖当前设置（保存后生效）。是否继续？')) {
+        return;
+      }
       // 重置其他权重
       for (var key of Object.keys(DEFAULT_WEIGHTS)) {
         if (skipKeys[key] || !weightInputs[key]) continue;
@@ -5842,6 +5971,19 @@ function openSettings() {
   function init() {
     // 加载存储数据
     tableData = loadStorage(STORAGE_KEYS.table, []);
+    // 为旧数据补充 fingerprint（去重功能升级前的数据没有此字段）
+    let migrated = 0;
+    for (const row of tableData) {
+      if (!row.fingerprint && row.showTitle) {
+        const parsed = parseAccountInfo(row.showTitle);
+        row.fingerprint = generateFingerprint(parsed);
+        migrated++;
+      }
+    }
+    if (migrated > 0) {
+      console.log('[鸣潮监控] 为' + migrated + '条旧数据补充了内容指纹');
+      saveTableData();
+    }
     seenIds = loadStorage(STORAGE_KEYS.seen, []);
     notifiedIds = loadStorage(STORAGE_KEYS.notified, []);
 
@@ -5870,6 +6012,25 @@ function openSettings() {
 
     // 创建UI
     createDashboard();
+
+    if (hasNewRulesAvailable) {
+      var banner = document.createElement('div');
+      banner.style.cssText = 'background:#3a2a1a;border:1px solid #f59e0b;color:#f59e0b;padding:10px 16px;margin:8px 0;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:10px;';
+      banner.innerHTML = '<span>有新的规则可用，点击"加载最新规则"来更新</span>';
+      var openBtn = document.createElement('button');
+      openBtn.textContent = '打开设置';
+      openBtn.style.cssText = 'background:#f59e0b;color:#1a1a2e;border:none;border-radius:4px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;';
+      openBtn.onclick = function () { openSettings(); };
+      banner.appendChild(openBtn);
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '×';
+      closeBtn.style.cssText = 'background:none;border:none;color:#f59e0b;font-size:18px;cursor:pointer;margin-left:auto;';
+      closeBtn.onclick = function () { banner.remove(); };
+      banner.appendChild(closeBtn);
+      var panel = document.getElementById('mw-dashboard') || document.querySelector('.mw-dashboard');
+      if (panel) panel.insertBefore(banner, panel.firstChild);
+      else document.body.insertBefore(banner, document.body.firstChild);
+    }
 
     // 刷新表格显示
     refreshTableDisplay();

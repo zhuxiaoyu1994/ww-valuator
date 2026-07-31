@@ -104,10 +104,15 @@
       var savedVersion = parseInt(localStorage.getItem(CONFIG_VERSION_KEY) || '0', 10);
       var currentVersion = (cachedDefaults && cachedDefaults.configVersion) || 1;
       if (savedVersion < currentVersion) {
-        console.log('[value-settings] 配置版本升级(' + savedVersion + '→' + currentVersion + ')，清除旧配置');
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
-        return null;
+        var existing = localStorage.getItem(STORAGE_KEY);
+        if (existing) {
+          console.log('[value-settings] 检测到新规则版本，用户有自定义配置');
+          window._hasNewRulesAvailable = true;
+          localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+        } else {
+          localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+          return null;
+        }
       }
       var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
       return saved || null;
@@ -1441,9 +1446,13 @@
     btnArea.style.cssText = 'display:flex;gap:10px;position:sticky;bottom:0;background:#12122a;padding:12px 24px 16px;margin:8px -24px 0;border-top:1px solid #2a2a4a;z-index:5;border-radius:0 0 12px 12px;';
 
     var resetBtn = document.createElement('button');
-    resetBtn.textContent = '恢复默认';
+    resetBtn.textContent = '加载最新规则';
     resetBtn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;background:#1a1a3a;color:#ccc;font-size:14px;font-weight:600;cursor:pointer;';
     resetBtn.onclick = function () {
+      var hasCustom = localStorage.getItem(STORAGE_KEY) != null;
+      if (hasCustom && !confirm('检测到您有自定义配置，加载最新规则将覆盖当前设置（保存后生效）。是否继续？')) {
+        return;
+      }
       // 重置其他权重
       for (var key in DEFAULT_WEIGHTS) {
         if (!DEFAULT_WEIGHTS.hasOwnProperty(key) || skipKeys[key] || !weightInputs[key]) continue;

@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 4;
+const CONFIG_VERSION = 5;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -132,6 +132,7 @@ const DEFAULT_TEAMS = [
   { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.5 },
   { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
   { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
+  { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.6 },
 ];
 
 // ============================================================
@@ -171,14 +172,32 @@ const DEFAULT_YELLOW_TIERS = [
   { minYellow: 90, maxYellow: 100, coefficient: 1.2 },
   { minYellow: 100, maxYellow: 110, coefficient: 1.25 },
   { minYellow: 110, maxYellow: 120, coefficient: 1.3 },
-  { minYellow: 120, maxYellow: 999, coefficient: 1.35 },
+  { minYellow: 120, maxYellow: 130, coefficient: 1.35 },
+  { minYellow: 130, maxYellow: 140, coefficient: 1.4 },
+  { minYellow: 140, maxYellow: 150, coefficient: 1.45 },
+  { minYellow: 150, maxYellow: 160, coefficient: 1.5 },
+  { minYellow: 160, maxYellow: 170, coefficient: 1.55 },
+  { minYellow: 170, maxYellow: 180, coefficient: 1.6 },
+  { minYellow: 180, maxYellow: 190, coefficient: 1.65 },
+  { minYellow: 190, maxYellow: 200, coefficient: 1.7 },
+  { minYellow: 200, maxYellow: 210, coefficient: 1.75 },
+  { minYellow: 210, maxYellow: 220, coefficient: 1.8 },
+  { minYellow: 220, maxYellow: 230, coefficient: 1.85 },
+  { minYellow: 230, maxYellow: 240, coefficient: 1.9 },
+  { minYellow: 240, maxYellow: 250, coefficient: 1.95 },
+  { minYellow: 250, maxYellow: 260, coefficient: 2 },
+  { minYellow: 260, maxYellow: 270, coefficient: 2.05 },
+  { minYellow: 270, maxYellow: 280, coefficient: 2.1 },
+  { minYellow: 280, maxYellow: 290, coefficient: 2.15 },
+  { minYellow: 290, maxYellow: 300, coefficient: 2.2 },
+  { minYellow: 300, maxYellow: 999, coefficient: 2.25 },
 ];
 
 // ============================================================
 // 默认角色价格表（对应油猴脚本 DEFAULT_CHAR_PRICES，按角色名）
 // ============================================================
 const DEFAULT_CHAR_PRICES = {
-  '爱弥斯': 50, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
+  '爱弥斯': 45, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
   '琳奈': 25, '守岸人': 20, '千咲': 25, '穗穗': 35, '莫宁': 25, '秧秧玄翎': 35,
   '洛瑟菈': 25,
   '达妮娅': 15, '夏空': 15,
@@ -227,6 +246,7 @@ const DEFAULT_CONST_PREMIUMS = {
   '菲比': { '2': 30, '6': 80 },
   '露帕': { '6': 80 },
   '达妮娅': { '2': 30, '6': 80 },
+  '穗穗': { '2': 50, '6': 120 },
 };
 
 // 需要专武的角色列表（对应油猴脚本 DEFAULT_NEED_SIG_WEAPONS）
