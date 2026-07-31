@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.25.1
+// @version      1.26.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -386,7 +386,7 @@
   let seenIds = [];              // 已扫描productId
   let notifiedIds = [];          // 已通知productId
   let batchMode = false;          // 批量处理模式：跳过逐条保存和刷新
-  let hasNewRulesAvailable = false;
+  let hasNewRulesAvailable = false;  // 有新规则可用（用户有自定义配置时提醒）
   let monitorRunning = false;    // 监控开关
   let notifyEnabled = false;     // 通知开关
   let threshold = 20;            // 估值阈值(%)
@@ -396,6 +396,8 @@
   let autoBuyDiff = 500;        // 自动购买差价阈值(元)
   let notifyMinValue = 498;      // 通知估值下限(元)，低于此值不通知
   let notifyMinPrice = 0;        // 通知标价下限(元)，低于此值不通知
+  let notifyMaxPrice = 0;        // 通知标价上限(元)，高于此值不通知（0=不限制）
+  let autoBuyMaxPrice = 0;       // 自动抢购标价上限(元)，高于此值不抢购（0=不限制）
   let refreshIntervalSec = 30;   // 刷新间隔（秒），可设置
   // 检查已售设置
   let soldCheckRatio = 40;       // 检查已售的性价比阈值(%)
@@ -519,11 +521,12 @@
    * @returns {object} 权重对象（含 charPrices / constPremiums / teamPremiums / pullTiers / yellowTiers）
    */
   function loadWeights() {
-    // 配置版本检查：版本号不匹配时清除旧配置，强制使用新默认值
+    // 配置版本检查：版本号不匹配时，有自定义配置则提醒，无则自动更新版本号
     const savedVersion = loadStorage(STORAGE_KEYS.configVersion, 0);
     if (savedVersion < CONFIG_VERSION) {
       const hasCustomConfig = loadStorage(STORAGE_KEYS.weights, null) != null;
       if (hasCustomConfig) {
+        // 用户有自定义配置，不覆盖，只标记有新规则可用
         hasNewRulesAvailable = true;
         console.log('[鸣潮监控] 检测到新规则版本(' + savedVersion + '→' + CONFIG_VERSION + ')，用户有自定义配置，已提醒');
       } else {
@@ -1394,9 +1397,8 @@
    *   pageIndex: 页码（从1开始）
    *   pageSize: 每页数量
    *   bizProd: 业务类型（1=成品账号 FINISHED_ACCOUNT）
-   *   type: 查询类型（"1"=最新发布，"4"=综合排序）
+   *   type: 查询类型（"4"=过滤商品列表）
    *   posType: 位置类型（1=FILTER_PRODUCT_LIST）
-   *   sortType: 排序方向（2=降序，最新优先）
    */
   async function fetchList(page) {
     const controller = new AbortController();
@@ -1596,8 +1598,9 @@
         }
         console.log('[鸣潮监控] 降价: ' + (existRow.productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
 
-        // 降价通知（如果估值仍满足通知条件）
+        // 降价通知（如果估值仍满足通知条件，且标价不高于上限）
         if (existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+            (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (existRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
           const dropMsg = '降价¥' + (oldPrice - price).toFixed(0) +
             ' ' + (existRow.productUniqueNo || '') +
@@ -1659,6 +1662,7 @@
         console.log('[鸣潮监控] 重复上架合并(降价): ' + (productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
         // 降价通知
         if (notifyEnabled && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+            (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (dupRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
           const dropMsg = '降价¥' + (oldPrice - price).toFixed(0) + ' ' + (dupRow.productUniqueNo || '') +
             ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) + ' 估值¥' + (dupRow.value || 0).toFixed(0);
@@ -1812,10 +1816,11 @@
           const matchedRules = charNotifyRules.filter(rule =>
             rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
           );
-          // 常规通知条件：差价超过阈值，且估值/标价不低于各自下限
+          // 常规通知条件：差价超过阈值，且估值/标价不低于各自下限，且标价不高于上限
           const shouldNotifyRegular = (valuation.diff > notifyDiffThreshold)
             && valuation.totalValue >= notifyMinValue
-            && price >= notifyMinPrice;
+            && price >= notifyMinPrice
+            && (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
 
           // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff
           let charRuleTriggered = false;
@@ -1877,8 +1882,8 @@
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
             saveStorage(STORAGE_KEYS.notified, notifiedIds);
 
-            // 自动抢购：差价超过阈值时自动打开商品页
-            if (autoBuyEnabled && valuation.diff >= autoBuyDiff) {
+            // 自动抢购：差价超过阈值且标价不超过上限时自动打开商品页
+            if (autoBuyEnabled && valuation.diff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || price <= autoBuyMaxPrice)) {
               autoBuy(item.productId, valuation.diff);
             }
           }
@@ -2606,8 +2611,10 @@
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">自动抢购差价阈值（元）</label>' +
         '<input type="number" id="mwAutoBuyDiff" value="' + autoBuyDiff + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">标价上限（元）</label>' +
+        '<input type="number" id="mwAutoBuyMaxPrice" value="' + autoBuyMaxPrice + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#f59e0b;margin-bottom:16px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">差价超过阈值时自动打开商品页并点击"立即购买"跳转到确认页，你只需手动扫码支付。需保持螃蟹网登录状态。</div>' +
+        '<div style="font-size:11px;color:#f59e0b;margin-bottom:16px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">差价超过阈值且标价不超过上限时自动打开商品页并点击"立即购买"跳转到确认页，你只需手动扫码支付。需保持螃蟹网登录状态。标价上限填0表示不限制。</div>' +
         // 指定账号通知
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">指定账号通知（须满足全部角色条件）</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，且差价超过阈值才通知</div>' +
@@ -2657,8 +2664,10 @@
         '<input type="number" id="mwNotifyMinValue" value="' + notifyMinValue + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">标价下限（元）</label>' +
         '<input type="number" id="mwNotifyMinPrice" value="' + notifyMinPrice + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">标价上限（元）</label>' +
+        '<input type="number" id="mwNotifyMaxPrice" value="' + notifyMaxPrice + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值或标价低于各自下限时不会发送通知（填0表示不限制）</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值或标价低于各自下限时不会发送通知，标价高于上限时也不通知（填0表示不限制）</div>' +
         // 提醒方式
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">提醒方式</div>' +
         '<div style="margin-bottom:8px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwSoundAlert" ' + (pushConfig.soundAlert ? 'checked' : '') + ' style="margin-right:6px;">声音提醒（连续蜂鸣3次）</label></div>' +
@@ -2780,8 +2789,10 @@
         notifyDiffThreshold = parseFloat(box.querySelector('#mwNotifyDiff').value) || 0;
         autoBuyEnabled = box.querySelector('#mwAutoBuyEnabled').checked;
         autoBuyDiff = parseFloat(box.querySelector('#mwAutoBuyDiff').value) || 0;
+        autoBuyMaxPrice = parseFloat(box.querySelector('#mwAutoBuyMaxPrice').value) || 0;
         notifyMinValue = parseFloat(box.querySelector('#mwNotifyMinValue').value) || 0;
         notifyMinPrice = parseFloat(box.querySelector('#mwNotifyMinPrice').value) || 0;
+        notifyMaxPrice = parseFloat(box.querySelector('#mwNotifyMaxPrice').value) || 0;
         var newInterval = parseInt(box.querySelector('#mwRefreshInterval').value) || 60;
         if (newInterval < 10) newInterval = 10;
         if (newInterval > 3600) newInterval = 3600;
@@ -4953,12 +4964,13 @@ function openSettings() {
 
     // ===== 按钮区 =====
     var btnArea = document.createElement('div');
-    btnArea.style.cssText = 'display:flex;gap:10px;';
+    btnArea.style.cssText = 'display:flex;gap:10px;position:sticky;bottom:0;background:#1a1a2e;padding:12px 24px 16px;margin:8px -24px 0;border-top:1px solid #0f3460;z-index:5;border-radius:0 0 12px 12px;';
 
     var resetBtn = document.createElement('button');
     resetBtn.textContent = '加载最新规则';
     resetBtn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;background:#333;color:#ccc;font-size:14px;font-weight:600;cursor:pointer;';
     resetBtn.onclick = function () {
+      // 检查用户是否有自定义配置
       var hasCustom = loadStorage(STORAGE_KEYS.weights, null) != null;
       if (hasCustom && !confirm('检测到您有自定义配置，加载最新规则将覆盖当前设置（保存后生效）。是否继续？')) {
         return;
@@ -5876,8 +5888,10 @@ function openSettings() {
       notifyDiffThreshold: notifyDiffThreshold,
       autoBuyEnabled: autoBuyEnabled,
       autoBuyDiff: autoBuyDiff,
+      autoBuyMaxPrice: autoBuyMaxPrice,
       notifyMinValue: notifyMinValue,
       notifyMinPrice: notifyMinPrice,
+      notifyMaxPrice: notifyMaxPrice,
       refreshIntervalSec: refreshIntervalSec,
       soldCheckRatio: soldCheckRatio,
       soldCheckDiff: soldCheckDiff,
@@ -6012,8 +6026,10 @@ function openSettings() {
     notifyDiffThreshold = savedState.notifyDiffThreshold != null ? savedState.notifyDiffThreshold : 100;
     autoBuyEnabled = savedState.autoBuyEnabled || false;
     autoBuyDiff = savedState.autoBuyDiff != null ? savedState.autoBuyDiff : 500;
+    autoBuyMaxPrice = savedState.autoBuyMaxPrice != null ? savedState.autoBuyMaxPrice : 0;
     notifyMinValue = savedState.notifyMinValue != null ? savedState.notifyMinValue : 200;
     notifyMinPrice = savedState.notifyMinPrice != null ? savedState.notifyMinPrice : 0;
+    notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 0;
     refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 60;
     soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 20;
     soldCheckDiff = savedState.soldCheckDiff != null ? savedState.soldCheckDiff : 0;
@@ -6031,6 +6047,7 @@ function openSettings() {
     // 创建UI
     createDashboard();
 
+    // 有新规则可用时，在面板顶部显示提醒
     if (hasNewRulesAvailable) {
       var banner = document.createElement('div');
       banner.style.cssText = 'background:#3a2a1a;border:1px solid #f59e0b;color:#f59e0b;padding:10px 16px;margin:8px 0;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:10px;';
@@ -6045,6 +6062,7 @@ function openSettings() {
       closeBtn.style.cssText = 'background:none;border:none;color:#f59e0b;font-size:18px;cursor:pointer;margin-left:auto;';
       closeBtn.onclick = function () { banner.remove(); };
       banner.appendChild(closeBtn);
+      // 插入到面板顶部
       var panel = document.getElementById('mw-dashboard') || document.querySelector('.mw-dashboard');
       if (panel) panel.insertBefore(banner, panel.firstChild);
       else document.body.insertBefore(banner, document.body.firstChild);
