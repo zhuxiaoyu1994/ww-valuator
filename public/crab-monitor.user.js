@@ -422,6 +422,7 @@
   let lastInterceptTime = null;  // 最后拦截时间
   let lastRefreshTime = 0;       // 最后刷新时间
   let nextRefreshTime = 0;       // 下次刷新时间
+  let lastRefreshError = '';     // 最后刷新错误信息（空=成功）
   let detailQueue = [];          // 详情API队列
   let detailTimer = null;        // 详情队列定时器
   let detailCallsThisMinute = 0; // 本分钟详情API调用数
@@ -5262,7 +5263,8 @@ function openSettings() {
       countdownStr = remaining + '秒';
     }
 
-    dom.bottomLeft.textContent = '最后刷新: ' + lastStr + ' | 下次刷新: ' + countdownStr;
+    dom.bottomLeft.textContent = '最后刷新: ' + lastStr + ' | 下次刷新: ' + countdownStr +
+      (lastRefreshError ? ' | ❌ ' + lastRefreshError : '');
 
     // 重置每分钟计数
     if (Date.now() - detailMinuteStart >= 60000) {
@@ -5964,7 +5966,12 @@ function openSettings() {
       if (data && data.success && data.data) {
         list = Array.isArray(data.data) ? data.data : (data.data.list || null);
       }
-      if (list) handleListResponse(list, false);
+      if (list) {
+        handleListResponse(list, false);
+        lastRefreshError = '';  // 刷新成功，清除错误
+      } else if (data && !data.success) {
+        lastRefreshError = 'API返回失败: ' + (data.message || data.msg || '未知错误');
+      }
 
       // 可选：扫描第2-3页
       for (let page = 2; page <= CONFIG.scanPages; page++) {
@@ -5979,6 +5986,7 @@ function openSettings() {
         }
       }
     } catch (e) {
+      lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
       console.error('[鸣潮监控] 列表刷新失败:', e);
     }
 
