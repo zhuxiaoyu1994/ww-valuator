@@ -1612,6 +1612,10 @@
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
         }
+      } else if (!existRow) {
+        // 行已被截断但 seenIds 保留：重新入详情队列，由详情回调重建行
+        console.log('[鸣潮监控] 行已截断，重新入队:', productId);
+        enqueueDetail(productId);
       }
       return;
     }
@@ -1978,11 +1982,8 @@
     });
     const removed = tableData.slice(CONFIG.maxTableRows);
     tableData = tableData.slice(0, CONFIG.maxTableRows);
-    // 同步移除被截断行的 seenIds，保持一致
-    if (removed.length > 0) {
-      const removedIds = new Set(removed.map(r => r.productId));
-      seenIds = seenIds.filter(id => !removedIds.has(id));
-    }
+    // 不清除 seenIds：被截断的商品可能仍在详情队列中，
+    // 清除后会导致重新按初估覆盖详估数据，引发数据丢失
     console.log('[鸣潮监控] 表格截断：移除' + removed.length + '条旧数据');
   }
 
