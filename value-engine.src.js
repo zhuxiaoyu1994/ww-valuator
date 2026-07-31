@@ -1077,7 +1077,8 @@ function calculateValue(parsed, price) {
   }
 
   // 低命折扣系数与黄数系数取较低值（不重复计算）
-  const finalCoeff = Math.min(yellowCoeff, flatDiscount);
+  // 仅当低命折扣规则匹配（flatDiscount < 1）时才取较低值，否则直接用黄数系数
+  const finalCoeff = flatDiscount < 1 ? Math.min(yellowCoeff, flatDiscount) : yellowCoeff;
   const totalValue = totalBeforeYellow * finalCoeff;
 
   // 性价比
