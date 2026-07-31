@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.25.0
+// @version      1.25.1
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -1398,25 +1398,32 @@
    *   sortType: 排序方向（2=降序，最新优先）
    */
   async function fetchList(page) {
-    const response = await fetch(API_URLS.list, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: '',
-        gameId: '10302',
-        pageIndex: page,
-        pageSize: 20,
-        bizProd: 1,
-        type: '1',        // 1=最新发布（按上架时间降序），4=综合排序
-        posType: 1,
-        sortType: 2,      // 2=降序（最新优先）
-        filterDTOList: [],
-        combineFilterList: [],
-      }),
-      credentials: 'include',
-    });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    return await response.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(API_URLS.list, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: '',
+          gameId: '10302',
+          pageIndex: page,
+          pageSize: 20,
+          bizProd: 1,
+          type: '1',        // 1=最新发布（按上架时间降序），4=综合排序
+          posType: 1,
+          sortType: 2,      // 2=降序（最新优先）
+          filterDTOList: [],
+          combineFilterList: [],
+        }),
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return await response.json();
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**
@@ -1447,14 +1454,21 @@
    * 调用详情API
    */
   async function fetchDetail(productId) {
-    const response = await fetch(API_URLS.detail, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: productId }),
-      credentials: 'include',
-    });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    return await response.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(API_URLS.detail, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: productId }),
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return await response.json();
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   // ============================================================
@@ -1528,10 +1542,13 @@
 
     // 批量处理：跳过逐条保存和刷新，处理完后统一执行一次
     batchMode = true;
-    for (const item of list) {
-      processProduct(item);
+    try {
+      for (const item of list) {
+        processProduct(item);
+      }
+    } finally {
+      batchMode = false;
     }
-    batchMode = false;
 
     // 统一执行一次截断、保存、排序和刷新
     trimTableData();
