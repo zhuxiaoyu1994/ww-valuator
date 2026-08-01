@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.27.0
+// @version      1.28.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -411,7 +411,8 @@
     barkKey: 'SCT378977TClEq1lr2mRcBmHgadFxK6CVr', // Bark推送Key（iOS）
     serverChanKey: '',     // Server酱SendKey（微信）
     pushPlusToken: '',     // 旧格式：PushPlus Token字符串（兼容）
-    pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt}]
+    pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt, priority}]
+    secondaryDelay: 20,    // 从通知延迟秒数
     soundAlert: true,      // 声音提醒
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
     repeatAlert: false,    // 重复提醒（每30秒直到确认）
@@ -2695,15 +2696,21 @@
         // PushPlus
         '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;">' +
           '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">PushPlus（微信推送）</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 pushplus.plus 登录后获取 Token，按订阅者管理</div>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">主通知立即推送，从通知延后推送（确保你优先获取信息）</div>' +
+          '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">' +
+          '<label style="font-size:10px;color:#888;">从通知延迟（秒）</label>' +
+          '<input type="number" id="mwSecondaryDelay" value="' + (pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20) + '" min="0" max="300" style="width:60px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
+          '</div>' +
           '<div id="mwPushPlusList" style="margin-bottom:8px;"></div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">' +
-          '<div style="flex:1;min-width:80px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">备注</label>' +
+          '<div style="flex:1;min-width:60px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">备注</label>' +
           '<input type="text" id="mwPpName" placeholder="如：张三" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
-          '<div style="flex:2;min-width:120px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Token</label>' +
+          '<div style="flex:2;min-width:100px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Token</label>' +
           '<input type="text" id="mwPpToken" placeholder="PushPlus Token" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
-          '<div style="flex:1;min-width:60px;max-width:80px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">有效天数</label>' +
+          '<div style="flex:1;min-width:50px;max-width:70px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">有效天数</label>' +
           '<input type="number" id="mwPpDays" value="30" min="1" max="3650" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<div style="min-width:70px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">通知级别</label>' +
+          '<select id="mwPpPriority" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;"><option value="primary">主通知</option><option value="secondary" selected>从通知</option></select></div>' +
           '<button id="mwPpAddBtn" style="padding:5px 10px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">添加</button>' +
           '</div>' +
         '</div>' +
@@ -2806,10 +2813,15 @@
           var remaining = sub.validDays - Math.floor((Date.now() - sub.createdAt) / 86400000);
           var remainColor = remaining <= 3 ? '#ef4444' : (remaining <= 7 ? '#f59e0b' : '#10b981');
           var maskedToken = sub.token.substring(0, 8) + '...' + sub.token.substring(sub.token.length - 4);
+          var isPrimary = (sub.priority || 'secondary') === 'primary';
+          var priorityLabel = isPrimary
+            ? '<span style="color:#f59e0b;font-weight:600;font-size:10px;">主</span>'
+            : '<span style="color:#6b7280;font-size:10px;">从</span>';
           var row = document.createElement('div');
           row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 6px;margin-bottom:4px;background:#0d1a3a;border-radius:4px;font-size:11px;';
           row.innerHTML =
-            '<span style="color:#e0e0e0;min-width:50px;">' + (sub.name || '未命名') + '</span>' +
+            priorityLabel +
+            '<span style="color:#e0e0e0;min-width:45px;">' + (sub.name || '未命名') + '</span>' +
             '<span style="color:#888;flex:1;word-break:break-all;">' + maskedToken + '</span>' +
             '<span style="color:' + remainColor + ';white-space:nowrap;">剩余' + remaining + '天</span>' +
             '<button data-pp-idx="' + idx + '" data-pp-act="edit" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#6a9fff;font-size:10px;cursor:pointer;">编辑</button>' +
@@ -2831,6 +2843,7 @@
           box.querySelector('#mwPpToken').value = sub.token || '';
           var remaining = sub.validDays - Math.floor((Date.now() - sub.createdAt) / 86400000);
           box.querySelector('#mwPpDays').value = Math.max(1, remaining);
+          box.querySelector('#mwPpPriority').value = sub.priority || 'secondary';
           ppEditingIdx = idx;
           box.querySelector('#mwPpAddBtn').textContent = '更新';
         } else if (act === 'del') {
@@ -2840,6 +2853,7 @@
           box.querySelector('#mwPpName').value = '';
           box.querySelector('#mwPpToken').value = '';
           box.querySelector('#mwPpDays').value = '30';
+          box.querySelector('#mwPpPriority').value = 'secondary';
           renderPpList();
         }
       });
@@ -2849,11 +2863,12 @@
         var name = box.querySelector('#mwPpName').value.trim();
         var token = box.querySelector('#mwPpToken').value.trim();
         var days = parseInt(box.querySelector('#mwPpDays').value) || 30;
+        var priority = box.querySelector('#mwPpPriority').value;
         if (!token) { alert('请填写Token'); return; }
         if (ppEditingIdx >= 0) {
           // 更新模式：保留原 createdAt，用新天数重新计算
           pushConfig.pushPlusSubscribers[ppEditingIdx] = {
-            name: name, token: token, validDays: days,
+            name: name, token: token, validDays: days, priority: priority,
             createdAt: Date.now() // 编辑时重新开始倒计时
           };
           ppEditingIdx = -1;
@@ -2863,12 +2878,13 @@
           var exists = pushConfig.pushPlusSubscribers.some(function (s) { return s.token === token; });
           if (exists) { alert('该Token已存在'); return; }
           pushConfig.pushPlusSubscribers.push({
-            name: name, token: token, validDays: days, createdAt: Date.now()
+            name: name, token: token, validDays: days, priority: priority, createdAt: Date.now()
           });
         }
         box.querySelector('#mwPpName').value = '';
         box.querySelector('#mwPpToken').value = '';
         box.querySelector('#mwPpDays').value = '30';
+        box.querySelector('#mwPpPriority').value = 'secondary';
         renderPpList();
       };
 
@@ -2903,6 +2919,7 @@
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
         pushConfig.barkKey = box.querySelector('#mwBarkKey').value.trim();
         pushConfig.serverChanKey = box.querySelector('#mwServerChanKey').value.trim();
+        pushConfig.secondaryDelay = parseInt(box.querySelector('#mwSecondaryDelay').value) || 0;
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
         saveState();
         // 如果刷新间隔变了且正在监控，重启定时器
@@ -5720,7 +5737,7 @@ function openSettings() {
       });
     }
 
-    // PushPlus推送（微信）- 遍历订阅者列表，过滤已过期的
+    // PushPlus推送（微信）- 主从分级推送
     var ppSubscribers = pushConfig.pushPlusSubscribers || [];
     var now = Date.now();
     var activeSubs = ppSubscribers.filter(function (s) {
@@ -5736,7 +5753,8 @@ function openSettings() {
       pushConfig.pushPlusSubscribers = activeSubs;
       saveState();
     }
-    activeSubs.forEach(function (sub) {
+    // 发送 PushPlus 推送
+    function sendPushPlus(sub, ttl, body) {
       var token = sub.token.trim();
       if (!token) return;
       try {
@@ -5744,17 +5762,28 @@ function openSettings() {
           method: 'POST',
           url: 'https://www.pushplus.plus/send',
           headers: { 'Content-Type': 'application/json' },
-          data: JSON.stringify({
-            token: token,
-            title: title,
-            content: pushBody,
-            template: 'txt'
-          }),
+          data: JSON.stringify({ token: token, title: ttl, content: body, template: 'txt' }),
           onload: function () { console.log('[鸣潮监控] PushPlus推送已发送: ' + (sub.name || token.substring(0, 8)) + '...'); },
           onerror: function (e) { console.error('[鸣潮监控] PushPlus推送失败:', (sub.name || token.substring(0, 8)) + '...', e); }
         });
       } catch (e) { console.error('[鸣潮监控] PushPlus推送异常:', (sub.name || token.substring(0, 8)) + '...', e); }
-    });
+    }
+    // 分为主通知（立即）和从通知（延迟）
+    var primarySubs = activeSubs.filter(function (s) { return (s.priority || 'secondary') === 'primary'; });
+    var secondarySubs = activeSubs.filter(function (s) { return (s.priority || 'secondary') !== 'primary'; });
+    // 主通知立即发送
+    primarySubs.forEach(function (sub) { sendPushPlus(sub, title, pushBody); });
+    // 从通知延迟发送
+    var delaySec = pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20;
+    if (secondarySubs.length > 0 && delaySec > 0) {
+      console.log('[鸣潮监控] 从通知' + secondarySubs.length + '人，延迟' + delaySec + '秒发送');
+      setTimeout(function () {
+        secondarySubs.forEach(function (sub) { sendPushPlus(sub, title, pushBody); });
+      }, delaySec * 1000);
+    } else if (secondarySubs.length > 0) {
+      // 延迟为0时直接发送
+      secondarySubs.forEach(function (sub) { sendPushPlus(sub, title, pushBody); });
+    }
   }
 
   // ============================================================
@@ -6158,7 +6187,7 @@ function openSettings() {
     if (pushConfig.pushPlusToken && (!pushConfig.pushPlusSubscribers || pushConfig.pushPlusSubscribers.length === 0)) {
       var oldTokens = pushConfig.pushPlusToken.split(/[,\n\s]+/).filter(function (t) { return t.trim().length > 0; });
       pushConfig.pushPlusSubscribers = oldTokens.map(function (token) {
-        return { name: '迁移用户', token: token.trim(), validDays: 365, createdAt: Date.now() };
+        return { name: '迁移用户', token: token.trim(), validDays: 365, priority: 'secondary', createdAt: Date.now() };
       });
       pushConfig.pushPlusToken = ''; // 清除旧格式
       console.log('[鸣潮监控] PushPlus旧格式已迁移为订阅者列表，共' + oldTokens.length + '个');
