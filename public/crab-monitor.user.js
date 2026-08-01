@@ -1829,13 +1829,16 @@
             && price >= notifyMinPrice
             && (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
 
-          // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff + 标价不高于上限
+          // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff + 最低限制 + 标价不高于上限
           let charRuleTriggered = false;
           let triggeredRule = null;
           const priceWithinMax = (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
-          if (matchedRules.length > 0 && priceWithinMax) {
+          const meetsMinValue = valuation.totalValue >= notifyMinValue;
+          const meetsMinPrice = price >= notifyMinPrice;
+          if (matchedRules.length > 0 && priceWithinMax && meetsMinValue && meetsMinPrice) {
             for (const r of matchedRules) {
-              if (valuation.diff > (r.minDiff || 0)) {
+              // minDiff=0 表示不限差价（始终通过），否则检查差价是否超过 minDiff
+              if (r.minDiff === 0 || valuation.diff > r.minDiff) {
                 charRuleTriggered = true;
                 triggeredRule = r;
                 break;
@@ -2765,7 +2768,7 @@
             var row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;background:#16213e;border-radius:6px;margin-bottom:4px;flex-wrap:wrap;';
             var charStr = r.chars.map(function (c) { return c.name + (c.minConst > 0 ? c.minConst + '命+' : ''); }).join(' + ');
-            var diffStr = r.minDiff > 0 ? ('差价>' + r.minDiff + '元') : '不限差价';
+            var diffStr = r.minDiff !== 0 ? ('差价>' + r.minDiff + '元') : '不限差价';
             row.innerHTML = '<span style="color:#e94560;font-weight:600;">规则' + (idx + 1) + ':</span>' +
               '<span style="color:#6a9fff;">' + charStr + '</span>' +
               '<span style="color:#888;">' + diffStr + '</span>' +
