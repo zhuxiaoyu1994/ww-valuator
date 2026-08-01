@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.26.0
+// @version      1.27.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -410,7 +410,8 @@
   let pushConfig = {
     barkKey: 'SCT378977TClEq1lr2mRcBmHgadFxK6CVr', // Bark推送Key（iOS）
     serverChanKey: '',     // Server酱SendKey（微信）
-    pushPlusToken: 'a5a5ac53ced14dbb82ac325bfcf3e4c6', // PushPlus Token（微信）
+    pushPlusToken: '',     // 旧格式：PushPlus Token字符串（兼容）
+    pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt}]
     soundAlert: true,      // 声音提醒
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
     repeatAlert: false,    // 重复提醒（每30秒直到确认）
@@ -2694,8 +2695,17 @@
         // PushPlus
         '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;">' +
           '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">PushPlus（微信推送）</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 pushplus.plus 登录后获取 Token，多个Token用逗号或换行分隔</div>' +
-          '<textarea id="mwPushPlusToken" placeholder="Token1,Token2 或每行一个" style="width:100%;height:60px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;resize:vertical;">' + (pushConfig.pushPlusToken || '') + '</textarea>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 pushplus.plus 登录后获取 Token，按订阅者管理</div>' +
+          '<div id="mwPushPlusList" style="margin-bottom:8px;"></div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">' +
+          '<div style="flex:1;min-width:80px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">备注</label>' +
+          '<input type="text" id="mwPpName" placeholder="如：张三" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<div style="flex:2;min-width:120px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Token</label>' +
+          '<input type="text" id="mwPpToken" placeholder="PushPlus Token" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<div style="flex:1;min-width:60px;max-width:80px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">有效天数</label>' +
+          '<input type="number" id="mwPpDays" value="30" min="1" max="3650" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<button id="mwPpAddBtn" style="padding:5px 10px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">添加</button>' +
+          '</div>' +
         '</div>' +
         // 测试按钮
         '<div style="margin-bottom:16px;text-align:center;">' +
@@ -2782,6 +2792,88 @@
         box.querySelector('#mwCharNotifyDiff').value = '0';
       };
 
+      // ===== PushPlus 订阅者管理 =====
+      var ppListEl = box.querySelector('#mwPushPlusList');
+      var ppEditingIdx = -1; // 正在编辑的订阅者索引，-1=新增模式
+
+      function renderPpList() {
+        ppListEl.innerHTML = '';
+        if (pushConfig.pushPlusSubscribers.length === 0) {
+          ppListEl.innerHTML = '<div style="font-size:11px;color:#555;padding:4px 0;">暂无订阅者，在下方添加</div>';
+          return;
+        }
+        pushConfig.pushPlusSubscribers.forEach(function (sub, idx) {
+          var remaining = sub.validDays - Math.floor((Date.now() - sub.createdAt) / 86400000);
+          var remainColor = remaining <= 3 ? '#ef4444' : (remaining <= 7 ? '#f59e0b' : '#10b981');
+          var maskedToken = sub.token.substring(0, 8) + '...' + sub.token.substring(sub.token.length - 4);
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 6px;margin-bottom:4px;background:#0d1a3a;border-radius:4px;font-size:11px;';
+          row.innerHTML =
+            '<span style="color:#e0e0e0;min-width:50px;">' + (sub.name || '未命名') + '</span>' +
+            '<span style="color:#888;flex:1;word-break:break-all;">' + maskedToken + '</span>' +
+            '<span style="color:' + remainColor + ';white-space:nowrap;">剩余' + remaining + '天</span>' +
+            '<button data-pp-idx="' + idx + '" data-pp-act="edit" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#6a9fff;font-size:10px;cursor:pointer;">编辑</button>' +
+            '<button data-pp-idx="' + idx + '" data-pp-act="del" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#ef4444;font-size:10px;cursor:pointer;">删除</button>';
+          ppListEl.appendChild(row);
+        });
+      }
+
+      // 绑定编辑/删除按钮事件（事件委托）
+      ppListEl.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-pp-act]');
+        if (!btn) return;
+        var idx = parseInt(btn.getAttribute('data-pp-idx'));
+        var act = btn.getAttribute('data-pp-act');
+        if (act === 'edit') {
+          var sub = pushConfig.pushPlusSubscribers[idx];
+          if (!sub) return;
+          box.querySelector('#mwPpName').value = sub.name || '';
+          box.querySelector('#mwPpToken').value = sub.token || '';
+          var remaining = sub.validDays - Math.floor((Date.now() - sub.createdAt) / 86400000);
+          box.querySelector('#mwPpDays').value = Math.max(1, remaining);
+          ppEditingIdx = idx;
+          box.querySelector('#mwPpAddBtn').textContent = '更新';
+        } else if (act === 'del') {
+          pushConfig.pushPlusSubscribers.splice(idx, 1);
+          ppEditingIdx = -1;
+          box.querySelector('#mwPpAddBtn').textContent = '添加';
+          box.querySelector('#mwPpName').value = '';
+          box.querySelector('#mwPpToken').value = '';
+          box.querySelector('#mwPpDays').value = '30';
+          renderPpList();
+        }
+      });
+
+      // 添加/更新按钮
+      box.querySelector('#mwPpAddBtn').onclick = function () {
+        var name = box.querySelector('#mwPpName').value.trim();
+        var token = box.querySelector('#mwPpToken').value.trim();
+        var days = parseInt(box.querySelector('#mwPpDays').value) || 30;
+        if (!token) { alert('请填写Token'); return; }
+        if (ppEditingIdx >= 0) {
+          // 更新模式：保留原 createdAt，用新天数重新计算
+          pushConfig.pushPlusSubscribers[ppEditingIdx] = {
+            name: name, token: token, validDays: days,
+            createdAt: Date.now() // 编辑时重新开始倒计时
+          };
+          ppEditingIdx = -1;
+          box.querySelector('#mwPpAddBtn').textContent = '添加';
+        } else {
+          // 检查Token是否重复
+          var exists = pushConfig.pushPlusSubscribers.some(function (s) { return s.token === token; });
+          if (exists) { alert('该Token已存在'); return; }
+          pushConfig.pushPlusSubscribers.push({
+            name: name, token: token, validDays: days, createdAt: Date.now()
+          });
+        }
+        box.querySelector('#mwPpName').value = '';
+        box.querySelector('#mwPpToken').value = '';
+        box.querySelector('#mwPpDays').value = '30';
+        renderPpList();
+      };
+
+      renderPpList();
+
       // 测试推送
       box.querySelector('#mwTestPush').onclick = function () {
         notify('test', '测试通知 - 鸣潮监控助手', '如果您收到了这条通知，说明推送配置正确！\n标价100元 估值200元\n差价+100元 性价比+100%');
@@ -2811,7 +2903,7 @@
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
         pushConfig.barkKey = box.querySelector('#mwBarkKey').value.trim();
         pushConfig.serverChanKey = box.querySelector('#mwServerChanKey').value.trim();
-        pushConfig.pushPlusToken = box.querySelector('#mwPushPlusToken').value.trim();
+        // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
         saveState();
         // 如果刷新间隔变了且正在监控，重启定时器
         if (intervalChanged && monitorRunning) {
@@ -5628,29 +5720,41 @@ function openSettings() {
       });
     }
 
-    // PushPlus推送（微信）- 支持多个Token
-    if (pushConfig.pushPlusToken) {
-      var tokens = pushConfig.pushPlusToken.split(/[,\n\s]+/).filter(function(t) { return t.trim().length > 0; });
-      tokens.forEach(function(token) {
-        token = token.trim();
-        if (!token) return;
-        try {
-          GM_xmlhttpRequest({
-            method: 'POST',
-            url: 'https://www.pushplus.plus/send',
-            headers: { 'Content-Type': 'application/json' },
-            data: JSON.stringify({
-              token: token,
-              title: title,
-              content: pushBody,
-              template: 'txt'
-            }),
-            onload: function () { console.log('[鸣潮监控] PushPlus推送已发送: ' + token.substring(0, 8) + '...'); },
-            onerror: function (e) { console.error('[鸣潮监控] PushPlus推送失败:', token.substring(0, 8) + '...', e); }
-          });
-        } catch (e) { console.error('[鸣潮监控] PushPlus推送异常:', token.substring(0, 8) + '...', e); }
-      });
+    // PushPlus推送（微信）- 遍历订阅者列表，过滤已过期的
+    var ppSubscribers = pushConfig.pushPlusSubscribers || [];
+    var now = Date.now();
+    var activeSubs = ppSubscribers.filter(function (s) {
+      var remaining = s.validDays - Math.floor((now - s.createdAt) / 86400000);
+      return remaining > 0;
+    });
+    // 自动清理过期订阅者
+    if (activeSubs.length < ppSubscribers.length) {
+      var expiredNames = ppSubscribers.filter(function (s) {
+        return s.validDays - Math.floor((now - s.createdAt) / 86400000) <= 0;
+      }).map(function (s) { return s.name || s.token.substring(0, 8); });
+      console.log('[鸣潮监控] PushPlus自动清理过期订阅者:', expiredNames.join(', '));
+      pushConfig.pushPlusSubscribers = activeSubs;
+      saveState();
     }
+    activeSubs.forEach(function (sub) {
+      var token = sub.token.trim();
+      if (!token) return;
+      try {
+        GM_xmlhttpRequest({
+          method: 'POST',
+          url: 'https://www.pushplus.plus/send',
+          headers: { 'Content-Type': 'application/json' },
+          data: JSON.stringify({
+            token: token,
+            title: title,
+            content: pushBody,
+            template: 'txt'
+          }),
+          onload: function () { console.log('[鸣潮监控] PushPlus推送已发送: ' + (sub.name || token.substring(0, 8)) + '...'); },
+          onerror: function (e) { console.error('[鸣潮监控] PushPlus推送失败:', (sub.name || token.substring(0, 8)) + '...', e); }
+        });
+      } catch (e) { console.error('[鸣潮监控] PushPlus推送异常:', (sub.name || token.substring(0, 8)) + '...', e); }
+    });
   }
 
   // ============================================================
@@ -6049,6 +6153,19 @@ function openSettings() {
     // 加载推送配置
     if (savedState.pushConfig) {
       pushConfig = Object.assign(pushConfig, savedState.pushConfig);
+    }
+    // 迁移旧格式 pushPlusToken 字符串到 pushPlusSubscribers 数组
+    if (pushConfig.pushPlusToken && (!pushConfig.pushPlusSubscribers || pushConfig.pushPlusSubscribers.length === 0)) {
+      var oldTokens = pushConfig.pushPlusToken.split(/[,\n\s]+/).filter(function (t) { return t.trim().length > 0; });
+      pushConfig.pushPlusSubscribers = oldTokens.map(function (token) {
+        return { name: '迁移用户', token: token.trim(), validDays: 365, createdAt: Date.now() };
+      });
+      pushConfig.pushPlusToken = ''; // 清除旧格式
+      console.log('[鸣潮监控] PushPlus旧格式已迁移为订阅者列表，共' + oldTokens.length + '个');
+    }
+    // 确保数组存在
+    if (!Array.isArray(pushConfig.pushPlusSubscribers)) {
+      pushConfig.pushPlusSubscribers = [];
     }
 
     // 加载估值权重（改进4）
