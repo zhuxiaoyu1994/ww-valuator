@@ -1827,10 +1827,11 @@
             && price >= notifyMinPrice
             && (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
 
-          // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff
+          // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff + 标价不高于上限
           let charRuleTriggered = false;
           let triggeredRule = null;
-          if (matchedRules.length > 0) {
+          const priceWithinMax = (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
+          if (matchedRules.length > 0 && priceWithinMax) {
             for (const r of matchedRules) {
               if (valuation.diff > (r.minDiff || 0)) {
                 charRuleTriggered = true;
