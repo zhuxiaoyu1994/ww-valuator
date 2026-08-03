@@ -393,6 +393,34 @@ function getPageHTML() {
       cursor: pointer; transition: all 0.2s; font-family: inherit;
     }
     .adjust-link:hover { background: rgba(251,191,36,0.15); }
+    /* 新规则通知横幅 */
+    .rules-banner {
+      background: rgba(251,191,36,0.1);
+      border: 1px solid rgba(251,191,36,0.3);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: rulesFadeIn 0.3s ease;
+    }
+    @keyframes rulesFadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .rules-banner-text {
+      color: #fbbf24; font-size: 13px; flex: 1;
+    }
+    .rules-banner-btns { display: flex; gap: 8px; }
+    .rules-banner-btn {
+      padding: 6px 14px; border: none; border-radius: 6px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: opacity 0.2s; font-family: inherit;
+    }
+    .rules-banner-btn:hover { opacity: 0.85; }
+    .rules-banner-btn.load { background: #fbbf24; color: #0f0f23; }
+    .rules-banner-btn.dismiss { background: #2a2a4a; color: #888; }
   </style>
 </head>
 <body>
@@ -516,6 +544,47 @@ function getPageHTML() {
     }
     // 页面加载后初始化按钮状态
     (function(){ updateSettingsBtnState(); })();
+
+    // ============================================================
+    // 新规则检测：页面加载后异步检查是否有新版本规则
+    // ============================================================
+    (function checkNewRules() {
+      if (typeof checkNewRulesAvailable !== 'function') return;
+      checkNewRulesAvailable().then(function(hasNew) {
+        if (!hasNew) return;
+        // 创建通知横幅
+        var banner = document.createElement('div');
+        banner.className = 'rules-banner';
+        banner.innerHTML =
+          '<span class="rules-banner-text">估价规则已更新，是否加载最新规则？</span>' +
+          '<div class="rules-banner-btns">' +
+          '<button class="rules-banner-btn load">加载最新规则</button>' +
+          '<button class="rules-banner-btn dismiss">保持当前配置</button>' +
+          '</div>';
+        // 插入到设置按钮区域之前
+        var settingsBar = document.querySelector('.settings-bar');
+        if (settingsBar && settingsBar.parentNode) {
+          settingsBar.parentNode.insertBefore(banner, settingsBar);
+        }
+        // 加载最新规则
+        banner.querySelector('.load').onclick = function() {
+          if (typeof loadLatestRules === 'function') loadLatestRules();
+          updateSettingsBtnState();
+          banner.remove();
+          // 如果之前有估价结果，重新估价以应用新规则
+          if (currentTab === 'paste') {
+            doEvaluate();
+          } else if (lastLookupId) {
+            doLookup();
+          }
+        };
+        // 保持当前配置
+        banner.querySelector('.dismiss').onclick = function() {
+          if (typeof dismissNewRules === 'function') dismissNewRules();
+          banner.remove();
+        };
+      });
+    })();
 
     // 最近一次按编号查询的商品ID（用于设置保存后重新估价）
     let lastLookupId = '';

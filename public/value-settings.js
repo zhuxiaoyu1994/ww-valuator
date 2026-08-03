@@ -1726,9 +1726,61 @@
   }
 
   // ============================================================
+  // 新规则检测与加载（网站前端用）
+  // ============================================================
+
+  /**
+   * 检测是否有新规则可用
+   * 异步获取后端默认配置，与本地存储的版本号比较。
+   * - 无自定义配置：静默更新版本号，返回 false
+   * - 有自定义配置且版本落后：返回 true（由前端显示横幅提醒）
+   * - 版本一致：返回 false
+   * @returns {Promise<boolean>}
+   */
+  function checkNewRulesAvailable() {
+    return fetchDefaults().then(function (defaults) {
+      if (!defaults) return false;
+      var currentVersion = defaults.configVersion || 1;
+      var savedVersion = parseInt(localStorage.getItem(CONFIG_VERSION_KEY) || '0', 10);
+      if (savedVersion < currentVersion) {
+        var hasCustom = localStorage.getItem(STORAGE_KEY) != null;
+        if (hasCustom) {
+          // 有自定义配置，不自动更新版本号，等用户决定
+          return true;
+        } else {
+          // 无自定义配置，静默更新版本号
+          localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+          return false;
+        }
+      }
+      return false;
+    });
+  }
+
+  /**
+   * 加载最新规则（清除自定义配置，使用最新默认值）
+   */
+  function loadLatestRules() {
+    localStorage.removeItem(STORAGE_KEY);
+    var currentVersion = (cachedDefaults && cachedDefaults.configVersion) || 1;
+    localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+  }
+
+  /**
+   * 忽略新规则提醒（保留自定义配置，仅更新版本号）
+   */
+  function dismissNewRules() {
+    var currentVersion = (cachedDefaults && cachedDefaults.configVersion) || 1;
+    localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+  }
+
+  // ============================================================
   // 导出全局函数
   // ============================================================
   window.openValueSettings = openValueSettings;
   window.getSavedWeights = getSavedWeights;
   window.hasCustomWeights = hasCustomWeights;
+  window.checkNewRulesAvailable = checkNewRulesAvailable;
+  window.loadLatestRules = loadLatestRules;
+  window.dismissNewRules = dismissNewRules;
 })();
