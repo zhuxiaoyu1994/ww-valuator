@@ -2130,7 +2130,8 @@
 
             // 自动抢购：差价超过阈值且标价不超过上限时自动打开商品页
             if (autoBuyEnabled && notifyDiff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || notifyPrice <= autoBuyMaxPrice)) {
-              autoBuy(item.productId, notifyDiff);
+              const detailRow = tableData.find(r => r.productId === item.productId);
+              autoBuy(item.productId, notifyDiff, detailRow && detailRow.status === '秒杀');
             }
           }
         }
@@ -5689,9 +5690,10 @@ function openSettings() {
    * 自动抢购：打开商品页并自动点击"立即购买"
    * 通过URL参数传递指令，商品页脚本检测到后自动执行
    */
-  function autoBuy(productId, diff) {
+  function autoBuy(productId, diff, isFlash) {
     console.log('[鸣潮监控] 自动抢购触发: ' + productId + ' 差价' + diff.toFixed(0) + '元');
     var buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
+    if (isFlash) buyUrl += '&flash=1';
     // 尝试打开新标签页（可能被浏览器拦截，用户需允许弹窗）
     var win = window.open(buyUrl, '_blank');
     if (!win) {
@@ -5773,6 +5775,81 @@ function openSettings() {
         setTimeout(function() { tryClickBuyButton(); }, 1500);
       });
     }
+  }
+
+  /**
+   * 秒杀价格拦截：在商品详情页拦截 detailPost API，将 zoneJumpType 改为 2 以获取秒杀价
+   * 当URL包含 flash=1 参数时激活
+   */
+  function setupFlashSalePriceInterception() {
+    var url = window.location.href;
+    if (url.indexOf('flash=1') === -1) return;
+
+    console.log('[鸣潮监控] 秒杀价格拦截已激活，将修改 detailPost 请求的 zoneJumpType 为 2');
+
+    // 拦截 fetch
+    var originalFetch = window.fetch;
+    window.fetch = function() {
+      var fetchArgs = arguments;
+      try {
+        var reqUrl = '';
+        var reqBody = null;
+        if (typeof fetchArgs[0] === 'string') {
+          reqUrl = fetchArgs[0];
+          if (fetchArgs[1] && fetchArgs[1].body) reqBody = fetchArgs[1].body;
+        } else if (fetchArgs[0] && fetchArgs[0].url) {
+          reqUrl = fetchArgs[0].url;
+          if (fetchArgs[0].body) reqBody = fetchArgs[0].body;
+        }
+        if (reqUrl && reqUrl.indexOf('detailPost') !== -1 && reqBody) {
+          var bodyStr = typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody);
+          var bodyObj = JSON.parse(bodyStr);
+          if (bodyObj.zoneJumpType === 0 || bodyObj.zoneJumpType === '0') {
+            bodyObj.zoneJumpType = 2;
+            var newBody = JSON.stringify(bodyObj);
+            console.log('[鸣潮监控] 拦截 detailPost(fetch): zoneJumpType 0→2');
+            if (typeof fetchArgs[0] === 'string') {
+              fetchArgs[1] = fetchArgs[1] || {};
+              fetchArgs[1].body = newBody;
+            } else {
+              fetchArgs[0] = new Request(reqUrl, {
+                method: fetchArgs[0].method || 'POST',
+                headers: fetchArgs[0].headers,
+                body: newBody,
+                mode: fetchArgs[0].mode,
+                credentials: fetchArgs[0].credentials
+              });
+            }
+          }
+        }
+      } catch (e) { /* 忽略 */ }
+      return originalFetch.apply(this, fetchArgs);
+    };
+
+    // 拦截 XMLHttpRequest
+    var originalXHROpen = XMLHttpRequest.prototype.open;
+    var originalXHRSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function(method, reqUrl) {
+      this._mwReqUrl = reqUrl;
+      return originalXHROpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function(body) {
+      try {
+        if (this._mwReqUrl && this._mwReqUrl.indexOf('detailPost') !== -1 && body) {
+          var bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+          var bodyObj = JSON.parse(bodyStr);
+          if (bodyObj.zoneJumpType === 0 || bodyObj.zoneJumpType === '0') {
+            bodyObj.zoneJumpType = 2;
+            var newBody = JSON.stringify(bodyObj);
+            console.log('[鸣潮监控] 拦截 detailPost(XHR): zoneJumpType 0→2');
+            return originalXHRSend.call(this, newBody);
+          }
+        }
+      } catch (e) { /* 忽略 */ }
+      return originalXHRSend.apply(this, arguments);
+    };
   }
 
   // ============================================================
@@ -5912,6 +5989,7 @@ function openSettings() {
    */
   function showAlertBanner(title, body, productId) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
+    const isFlash = String(productId).endsWith('_flash');
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
@@ -5930,7 +6008,7 @@ function openSettings() {
         '<div style="font-size:16px;font-weight:700;margin-bottom:2px;">' + title + '</div>' +
         '<div style="font-size:13px;opacity:0.9;white-space:pre-line;">' + body + '</div>' +
       '</div>' +
-      '<a href="https://www.pxb7.com/product/' + cleanId + '/1" target="_blank" ' +
+      '<a href="https://www.pxb7.com/product/' + cleanId + '/1' + (isFlash ? '?flash=1' : '') + '" target="_blank" ' +
         'style="padding:8px 24px;background:#fff;color:#e94560;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;white-space:nowrap;">立即查看</a>' +
       '<button id="mwAlertClose" style="padding:8px 12px;background:rgba(0,0,0,0.3);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:18px;">✕</button>';
     document.body.appendChild(banner);
@@ -5981,8 +6059,9 @@ function openSettings() {
    */
   function sendPhonePush(title, body, productId) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
+    const isFlash = String(productId).endsWith('_flash');
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
-    const pushBody = body + '\n\n详情: https://www.pxb7.com/product/' + cleanId + '/1';
+    const pushBody = body + '\n\n详情: https://www.pxb7.com/product/' + cleanId + '/1' + (isFlash ? '?flash=1' : '');
 
     // Bark推送（iOS）
     if (pushConfig.barkKey) {
@@ -6563,8 +6642,9 @@ function openSettings() {
   // 启动
   // ============================================================
 
-  // 商品详情页：仅执行自动购买逻辑，不启动监控面板
+  // 商品详情页：执行秒杀价格拦截和自动购买逻辑，不启动监控面板
   if (window.location.pathname.indexOf('/product/') !== -1) {
+    setupFlashSalePriceInterception();
     initAutoBuyOnProductPage();
     return;
   }
