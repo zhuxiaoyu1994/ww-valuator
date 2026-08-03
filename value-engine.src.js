@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 6;
+const CONFIG_VERSION = 7;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -66,14 +66,23 @@ const DEFAULT_WEIGHTS = {
   // 满命溢价（加权满命数档位）
   c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
   c6MultiBonus: [
+    { count: 1.5, bonus: 0.25 },
     { count: 2, bonus: 0.5 },
+    { count: 2.5, bonus: 0.75 },
     { count: 3, bonus: 1 },
+    { count: 3.5, bonus: 1.25 },
     { count: 4, bonus: 1.5 },
+    { count: 4.5, bonus: 1.75 },
     { count: 5, bonus: 2 },
+    { count: 5.5, bonus: 2.25 },
     { count: 6, bonus: 2.5 },
+    { count: 6.5, bonus: 2.75 },
     { count: 7, bonus: 3 },
+    { count: 7.5, bonus: 3.25 },
     { count: 8, bonus: 3.5 },
+    { count: 8.5, bonus: 3.75 },
     { count: 9, bonus: 4 },
+    { count: 9.5, bonus: 4.25 },
     { count: 10, bonus: 4.5 },
   ],
   // 资源定价

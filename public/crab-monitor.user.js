@@ -18,7 +18,7 @@
   'use strict';
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 6;
+  const CONFIG_VERSION = 7;
 
   // ============================================================
   // 常量定义
@@ -103,14 +103,23 @@
     // 满命溢价（加权满命数档位）
     c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
     c6MultiBonus: [
+      { count: 1.5, bonus: 0.25 },
       { count: 2, bonus: 0.5 },
+      { count: 2.5, bonus: 0.75 },
       { count: 3, bonus: 1 },
+      { count: 3.5, bonus: 1.25 },
       { count: 4, bonus: 1.5 },
+      { count: 4.5, bonus: 1.75 },
       { count: 5, bonus: 2 },
+      { count: 5.5, bonus: 2.25 },
       { count: 6, bonus: 2.5 },
+      { count: 6.5, bonus: 2.75 },
       { count: 7, bonus: 3 },
+      { count: 7.5, bonus: 3.25 },
       { count: 8, bonus: 3.5 },
+      { count: 8.5, bonus: 3.75 },
       { count: 9, bonus: 4 },
+      { count: 9.5, bonus: 4.25 },
       { count: 10, bonus: 4.5 },
     ],
     // 资源定价
@@ -567,6 +576,8 @@
 
     // 改进5：角色价格表（按角色名，合并默认值与用户自定义）
     w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
+    // 用户已删除的角色列表（用于设置面板初始化时跳过）
+    w.deletedChars = saved.deletedChars || [];
     // 数据迁移：旧的'秧秧'是五星角色(价格35)，现已改名为'秧秧玄翎'
     // 四星'秧秧'价格应为0，如果旧配置中'秧秧'价格>0说明是旧数据，重置为0
     if (saved.charPrices && saved.charPrices['秧秧'] != null && saved.charPrices['秧秧'] > 0) {
@@ -1716,7 +1727,7 @@
               ' 性价比' + (existRow.ratio || 0).toFixed(1) + '%' +
               (flashCharStr ? '\n角色: ' + flashCharStr : '') +
               '\n' + (existRow.showTitle || '').substring(0, 80);
-            notify(productId + '_flash', '秒杀提醒 ' + existRow.ratio.toFixed(1) + '%', flashMsg);
+            notify(productId + '_flash', '秒杀提醒 降¥' + (oldPrice - price).toFixed(0) + ' 差价¥' + (existRow.value - price).toFixed(0), flashMsg);
             notifiedIds.push(productId + '_flash');
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
             saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -1783,7 +1794,7 @@
             ' 性价比' + (existRow.ratio || 0).toFixed(1) + '%' +
             (dropCharStr ? '\n角色: ' + dropCharStr : '') +
             '\n' + (existRow.showTitle || '').substring(0, 80);
-          notify(productId + '_drop', '降价提醒 ' + existRow.ratio.toFixed(1) + '%', dropMsg);
+          notify(productId + '_drop', '降价提醒 降¥' + (oldPrice - price).toFixed(0) + ' 差价¥' + (existRow.value - price).toFixed(0), dropMsg);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -1860,7 +1871,7 @@
             ' 性价比' + (dupRow.ratio || 0).toFixed(1) + '%' +
             (mergeCharStr ? '\n角色: ' + mergeCharStr : '') +
             '\n' + (dupRow.showTitle || '').substring(0, 80);
-          notify(productId + '_drop', mergeStatus + '提醒 ' + dupRow.ratio.toFixed(1) + '%', dropMsg);
+          notify(productId + '_drop', mergeStatus + '提醒 降¥' + (oldPrice - price).toFixed(0) + ' 差价¥' + (dupRow.value - price).toFixed(0), dropMsg);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -4071,17 +4082,28 @@ function openSettings() {
 
     // 初始化角色列表
     var defPrices = buildDefaultCharPrices();
+    var deletedChars = w.deletedChars || [];
     for (var ti = 0; ti < tierOrder.length; ti++) {
       var tk = tierOrder[ti];
       if (!CHAR_TIERS[tk]) continue;
       var tier = CHAR_TIERS[tk];
       for (var ci = 0; ci < tier.chars.length; ci++) {
         var cname = tier.chars[ci];
+        if (deletedChars.indexOf(cname) >= 0) continue; // 跳过用户已删除的角色
         var defaultPrice = defPrices[cname] != null ? defPrices[cname] : tier.price;
         var userPrice = w.charPrices[cname] != null ? w.charPrices[cname] : defaultPrice;
         var weapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[cname]) || SIG_WEAPONS[cname] || '';
         charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk });
       }
+    }
+    // 补充用户自定义添加的角色（不在CHAR_TIERS中的角色）
+    var existingNames = charEntries.map(function(e) { return e.name; });
+    for (var customName in w.charPrices) {
+      if (!w.charPrices.hasOwnProperty(customName)) continue;
+      if (existingNames.indexOf(customName) >= 0) continue;
+      if (deletedChars.indexOf(customName) >= 0) continue;
+      var customWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[customName]) || '';
+      charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: 'C' });
     }
 
     var charList = document.createElement('div');
@@ -4138,7 +4160,7 @@ function openSettings() {
             delBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a2e;color:#e94560;font-size:14px;cursor:pointer;line-height:1;';
             delBtn.onclick = function() {
               var idx = charEntries.indexOf(entry);
-              if (idx >= 0) { charEntries.splice(idx, 1); renderCharList(); }
+              if (idx >= 0) { charEntries.splice(idx, 1); deletedChars.push(entry.name); renderCharList(); }
             };
             row.appendChild(delBtn);
 
@@ -4597,7 +4619,7 @@ function openSettings() {
             editBox.innerHTML =
               '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#e94560;">编辑满命溢价档位</div>' +
               '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">等效满命数量</label>' +
-              '<input type="number" class="edit-count" value="' + e.count + '" min="2" max="20" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
+              '<input type="number" class="edit-count" value="' + e.count + '" min="1" max="20" step="0.5" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
               '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">加成比例（如0.2=20%）</label>' +
               '<input type="number" class="edit-bonus" value="' + e.bonus + '" min="0" max="5" step="0.1" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
               '<div style="display:flex;gap:10px;margin-top:12px;">' +
@@ -4607,9 +4629,9 @@ function openSettings() {
             document.body.appendChild(editOverlay);
             editBox.querySelector('.cancel-edit').onclick = function () { editOverlay.remove(); };
             editBox.querySelector('.save-edit').onclick = function () {
-              var newCount = parseInt(editBox.querySelector('.edit-count').value);
+              var newCount = parseFloat(editBox.querySelector('.edit-count').value);
               var newBonus = parseFloat(editBox.querySelector('.edit-bonus').value);
-              if (newCount < 2) { alert('数量至少为2'); return; }
+              if (newCount < 1) { alert('数量至少为1'); return; }
               if (newBonus < 0) { alert('加成比例不能为负'); return; }
               e.count = newCount; e.bonus = newBonus; renderC6List(); editOverlay.remove();
             };
@@ -4648,7 +4670,7 @@ function openSettings() {
     var addC6Row = document.createElement('div');
     addC6Row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-top:10px;';
     var c6CountInput = document.createElement('input');
-    c6CountInput.type = 'number'; c6CountInput.min = '2'; c6CountInput.max = '20'; c6CountInput.placeholder = '数量';
+    c6CountInput.type = 'number'; c6CountInput.min = '1'; c6CountInput.max = '20'; c6CountInput.step = '0.5'; c6CountInput.placeholder = '数量';
     c6CountInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
     addC6Row.appendChild(c6CountInput);
     var c6Unit = document.createElement('span');
@@ -4668,9 +4690,9 @@ function openSettings() {
     addC6Btn.textContent = '添加';
     addC6Btn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#e94560;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
     addC6Btn.onclick = function () {
-      var count = parseInt(c6CountInput.value);
+      var count = parseFloat(c6CountInput.value);
       var bonus = parseFloat(c6BonusInput.value);
-      if (isNaN(count) || count < 2) { alert('数量至少为2'); return; }
+      if (isNaN(count) || count < 1) { alert('数量至少为1'); return; }
       if (isNaN(bonus) || bonus < 0) { alert('请输入有效的加成比例'); return; }
       var existingE = c6Entries.find(function (e) { return e.count === count; });
       if (existingE) { existingE.bonus = bonus; renderC6List(); }
@@ -5345,6 +5367,7 @@ function openSettings() {
       }
       // 重置角色价格
       charEntries.length = 0;
+      deletedChars.length = 0;
       var rstDefPrices = buildDefaultCharPrices();
       for (var rt = 0; rt < tierOrder.length; rt++) {
         var rtk = tierOrder[rt];
@@ -5451,6 +5474,7 @@ function openSettings() {
         }
       }
       newW.charPrices = newCharPrices;
+      newW.deletedChars = deletedChars;
       if (Object.keys(newSigWeapons).length > 0) {
         newW.sigWeaponsOverride = newSigWeapons;
       }
@@ -6448,21 +6472,21 @@ function openSettings() {
     const savedState = loadStorage(STORAGE_KEYS.state, {});
     threshold = savedState.threshold || 20;
     notifyEnabled = savedState.notifyEnabled || false;
-    notifyRatioThreshold = savedState.notifyRatioThreshold != null ? savedState.notifyRatioThreshold : 30;
-    notifyDiffThreshold = savedState.notifyDiffThreshold != null ? savedState.notifyDiffThreshold : 100;
-    autoBuyEnabled = savedState.autoBuyEnabled || false;
-    autoBuyDiff = savedState.autoBuyDiff != null ? savedState.autoBuyDiff : 500;
-    autoBuyMaxPrice = savedState.autoBuyMaxPrice != null ? savedState.autoBuyMaxPrice : 0;
-    notifyMinValue = savedState.notifyMinValue != null ? savedState.notifyMinValue : 200;
+    notifyRatioThreshold = savedState.notifyRatioThreshold != null ? savedState.notifyRatioThreshold : 40;
+    notifyDiffThreshold = savedState.notifyDiffThreshold != null ? savedState.notifyDiffThreshold : 150;
+    autoBuyEnabled = savedState.autoBuyEnabled != null ? savedState.autoBuyEnabled : true;
+    autoBuyDiff = savedState.autoBuyDiff != null ? savedState.autoBuyDiff : 380;
+    autoBuyMaxPrice = savedState.autoBuyMaxPrice != null ? savedState.autoBuyMaxPrice : 6000;
+    notifyMinValue = savedState.notifyMinValue != null ? savedState.notifyMinValue : 400;
     notifyMinPrice = savedState.notifyMinPrice != null ? savedState.notifyMinPrice : 0;
-    notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 0;
-    refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 60;
+    notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 20000;
+    refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 20;
     flashSaleEnabled = savedState.flashSaleEnabled != null ? savedState.flashSaleEnabled : true;
-    soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 20;
+    soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 40;
     soldCheckDiff = savedState.soldCheckDiff != null ? savedState.soldCheckDiff : 0;
     soldCheckMinValue = savedState.soldCheckMinValue != null ? savedState.soldCheckMinValue : 0;
     soldCheckMaxValue = savedState.soldCheckMaxValue != null ? savedState.soldCheckMaxValue : 0;
-    charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : [];
+    charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
     // 加载推送配置
     if (savedState.pushConfig) {
       pushConfig = Object.assign(pushConfig, savedState.pushConfig);

@@ -238,21 +238,36 @@
 
     // 角色定价数据（可增删改）
     var charEntries = [];
+    var deletedChars = (saved && Array.isArray(saved.deletedChars)) ? saved.deletedChars.slice() : [];
     var tierLabels = { S: 'S级 热门人权', A: 'A级 热门限定', B: 'B级 温门核心', C: 'C级 冷门限定', D: 'D级 退环境', E: 'E级 常驻五星' };
     var tierColors = { S: '#4ade80', A: '#e94560', B: '#fbbf24', C: '#9ca3af', D: '#6b7280', E: '#4b5563' };
     var tierOrder = ['S', 'A', 'B', 'C', 'D', 'E'];
 
-    // 初始化角色列表
+    // 初始化角色列表（跳过已删除的角色）
+    var _addedNames = {};
     for (var ti = 0; ti < tierOrder.length; ti++) {
       var tk = tierOrder[ti];
       if (!CHAR_TIERS[tk]) continue;
       var tier = CHAR_TIERS[tk];
       for (var ci = 0; ci < tier.chars.length; ci++) {
         var cname = tier.chars[ci];
+        if (deletedChars.indexOf(cname) >= 0) continue;
         var defaultPrice = DEFAULT_CHAR_PRICES[cname] != null ? DEFAULT_CHAR_PRICES[cname] : tier.price;
         var userPrice = w.charPrices[cname] != null ? w.charPrices[cname] : defaultPrice;
-        var weapon = SIG_WEAPONS[cname] || '';
+        var weapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[cname]) || SIG_WEAPONS[cname] || '';
         charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk });
+        _addedNames[cname] = true;
+      }
+    }
+    // 加载用户自定义添加的角色（不在 CHAR_TIERS 中的角色）
+    if (w.charPrices) {
+      for (var customName in w.charPrices) {
+        if (!w.charPrices.hasOwnProperty(customName)) continue;
+        if (_addedNames[customName]) continue;
+        if (deletedChars.indexOf(customName) >= 0) continue;
+        var customTier = 'C';
+        var customWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[customName]) || SIG_WEAPONS[customName] || '';
+        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier });
       }
     }
 
@@ -317,7 +332,11 @@
             delBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:14px;cursor:pointer;line-height:1;';
             delBtn.onclick = function() {
               var idx = charEntries.indexOf(entry);
-              if (idx >= 0) { charEntries.splice(idx, 1); renderCharList(); }
+              if (idx >= 0) {
+                charEntries.splice(idx, 1);
+                if (deletedChars.indexOf(entry.name) < 0) deletedChars.push(entry.name);
+                renderCharList();
+              }
             };
             row.appendChild(delBtn);
 
@@ -746,13 +765,13 @@
             openEditDialog({
               title: '编辑满命溢价档位', titleColor: '#e94560', saveColor: '#4ade80',
               fields: [
-                { label: '等效满命数量', key: 'count', type: 'number', value: e.count, min: 2, max: 20 },
+                { label: '等效满命数量', key: 'count', type: 'number', value: e.count, min: 1, max: 20, step: 0.5 },
                 { label: '加成比例（如0.2=20%）', key: 'bonus', type: 'number', value: e.bonus, min: 0, max: 5, step: 0.1 },
               ],
               onSave: function (vals) {
-                var newCount = parseInt(vals.count);
+                var newCount = parseFloat(vals.count);
                 var newBonus = parseFloat(vals.bonus);
-                if (newCount < 2) { alert('数量至少为2'); return false; }
+                if (newCount < 1) { alert('数量至少为1'); return false; }
                 if (newBonus < 0) { alert('加成比例不能为负'); return false; }
                 e.count = newCount; e.bonus = newBonus; renderC6List(); return true;
               }
@@ -784,7 +803,7 @@
     var addC6Row = document.createElement('div');
     addC6Row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-top:10px;';
     var c6CountInput = document.createElement('input');
-    c6CountInput.type = 'number'; c6CountInput.min = '2'; c6CountInput.max = '20'; c6CountInput.placeholder = '数量';
+    c6CountInput.type = 'number'; c6CountInput.min = '1'; c6CountInput.max = '20'; c6CountInput.step = '0.5'; c6CountInput.placeholder = '数量';
     c6CountInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
     addC6Row.appendChild(c6CountInput);
     var c6Unit = document.createElement('span');
@@ -804,9 +823,9 @@
     addC6Btn.textContent = '添加';
     addC6Btn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#e94560;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
     addC6Btn.onclick = function () {
-      var count = parseInt(c6CountInput.value);
+      var count = parseFloat(c6CountInput.value);
       var bonus = parseFloat(c6BonusInput.value);
-      if (isNaN(count) || count < 2) { alert('数量至少为2'); return; }
+      if (isNaN(count) || count < 1) { alert('数量至少为1'); return; }
       if (isNaN(bonus) || bonus < 0) { alert('请输入有效的加成比例'); return; }
       var existingE = c6Entries.find(function (e) { return e.count === count; });
       if (existingE) { existingE.bonus = bonus; renderC6List(); }
@@ -1460,6 +1479,7 @@
       }
       // 重置角色价格
       charEntries.length = 0;
+      deletedChars.length = 0;
       for (var rt = 0; rt < tierOrder.length; rt++) {
         var rtk = tierOrder[rt];
         if (!CHAR_TIERS[rtk]) continue;
@@ -1568,6 +1588,7 @@
         }
       }
       newW.charPrices = newCharPrices;
+      newW.deletedChars = deletedChars;
       // 如果用户修改了专武映射，保存到权重中
       if (Object.keys(newSigWeapons).length > 0) {
         newW.sigWeaponsOverride = newSigWeapons;
