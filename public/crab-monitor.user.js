@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.28.0
+// @version      1.31.0
 // @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -150,24 +150,23 @@
     ],
     // 低命折扣系数规则（指定级别角色均不超过N命时，总价值打折）
     flatDiscountRules: [
-      { tiers: ['S', 'A'], maxConst: 2, discount: 0.9 },
+      { tiers: ['S', 'A'], maxConst: 2, discount: 0.85 },
     ],
   };
 
   // 默认配队列表
   const DEFAULT_TEAMS = [
-    { name: '绯洛千', members: ['绯雪', '洛瑟菈', '千咲'], multiplier: 1.5 },
-    { name: '日月守', members: ['奥古斯塔', '尤诺', '守岸人'], multiplier: 1.2 },
+    { name: '日月守', members: ['奥古斯塔', '尤诺', '守岸人'], multiplier: 1.1 },
     { name: '弗坎守', members: ['弗洛洛', '坎特蕾拉', '守岸人'], multiplier: 1.2 },
     { name: '爱达千', members: ['爱弥斯', '达妮娅', '千咲'], multiplier: 1.2 },
-    { name: '卡夏千', members: ['卡提希娅', '夏空', '千咲'], multiplier: 1.2 },
-    { name: '露丽守', members: ['露西', '丽贝卡', '守岸人'], multiplier: 1.2 },
+    { name: '卡夏千', members: ['卡提希娅', '夏空', '千咲'], multiplier: 1.3 },
+    { name: '露丽守', members: ['露西', '丽贝卡', '守岸人'], multiplier: 1.1 },
     { name: '西仇守', members: ['西格莉卡', '仇远', '守岸人'], multiplier: 1.2 },
-    { name: '嘉仇守', members: ['嘉贝莉娜', '仇远', '守岸人'], multiplier: 1.2 },
-    { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.5 },
+    { name: '嘉仇守', members: ['嘉贝莉娜', '仇远', '守岸人'], multiplier: 1.1 },
+    { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.4 },
     { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
     { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
-    { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.6 },
+    { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.4 },
   ];
 
   // 默认抽数阶梯定价
@@ -177,51 +176,51 @@
     { minPull: 200, maxPull: 300, perPullPrice: 1.1 },
     { minPull: 300, maxPull: 400, perPullPrice: 1.3 },
     { minPull: 400, maxPull: 500, perPullPrice: 1.5 },
-    { minPull: 500, maxPull: 600, perPullPrice: 1.8 },
-    { minPull: 600, maxPull: 700, perPullPrice: 2 },
-    { minPull: 700, maxPull: 800, perPullPrice: 2.2 },
-    { minPull: 800, maxPull: 900, perPullPrice: 2.4 },
-    { minPull: 900, maxPull: 1000, perPullPrice: 2.6 },
-    { minPull: 1000, maxPull: 1100, perPullPrice: 2.8 },
-    { minPull: 1100, maxPull: 1200, perPullPrice: 3 },
-    { minPull: 1200, maxPull: 1300, perPullPrice: 3.2 },
-    { minPull: 1300, maxPull: 1400, perPullPrice: 3.5 },
-    { minPull: 1400, maxPull: 9999, perPullPrice: 3.7 },
+    { minPull: 500, maxPull: 600, perPullPrice: 1.7 },
+    { minPull: 600, maxPull: 700, perPullPrice: 1.9 },
+    { minPull: 700, maxPull: 800, perPullPrice: 2.1 },
+    { minPull: 800, maxPull: 900, perPullPrice: 2.3 },
+    { minPull: 900, maxPull: 1000, perPullPrice: 2.5 },
+    { minPull: 1000, maxPull: 1100, perPullPrice: 2.7 },
+    { minPull: 1100, maxPull: 1200, perPullPrice: 2.9 },
+    { minPull: 1200, maxPull: 1300, perPullPrice: 3.1 },
+    { minPull: 1300, maxPull: 1400, perPullPrice: 3.3 },
+    { minPull: 1400, maxPull: 9999, perPullPrice: 3.5 },
   ];
 
   // 默认黄数阶梯系数
   const DEFAULT_YELLOW_TIERS = [
-    { minYellow: 0, maxYellow: 10, coefficient: 0.5 },
-    { minYellow: 10, maxYellow: 20, coefficient: 0.6 },
-    { minYellow: 20, maxYellow: 30, coefficient: 0.7 },
-    { minYellow: 30, maxYellow: 40, coefficient: 0.8 },
-    { minYellow: 40, maxYellow: 50, coefficient: 0.9 },
-    { minYellow: 50, maxYellow: 60, coefficient: 1 },
-    { minYellow: 60, maxYellow: 70, coefficient: 1.05 },
-    { minYellow: 70, maxYellow: 80, coefficient: 1.1 },
-    { minYellow: 80, maxYellow: 90, coefficient: 1.15 },
-    { minYellow: 90, maxYellow: 100, coefficient: 1.2 },
-    { minYellow: 100, maxYellow: 110, coefficient: 1.25 },
-    { minYellow: 110, maxYellow: 120, coefficient: 1.3 },
-    { minYellow: 120, maxYellow: 130, coefficient: 1.35 },
-    { minYellow: 130, maxYellow: 140, coefficient: 1.4 },
-    { minYellow: 140, maxYellow: 150, coefficient: 1.45 },
-    { minYellow: 150, maxYellow: 160, coefficient: 1.5 },
-    { minYellow: 160, maxYellow: 170, coefficient: 1.55 },
-    { minYellow: 170, maxYellow: 180, coefficient: 1.6 },
-    { minYellow: 180, maxYellow: 190, coefficient: 1.65 },
-    { minYellow: 190, maxYellow: 200, coefficient: 1.7 },
-    { minYellow: 200, maxYellow: 210, coefficient: 1.75 },
-    { minYellow: 210, maxYellow: 220, coefficient: 1.8 },
-    { minYellow: 220, maxYellow: 230, coefficient: 1.85 },
-    { minYellow: 230, maxYellow: 240, coefficient: 1.9 },
-    { minYellow: 240, maxYellow: 250, coefficient: 1.95 },
-    { minYellow: 250, maxYellow: 260, coefficient: 2 },
-    { minYellow: 260, maxYellow: 270, coefficient: 2.05 },
-    { minYellow: 270, maxYellow: 280, coefficient: 2.1 },
-    { minYellow: 280, maxYellow: 290, coefficient: 2.15 },
-    { minYellow: 290, maxYellow: 300, coefficient: 2.2 },
-    { minYellow: 300, maxYellow: 999, coefficient: 2.25 },
+    { minYellow: 0, maxYellow: 10, coefficient: 0.45 },
+    { minYellow: 10, maxYellow: 20, coefficient: 0.55 },
+    { minYellow: 20, maxYellow: 30, coefficient: 0.65 },
+    { minYellow: 30, maxYellow: 40, coefficient: 0.75 },
+    { minYellow: 40, maxYellow: 50, coefficient: 0.85 },
+    { minYellow: 50, maxYellow: 60, coefficient: 0.95 },
+    { minYellow: 60, maxYellow: 70, coefficient: 1 },
+    { minYellow: 70, maxYellow: 80, coefficient: 1.05 },
+    { minYellow: 80, maxYellow: 90, coefficient: 1.1 },
+    { minYellow: 90, maxYellow: 100, coefficient: 1.15 },
+    { minYellow: 100, maxYellow: 110, coefficient: 1.2 },
+    { minYellow: 110, maxYellow: 120, coefficient: 1.25 },
+    { minYellow: 120, maxYellow: 130, coefficient: 1.3 },
+    { minYellow: 130, maxYellow: 140, coefficient: 1.35 },
+    { minYellow: 140, maxYellow: 150, coefficient: 1.4 },
+    { minYellow: 150, maxYellow: 160, coefficient: 1.45 },
+    { minYellow: 160, maxYellow: 170, coefficient: 1.5 },
+    { minYellow: 170, maxYellow: 180, coefficient: 1.55 },
+    { minYellow: 180, maxYellow: 190, coefficient: 1.6 },
+    { minYellow: 190, maxYellow: 200, coefficient: 1.65 },
+    { minYellow: 200, maxYellow: 210, coefficient: 1.7 },
+    { minYellow: 210, maxYellow: 220, coefficient: 1.75 },
+    { minYellow: 220, maxYellow: 230, coefficient: 1.8 },
+    { minYellow: 230, maxYellow: 240, coefficient: 1.85 },
+    { minYellow: 240, maxYellow: 250, coefficient: 1.9 },
+    { minYellow: 250, maxYellow: 260, coefficient: 1.95 },
+    { minYellow: 260, maxYellow: 270, coefficient: 2 },
+    { minYellow: 270, maxYellow: 280, coefficient: 2.05 },
+    { minYellow: 280, maxYellow: 290, coefficient: 2.1 },
+    { minYellow: 290, maxYellow: 300, coefficient: 2.15 },
+    { minYellow: 300, maxYellow: 999, coefficient: 2.2 },
   ];
 
   // 默认角色价格表（用户自定义）
@@ -391,28 +390,29 @@
   let notifyEnabled = false;     // 通知开关
   let threshold = 20;            // 估值阈值(%)
   let notifyRatioThreshold = 40; // 通知性价比阈值(%)
-  let notifyDiffThreshold = 200; // 通知差价阈值(元)
-  let autoBuyEnabled = false;   // 自动购买开关
-  let autoBuyDiff = 500;        // 自动购买差价阈值(元)
-  let notifyMinValue = 498;      // 通知估值下限(元)，低于此值不通知
+  let notifyDiffThreshold = 150; // 通知差价阈值(元)
+  let autoBuyEnabled = true;   // 自动购买开关
+  let autoBuyDiff = 380;        // 自动购买差价阈值(元)
+  let notifyMinValue = 400;      // 通知估值下限(元)，低于此值不通知
   let notifyMinPrice = 0;        // 通知标价下限(元)，低于此值不通知
-  let notifyMaxPrice = 0;        // 通知标价上限(元)，高于此值不通知（0=不限制）
-  let autoBuyMaxPrice = 0;       // 自动抢购标价上限(元)，高于此值不抢购（0=不限制）
-  let refreshIntervalSec = 30;   // 刷新间隔（秒），可设置
+  let notifyMaxPrice = 20000;    // 通知标价上限(元)，高于此值不通知（0=不限制）
+  let autoBuyMaxPrice = 6000;    // 自动抢购标价上限(元)，高于此值不抢购（0=不限制）
+  let refreshIntervalSec = 20;   // 刷新间隔（秒），可设置
+  let flashSaleEnabled = true;   // 秒杀库池监控开关
   // 检查已售设置
   let soldCheckRatio = 40;       // 检查已售的性价比阈值(%)
   let soldCheckDiff = 0;         // 检查已售的差价阈值(元)
   let soldCheckMinValue = 0;     // 检查已售的估值下限(元)
   let soldCheckMaxValue = 0;     // 检查已售的估值上限(元，0=不限)
   // 指定账号通知规则
-  let charNotifyRules = [{ chars: [{ name: '爱弥斯', minConst: 6 }, { name: '绯雪', minConst: 6 }], minDiff: 0 }];
+  let charNotifyRules = [{ chars: [{ name: '爱弥斯', minConst: 3 }, { name: '绯雪', minConst: 3 }, { name: '卡提希娅', minConst: 3 }, { name: '弗洛洛', minConst: 2 }, { name: '琳奈', minConst: 0 }, { name: '莫宁', minConst: 0 }, { name: '洛瑟菈', minConst: 0 }, { name: '夏空', minConst: 0 }], minDiff: -200 }];
   // 推送通知配置
   let pushConfig = {
-    barkKey: 'SCT378977TClEq1lr2mRcBmHgadFxK6CVr', // Bark推送Key（iOS）
-    serverChanKey: '',     // Server酱SendKey（微信）
+    barkKey: '',            // Bark推送Key（iOS）
+    serverChanKey: 'SCT383470T7x9zy1jphllnHLuo7vpw0WA4\nSCT378977TClEq1lr2mRcBmHgadFxK6CVr\nSCT383733TlGLAHCEQaaGqSxiCi0FHEDMU', // Server酱SendKey（微信）
     pushPlusToken: '',     // 旧格式：PushPlus Token字符串（兼容）
     pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt, priority}]
-    secondaryDelay: 20,    // 从通知延迟秒数
+    secondaryDelay: 15,    // 从通知延迟秒数
     soundAlert: true,      // 声音提醒
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
     repeatAlert: false,    // 重复提醒（每30秒直到确认）
@@ -436,6 +436,7 @@
   let ratioFilter = { min: null, max: null };       // 性价比筛选
   let searchKeyword = '';                           // 商品编号/文字搜索
   let showOnlySold = false;                         // 是否只显示已售账号
+  let showOnlyFlashSale = false;                    // 是否只显示秒杀账号
   let monitorTimeout = null;     // 监控定时器
   let countdownTimer = null;     // 倒计时定时器
   let weights = null;            // 估值权重（init时从localStorage加载）
@@ -501,11 +502,24 @@
       return true;
     }
 
-    // 第二次失败：减少行数后重试
-    for (let limit = 500; limit >= 100; limit -= 100) {
-      const trimmed = tableData.slice(0, limit).map(slimRow);
+    // 第二次失败：按重要性排序后减少行数重试
+    // 重要性排序：有上架时间优先保留 → 估值降序 → 时间降序（最新优先保留）
+    const importanceSorted = tableData.slice().sort((a, b) => {
+      const timeA = a.firstSeen || a.listTime || 0;
+      const timeB = b.firstSeen || b.listTime || 0;
+      // 上架时间未知的排最后（优先被清理）
+      const unknownA = timeA === 0 ? 1 : 0;
+      const unknownB = timeB === 0 ? 1 : 0;
+      if (unknownA !== unknownB) return unknownA - unknownB;
+      const valA = a.value || 0;
+      const valB = b.value || 0;
+      if (valA !== valB) return valB - valA;
+      return timeB - timeA;
+    });
+    for (let limit = 1000; limit >= 100; limit -= 100) {
+      const trimmed = importanceSorted.slice(0, limit).map(slimRow);
       if (saveStorage(STORAGE_KEYS.table, trimmed)) {
-        console.warn('[鸣潮监控] 表格数据缩减至' + limit + '条后写入成功');
+        console.warn('[鸣潮监控] 表格数据按重要性排序后缩减至' + limit + '条写入成功');
         tableData = trimmed;
         // 同步裁剪 seenIds，保持一致
         const keptIds = new Set(trimmed.map(r => r.productId));
@@ -1246,14 +1260,19 @@
       }
     }
 
-    for (const team of satisfiedTeams) {
-      for (const member of team.members) {
-        const char = parsed.characters.find(c => c.name === member);
-        if (char) {
-          const hasSig = checkHasSigWeapon(member, weaponNames, weaponSectionText);
-          const memberVal = getCharValue(char, hasSig, w);
-          teamPremium += memberVal * (team.multiplier - 1);
+    // 去重：每个角色只取参与配队中的最高溢价系数，不重复累加
+    for (const char of parsed.characters) {
+      let bestCoeff = 0;
+      for (const team of satisfiedTeams) {
+        if (team.members.indexOf(char.name) >= 0) {
+          const coeff = team.multiplier - 1;
+          if (coeff > bestCoeff) bestCoeff = coeff;
         }
+      }
+      if (bestCoeff > 0) {
+        const hasSig = checkHasSigWeapon(char.name, weaponNames, weaponSectionText);
+        const memberVal = getCharValue(char, hasSig, w);
+        teamPremium += memberVal * bestCoeff;
       }
     }
     teamPremium *= multiTeamCoeff;
@@ -1433,6 +1452,73 @@
   }
 
   /**
+   * 获取秒杀库池列表（还价后卖家同意的低价商品）
+   * 与普通列表的区别：type=4，filterDTOList带限时秒杀筛选条件
+   */
+  async function fetchFlashSaleList(page) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(API_URLS.list, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: '',
+          gameId: '10302',
+          pageIndex: page,
+          pageSize: 16,
+          bizProd: 1,
+          type: '1',
+          sortType: 2,
+          posType: 1,
+          filterDTOList: [
+            {
+              attrId: '128593869357091',
+              attrType: 2,
+              attrValList: [-1, ''],
+            },
+          ],
+          sortAttrId: '',
+          mineFav: false,
+          zoneJumpType: 2,
+          bargainZoneJump: false,
+          combineFilterList: [],
+        }),
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return await response.json();
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * 带重试的秒杀库池API调用
+   */
+  async function fetchFlashSaleWithRetry(page, retries = 1) {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const data = await fetchFlashSaleList(page);
+        if (data && data.success) return data;
+        if (i < retries) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        return data;
+      } catch (e) {
+        console.error('[鸣潮监控] 秒杀库API调用失败(第' + (i + 1) + '次):', e);
+        if (i < retries) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
+  /**
    * 带重试的列表API调用
    */
   async function fetchListWithRetry(page, retries = 1) {
@@ -1537,7 +1623,7 @@
    * @param {Array} list - 商品列表
    * @param {boolean} fromIntercept - 是否来自拦截
    */
-  function handleListResponse(list, fromIntercept) {
+  function handleListResponse(list, fromIntercept, fromFlashSale) {
     if (!Array.isArray(list)) return;
 
     if (fromIntercept) {
@@ -1550,17 +1636,18 @@
     batchMode = true;
     try {
       for (const item of list) {
-        processProduct(item);
+        processProduct(item, fromFlashSale);
       }
     } finally {
       batchMode = false;
     }
 
-    // 统一执行一次截断、保存、排序和刷新
+    // 统一执行一次截断、排序、保存和刷新
+    // 注意：先排序再保存，确保缩减时保留高价值+最新数据
     trimTableData();
+    sortTableData();
     saveTableData();
     saveStorage(STORAGE_KEYS.seen, seenIds);
-    sortTableData();
     refreshTableDisplay();
     updateStatusText();
   }
@@ -1568,17 +1655,93 @@
   /**
    * 处理单个商品
    */
-  function processProduct(item) {
+  function processProduct(item, fromFlashSale) {
     const productId = item.productId || item.id;
     if (!productId) return;
 
     const showTitle = item.showTitle || item.title || '';
-    const price = (item.price || 0) / 100; // 分转元
+    const originalPrice = (item.price || 0) / 100; // 分转元（原价）
+    let price = originalPrice;
+
+    // 秒杀池商品：使用 discountInfo.discountPrice 作为实际秒杀价
+    if (fromFlashSale && item.discountInfo && item.discountInfo.discountPrice) {
+      const flashPrice = item.discountInfo.discountPrice / 100;
+      if (flashPrice > 0 && flashPrice < originalPrice) {
+        price = flashPrice;
+        console.log('[鸣潮监控] 秒杀价: ' + (item.productUniqueNo || productId) + ' 原价¥' + originalPrice + ' 秒杀价¥' + flashPrice + ' 已降¥' + ((originalPrice - flashPrice).toFixed(0)));
+      }
+    }
 
     // 自主截图账号不记录
     if (/自主截图/.test(showTitle)) return;
 
-    // 去重：已见商品检查价格是否变化
+    // 秒杀池商品：即使已见过也处理（价格更低）
+    if (fromFlashSale) {
+      const existRow = tableData.find(r => r.productId === productId);
+      if (existRow) {
+        // 秒杀池价格更低，更新为秒杀价
+        if (price < existRow.price) {
+          if (!existRow.priceHistory) existRow.priceHistory = [];
+          existRow.priceHistory.push({ price: existRow.price, time: Date.now() });
+          const oldPrice = existRow.price;
+          existRow.price = price;
+          if (existRow.value && existRow.value > 0) {
+            existRow.ratio = ((existRow.value - price) / price) * 100;
+          }
+          existRow.priceDrop = (existRow.priceDrop || 0) + (oldPrice - price);
+          existRow.status = '秒杀';
+          if (!batchMode) {
+            sortTableData();
+            saveTableData();
+            refreshTableDisplay();
+          }
+          console.log('[鸣潮监控] 秒杀: ' + (existRow.productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
+
+          // 秒杀通知（与降价通知相同逻辑，但标题不同）
+          if (notifyEnabled && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+              (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+              (existRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_flash')) {
+            // 角色摘要
+            let flashCharStr = '';
+            if (existRow.parsed && existRow.parsed.characters) {
+              flashCharStr = existRow.parsed.characters.map(c => {
+                const cs = c.const > 0 ? (c.const === 6 ? '满' : c.const + '命') : '';
+                return c.name + cs;
+              }).join(' ');
+            }
+            const flashMsg = '编号:' + (existRow.productUniqueNo || productId) +
+              ' 秒杀降¥' + (oldPrice - price).toFixed(0) +
+              ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) +
+              ' 估值¥' + (existRow.value || 0).toFixed(0) +
+              ' 性价比' + (existRow.ratio || 0).toFixed(1) + '%' +
+              (flashCharStr ? '\n角色: ' + flashCharStr : '') +
+              '\n' + (existRow.showTitle || '').substring(0, 80);
+            notify(productId + '_flash', '秒杀提醒 ' + existRow.ratio.toFixed(1) + '%', flashMsg);
+            notifiedIds.push(productId + '_flash');
+            if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          }
+        } else {
+          // 价格相同或更高，但仍标记为秒杀（在秒杀池中即代表还价成交）
+          if (existRow.status !== '秒杀' && existRow.status !== '已售') {
+            existRow.status = '秒杀';
+            if (!batchMode) {
+              saveTableData();
+              refreshTableDisplay();
+            }
+            console.log('[鸣潮监控] 秒杀标记(价格未变): ' + (existRow.productUniqueNo || productId) + ' ¥' + price);
+          }
+        }
+        return;
+      }
+      // 表格中不存在（可能已被截断）
+      // 秒杀池商品不受 seenIds 去重限制，从 seenIds 中移除以允许重新处理
+      const seenIdx = seenIds.indexOf(productId);
+      if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
+      console.log('[鸣潮监控] 秒杀池新商品(表格中不存在): ' + productId + ' ¥' + price);
+    }
+
+    // 去重：已见商品检查价格是否变化（秒杀池商品已在上面清除 seenIds，不会被跳过）
     if (seenIds.includes(productId)) {
       // 查找表格中已有行，检测价格变化
       const existRow = tableData.find(r => r.productId === productId);
@@ -1605,19 +1768,28 @@
         if (existRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (existRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
-          const dropMsg = '降价¥' + (oldPrice - price).toFixed(0) +
-            ' ' + (existRow.productUniqueNo || '') +
+          // 角色摘要
+          let dropCharStr = '';
+          if (existRow.parsed && existRow.parsed.characters) {
+            dropCharStr = existRow.parsed.characters.map(c => {
+              const cs = c.const > 0 ? (c.const === 6 ? '满' : c.const + '命') : '';
+              return c.name + cs;
+            }).join(' ');
+          }
+          const dropMsg = '编号:' + (existRow.productUniqueNo || productId) +
+            ' 降价¥' + (oldPrice - price).toFixed(0) +
             ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) +
-            ' 估值¥' + (existRow.value || 0).toFixed(0);
+            ' 估值¥' + (existRow.value || 0).toFixed(0) +
+            ' 性价比' + (existRow.ratio || 0).toFixed(1) + '%' +
+            (dropCharStr ? '\n角色: ' + dropCharStr : '') +
+            '\n' + (existRow.showTitle || '').substring(0, 80);
           notify(productId + '_drop', '降价提醒 ' + existRow.ratio.toFixed(1) + '%', dropMsg);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
         }
       } else if (!existRow) {
-        // 行已被截断但 seenIds 保留：重新入详情队列，由详情回调重建行
-        console.log('[鸣潮监控] 行已截断，重新入队:', productId);
-        enqueueDetail(productId);
+        // 行已被截断但 seenIds 保留：不再重新入队（详情已处理过，避免队列堆积）
       }
       return;
     }
@@ -1649,7 +1821,9 @@
       // 标记新ID为已见，避免重复进详情队列
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
-      // 如果新标价更低，更新价格（相当于降价）
+      // 秒杀池商品标记为"秒杀"，普通池标记为"降价"
+      const mergeStatus = fromFlashSale ? '秒杀' : '降价';
+      // 如果新标价更低，更新价格
       if (price < dupRow.price) {
         if (!dupRow.priceHistory) dupRow.priceHistory = [];
         dupRow.priceHistory.push({ price: dupRow.price, time: Date.now() });
@@ -1659,26 +1833,45 @@
         if (dupRow.productUniqueNo) dupRow.productUniqueNo = productUniqueNo;
         dupRow.ratio = ((dupRow.value - price) / price) * 100;
         dupRow.priceDrop = (dupRow.priceDrop || 0) + (oldPrice - price);
-        dupRow.status = '降价';
+        dupRow.status = mergeStatus;
         dupRow.listTime = typeof listTime === 'number' ? listTime : Date.now();
         if (!batchMode) {
           sortTableData();
           saveTableData();
           refreshTableDisplay();
         }
-        console.log('[鸣潮监控] 重复上架合并(降价): ' + (productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
-        // 降价通知
+        console.log('[鸣潮监控] 重复上架合并(' + mergeStatus + '): ' + (productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
+        // 降价/秒杀通知
         if (notifyEnabled && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (dupRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
-          const dropMsg = '降价¥' + (oldPrice - price).toFixed(0) + ' ' + (dupRow.productUniqueNo || '') +
-            ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) + ' 估值¥' + (dupRow.value || 0).toFixed(0);
-          notify(productId + '_drop', '降价提醒 ' + dupRow.ratio.toFixed(1) + '%', dropMsg);
+          // 角色摘要
+          let mergeCharStr = '';
+          if (dupRow.parsed && dupRow.parsed.characters) {
+            mergeCharStr = dupRow.parsed.characters.map(c => {
+              const cs = c.const > 0 ? (c.const === 6 ? '满' : c.const + '命') : '';
+              return c.name + cs;
+            }).join(' ');
+          }
+          const dropMsg = '编号:' + (dupRow.productUniqueNo || productId) +
+            ' ' + mergeStatus + '¥' + (oldPrice - price).toFixed(0) +
+            ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) +
+            ' 估值¥' + (dupRow.value || 0).toFixed(0) +
+            ' 性价比' + (dupRow.ratio || 0).toFixed(1) + '%' +
+            (mergeCharStr ? '\n角色: ' + mergeCharStr : '') +
+            '\n' + (dupRow.showTitle || '').substring(0, 80);
+          notify(productId + '_drop', mergeStatus + '提醒 ' + dupRow.ratio.toFixed(1) + '%', dropMsg);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
         }
       } else {
+        // 价格未降但秒杀池商品仍标记为秒杀
+        if (fromFlashSale && dupRow.status !== '秒杀' && dupRow.status !== '已售') {
+          dupRow.status = '秒杀';
+          if (!batchMode) { saveTableData(); refreshTableDisplay(); }
+          console.log('[鸣潮监控] 秒杀标记(指纹合并,价格未变): ' + (productUniqueNo || productId) + ' ¥' + price);
+        }
         if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       }
       return;
@@ -1693,7 +1886,7 @@
       price,
       value: valuation.totalValue,
       ratio: valuation.ratio,
-      status: '初估',
+      status: fromFlashSale ? '秒杀' : '初估',
       parsed: {
         yellowCount: parsed.yellowCount,
         pulls: Math.round(parsed.pulls * 10) / 10,
@@ -1708,16 +1901,20 @@
       firstSeen: Date.now(),
     });
 
-    // 加入详情队列：性价比超阈值、S级满命、匹配指定规则、或性价比/差价达通知阈值
+    if (fromFlashSale) {
+      console.log('[鸣潮监控] 秒杀池商品已入表: ' + (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0));
+    }
+
+    // 加入详情队列：估值>500且差价>100，或有S级满命，或匹配指定账号规则
     const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
     // 检查是否匹配指定账号通知规则（须满足全部角色条件）
     const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule =>
       rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
     );
-    // 检查是否达通知阈值（确保低于入队阈值但达通知阈值的账号也能入队）
-    const meetsNotifyThreshold = valuation.diff != null && valuation.diff > notifyDiffThreshold;
-    if (valuation.ratio > threshold || hasSC6 || matchesCharRule || meetsNotifyThreshold) {
-      enqueueDetail(productId);
+    // 基本入队条件：估值>500且差价>100（过滤低价值账号，减少队列堆积）
+    const meetsBasicThreshold = valuation.totalValue > 500 && valuation.diff != null && valuation.diff > 100;
+    if (meetsBasicThreshold || hasSC6 || matchesCharRule) {
+      enqueueDetail(productId, valuation.diff || 0);
     }
   }
 
@@ -1726,16 +1923,27 @@
   // ============================================================
 
   /**
-   * 加入详情队列
+   * 加入详情队列（按差价降序优先处理，差价大的先出队）
+   * @param {string} productId - 商品ID
+   * @param {number} priority - 优先级（差价，默认0）
    */
-  function enqueueDetail(productId) {
+  function enqueueDetail(productId, priority) {
     // 避免重复入队
-    if (detailQueue.find(item => item.productId === productId)) return;
+    const existItem = detailQueue.find(item => item.productId === productId);
+    if (existItem) {
+      // 已在队列中，更新优先级（取较大值）
+      if (priority != null && (existItem.priority == null || priority > existItem.priority)) {
+        existItem.priority = priority;
+      }
+      return;
+    }
     // 避免已处理的
     const row = tableData.find(r => r.productId === productId);
     if (row && row.status === '详估') return;
 
-    detailQueue.push({ productId, time: Date.now() });
+    detailQueue.push({ productId, time: Date.now(), priority: priority || 0 });
+    // 按优先级（差价）降序排序，差价大的排前面优先处理
+    detailQueue.sort((a, b) => (b.priority || 0) - (a.priority || 0));
     updateBottomBar();
 
     if (!detailTimer) {
@@ -1774,13 +1982,13 @@
     fetchDetail(item.productId).then(data => {
       if (data && data.success && data.data) {
         const showTitle = data.data.showTitle || data.data.title || '';
-        const price = (data.data.price || 0) / 100;
+        const detailPrice = (data.data.price || 0) / 100;
         // 改进2：从详情API提取字母编号 productUniqueNo
         const productUniqueNo = data.data.productUniqueNo || data.data.uniqueNo || '';
 
         // 重新解析和估值
         const parsed = parseAccountInfo(showTitle);
-        const valuation = calculateValue(parsed, price);
+        const valuation = calculateValue(parsed, detailPrice);
 
         // 详估后估值低于300，从表格移除
         if (valuation.totalValue < 300) {
@@ -1795,14 +2003,21 @@
           return;
         }
 
-        // 更新表格行
+        // 更新表格行（保留"秒杀"状态和秒杀价，不被"详估"覆盖）
+        const existingRow = tableData.find(r => r.productId === item.productId);
+        const isFlashSale = existingRow && existingRow.status === '秒杀';
+        const preserveStatus = isFlashSale ? '秒杀' : '详估';
+        // 秒杀商品的秒杀价低于详情API返回的标价，保留秒杀价
+        const finalPrice = isFlashSale ? Math.min(existingRow.price, detailPrice) : detailPrice;
+        // 用保留的价格重算性价比
+        const finalRatio = finalPrice > 0 ? ((valuation.totalValue - finalPrice) / finalPrice) * 100 : valuation.ratio;
         updateTableRow(item.productId, {
           showTitle,
-          price,
+          price: finalPrice,
           productUniqueNo,
           value: valuation.totalValue,
-          ratio: valuation.ratio,
-          status: '详估',
+          ratio: finalRatio,
+          status: preserveStatus,
           parsed: {
             yellowCount: parsed.yellowCount,
             pulls: Math.round(parsed.pulls * 10) / 10,
@@ -1819,26 +2034,29 @@
         // 自主截图账号不通知（信息不可靠）
         const isSelfScreenshot = /自主截图/.test(showTitle);
         if (notifyEnabled && !isSelfScreenshot && !notifiedIds.includes(item.productId)) {
+          // 秒杀商品使用秒杀价计算差价和通知条件
+          const notifyPrice = finalPrice;
+          const notifyDiff = valuation.totalValue - notifyPrice;
           // 1. 优先检查指定账号通知规则（须满足全部角色条件 + 差价）
           const matchedRules = charNotifyRules.filter(rule =>
             rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
           );
           // 常规通知条件：差价超过阈值，且估值/标价不低于各自下限，且标价不高于上限
-          const shouldNotifyRegular = (valuation.diff > notifyDiffThreshold)
+          const shouldNotifyRegular = (notifyDiff > notifyDiffThreshold)
             && valuation.totalValue >= notifyMinValue
-            && price >= notifyMinPrice
-            && (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
+            && notifyPrice >= notifyMinPrice
+            && (notifyMaxPrice <= 0 || notifyPrice <= notifyMaxPrice);
 
           // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff + 最低限制 + 标价不高于上限
           let charRuleTriggered = false;
           let triggeredRule = null;
-          const priceWithinMax = (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
+          const priceWithinMax = (notifyMaxPrice <= 0 || notifyPrice <= notifyMaxPrice);
           const meetsMinValue = valuation.totalValue >= notifyMinValue;
-          const meetsMinPrice = price >= notifyMinPrice;
+          const meetsMinPrice = notifyPrice >= notifyMinPrice;
           if (matchedRules.length > 0 && priceWithinMax && meetsMinValue && meetsMinPrice) {
             for (const r of matchedRules) {
               // minDiff=0 表示不限差价（始终通过），否则检查差价是否超过 minDiff
-              if (r.minDiff === 0 || valuation.diff > r.minDiff) {
+              if (r.minDiff === 0 || notifyDiff > r.minDiff) {
                 charRuleTriggered = true;
                 triggeredRule = r;
                 break;
@@ -1852,8 +2070,8 @@
               ? triggeredRule.chars.map(c => c.name + (c.minConst > 0 ? c.minConst + '命+' : '')).join('+')
               : '';
             const title = charRuleTriggered
-              ? '指定账号 ' + matchedCharNames + ' 差价' + valuation.diff.toFixed(0) + '元'
-              : '高差价账号 差价' + valuation.diff.toFixed(0) + '元';
+              ? '指定账号 ' + matchedCharNames + ' 差价' + notifyDiff.toFixed(0) + '元'
+              : '高差价账号 差价' + notifyDiff.toFixed(0) + '元';
 
             // 角色明细估值摘要
             let charDetailStr = '';
@@ -1884,7 +2102,7 @@
             if (valuation.otherResources > 0) resParts.push('其他:' + valuation.otherResources + '元');
             resourceStr = resParts.join(' ');
 
-            const body = '标价' + price.toFixed(0) + '元 估值' + valuation.totalValue.toFixed(0) + '元 差价' + valuation.diff.toFixed(0) + '元\n' +
+            const body = '标价' + notifyPrice.toFixed(0) + '元 估值' + valuation.totalValue.toFixed(0) + '元 差价' + notifyDiff.toFixed(0) + '元\n' +
               (charDetailStr ? '角色: ' + charDetailStr + '\n' : '') +
               (resourceStr ? '资源: ' + resourceStr + '\n' : '') +
               showTitle.substring(0, 80);
@@ -1894,8 +2112,8 @@
             saveStorage(STORAGE_KEYS.notified, notifiedIds);
 
             // 自动抢购：差价超过阈值且标价不超过上限时自动打开商品页
-            if (autoBuyEnabled && valuation.diff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || price <= autoBuyMaxPrice)) {
-              autoBuy(item.productId, valuation.diff);
+            if (autoBuyEnabled && notifyDiff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || notifyPrice <= autoBuyMaxPrice)) {
+              autoBuy(item.productId, notifyDiff);
             }
           }
         }
@@ -1930,13 +2148,14 @@
     // 限制最大行数：始终按差价降序截断，确保高价值数据不被误删
     trimTableData();
 
+    // 先排序再保存：确保新数据处于正确位置，缩减时不会被误删
+    sortTableData();
     const saved = saveTableData();
     // 只有表格数据成功保存（或精简后保存），才同步 seenIds
     // 这确保刷新后 seenIds 与 tableData 始终一致，不会出现"ID已见但表格缺失"的情况
     if (saved) {
       saveStorage(STORAGE_KEYS.seen, seenIds);
     }
-    sortTableData();
     refreshTableDisplay();
     updateStatusText();
   }
@@ -1948,8 +2167,9 @@
     const row = tableData.find(r => r.productId === productId);
     if (row) {
       Object.assign(row, updates);
-      saveTableData();
+      // 先排序再保存：确保更新后的行处于正确位置，缩减时高价值行不会被误删
       sortTableData();
+      saveTableData();
       refreshTableDisplay();
     } else {
       // 行不存在（可能被挤出），重新创建
@@ -1960,8 +2180,8 @@
         firstSeen: Date.now(),
       }, updates));
       trimTableData();
-      saveTableData();
       sortTableData();
+      saveTableData();
       refreshTableDisplay();
     }
   }
@@ -1972,19 +2192,23 @@
    */
   function trimTableData() {
     if (tableData.length <= CONFIG.maxTableRows) return;
-    // 清理优先级：1.估值低于600的优先清理 2.时间越久越优先清理（估值<300的已不入库）
+    // 清理优先级：1.上架时间未知的优先清理 2.估值低于600的优先清理 3.时间越久越优先清理
     const CLEAN_THRESHOLD = 600;
     tableData.sort((a, b) => {
+      // 上架时间未知（listTime为0或不存在）的排最后（优先被清理）
+      const timeA = a.firstSeen || a.listTime || 0;
+      const timeB = b.firstSeen || b.listTime || 0;
+      const unknownA = timeA === 0 ? 1 : 0;
+      const unknownB = timeB === 0 ? 1 : 0;
+      if (unknownA !== unknownB) return unknownA - unknownB;
+      // 估值低的排后面（优先被清理）
       const valA = a.value || 0;
       const valB = b.value || 0;
       const lowA = valA < CLEAN_THRESHOLD ? 1 : 0;
       const lowB = valB < CLEAN_THRESHOLD ? 1 : 0;
-      // 估值低的排后面（优先被清理）
       if (lowA !== lowB) return lowA - lowB;
-      // 同组内按时间升序，时间越早的排后面（优先被清理）
-      const timeA = a.firstSeen || a.listTime || 0;
-      const timeB = b.firstSeen || b.listTime || 0;
-      return timeA - timeB;
+      // 同组内按时间降序，最新的排前面（优先保留），时间越早的排后面（优先被清理）
+      return timeB - timeA;
     });
     const removed = tableData.slice(CONFIG.maxTableRows);
     tableData = tableData.slice(0, CONFIG.maxTableRows);
@@ -2407,8 +2631,11 @@
         <input type="number" class="mw-input" id="mwFilterRatioMin" placeholder="最小" style="width:50px;">
         <span style="color:#555;">~</span>
         <input type="number" class="mw-input" id="mwFilterRatioMax" placeholder="最大" style="width:50px;">
-        <label style="color:#8888aa;font-size:12px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="mwShowOnlySold" style="vertical-align:middle;">只显示已售</label>
         <span class="mw-filter-clear" id="mwNumFilterClear">重置</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:0 4px;">
+        <label style="color:#8888aa;font-size:12px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="mwShowOnlySold" style="vertical-align:middle;">只显示已售</label>
+        <label style="color:#e94560;font-size:12px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="mwShowOnlyFlashSale" style="vertical-align:middle;">只显示秒杀</label>
       </div>
       <div class="mw-table-container">
         <table class="mw-table" id="mwTable">
@@ -2603,6 +2830,12 @@
         '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="10" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">自动刷新列表的时间间隔，建议30~120秒</div>' +
+        // 秒杀库池监控
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwFlashSaleEnabled" ' + (flashSaleEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控秒杀库池（还价成交的低价账号）</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">扫描秒杀库池前2页，捕获还价后卖家同意的降价商品</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -2912,6 +3145,7 @@
         if (newInterval > 3600) newInterval = 3600;
         var intervalChanged = newInterval !== refreshIntervalSec;
         refreshIntervalSec = newInterval;
+        flashSaleEnabled = box.querySelector('#mwFlashSaleEnabled').checked;
         soldCheckRatio = parseFloat(box.querySelector('#mwSoldCheckRatio').value) || 0;
         soldCheckDiff = parseFloat(box.querySelector('#mwSoldCheckDiff').value) || 0;
         soldCheckMinValue = parseFloat(box.querySelector('#mwSoldCheckMinValue').value) || 0;
@@ -3047,6 +3281,15 @@
         refreshTableDisplay();
       });
     }
+
+    // 只显示秒杀复选框事件
+    const showOnlyFlashSaleEl = document.getElementById('mwShowOnlyFlashSale');
+    if (showOnlyFlashSaleEl) {
+      showOnlyFlashSaleEl.addEventListener('change', function () {
+        showOnlyFlashSale = this.checked;
+        refreshTableDisplay();
+      });
+    }
   }
 
   // 角色级别排序优先级（S最前，A、B次之，C/D/E最后）
@@ -3167,10 +3410,13 @@
         row.parsed && row.parsed.characters && row.parsed.characters.some(c => c.name === charFilter)
       );
     }
-    // 隐藏已售
     // 只显示已售
     if (showOnlySold) {
       displayData = displayData.filter(row => row.status === '已售');
+    }
+    // 只显示秒杀
+    if (showOnlyFlashSale) {
+      displayData = displayData.filter(row => row.status === '秒杀');
     }
     // 数值筛选
     displayData = displayData.filter(row => {
@@ -3253,8 +3499,10 @@
         '<td class="' + diffColorClass + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(0) + '</td>' +
         '<td class="' + ratioColorClass + '">' + ratio.toFixed(1) + '%</td>' +
         '<td>' + (row.priceHistory && row.priceHistory.length > 0
-          ? '<span style="color:#666;text-decoration:line-through;font-size:11px;">¥' + row.priceHistory[0].price.toFixed(0) + '</span> <span style="color:#f59e0b;font-weight:600;">¥' + row.price.toFixed(0) + '</span>'
-          : row.price.toFixed(0)) + '</td>' +
+          ? '<span style="color:#666;text-decoration:line-through;font-size:11px;">¥' + row.priceHistory[0].price.toFixed(0) + '</span> <span style="color:' + (row.status === '秒杀' ? '#e94560' : '#f59e0b') + ';font-weight:600;">¥' + row.price.toFixed(0) + '</span>'
+          : row.status === '秒杀'
+            ? '<span style="color:#e94560;font-weight:600;">秒杀 ¥' + row.price.toFixed(0) + '</span>'
+            : row.price.toFixed(0)) + '</td>' +
         '<td>' + (row.parsed ? row.parsed.yellowCount : 0) + '</td>' +
         '<td>' + (row.parsed ? row.parsed.pulls : 0) + '</td>' +
         '<td>' + (row.parsed ? row.parsed.motoCount : 0) + '</td>' +
@@ -5633,8 +5881,8 @@ function openSettings() {
    * 页面内大横幅提醒
    */
   function showAlertBanner(title, body, productId) {
-    // 清理productId后缀（如降价的 _drop），确保链接正确
-    const cleanId = String(productId).replace(/_drop$/, '');
+    // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
+    const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
 
@@ -5702,8 +5950,8 @@ function openSettings() {
    * 支持：Bark（iOS）、Server酱（微信）、PushPlus（微信）
    */
   function sendPhonePush(title, body, productId) {
-    // 清理productId后缀（如降价的 _drop），确保链接正确
-    const cleanId = String(productId).replace(/_drop$/, '');
+    // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
+    const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     const pushBody = body + '\n\n详情: https://www.pxb7.com/product/' + cleanId + '/1';
 
     // Bark推送（iOS）
@@ -6033,6 +6281,7 @@ function openSettings() {
       notifyMinPrice: notifyMinPrice,
       notifyMaxPrice: notifyMaxPrice,
       refreshIntervalSec: refreshIntervalSec,
+      flashSaleEnabled: flashSaleEnabled,
       soldCheckRatio: soldCheckRatio,
       soldCheckDiff: soldCheckDiff,
       soldCheckMinValue: soldCheckMinValue,
@@ -6123,6 +6372,37 @@ function openSettings() {
           console.error('[鸣潮监控] 第' + page + '页获取失败:', e);
         }
       }
+
+      // 秒杀库池扫描（还价后卖家同意的低价商品）
+      if (flashSaleEnabled) {
+        let flashTotal = 0;
+        for (let page = 1; page <= 1; page++) {
+          try {
+            const flashData = await fetchFlashSaleWithRetry(page);
+            if (flashData && flashData.success && flashData.data) {
+              const flashList = Array.isArray(flashData.data) ? flashData.data : (flashData.data.list || null);
+              if (flashList) {
+                // 调试：打印第一条商品的完整数据，找出秒杀价字段
+                if (page === 1 && flashList.length > 0) {
+                  console.log('[鸣潮监控] 秒杀池首条商品完整数据:', JSON.stringify(flashList[0]));
+                }
+                flashTotal += flashList.length;
+                handleListResponse(flashList, false, true);
+                console.log('[鸣潮监控] 秒杀库第' + page + '页扫描完成，获取' + flashList.length + '条');
+              } else {
+                console.log('[鸣潮监控] 秒杀库第' + page + '页：响应格式无list数据', flashData);
+              }
+            } else {
+              console.log('[鸣潮监控] 秒杀库第' + page + '页：API返回', flashData ? (flashData.success ? 'success但无data' : '失败:' + (flashData.message || flashData.msg)) : '空响应');
+            }
+          } catch (e) {
+            console.error('[鸣潮监控] 秒杀库第' + page + '页获取失败:', e);
+          }
+        }
+        if (flashTotal > 0) {
+          console.log('[鸣潮监控] 秒杀库扫描完成，共获取' + flashTotal + '条');
+        }
+      }
     } catch (e) {
       lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
       console.error('[鸣潮监控] 列表刷新失败:', e);
@@ -6177,6 +6457,7 @@ function openSettings() {
     notifyMinPrice = savedState.notifyMinPrice != null ? savedState.notifyMinPrice : 0;
     notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 0;
     refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 60;
+    flashSaleEnabled = savedState.flashSaleEnabled != null ? savedState.flashSaleEnabled : true;
     soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 20;
     soldCheckDiff = savedState.soldCheckDiff != null ? savedState.soldCheckDiff : 0;
     soldCheckMinValue = savedState.soldCheckMinValue != null ? savedState.soldCheckMinValue : 0;
