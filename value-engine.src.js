@@ -941,18 +941,21 @@ function calculateValue(parsed, price) {
   }
   // 计算满命加成系数（用于满命溢价）
   let c6BonusMultiplier = 0;
-  if (weightedFullConst >= 2 && c6BonusRules.length > 0) {
+  if (c6BonusRules.length > 0) {
     const sortedRules = [...c6BonusRules].sort((a, b) => a.count - b.count);
-    let lower = null, upper = null;
-    for (const rule of sortedRules) {
-      if (weightedFullConst >= rule.count) lower = rule;
-      else if (!upper) upper = rule;
-    }
-    if (lower && upper) {
-      const ratio = (weightedFullConst - lower.count) / (upper.count - lower.count);
-      c6BonusMultiplier = Math.max(upper.bonus * ratio, lower.bonus);
-    } else if (lower) {
-      c6BonusMultiplier = lower.bonus;
+    const minRuleCount = sortedRules[0].count;
+    if (weightedFullConst >= minRuleCount) {
+      let lower = null, upper = null;
+      for (const rule of sortedRules) {
+        if (weightedFullConst >= rule.count) lower = rule;
+        else if (!upper) upper = rule;
+      }
+      if (lower && upper) {
+        const ratio = (weightedFullConst - lower.count) / (upper.count - lower.count);
+        c6BonusMultiplier = Math.max(upper.bonus * ratio, lower.bonus);
+      } else if (lower) {
+        c6BonusMultiplier = lower.bonus;
+      }
     }
   }
   if (c6BonusMultiplier > 0) {
@@ -966,18 +969,21 @@ function calculateValue(parsed, price) {
   // 计算抽数满命加成系数（独立档位 pullC6Bonus）
   const pullC6Rules = w.pullC6Bonus || [];
   let pullC6Multiplier = 0;
-  if (weightedFullConst >= 1 && pullC6Rules.length > 0) {
+  if (pullC6Rules.length > 0) {
     const sortedPullRules = [...pullC6Rules].sort((a, b) => a.count - b.count);
-    let plower = null, pupper = null;
-    for (const rule of sortedPullRules) {
-      if (weightedFullConst >= rule.count) plower = rule;
-      else if (!pupper) pupper = rule;
-    }
-    if (plower && pupper) {
-      const pratio = (weightedFullConst - plower.count) / (pupper.count - plower.count);
-      pullC6Multiplier = Math.max(pupper.bonus * pratio, plower.bonus);
-    } else if (plower) {
-      pullC6Multiplier = plower.bonus;
+    const minPullCount = sortedPullRules[0].count;
+    if (weightedFullConst >= minPullCount) {
+      let plower = null, pupper = null;
+      for (const rule of sortedPullRules) {
+        if (weightedFullConst >= rule.count) plower = rule;
+        else if (!pupper) pupper = rule;
+      }
+      if (plower && pupper) {
+        const pratio = (weightedFullConst - plower.count) / (pupper.count - plower.count);
+        pullC6Multiplier = Math.max(pupper.bonus * pratio, plower.bonus);
+      } else if (plower) {
+        pullC6Multiplier = plower.bonus;
+      }
     }
   }
 
