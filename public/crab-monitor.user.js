@@ -4246,6 +4246,9 @@ function openSettings() {
       var pr = parseFloat(addPriceInput.value);
       if (isNaN(pr)) pr = 15;
       charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value });
+      // 如果角色之前被删除过，从 deletedChars 中移除，否则重新打开设置时会跳过
+      var dcIdx = deletedChars.indexOf(nm);
+      if (dcIdx >= 0) deletedChars.splice(dcIdx, 1);
       renderCharList();
       addNameInput.value = ''; addWeaponInput.value = '';
     };
@@ -5600,7 +5603,10 @@ function openSettings() {
       }
 
       // 保存并刷新
-      saveWeights(newW);
+      if (!saveWeights(newW)) {
+        alert('保存失败：localStorage 空间不足。请先清理部分监控数据后重试。');
+        return;
+      }
       weights = newW;
       overlay.remove();
       // 全量重算表格中已有行的估值
