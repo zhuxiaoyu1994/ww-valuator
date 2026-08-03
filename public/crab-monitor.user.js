@@ -483,15 +483,30 @@
 
   /**
    * 精简表格行数据（去除大字段，减小存储体积）
+   * parsed 和 valuation 均可通过 showTitle 重新计算，存储时移除以节省空间
    */
   function slimRow(row) {
     const slim = Object.assign({}, row);
-    // 移除估值明细对象（可通过 showTitle 重新计算）
     delete slim.valuation;
     delete slim._cachedValuation;
-    // 截断超长标题（保留足够长度以确保角色/武器数据不丢失）
+    delete slim.parsed;           // 可从 showTitle 重新解析
     if (slim.showTitle && slim.showTitle.length > 2000) {
       slim.showTitle = slim.showTitle.substring(0, 2000);
+    }
+    return slim;
+  }
+
+  /**
+   * 超精简行：在 slimRow 基础上进一步截断 showTitle，用于极端空间不足时的降级
+   */
+  function ultraSlimRow(row) {
+    const slim = Object.assign({}, row);
+    delete slim.valuation;
+    delete slim._cachedValuation;
+    delete slim.parsed;
+    delete slim.fingerprint;
+    if (slim.showTitle && slim.showTitle.length > 800) {
+      slim.showTitle = slim.showTitle.substring(0, 800);
     }
     return slim;
   }
@@ -502,21 +517,18 @@
   function saveTableData() {
     if (saveStorage(STORAGE_KEYS.table, tableData)) return true;
 
-    // 第一次失败：精简每行数据（移除 valuation 等大字段）
+    // 第一次失败：精简每行数据（移除 valuation / parsed 等大字段）
     console.warn('[鸣潮监控] 表格数据写入失败，尝试精简数据...');
     const slimmed = tableData.map(slimRow);
     if (saveStorage(STORAGE_KEYS.table, slimmed)) {
-      // 精简成功，用精简数据替换内存数据
       tableData = slimmed;
       return true;
     }
 
     // 第二次失败：按重要性排序后减少行数重试
-    // 重要性排序：有上架时间优先保留 → 估值降序 → 时间降序（最新优先保留）
     const importanceSorted = tableData.slice().sort((a, b) => {
       const timeA = a.firstSeen || a.listTime || 0;
       const timeB = b.firstSeen || b.listTime || 0;
-      // 上架时间未知的排最后（优先被清理）
       const unknownA = timeA === 0 ? 1 : 0;
       const unknownB = timeB === 0 ? 1 : 0;
       if (unknownA !== unknownB) return unknownA - unknownB;
@@ -528,9 +540,8 @@
     for (let limit = 1000; limit >= 100; limit -= 100) {
       const trimmed = importanceSorted.slice(0, limit).map(slimRow);
       if (saveStorage(STORAGE_KEYS.table, trimmed)) {
-        console.warn('[鸣潮监控] 表格数据按重要性排序后缩减至' + limit + '条写入成功');
+        console.warn('[鸣潮监控] 表格数据缩减至' + limit + '条写入成功');
         tableData = trimmed;
-        // 同步裁剪 seenIds，保持一致
         const keptIds = new Set(trimmed.map(r => r.productId));
         seenIds = seenIds.filter(id => keptIds.has(id));
         saveStorage(STORAGE_KEYS.seen, seenIds);
@@ -538,7 +549,21 @@
       }
     }
 
-    console.error('[鸣潮监控] 表格数据即使精简后仍无法写入，localStorage 可能已满');
+    // 第三次失败：超精简（截断 showTitle 至 800 + 移除 parsed/fingerprint）
+    console.warn('[鸣潮监控] 常规精简仍失败，尝试超精简模式...');
+    for (let limit = 800; limit >= 200; limit -= 100) {
+      const ultraTrimmed = importanceSorted.slice(0, limit).map(ultraSlimRow);
+      if (saveStorage(STORAGE_KEYS.table, ultraTrimmed)) {
+        console.warn('[鸣潮监控] 表格数据超精简至' + limit + '条写入成功');
+        tableData = ultraTrimmed;
+        const keptIds = new Set(ultraTrimmed.map(r => r.productId));
+        seenIds = seenIds.filter(id => keptIds.has(id));
+        saveStorage(STORAGE_KEYS.seen, seenIds);
+        return true;
+      }
+    }
+
+    console.error('[鸣潮监控] 表格数据即使超精简后仍无法写入，localStorage 可能已满');
     return false;
   }
 
@@ -606,9 +631,14 @@
 
   /**
    * 保存估值权重到localStorage
+   * 如果空间不足，先清理表格数据释放空间再重试
    */
   function saveWeights(w) {
-    saveStorage(STORAGE_KEYS.weights, w);
+    if (saveStorage(STORAGE_KEYS.weights, w)) return true;
+    // 权重保存失败，可能是 localStorage 空间被表格数据占满
+    console.warn('[鸣潮监控] 权重保存失败，尝试清理表格数据释放空间...');
+    saveTableData();
+    return saveStorage(STORAGE_KEYS.weights, w);
   }
 
   // ============================================================
@@ -3248,6 +3278,7 @@
    * @returns {string} 标签 HTML
    */
   function buildCharTagsHTML(row) {
+    ensureRowData(row);
     if (!row.parsed || !row.parsed.characters || row.parsed.characters.length === 0) return '-';
 
     const breakdown = (row.valuation && row.valuation.charBreakdown) || [];
@@ -3330,6 +3361,11 @@
    */
   function refreshTableDisplay() {
     if (!dom.tableBody) return;
+
+    // 确保 tableData 中每行都有 parsed 数据（slimRow 存储后可能被移除）
+    for (const row of tableData) {
+      ensureRowData(row);
+    }
 
     // 筛选
     let displayData = tableData;
@@ -3596,11 +3632,40 @@
   }
 
   /**
+   * 确保行数据已解析（parsed / valuation）
+   * slimRow 存储后 parsed 和 valuation 被移除，显示时按需从 showTitle 重新解析
+   */
+  function ensureRowData(row) {
+    if (row.parsed && row.valuation) return;
+    if (!row.showTitle) return;
+    try {
+      const parsed = parseAccountInfo(row.showTitle);
+      if (!row.parsed) {
+        row.parsed = {
+          yellowCount: parsed.yellowCount,
+          pulls: Math.round(parsed.pulls * 10) / 10,
+          motoCount: parsed.motoCount,
+          characters: parsed.characters.map(c => ({ name: c.name, const: c.const, tier: c.tier, isHot: c.isHot, price: c.price })),
+          weapons: parsed.weapons.map(w => ({ name: w.name, refine: w.refine })),
+        };
+      }
+      if (!row.valuation) {
+        row.valuation = calculateValue(parsed, row.price);
+        row.value = row.valuation.totalValue;
+        row.ratio = row.valuation.ratio;
+      }
+    } catch (e) {
+      // 解析失败，保持原样
+    }
+  }
+
+  /**
    * 获取行估值信息（若旧数据缺少明细字段则从 showTitle 重新计算并缓存）
    * @param {object} row - 表格行数据
    * @returns {object} 估值结果
    */
   function getRowValuation(row) {
+    ensureRowData(row);
     if (row.valuation && row.valuation.charBreakdown) return row.valuation;
     // 旧数据或 slimRow 精简后：重新解析计算
     if (!row._cachedValuation && row.showTitle) {
