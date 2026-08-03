@@ -18,7 +18,7 @@
   'use strict';
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 7;
+  const CONFIG_VERSION = 8;
 
   // ============================================================
   // 常量定义
@@ -45,7 +45,7 @@
     '奥古斯塔': '驭冕铸雷之权', '嘉贝莉娜': '光影双生', '西格莉卡': '昭日译注',
     '达妮娅': '赝作的矮星', '菲比': '和光回唱', '绯雪': '灼霜', '琳奈': '溢彩荧辉',
     '丽贝卡': '碎骨', '陆赫斯': '白昼之脊', '秧秧玄翎': '天之苍苍', '穗穗': '栖霞饮露',
-    '露西': '蜃影',
+    '露西': '蜃影', '洛可可': '悲喜剧',
   };
 
   // 配队定义
@@ -176,6 +176,7 @@
     { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
     { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
     { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.4 },
+    { name: '秧千穗', members: ['秧秧玄翎', '千咲', '穗穗'], multiplier: 1.4 },
   ];
 
   // 默认抽数阶梯定价
@@ -417,11 +418,10 @@
   let charNotifyRules = [{ chars: [{ name: '爱弥斯', minConst: 3 }, { name: '绯雪', minConst: 3 }, { name: '卡提希娅', minConst: 3 }, { name: '弗洛洛', minConst: 2 }, { name: '琳奈', minConst: 0 }, { name: '莫宁', minConst: 0 }, { name: '洛瑟菈', minConst: 0 }, { name: '夏空', minConst: 0 }], minDiff: -200 }];
   // 推送通知配置
   let pushConfig = {
-    barkKey: '',            // Bark推送Key（iOS）
     serverChanKey: 'SCT383470T7x9zy1jphllnHLuo7vpw0WA4\nSCT378977TClEq1lr2mRcBmHgadFxK6CVr\nSCT383733TlGLAHCEQaaGqSxiCi0FHEDMU', // Server酱SendKey（微信）
     pushPlusToken: '',     // 旧格式：PushPlus Token字符串（兼容）
     pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt, priority}]
-    secondaryDelay: 15,    // 从通知延迟秒数
+    secondaryDelay: 10,    // 从通知延迟秒数
     soundAlert: true,      // 声音提醒
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
     repeatAlert: false,    // 重复提醒（每30秒直到确认）
@@ -577,7 +577,7 @@
     // 改进5：角色价格表（按角色名，合并默认值与用户自定义）
     w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
     // 用户已删除的角色列表（用于设置面板初始化时跳过）
-    w.deletedChars = saved.deletedChars || [];
+    w.deletedChars = saved.deletedChars || ['卡卡罗', '秧秧', '卡提希娅', '秧秧玄翎'];
     // 数据迁移：旧的'秧秧'是五星角色(价格35)，现已改名为'秧秧玄翎'
     // 四星'秧秧'价格应为0，如果旧配置中'秧秧'价格>0说明是旧数据，重置为0
     if (saved.charPrices && saved.charPrices['秧秧'] != null && saved.charPrices['秧秧'] > 0) {
@@ -1718,22 +1718,8 @@
           if (notifyEnabled && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
               (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
               (existRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_flash')) {
-            // 角色摘要
-            let flashCharStr = '';
-            if (existRow.parsed && existRow.parsed.characters) {
-              flashCharStr = existRow.parsed.characters.map(c => {
-                const cs = c.const > 0 ? (c.const === 6 ? '满' : c.const + '命') : '';
-                return c.name + cs;
-              }).join(' ');
-            }
-            const flashMsg = '编号:' + (existRow.productUniqueNo || productId) +
-              ' 秒杀降¥' + (oldPrice - price).toFixed(0) +
-              ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) +
-              ' 估值¥' + (existRow.value || 0).toFixed(0) +
-              ' 性价比' + (existRow.ratio || 0).toFixed(1) + '%' +
-              (flashCharStr ? '\n角色: ' + flashCharStr : '') +
-              '\n' + (existRow.showTitle || '').substring(0, 80);
-            notify(productId + '_flash', '秒杀提醒 降¥' + (oldPrice - price).toFixed(0) + ' 差价¥' + (existRow.value - price).toFixed(0), flashMsg);
+            const { title: flashTitle, body: flashMsg, mdBody: flashMd } = buildNotifyContent('秒杀', existRow, oldPrice, price);
+            notify(productId + '_flash', flashTitle, flashMsg, flashMd);
             notifiedIds.push(productId + '_flash');
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
             saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -1785,22 +1771,8 @@
         if (existRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (existRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
-          // 角色摘要
-          let dropCharStr = '';
-          if (existRow.parsed && existRow.parsed.characters) {
-            dropCharStr = existRow.parsed.characters.map(c => {
-              const cs = c.const > 0 ? (c.const === 6 ? '满' : c.const + '命') : '';
-              return c.name + cs;
-            }).join(' ');
-          }
-          const dropMsg = '编号:' + (existRow.productUniqueNo || productId) +
-            ' 降价¥' + (oldPrice - price).toFixed(0) +
-            ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) +
-            ' 估值¥' + (existRow.value || 0).toFixed(0) +
-            ' 性价比' + (existRow.ratio || 0).toFixed(1) + '%' +
-            (dropCharStr ? '\n角色: ' + dropCharStr : '') +
-            '\n' + (existRow.showTitle || '').substring(0, 80);
-          notify(productId + '_drop', '降价提醒 降¥' + (oldPrice - price).toFixed(0) + ' 差价¥' + (existRow.value - price).toFixed(0), dropMsg);
+          const { title: dropTitle, body: dropMsg, mdBody: dropMd } = buildNotifyContent('降价', existRow, oldPrice, price);
+          notify(productId + '_drop', dropTitle, dropMsg, dropMd);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -1862,22 +1834,8 @@
         if (notifyEnabled && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (dupRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
-          // 角色摘要
-          let mergeCharStr = '';
-          if (dupRow.parsed && dupRow.parsed.characters) {
-            mergeCharStr = dupRow.parsed.characters.map(c => {
-              const cs = c.const > 0 ? (c.const === 6 ? '满' : c.const + '命') : '';
-              return c.name + cs;
-            }).join(' ');
-          }
-          const dropMsg = '编号:' + (dupRow.productUniqueNo || productId) +
-            ' ' + mergeStatus + '¥' + (oldPrice - price).toFixed(0) +
-            ' ¥' + oldPrice.toFixed(0) + '→¥' + price.toFixed(0) +
-            ' 估值¥' + (dupRow.value || 0).toFixed(0) +
-            ' 性价比' + (dupRow.ratio || 0).toFixed(1) + '%' +
-            (mergeCharStr ? '\n角色: ' + mergeCharStr : '') +
-            '\n' + (dupRow.showTitle || '').substring(0, 80);
-          notify(productId + '_drop', mergeStatus + '提醒 降¥' + (oldPrice - price).toFixed(0) + ' 差价¥' + (dupRow.value - price).toFixed(0), dropMsg);
+          const { title: mergeTitle, body: mergeMsg, mdBody: mergeMd } = buildNotifyContent(mergeStatus, dupRow, oldPrice, price);
+          notify(productId + '_drop', mergeTitle, mergeMsg, mergeMd);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -2086,52 +2044,24 @@
             const matchedCharNames = triggeredRule
               ? triggeredRule.chars.map(c => c.name + (c.minConst > 0 ? c.minConst + '命+' : '')).join('+')
               : '';
-            const title = charRuleTriggered
-              ? '指定账号 ' + matchedCharNames + ' 差价' + notifyDiff.toFixed(0) + '元'
-              : '高差价账号 差价' + notifyDiff.toFixed(0) + '元';
-
-            // 角色明细估值摘要
-            let charDetailStr = '';
-            if (valuation.charBreakdown && valuation.charBreakdown.length > 0) {
-              const topChars = valuation.charBreakdown
-                .slice()
-                .sort((a, b) => b.value - a.value)
-                .slice(0, 5);
-              charDetailStr = topChars.map(cb => {
-                const constStr = cb.const > 0 ? (cb.const === 6 ? '满' : cb.const + '命') : '';
-                return cb.name + constStr + '(' + cb.value + '元)';
-              }).join(' ');
-            }
-
-            // 资源明细估值摘要
-            let resourceStr = '';
-            const resParts = [];
-            if (valuation.pullValue > 0) {
-              var pinfo = valuation.pullInfo;
-              var pullStr = '抽数' + pinfo.tierLabel + ':' + pinfo.baseTotal + '元';
-              if (pinfo.c6Bonus > 0) {
-                pullStr += '+满命加成(+' + Math.round((pinfo.c6Multiplier || 0) * 100) + '%):' + pinfo.c6Bonus + '元';
-              }
-              resParts.push(pullStr);
-            }
-            if (valuation.fullConstPremium > 0) resParts.push('满命溢价:' + valuation.fullConstPremium + '元');
-            if (valuation.teamPremium > 0) resParts.push('配队:' + valuation.teamPremium + '元');
-            if (valuation.otherResources > 0) resParts.push('其他:' + valuation.otherResources + '元');
-            resourceStr = resParts.join(' ');
-
-            const body = '标价' + notifyPrice.toFixed(0) + '元 估值' + valuation.totalValue.toFixed(0) + '元 差价' + notifyDiff.toFixed(0) + '元\n' +
-              (charDetailStr ? '角色: ' + charDetailStr + '\n' : '') +
-              (resourceStr ? '资源: ' + resourceStr + '\n' : '') +
-              showTitle.substring(0, 80);
-            notify(item.productId, title, body);
+            const prefix = charRuleTriggered ? '指定账号' : '高差价';
+            const notifyRow = {
+              value: valuation.totalValue,
+              ratio: finalRatio,
+              parsed: { pulls: parsed.pulls },
+              valuation: valuation,
+              showTitle: showTitle,
+              productUniqueNo: productUniqueNo,
+            };
+            const { title: notifyTitle, body: notifyBody, mdBody: notifyMd } = buildNotifyContent(prefix, notifyRow, null, notifyPrice, matchedCharNames || undefined);
+            notify(item.productId, notifyTitle, notifyBody, notifyMd);
             notifiedIds.push(item.productId);
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
             saveStorage(STORAGE_KEYS.notified, notifiedIds);
 
             // 自动抢购：差价超过阈值且标价不超过上限时自动打开商品页
             if (autoBuyEnabled && notifyDiff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || notifyPrice <= autoBuyMaxPrice)) {
-              const detailRow = tableData.find(r => r.productId === item.productId);
-              autoBuy(item.productId, notifyDiff, detailRow && detailRow.status === '秒杀');
+              autoBuy(item.productId, notifyDiff);
             }
           }
         }
@@ -2669,10 +2599,11 @@
               <th>摩托</th>
               <th>五星角色</th>
               <th>状态</th>
+              <th style="width:30px;">删</th>
             </tr>
           </thead>
           <tbody id="mwTableBody">
-            <tr><td colspan="10" class="mw-empty">等待数据加载...</td></tr>
+            <tr><td colspan="11" class="mw-empty">等待数据加载...</td></tr>
           </tbody>
         </table>
       </div>
@@ -2935,12 +2866,6 @@
         // 手机推送
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">手机推送</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:12px;">配置后可发送推送到手机，即使浏览器关闭也能收到</div>' +
-        // Bark
-        '<div style="margin-bottom:12px;padding:10px;background:#16213e;border-radius:8px;">' +
-          '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">Bark推送（iOS推荐）</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">下载Bark App，复制推送Key（格式如 xxxxx）</div>' +
-          '<input type="text" id="mwBarkKey" value="' + (pushConfig.barkKey || '') + '" placeholder="Bark Key" style="width:100%;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
-        '</div>' +
         // Server酱
         '<div style="margin-bottom:12px;padding:10px;background:#16213e;border-radius:8px;">' +
           '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">Server酱（微信推送）</div>' +
@@ -3172,7 +3097,6 @@
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
-        pushConfig.barkKey = box.querySelector('#mwBarkKey').value.trim();
         pushConfig.serverChanKey = box.querySelector('#mwServerChanKey').value.trim();
         pushConfig.secondaryDelay = parseInt(box.querySelector('#mwSecondaryDelay').value) || 0;
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
@@ -3454,7 +3378,7 @@
     });
 
     if (displayData.length === 0) {
-      dom.tableBody.innerHTML = '<tr><td colspan="10" class="mw-empty">' +
+      dom.tableBody.innerHTML = '<tr><td colspan="11" class="mw-empty">' +
         (charFilter ? '当前筛选无数据' : '暂无数据，等待监控...') + '</td></tr>';
       return;
     }
@@ -3526,6 +3450,7 @@
         '<td>' + (row.parsed ? row.parsed.motoCount : 0) + '</td>' +
         '<td class="mw-chars-cell">' + charsHtml + '</td>' +
         '<td>' + statusBadge + '</td>' +
+        '<td><span class="mw-delete-btn" data-delete-id="' + row.productId + '" style="cursor:pointer;color:#666;font-size:16px;" title="删除此行">&times;</span></td>' +
         '</tr>';
     }
 
@@ -3558,6 +3483,38 @@
         const pid = badge.getAttribute('data-check-sold');
         checkSingleSold(pid, badge);
       });
+    });
+
+    // 绑定删除按钮点击
+    const delBtns = dom.tableBody.querySelectorAll('.mw-delete-btn');
+    delBtns.forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const pid = btn.getAttribute('data-delete-id');
+        var idx = tableData.findIndex(function (r) { return r.productId === pid; });
+        if (idx >= 0) {
+          var delRow = tableData[idx];
+          tableData.splice(idx, 1);
+          // 同步从 seenIds 移除，允许未来重新发现
+          var seenIdx = seenIds.indexOf(pid);
+          if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
+          // 同步从 notifiedIds 移除
+          ['_drop', '_flash'].forEach(function (suf) {
+            var nIdx = notifiedIds.indexOf(pid + suf);
+            if (nIdx >= 0) notifiedIds.splice(nIdx, 1);
+          });
+          saveTableData();
+          saveStorage(STORAGE_KEYS.seen, seenIds);
+          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          sortTableData();
+          refreshTableDisplay();
+          updateStatusText();
+          console.log('[鸣潮监控] 手动删除: ' + (delRow.productUniqueNo || pid));
+        }
+      });
+      // 悬停效果
+      btn.addEventListener('mouseenter', function () { btn.style.color = '#e94560'; });
+      btn.addEventListener('mouseleave', function () { btn.style.color = '#666'; });
     });
 
     // 绑定行悬停/点击事件（改进3：详情面板）
@@ -5690,10 +5647,9 @@ function openSettings() {
    * 自动抢购：打开商品页并自动点击"立即购买"
    * 通过URL参数传递指令，商品页脚本检测到后自动执行
    */
-  function autoBuy(productId, diff, isFlash) {
+  function autoBuy(productId, diff) {
     console.log('[鸣潮监控] 自动抢购触发: ' + productId + ' 差价' + diff.toFixed(0) + '元');
     var buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
-    if (isFlash) buyUrl += '&flash=1';
     // 尝试打开新标签页（可能被浏览器拦截，用户需允许弹窗）
     var win = window.open(buyUrl, '_blank');
     if (!win) {
@@ -5777,84 +5733,98 @@ function openSettings() {
     }
   }
 
-  /**
-   * 秒杀价格拦截：在商品详情页拦截 detailPost API，将 zoneJumpType 改为 2 以获取秒杀价
-   * 当URL包含 flash=1 参数时激活
-   */
-  function setupFlashSalePriceInterception() {
-    var url = window.location.href;
-    if (url.indexOf('flash=1') === -1) return;
-
-    console.log('[鸣潮监控] 秒杀价格拦截已激活，将修改 detailPost 请求的 zoneJumpType 为 2');
-
-    // 拦截 fetch
-    var originalFetch = window.fetch;
-    window.fetch = function() {
-      var fetchArgs = arguments;
-      try {
-        var reqUrl = '';
-        var reqBody = null;
-        if (typeof fetchArgs[0] === 'string') {
-          reqUrl = fetchArgs[0];
-          if (fetchArgs[1] && fetchArgs[1].body) reqBody = fetchArgs[1].body;
-        } else if (fetchArgs[0] && fetchArgs[0].url) {
-          reqUrl = fetchArgs[0].url;
-          if (fetchArgs[0].body) reqBody = fetchArgs[0].body;
-        }
-        if (reqUrl && reqUrl.indexOf('detailPost') !== -1 && reqBody) {
-          var bodyStr = typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody);
-          var bodyObj = JSON.parse(bodyStr);
-          if (bodyObj.zoneJumpType === 0 || bodyObj.zoneJumpType === '0') {
-            bodyObj.zoneJumpType = 2;
-            var newBody = JSON.stringify(bodyObj);
-            console.log('[鸣潮监控] 拦截 detailPost(fetch): zoneJumpType 0→2');
-            if (typeof fetchArgs[0] === 'string') {
-              fetchArgs[1] = fetchArgs[1] || {};
-              fetchArgs[1].body = newBody;
-            } else {
-              fetchArgs[0] = new Request(reqUrl, {
-                method: fetchArgs[0].method || 'POST',
-                headers: fetchArgs[0].headers,
-                body: newBody,
-                mode: fetchArgs[0].mode,
-                credentials: fetchArgs[0].credentials
-              });
-            }
-          }
-        }
-      } catch (e) { /* 忽略 */ }
-      return originalFetch.apply(this, fetchArgs);
-    };
-
-    // 拦截 XMLHttpRequest
-    var originalXHROpen = XMLHttpRequest.prototype.open;
-    var originalXHRSend = XMLHttpRequest.prototype.send;
-
-    XMLHttpRequest.prototype.open = function(method, reqUrl) {
-      this._mwReqUrl = reqUrl;
-      return originalXHROpen.apply(this, arguments);
-    };
-
-    XMLHttpRequest.prototype.send = function(body) {
-      try {
-        if (this._mwReqUrl && this._mwReqUrl.indexOf('detailPost') !== -1 && body) {
-          var bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
-          var bodyObj = JSON.parse(bodyStr);
-          if (bodyObj.zoneJumpType === 0 || bodyObj.zoneJumpType === '0') {
-            bodyObj.zoneJumpType = 2;
-            var newBody = JSON.stringify(bodyObj);
-            console.log('[鸣潮监控] 拦截 detailPost(XHR): zoneJumpType 0→2');
-            return originalXHRSend.call(this, newBody);
-          }
-        }
-      } catch (e) { /* 忽略 */ }
-      return originalXHRSend.apply(this, arguments);
-    };
-  }
-
   // ============================================================
   // 通知
   // ============================================================
+
+  /**
+   * 构建通知标题和内容（统一格式，含角色明细、资源明细等）
+   * @param {string} prefix - 通知前缀（秒杀/降价/高差价/重架/指定账号）
+   * @param {object} row - 表格行数据（含 valuation, parsed, showTitle, productUniqueNo, value, price, ratio）
+   * @param {number|null} oldPrice - 原价（新发现账号传null）
+   * @param {number} newPrice - 现价/标价
+   * @param {string} [suffix] - 标题额外后缀（如指定账号的角色匹配信息）
+   * @returns {object} { title, body }
+   */
+  function buildNotifyContent(prefix, row, oldPrice, newPrice, suffix) {
+    const value = row.value || (row.valuation && row.valuation.totalValue) || 0;
+    const ratio = row.ratio || (row.valuation && row.valuation.ratio) || 0;
+    const diff = value - newPrice;
+    const pullCount = row.parsed && row.parsed.pulls ? Math.round(row.parsed.pulls) : 0;
+    const uniqueNo = row.productUniqueNo || '';
+    const valuation = row.valuation;
+
+    // 构建标题（简洁清晰，避免特殊字符被推送平台吞掉）
+    let title;
+    if (oldPrice != null && oldPrice !== newPrice) {
+      const dropAmt = oldPrice - newPrice;
+      title = prefix + ' 降¥' + dropAmt.toFixed(0) +
+        ' ¥' + newPrice.toFixed(0) +
+        ' 估¥' + value.toFixed(0) +
+        ' 差¥' + diff.toFixed(0) +
+        (pullCount > 0 ? ' ' + pullCount + '抽' : '');
+    } else {
+      title = prefix + ' ¥' + newPrice.toFixed(0) +
+        ' 估¥' + value.toFixed(0) +
+        ' 差¥' + diff.toFixed(0) +
+        (pullCount > 0 ? ' ' + pullCount + '抽' : '');
+    }
+    if (suffix) title += ' ' + suffix;
+
+    // 角色明细估值摘要（按价值降序取前5）
+    let charDetailStr = '';
+    if (valuation && valuation.charBreakdown && valuation.charBreakdown.length > 0) {
+      const topChars = valuation.charBreakdown
+        .slice()
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
+      charDetailStr = topChars.map(cb => {
+        const constStr = cb.const > 0 ? (cb.const === 6 ? '满' : cb.const + '命') : '';
+        return cb.name + constStr + '(' + cb.value + '元)';
+      }).join(' ');
+    }
+
+    // 资源明细估值摘要（用具体抽数，不用区间）
+    let resourceStr = '';
+    if (valuation) {
+      const resParts = [];
+      if (valuation.pullValue > 0 && valuation.pullInfo) {
+        const pinfo = valuation.pullInfo;
+        let pullStr = pinfo.pulls + '抽:' + pinfo.baseTotal + '元';
+        if (pinfo.c6Bonus > 0) {
+          pullStr += '+满命加成(+' + Math.round((pinfo.c6Multiplier || 0) * 100) + '%):' + pinfo.c6Bonus + '元';
+        }
+        resParts.push(pullStr);
+      }
+      if (valuation.fullConstPremium > 0) resParts.push('满命溢价:' + valuation.fullConstPremium + '元');
+      if (valuation.teamPremium > 0) {
+        const teamCount = valuation.satisfiedTeams ? valuation.satisfiedTeams.length : 0;
+        resParts.push((teamCount > 0 ? teamCount + '配队:' : '配队:') + valuation.teamPremium + '元');
+      }
+      if (valuation.otherResources > 0) resParts.push('其他:' + valuation.otherResources + '元');
+      resourceStr = resParts.join(' ');
+    }
+
+    // 构建内容
+    const priceInfo = oldPrice != null && oldPrice !== newPrice
+      ? '原价¥' + oldPrice.toFixed(0) + ' 现价¥' + newPrice.toFixed(0)
+      : '标价¥' + newPrice.toFixed(0);
+    const headerLine = (uniqueNo ? '编号:' + uniqueNo + ' ' : '') + priceInfo + ' 估值¥' + value.toFixed(0) + ' 差价¥' + diff.toFixed(0) + ' 性价比' + ratio.toFixed(1) + '%';
+
+    // 纯文本版（桌面通知用）
+    const lines = [headerLine];
+    if (charDetailStr) lines.push('角色: ' + charDetailStr);
+    if (resourceStr) lines.push('资源: ' + resourceStr);
+    lines.push((row.showTitle || '').substring(0, 80));
+
+    // Markdown版（手机推送用）
+    const mdLines = ['**' + headerLine + '**'];
+    if (charDetailStr) mdLines.push('\n**角色**\n' + charDetailStr);
+    if (resourceStr) mdLines.push('\n**资源**\n' + resourceStr);
+    mdLines.push('\n> ' + (row.showTitle || '').substring(0, 80));
+
+    return { title: title, body: lines.join('\n'), mdBody: mdLines.join('\n') };
+  }
 
   /**
    * 发送通知
@@ -5864,10 +5834,10 @@ function openSettings() {
    * 1. 桌面通知 + GM通知
    * 2. 声音提醒（连续蜂鸣）
    * 3. 视觉提醒（页面标题闪烁 + 页面内大横幅）
-   * 4. 手机推送（Bark/Server酱/PushPlus）
+   * 4. 手机推送（Server酱/PushPlus）
    * 5. 重复提醒（可选）
    */
-  function notify(productId, title, body) {
+  function notify(productId, title, body, mdBody) {
     // 1. 桌面通知（需要浏览器授权）
     try {
       if (Notification && Notification.permission === 'granted') {
@@ -5912,7 +5882,7 @@ function openSettings() {
     }
 
     // 6. 手机推送
-    sendPhonePush(title, body, productId);
+    sendPhonePush(title, mdBody || body, productId);
 
     // 7. 重复提醒
     if (pushConfig.repeatAlert) {
@@ -5989,7 +5959,6 @@ function openSettings() {
    */
   function showAlertBanner(title, body, productId) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
-    const isFlash = String(productId).endsWith('_flash');
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
@@ -6008,7 +5977,7 @@ function openSettings() {
         '<div style="font-size:16px;font-weight:700;margin-bottom:2px;">' + title + '</div>' +
         '<div style="font-size:13px;opacity:0.9;white-space:pre-line;">' + body + '</div>' +
       '</div>' +
-      '<a href="https://www.pxb7.com/product/' + cleanId + '/1' + (isFlash ? '?flash=1' : '') + '" target="_blank" ' +
+      '<a href="https://www.pxb7.com/product/' + cleanId + '/1" target="_blank" ' +
         'style="padding:8px 24px;background:#fff;color:#e94560;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;white-space:nowrap;">立即查看</a>' +
       '<button id="mwAlertClose" style="padding:8px 12px;background:rgba(0,0,0,0.3);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:18px;">✕</button>';
     document.body.appendChild(banner);
@@ -6055,28 +6024,12 @@ function openSettings() {
 
   /**
    * 发送手机推送通知
-   * 支持：Bark（iOS）、Server酱（微信）、PushPlus（微信）
+   * 支持：Server酱（微信）、PushPlus（微信）
    */
   function sendPhonePush(title, body, productId) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
-    const isFlash = String(productId).endsWith('_flash');
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
-    const pushBody = body + '\n\n详情: https://www.pxb7.com/product/' + cleanId + '/1' + (isFlash ? '?flash=1' : '');
-
-    // Bark推送（iOS）
-    if (pushConfig.barkKey) {
-      try {
-        const barkUrl = 'https://api.day.app/' + pushConfig.barkKey + '/' +
-          encodeURIComponent(title) + '/' + encodeURIComponent(pushBody) +
-          '?isArchive=1&sound=bell&group=鸣潮监控';
-        GM_xmlhttpRequest({
-          method: 'GET',
-          url: barkUrl,
-          onload: function () { console.log('[鸣潮监控] Bark推送已发送'); },
-          onerror: function (e) { console.error('[鸣潮监控] Bark推送失败:', e); }
-        });
-      } catch (e) { console.error('[鸣潮监控] Bark推送异常:', e); }
-    }
+    const pushBody = body + '\n\n---\n`https://www.pxb7.com/product/' + cleanId + '/1`';
 
     // Server酱推送（微信）- 支持多个SendKey
     if (pushConfig.serverChanKey) {
@@ -6122,7 +6075,7 @@ function openSettings() {
           method: 'POST',
           url: 'https://www.pushplus.plus/send',
           headers: { 'Content-Type': 'application/json' },
-          data: JSON.stringify({ token: token, title: ttl, content: body, template: 'txt' }),
+          data: JSON.stringify({ token: token, title: ttl, content: body, template: 'markdown' }),
           onload: function () { console.log('[鸣潮监控] PushPlus推送已发送: ' + (sub.name || token.substring(0, 8)) + '...'); },
           onerror: function (e) { console.error('[鸣潮监控] PushPlus推送失败:', (sub.name || token.substring(0, 8)) + '...', e); }
         });
@@ -6642,9 +6595,8 @@ function openSettings() {
   // 启动
   // ============================================================
 
-  // 商品详情页：执行秒杀价格拦截和自动购买逻辑，不启动监控面板
+  // 商品详情页：仅执行自动购买逻辑，不启动监控面板
   if (window.location.pathname.indexOf('/product/') !== -1) {
-    setupFlashSalePriceInterception();
     initAutoBuyOnProductPage();
     return;
   }
