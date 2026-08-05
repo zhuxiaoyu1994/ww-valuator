@@ -636,12 +636,25 @@ function extractListCount(text, keyword) {
 }
 
 /**
+ * 判断条目是否为账号描述里的无关文字（非真实物品名）
+ * 用于过滤服饰/摩托/车架/涂装段落里混入的交易描述、联系方式等
+ */
+function isDescriptiveJunk(s) {
+  if (!s) return true;
+  // 含【】括号描述（如"详情看图【官服】【官方截图】"）
+  if (/【.+?】/.test(s)) return true;
+  // 含账号交易常见描述词
+  if (/(详情|看图|官服|截图|私聊|联系|微信|加微|加v|\+v|qq|议价|包赔|回收|代售|租号|出售|买号|诚收|甩卖|清仓|特价|秒杀|送号|免费|包邮|担保|验号|包过)/i.test(s)) return true;
+  return false;
+}
+
+/**
  * 从文本中提取某个关键词段落的条目列表（用于服饰/摩托/车架/涂装明细）
  */
 function extractListItems(text, keyword) {
   const section = extractSection(text, keyword);
   if (!section) return [];
-  return section.split(/[,，、\s]+/).filter(s => s.length > 0);
+  return section.split(/[,，、\s]+/).filter(s => s.length > 0).filter(s => !isDescriptiveJunk(s));
 }
 
 // ============================================================
