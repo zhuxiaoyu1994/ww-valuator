@@ -1525,8 +1525,8 @@
               title: '编辑C6配队依赖',
               titleColor: '#fbbf24', saveColor: '#fbbf24',
               fields: [
-                { label: '角色名称', key: 'name', type: 'text', value: e.name },
-                { label: '所需队友（多个用逗号分隔）', key: 'teammate', type: 'text', value: e.teammate },
+                { label: '角色名称', key: 'name', type: 'select', value: e.name, options: allCharNames },
+                { label: '所需队友', key: 'teammate', type: 'select', value: e.teammate.split(',')[0], options: allCharNames, allowEmpty: true },
                 { label: '降级权重档位', key: 'weightTier', type: 'text', value: e.weightTier },
                 { label: '角色价值折扣（0-1）', key: 'valueDiscount', type: 'number', value: e.valueDiscount, min: 0, max: 1, step: 0.05 }
               ],
@@ -1559,13 +1559,27 @@
 
     var c6DepAddRow = document.createElement('div');
     c6DepAddRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;';
-    var c6DepNameInput = document.createElement('input');
-    c6DepNameInput.type = 'text'; c6DepNameInput.placeholder = '角色名称';
+    var c6DepNameInput = document.createElement('select');
     c6DepNameInput.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
+    var c6DepNamePlaceholder = document.createElement('option');
+    c6DepNamePlaceholder.value = ''; c6DepNamePlaceholder.textContent = '角色名称';
+    c6DepNameInput.appendChild(c6DepNamePlaceholder);
+    for (var dni = 0; dni < allCharNames.length; dni++) {
+      var c6no = document.createElement('option');
+      c6no.value = allCharNames[dni]; c6no.textContent = allCharNames[dni];
+      c6DepNameInput.appendChild(c6no);
+    }
     c6DepAddRow.appendChild(c6DepNameInput);
-    var c6DepMateInput = document.createElement('input');
-    c6DepMateInput.type = 'text'; c6DepMateInput.placeholder = '所需队友';
+    var c6DepMateInput = document.createElement('select');
     c6DepMateInput.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
+    var c6DepMatePlaceholder = document.createElement('option');
+    c6DepMatePlaceholder.value = ''; c6DepMatePlaceholder.textContent = '所需队友';
+    c6DepMateInput.appendChild(c6DepMatePlaceholder);
+    for (var dmi = 0; dmi < allCharNames.length; dmi++) {
+      var c6mo = document.createElement('option');
+      c6mo.value = allCharNames[dmi]; c6mo.textContent = allCharNames[dmi];
+      c6DepMateInput.appendChild(c6mo);
+    }
     c6DepAddRow.appendChild(c6DepMateInput);
     var c6DepTierInput = document.createElement('select');
     c6DepTierInput.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
@@ -1957,12 +1971,23 @@
     }
     for (var i = 0; i < opts.fields.length; i++) {
       var f = opts.fields[i];
-      html += '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">' + f.label + '</label>' +
-        '<input type="' + (f.type || 'number') + '" class="field-' + f.key + '" value="' + f.value + '"' +
-        (f.min != null ? ' min="' + f.min + '"' : '') +
-        (f.max != null ? ' max="' + f.max + '"' : '') +
-        (f.step != null ? ' step="' + f.step + '"' : '') +
-        ' style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;" /></div>';
+      html += '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">' + f.label + '</label>';
+      if (f.type === 'select') {
+        html += '<select class="field-' + f.key + '" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;">';
+        if (f.allowEmpty) html += '<option value="">（不选）</option>';
+        for (var oi = 0; oi < (f.options || []).length; oi++) {
+          var o = f.options[oi];
+          html += '<option value="' + o + '"' + (o === f.value ? ' selected' : '') + '>' + o + '</option>';
+        }
+        html += '</select>';
+      } else {
+        html += '<input type="' + (f.type || 'number') + '" class="field-' + f.key + '" value="' + f.value + '"' +
+          (f.min != null ? ' min="' + f.min + '"' : '') +
+          (f.max != null ? ' max="' + f.max + '"' : '') +
+          (f.step != null ? ' step="' + f.step + '"' : '') +
+          ' style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;" />';
+      }
+      html += '</div>';
     }
     html += '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
       '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#1a1a3a;color:#888;font-size:12px;cursor:pointer;">取消</button>' +

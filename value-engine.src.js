@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 9;
+const CONFIG_VERSION = 10;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -86,7 +86,7 @@ const DEFAULT_WEIGHTS = {
     { count: 10, bonus: 4.5 },
   ],
   // 资源定价
-  outfit: 2,             // 服饰/皮肤单价
+  outfit: 5,             // 服饰/皮肤单价
   motoAccessory: 0,      // 摩托饰品单价
   motoFrame: 10,         // 车架模组单价
   paint: 0,              // 涂装单价
@@ -156,22 +156,38 @@ const DEFAULT_TEAMS = [
 // 默认抽数阶梯定价（对应油猴脚本 DEFAULT_PULL_TIERS）
 // ============================================================
 const DEFAULT_PULL_TIERS = [
-  { minPull: 0, maxPull: 100, perPullPrice: 0.7 },
-  { minPull: 100, maxPull: 200, perPullPrice: 0.9 },
-  { minPull: 200, maxPull: 300, perPullPrice: 1.1 },
-  { minPull: 300, maxPull: 400, perPullPrice: 1.3 },
-  { minPull: 400, maxPull: 500, perPullPrice: 1.5 },
-  { minPull: 500, maxPull: 600, perPullPrice: 1.7 },
-  { minPull: 600, maxPull: 700, perPullPrice: 1.9 },
-  { minPull: 700, maxPull: 800, perPullPrice: 2.1 },
-  { minPull: 800, maxPull: 900, perPullPrice: 2.3 },
-  { minPull: 900, maxPull: 1000, perPullPrice: 2.5 },
-  { minPull: 1000, maxPull: 1100, perPullPrice: 2.7 },
-  { minPull: 1100, maxPull: 1200, perPullPrice: 2.9 },
-  { minPull: 1200, maxPull: 1300, perPullPrice: 3.2 },
-  { minPull: 1300, maxPull: 1400, perPullPrice: 3.4 },
-  { minPull: 1400, maxPull: 1500, perPullPrice: 3.7 },
-  { minPull: 1500, maxPull: 1600, perPullPrice: 3.9 },
+  { minPull: 0, maxPull: 50, perPullPrice: 0.6 },
+  { minPull: 50, maxPull: 100, perPullPrice: 0.7 },
+  { minPull: 100, maxPull: 150, perPullPrice: 0.8 },
+  { minPull: 150, maxPull: 200, perPullPrice: 0.9 },
+  { minPull: 200, maxPull: 250, perPullPrice: 1 },
+  { minPull: 250, maxPull: 300, perPullPrice: 1.1 },
+  { minPull: 300, maxPull: 350, perPullPrice: 1.2 },
+  { minPull: 350, maxPull: 400, perPullPrice: 1.3 },
+  { minPull: 400, maxPull: 450, perPullPrice: 1.4 },
+  { minPull: 450, maxPull: 500, perPullPrice: 1.5 },
+  { minPull: 500, maxPull: 550, perPullPrice: 1.6 },
+  { minPull: 550, maxPull: 600, perPullPrice: 1.7 },
+  { minPull: 600, maxPull: 650, perPullPrice: 1.8 },
+  { minPull: 650, maxPull: 700, perPullPrice: 1.9 },
+  { minPull: 700, maxPull: 750, perPullPrice: 2 },
+  { minPull: 750, maxPull: 800, perPullPrice: 2.1 },
+  { minPull: 800, maxPull: 850, perPullPrice: 2.2 },
+  { minPull: 850, maxPull: 900, perPullPrice: 2.3 },
+  { minPull: 900, maxPull: 950, perPullPrice: 2.4 },
+  { minPull: 950, maxPull: 1000, perPullPrice: 2.5 },
+  { minPull: 1000, maxPull: 1050, perPullPrice: 2.6 },
+  { minPull: 1050, maxPull: 1100, perPullPrice: 2.7 },
+  { minPull: 1100, maxPull: 1150, perPullPrice: 2.8 },
+  { minPull: 1150, maxPull: 1200, perPullPrice: 2.9 },
+  { minPull: 1200, maxPull: 1250, perPullPrice: 3.1 },
+  { minPull: 1250, maxPull: 1300, perPullPrice: 3.2 },
+  { minPull: 1300, maxPull: 1350, perPullPrice: 3.3 },
+  { minPull: 1350, maxPull: 1400, perPullPrice: 3.4 },
+  { minPull: 1400, maxPull: 1450, perPullPrice: 3.6 },
+  { minPull: 1450, maxPull: 1500, perPullPrice: 3.7 },
+  { minPull: 1500, maxPull: 1550, perPullPrice: 3.8 },
+  { minPull: 1550, maxPull: 1600, perPullPrice: 3.9 },
   { minPull: 1600, maxPull: 9999, perPullPrice: 4.2 },
 ];
 
@@ -179,7 +195,8 @@ const DEFAULT_PULL_TIERS = [
 // 默认黄数阶梯系数（对应油猴脚本 DEFAULT_YELLOW_TIERS）
 // ============================================================
 const DEFAULT_YELLOW_TIERS = [
-  { minYellow: 0, maxYellow: 10, coefficient: 0.45 },
+  { minYellow: 0, maxYellow: 5, coefficient: 0.45 },
+  { minYellow: 5, maxYellow: 10, coefficient: 0.5 },
   { minYellow: 10, maxYellow: 20, coefficient: 0.55 },
   { minYellow: 20, maxYellow: 30, coefficient: 0.65 },
   { minYellow: 30, maxYellow: 40, coefficient: 0.75 },
@@ -235,18 +252,18 @@ const DEFAULT_CONST_PREMIUMS = {
   '绯雪': { '2': 35, '3': 60, '6': 200 },
   '卡提希娅': { '2': 20, '3': 35, '6': 120 },
   '弗洛洛': { '2': 20, '3': 50, '6': 100 },
-  '奥古斯塔': { '2': 20, '6': 100 },
+  '奥古斯塔': { '2': 20, '6': 80 },
   '尤诺': { '2': 20, '6': 60 },
-  '露西': { '3': 30, '6': 100 },
+  '露西': { '3': 30, '6': 80 },
   '忌炎': { '6': 30 },
   '守岸人': { '2': 20, '6': 50 },
-  '赞妮': { '2': 20, '6': 100 },
+  '赞妮': { '2': 20, '6': 80 },
   '椿': { '6': 50 },
-  '莫宁': { '1': 20, '6': 100 },
+  '莫宁': { '1': 20, '6': 80 },
   '珂莱塔': { '6': 50 },
   '秧秧玄翎': { '2': 30, '3': 50, '6': 160 },
-  '千咲': { '3': 50, '6': 100 },
-  '嘉贝莉娜': { '3': 30, '6': 100 },
+  '千咲': { '2': 20, '3': 30, '6': 60 },
+  '嘉贝莉娜': { '3': 30, '6': 80 },
   '陆赫斯': { '6': 100 },
   '西格莉卡': { '6': 100 },
   '丽贝卡': { '3': 20, '6': 50 },
