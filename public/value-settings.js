@@ -231,12 +231,12 @@
     charSection.style.cssText = 'margin-bottom:20px;';
     var charTitle = document.createElement('div');
     charTitle.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    charTitle.textContent = '五星角色定价（角色名 + 专武 + 估值）';
+    charTitle.textContent = '五星角色定价（角色名 + 专武 + 估值 + 命座溢价）';
     charSection.appendChild(charTitle);
 
     var charDesc = document.createElement('p');
     charDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    charDesc.innerHTML = '可自由添加、修改、删除角色定价。武器名自动匹配，也可手动修改。<br>S/A/B级为热门角色（按里程碑估值），C/D/E级为冷门角色（仅加分项）。';
+    charDesc.innerHTML = '可自由添加、修改、删除角色定价及命座溢价。武器名自动匹配，也可手动修改。<br>S/A/B级为热门角色（按里程碑估值），C/D/E级为冷门角色（仅加分项）。<br>点击每行"溢价"按钮可设置该角色达到指定命座时的额外加价（如C3→+50元，C6→+180元，只取最高不叠加）。';
     charSection.appendChild(charDesc);
 
     // 角色定价数据（可增删改）
@@ -269,7 +269,7 @@
         var defaultPrice = DEFAULT_CHAR_PRICES[cname] != null ? DEFAULT_CHAR_PRICES[cname] : tier.price;
         var userPrice = w.charPrices[cname] != null ? w.charPrices[cname] : defaultPrice;
         var weapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[cname]) || SIG_WEAPONS[cname] || '';
-        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk });
+        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk, premiums: w.constPremiums && w.constPremiums[cname] ? Object.assign({}, w.constPremiums[cname]) : {} });
         _addedNames[cname] = true;
       }
     }
@@ -284,7 +284,7 @@
         var ovrDefaultPrice = DEFAULT_CHAR_PRICES[ovrName] != null ? DEFAULT_CHAR_PRICES[ovrName] : (ovrTierInfo ? ovrTierInfo.price : 0);
         var ovrUserPrice = w.charPrices[ovrName] != null ? w.charPrices[ovrName] : ovrDefaultPrice;
         var ovrWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[ovrName]) || SIG_WEAPONS[ovrName] || '';
-        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier });
+        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier, premiums: w.constPremiums && w.constPremiums[ovrName] ? Object.assign({}, w.constPremiums[ovrName]) : {} });
         _addedNames[ovrName] = true;
       }
     }
@@ -296,7 +296,7 @@
         if (deletedChars.indexOf(customName) >= 0) continue;
         var customTier = (w.charTierOverride && w.charTierOverride[customName]) || 'C';
         var customWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[customName]) || SIG_WEAPONS[customName] || '';
-        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier });
+        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier, premiums: w.constPremiums && w.constPremiums[customName] ? Object.assign({}, w.constPremiums[customName]) : {} });
       }
     }
 
@@ -371,6 +371,50 @@
             };
             row.appendChild(tierSelect);
 
+            // 命座溢价按钮
+            var premBtn = document.createElement('button');
+            var premCount = entry.premiums ? Object.keys(entry.premiums).length : 0;
+            premBtn.textContent = '溢价' + (premCount > 0 ? '(' + premCount + ')' : '');
+            premBtn.title = '编辑命座溢价';
+            premBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:' + (premCount > 0 ? '#4ade80' : '#555') + ';font-size:11px;cursor:pointer;line-height:1.4;';
+            premBtn.onclick = function() {
+              var premOverlay = document.createElement('div');
+              premOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
+              var premBox = document.createElement('div');
+              premBox.style.cssText = 'background:#0f0f23;border-radius:12px;padding:20px;width:300px;color:#e0e0e0;';
+              var premHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#4ade80;">编辑命座溢价 - ' + entry.name + '</div>';
+              premHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">达到指定命座时额外加价（只取最高溢价，不叠加）。留空或0表示无溢价。</div>';
+              for (var pci = 1; pci <= 6; pci++) {
+                var curPremVal = entry.premiums && entry.premiums[pci] != null ? entry.premiums[pci] : '';
+                premHTML += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+                  '<span style="font-size:12px;color:#e94560;font-weight:600;min-width:30px;">C' + pci + '</span>' +
+                  '<span style="color:#555;font-size:11px;">→ +</span>' +
+                  '<input type="number" class="prem-c' + pci + '" value="' + curPremVal + '" placeholder="0" min="0" style="width:80px;padding:4px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;" />' +
+                  '<span style="color:#555;font-size:11px;">元</span>' +
+                  '</div>';
+              }
+              premHTML += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
+                '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
+                '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#4ade80;color:#0f0f23;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
+              premBox.innerHTML = premHTML;
+              premBox.querySelector('.cancel-btn').onclick = function() { premOverlay.remove(); };
+              premBox.querySelector('.save-btn').onclick = function() {
+                entry.premiums = {};
+                for (var sci = 1; sci <= 6; sci++) {
+                  var pv = parseFloat(premBox.querySelector('.prem-c' + sci).value);
+                  if (!isNaN(pv) && pv > 0) {
+                    entry.premiums[sci] = pv;
+                  }
+                }
+                premOverlay.remove();
+                renderCharList();
+              };
+              premOverlay.appendChild(premBox);
+              premOverlay.onclick = function(ev) { if (ev.target === premOverlay) premOverlay.remove(); };
+              document.body.appendChild(premOverlay);
+            };
+            row.appendChild(premBtn);
+
             // 删除按钮
             var delBtn = document.createElement('button');
             delBtn.textContent = '×'; delBtn.title = '删除';
@@ -440,7 +484,7 @@
       if (!wpn && SIG_WEAPONS[nm]) wpn = SIG_WEAPONS[nm]; // 自动匹配
       var pr = parseFloat(addPriceInput.value);
       if (isNaN(pr)) pr = 15;
-      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value });
+      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value, premiums: {} });
       // 如果角色之前被删除过，从 deletedChars 中移除
       var dcIdx = deletedChars.indexOf(nm);
       if (dcIdx >= 0) deletedChars.splice(dcIdx, 1);
@@ -452,113 +496,7 @@
 
     dialog.appendChild(charSection);
 
-    // ===== 2. 命座溢价 =====
-    var premSection = document.createElement('div');
-    premSection.style.cssText = 'margin-bottom:20px;';
-    var premTitle = document.createElement('div');
-    premTitle.style.cssText = 'font-size:14px;font-weight:600;color:#4ade80;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    premTitle.textContent = '命座溢价（特定角色达到指定命座时额外加价）';
-    premSection.appendChild(premTitle);
-
-    var premDesc = document.createElement('p');
-    premDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    premDesc.innerHTML = '设置方法：选择角色 → 输入命座数和对应溢价 → 添加。例如：绯雪 3命→+100元，6命→+200元。达到3命加100，达到6命加200（只取最高溢价，不叠加）。';
-    premSection.appendChild(premDesc);
-
-    var premList = document.createElement('div');
-    premList.style.cssText = 'margin-bottom:12px;';
-    var premEntries = [];
-
-    function renderPremList() {
-      premList.innerHTML = '';
-      if (premEntries.length === 0) {
-        premList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无溢价规则</div>';
-        return;
-      }
-      for (var i = 0; i < premEntries.length; i++) {
-        (function (idx) {
-          var e = premEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          row.innerHTML =
-            '<span style="color:#e94560;font-weight:600;min-width:60px;">' + e.name + '</span>' +
-            '<span style="color:#fbbf24;">' + e.bp + '命</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#4ade80;font-weight:600;">+' + e.val + '元</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            openEditDialog({
-              title: '编辑命座溢价', fields: [
-                { label: '命座数', key: 'bp', type: 'number', value: e.bp, min: 1, max: 6 },
-                { label: '溢价金额（元）', key: 'val', type: 'number', value: e.val },
-              ],
-              headerInfo: '角色：<span style="color:#e94560;font-weight:600;">' + e.name + '</span>',
-              headerColor: '#fbbf24',
-              saveColor: '#fbbf24',
-              onSave: function (vals) {
-                var newBp = parseInt(vals.bp);
-                var newVal = parseFloat(vals.val);
-                if (newBp >= 1 && newBp <= 6 && !isNaN(newVal)) { e.bp = newBp; e.val = newVal; renderPremList(); return true; }
-                return false;
-              }
-            });
-          };
-          row.querySelector('.del-btn').onclick = function () { premEntries.splice(idx, 1); renderPremList(); };
-          premList.appendChild(row);
-        })(i);
-      }
-    }
-
-    // 初始化已有规则
-    var existingPrems = w.constPremiums || {};
-    for (var premName in existingPrems) {
-      if (!existingPrems.hasOwnProperty(premName)) continue;
-      for (var premBp in existingPrems[premName]) {
-        if (!existingPrems[premName].hasOwnProperty(premBp)) continue;
-        premEntries.push({ name: premName, bp: parseInt(premBp), val: existingPrems[premName][premBp] });
-      }
-    }
-    renderPremList();
-    premSection.appendChild(premList);
-
-    // 添加新规则的输入行
-    var addRow = document.createElement('div');
-    addRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
-    var nameSelect = document.createElement('select');
-    nameSelect.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
-    for (var ni2 = 0; ni2 < allCharNames.length; ni2++) {
-      var opt = document.createElement('option');
-      opt.value = allCharNames[ni2]; opt.textContent = allCharNames[ni2];
-      nameSelect.appendChild(opt);
-    }
-    addRow.appendChild(nameSelect);
-    var bpInput = document.createElement('input');
-    bpInput.type = 'number'; bpInput.min = '1'; bpInput.max = '6'; bpInput.placeholder = '命座';
-    bpInput.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:center;';
-    addRow.appendChild(bpInput);
-    var arrowSpan = document.createElement('span');
-    arrowSpan.textContent = '→'; arrowSpan.style.cssText = 'color:#555;font-size:12px;';
-    addRow.appendChild(arrowSpan);
-    var valInput = document.createElement('input');
-    valInput.type = 'number'; valInput.placeholder = '溢价';
-    valInput.style.cssText = 'width:70px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;';
-    addRow.appendChild(valInput);
-    var addBtn = document.createElement('button');
-    addBtn.textContent = '添加';
-    addBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#4ade80;color:#0f0f23;font-size:12px;font-weight:600;cursor:pointer;';
-    addBtn.onclick = function () {
-      var nm = nameSelect.value; var bp = parseInt(bpInput.value); var vl = parseFloat(valInput.value);
-      if (isNaN(bp) || bp < 1 || bp > 6) { alert('命座数请填1-6'); return; }
-      if (isNaN(vl)) { alert('请输入溢价金额'); return; }
-      premEntries.push({ name: nm, bp: bp, val: vl });
-      renderPremList(); bpInput.value = ''; valInput.value = '';
-    };
-    addRow.appendChild(addBtn);
-    premSection.appendChild(addRow);
-    dialog.appendChild(premSection);
-
-    // ===== 3. 抽数阶梯定价 =====
+    // ===== 2. 抽数阶梯定价 =====
     var pullSection = document.createElement('div');
     pullSection.style.cssText = 'margin-bottom:20px;';
     var pullTitle = document.createElement('div');
@@ -571,44 +509,73 @@
     pullSection.appendChild(pullDesc);
 
     var pullList = document.createElement('div');
-    pullList.style.cssText = 'margin-bottom:12px;';
+    pullList.style.cssText = 'margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
     var pullEntries = (w.pullTiers || DEFAULT_PULL_TIERS).map(function (e) { return { minPull: e.minPull, maxPull: e.maxPull, perPullPrice: e.perPullPrice }; });
 
     function renderPullList() {
       pullList.innerHTML = '';
       if (pullEntries.length === 0) { pullList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无阶梯规则</div>'; return; }
       pullEntries.sort(function (a, b) { return a.minPull - b.minPull; });
+      var prices = pullEntries.map(function(e) { return e.perPullPrice; });
+      var minPrice = Math.min.apply(null, prices);
+      var maxPrice = Math.max.apply(null, prices);
       for (var i = 0; i < pullEntries.length; i++) {
         (function (idx) {
           var e = pullEntries[idx];
           var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          var maxLabel = e.maxPull === Infinity ? '+' : '~' + e.maxPull;
-          row.innerHTML =
-            '<span style="color:#60a5fa;font-weight:600;min-width:80px;">' + e.minPull + maxLabel + '抽</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#4ade80;font-weight:600;">' + e.perPullPrice + '元/抽</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            openEditDialog({
-              title: '编辑抽数阶梯', titleColor: '#60a5fa', saveColor: '#60a5fa',
-              fields: [
-                { label: '起始抽数', key: 'min', type: 'number', value: e.minPull, min: 0 },
-                { label: '结束抽数（填99999表示无限）', key: 'max', type: 'number', value: (e.maxPull === Infinity ? 99999 : e.maxPull), min: 0 },
-                { label: '每抽价值（元）', key: 'price', type: 'number', value: e.perPullPrice, step: 0.1, min: 0 },
-              ],
-              onSave: function (vals) {
-                var newMin = parseInt(vals.min) || 0;
-                var newMaxRaw = parseInt(vals.max) || 99999;
-                var newMax = newMaxRaw >= 99999 ? Infinity : newMaxRaw;
-                var newPrice = parseFloat(vals.price) || 0;
-                if (newMin >= 0 && newPrice >= 0) { e.minPull = newMin; e.maxPull = newMax; e.perPullPrice = newPrice; renderPullList(); return true; }
-                return false;
-              }
-            });
+          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
+
+          var minInp = document.createElement('input');
+          minInp.type = 'number'; minInp.value = e.minPull; minInp.min = 0;
+          minInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
+          minInp.title = '起始抽数';
+          minInp.onchange = function() { e.minPull = parseInt(minInp.value) || 0; };
+          row.appendChild(minInp);
+
+          var dash = document.createElement('span');
+          dash.textContent = '~'; dash.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(dash);
+
+          var maxInp = document.createElement('input');
+          maxInp.type = 'number'; maxInp.value = (e.maxPull === Infinity ? '' : e.maxPull); maxInp.min = 0; maxInp.placeholder = '∞';
+          maxInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
+          maxInp.title = '结束抽数（留空表示无限）';
+          maxInp.onchange = function() {
+            var v = parseInt(maxInp.value);
+            e.maxPull = (isNaN(v) || v >= 99999) ? Infinity : v;
           };
-          row.querySelector('.del-btn').onclick = function () { pullEntries.splice(idx, 1); renderPullList(); };
+          row.appendChild(maxInp);
+
+          var unitLab = document.createElement('span');
+          unitLab.textContent = '抽'; unitLab.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(unitLab);
+
+          var priceInp = document.createElement('input');
+          priceInp.type = 'number'; priceInp.value = e.perPullPrice; priceInp.step = 0.1; priceInp.min = 0;
+          priceInp.style.cssText = 'width:42px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+          priceInp.title = '每抽价值（元）';
+          priceInp.onchange = function() { e.perPullPrice = parseFloat(priceInp.value) || 0; };
+          row.appendChild(priceInp);
+
+          var yuanLab = document.createElement('span');
+          yuanLab.textContent = '元'; yuanLab.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(yuanLab);
+
+          var barWrap = document.createElement('div');
+          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
+          var barFill = document.createElement('div');
+          var ratio = maxPrice > minPrice ? (e.perPullPrice - minPrice) / (maxPrice - minPrice) : 0.5;
+          barFill.className = 'price-bar';
+          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#60a5fa,#4ade80);border-radius:3px;transition:width 0.2s;';
+          barWrap.appendChild(barFill);
+          row.appendChild(barWrap);
+
+          var delBtn = document.createElement('button');
+          delBtn.textContent = '×'; delBtn.title = '删除';
+          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
+          delBtn.onclick = function () { pullEntries.splice(idx, 1); renderPullList(); };
+          row.appendChild(delBtn);
+
           pullList.appendChild(row);
         })(i);
       }
@@ -619,38 +586,35 @@
 
     // 添加新抽数阶梯
     var addPullRow = document.createElement('div');
-    addPullRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;';
+    addPullRow.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
     var minInput = document.createElement('input');
     minInput.type = 'number'; minInput.min = '0'; minInput.placeholder = '起始';
-    minInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
+    minInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
     addPullRow.appendChild(minInput);
     var dashSpan = document.createElement('span');
-    dashSpan.textContent = '~'; dashSpan.style.cssText = 'color:#555;font-size:11px;';
+    dashSpan.textContent = '~'; dashSpan.style.cssText = 'color:#555;font-size:10px;';
     addPullRow.appendChild(dashSpan);
     var maxInput = document.createElement('input');
-    maxInput.type = 'number'; maxInput.min = '0'; maxInput.placeholder = '结束';
-    maxInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
+    maxInput.type = 'number'; maxInput.min = '0'; maxInput.placeholder = '∞';
+    maxInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
     addPullRow.appendChild(maxInput);
     var pullUnit = document.createElement('span');
-    pullUnit.textContent = '抽'; pullUnit.style.cssText = 'color:#888;font-size:11px;';
+    pullUnit.textContent = '抽'; pullUnit.style.cssText = 'color:#555;font-size:10px;';
     addPullRow.appendChild(pullUnit);
-    var arrowSpan2 = document.createElement('span');
-    arrowSpan2.textContent = '→'; arrowSpan2.style.cssText = 'color:#555;font-size:11px;margin-left:4px;';
-    addPullRow.appendChild(arrowSpan2);
     var priceInput = document.createElement('input');
     priceInput.type = 'number'; priceInput.step = '0.1'; priceInput.placeholder = '每抽';
-    priceInput.style.cssText = 'width:60px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:right;';
+    priceInput.style.cssText = 'width:46px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
     addPullRow.appendChild(priceInput);
     var yuanSpan = document.createElement('span');
-    yuanSpan.textContent = '元'; yuanSpan.style.cssText = 'color:#888;font-size:11px;';
+    yuanSpan.textContent = '元'; yuanSpan.style.cssText = 'color:#555;font-size:10px;';
     addPullRow.appendChild(yuanSpan);
     var addPullBtn = document.createElement('button');
     addPullBtn.textContent = '添加';
-    addPullBtn.style.cssText = 'padding:5px 12px;border:none;border-radius:4px;background:#60a5fa;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
+    addPullBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#60a5fa;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
     addPullBtn.onclick = function () {
       var minVal = parseInt(minInput.value) || 0;
-      var maxValRaw = parseInt(maxInput.value) || 99999;
-      var maxVal = maxValRaw >= 99999 ? Infinity : maxValRaw;
+      var maxRaw = parseInt(maxInput.value);
+      var maxVal = (isNaN(maxRaw) || maxRaw >= 99999) ? Infinity : maxRaw;
       var priceVal = parseFloat(priceInput.value);
       if (isNaN(priceVal) || priceVal < 0) { alert('请输入每抽价值'); return; }
       pullEntries.push({ minPull: minVal, maxPull: maxVal, perPullPrice: priceVal });
@@ -675,40 +639,63 @@
     pullSection.appendChild(pullC6Desc);
 
     var pullC6List = document.createElement('div');
-    pullC6List.style.cssText = 'margin-bottom:10px;';
+    pullC6List.style.cssText = 'margin-bottom:10px;max-height:200px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
     var pullC6Entries = (w.pullC6Bonus || DEFAULT_WEIGHTS.pullC6Bonus).map(function (e) { return { count: e.count, bonus: e.bonus }; });
 
     function renderPullC6List() {
       pullC6List.innerHTML = '';
       if (pullC6Entries.length === 0) { pullC6List.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无加成规则</div>'; return; }
       pullC6Entries.sort(function (a, b) { return a.count - b.count; });
+      var bonuses = pullC6Entries.map(function(e) { return e.bonus; });
+      var minBonus = Math.min.apply(null, bonuses);
+      var maxBonus = Math.max.apply(null, bonuses);
       for (var i = 0; i < pullC6Entries.length; i++) {
         (function (idx) {
           var e = pullC6Entries[idx];
           var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          row.innerHTML =
-            '<span style="color:#fbbf24;font-weight:600;min-width:80px;">加权满命' + e.count + '</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#4ade80;font-weight:600;">+' + (e.bonus * 100) + '%</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            openEditDialog({
-              title: '编辑抽数满命加成', titleColor: '#fbbf24', saveColor: '#fbbf24',
-              fields: [
-                { label: '加权满命数', key: 'count', type: 'number', value: e.count, min: 1, step: 0.5 },
-                { label: '加成系数（0.5=+50%）', key: 'bonus', type: 'number', value: e.bonus, min: 0, step: 0.05 },
-              ],
-              onSave: function (vals) {
-                var newCount = parseFloat(vals.count) || 0;
-                var newBonus = parseFloat(vals.bonus) || 0;
-                if (newCount >= 1 && newBonus >= 0) { e.count = newCount; e.bonus = newBonus; renderPullC6List(); return true; }
-                return false;
-              }
-            });
-          };
-          row.querySelector('.del-btn').onclick = function () { pullC6Entries.splice(idx, 1); renderPullC6List(); };
+          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
+
+          var countInp = document.createElement('input');
+          countInp.type = 'number'; countInp.value = e.count; countInp.min = 1; countInp.step = 0.5;
+          countInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
+          countInp.title = '加权满命数';
+          countInp.onchange = function() { e.count = parseFloat(countInp.value) || 1; };
+          row.appendChild(countInp);
+
+          var mingLab = document.createElement('span');
+          mingLab.textContent = '命'; mingLab.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(mingLab);
+
+          var plusLab = document.createElement('span');
+          plusLab.textContent = '+'; plusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
+          row.appendChild(plusLab);
+
+          var bonusInp = document.createElement('input');
+          bonusInp.type = 'number'; bonusInp.value = parseFloat((e.bonus * 100).toFixed(2)); bonusInp.min = 0; bonusInp.step = 5;
+          bonusInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+          bonusInp.title = '加成百分比（如15表示+15%）';
+          bonusInp.onchange = function() { e.bonus = parseFloat(bonusInp.value) / 100 || 0; };
+          row.appendChild(bonusInp);
+
+          var pctLab = document.createElement('span');
+          pctLab.textContent = '%'; pctLab.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(pctLab);
+
+          var barWrap = document.createElement('div');
+          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
+          var barFill = document.createElement('div');
+          var ratio = maxBonus > minBonus ? (e.bonus - minBonus) / (maxBonus - minBonus) : 0.5;
+          barFill.className = 'price-bar';
+          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#fbbf24,#4ade80);border-radius:3px;transition:width 0.2s;';
+          barWrap.appendChild(barFill);
+          row.appendChild(barWrap);
+
+          var delBtn = document.createElement('button');
+          delBtn.textContent = '×'; delBtn.title = '删除';
+          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
+          delBtn.onclick = function () { pullC6Entries.splice(idx, 1); renderPullC6List(); };
+          row.appendChild(delBtn);
+
           pullC6List.appendChild(row);
         })(i);
       }
@@ -718,29 +705,32 @@
 
     // 添加新抽数满命加成
     var addPullC6Row = document.createElement('div');
-    addPullC6Row.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;';
+    addPullC6Row.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
     var pc6CountInput = document.createElement('input');
-    pc6CountInput.type = 'number'; pc6CountInput.min = '1'; pc6CountInput.step = '0.5'; pc6CountInput.placeholder = '加权满命';
-    pc6CountInput.style.cssText = 'width:80px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
+    pc6CountInput.type = 'number'; pc6CountInput.min = '1'; pc6CountInput.step = '0.5'; pc6CountInput.placeholder = '满命';
+    pc6CountInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
     addPullC6Row.appendChild(pc6CountInput);
-    var pc6Arrow = document.createElement('span');
-    pc6Arrow.textContent = '→'; pc6Arrow.style.cssText = 'color:#555;font-size:11px;';
-    addPullC6Row.appendChild(pc6Arrow);
+    var pc6MingLab = document.createElement('span');
+    pc6MingLab.textContent = '命'; pc6MingLab.style.cssText = 'color:#555;font-size:10px;';
+    addPullC6Row.appendChild(pc6MingLab);
+    var pc6PlusLab = document.createElement('span');
+    pc6PlusLab.textContent = '+'; pc6PlusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
+    addPullC6Row.appendChild(pc6PlusLab);
     var pc6BonusInput = document.createElement('input');
-    pc6BonusInput.type = 'number'; pc6BonusInput.min = '0'; pc6BonusInput.step = '0.05'; pc6BonusInput.placeholder = '加成';
-    pc6BonusInput.style.cssText = 'width:60px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:right;';
+    pc6BonusInput.type = 'number'; pc6BonusInput.min = '0'; pc6BonusInput.step = '5'; pc6BonusInput.placeholder = '加成%';
+    pc6BonusInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
     addPullC6Row.appendChild(pc6BonusInput);
     var pc6Pct = document.createElement('span');
-    pc6Pct.textContent = '(0.5=+50%)'; pc6Pct.style.cssText = 'color:#888;font-size:11px;';
+    pc6Pct.textContent = '%'; pc6Pct.style.cssText = 'color:#555;font-size:10px;';
     addPullC6Row.appendChild(pc6Pct);
     var addPullC6Btn = document.createElement('button');
     addPullC6Btn.textContent = '添加';
-    addPullC6Btn.style.cssText = 'padding:5px 12px;border:none;border-radius:4px;background:#fbbf24;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
+    addPullC6Btn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#fbbf24;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
     addPullC6Btn.onclick = function () {
       var cVal = parseFloat(pc6CountInput.value);
-      var bVal = parseFloat(pc6BonusInput.value);
+      var bVal = parseFloat(pc6BonusInput.value) / 100;
       if (isNaN(cVal) || cVal < 1) { alert('加权满命数至少为1'); return; }
-      if (isNaN(bVal) || bVal < 0) { alert('请输入加成系数'); return; }
+      if (isNaN(bVal) || bVal < 0) { alert('请输入加成百分比'); return; }
       pullC6Entries.push({ count: cVal, bonus: bVal });
       renderPullC6List(); pc6CountInput.value = ''; pc6BonusInput.value = '';
     };
@@ -791,41 +781,63 @@
 
     // 满命溢价档位列表
     var c6List = document.createElement('div');
-    c6List.style.cssText = 'margin-bottom:12px;';
+    c6List.style.cssText = 'margin-bottom:12px;max-height:200px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
     var c6Entries = (w.c6MultiBonus || DEFAULT_WEIGHTS.c6MultiBonus).map(function (e) { return { count: e.count, bonus: e.bonus }; });
 
     function renderC6List() {
       c6List.innerHTML = '';
       if (c6Entries.length === 0) { c6List.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无溢价档位，可点击下方"载入默认"快速添加</div>'; return; }
       c6Entries.sort(function (a, b) { return a.count - b.count; });
+      var bonuses = c6Entries.map(function(e) { return e.bonus; });
+      var minBonus = Math.min.apply(null, bonuses);
+      var maxBonus = Math.max.apply(null, bonuses);
       for (var i = 0; i < c6Entries.length; i++) {
         (function (idx) {
           var e = c6Entries[idx];
           var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          row.innerHTML =
-            '<span style="color:#e94560;font-weight:600;min-width:80px;">等效' + e.count + '个满命</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#4ade80;font-weight:600;">加' + Math.round(e.bonus * 100) + '%</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            openEditDialog({
-              title: '编辑满命溢价档位', titleColor: '#e94560', saveColor: '#4ade80',
-              fields: [
-                { label: '等效满命数量', key: 'count', type: 'number', value: e.count, min: 1, max: 20, step: 0.5 },
-                { label: '加成比例（如0.2=20%）', key: 'bonus', type: 'number', value: e.bonus, min: 0, max: 5, step: 0.1 },
-              ],
-              onSave: function (vals) {
-                var newCount = parseFloat(vals.count);
-                var newBonus = parseFloat(vals.bonus);
-                if (newCount < 1) { alert('数量至少为1'); return false; }
-                if (newBonus < 0) { alert('加成比例不能为负'); return false; }
-                e.count = newCount; e.bonus = newBonus; renderC6List(); return true;
-              }
-            });
-          };
-          row.querySelector('.del-btn').onclick = function () { var di = c6Entries.indexOf(e); if (di >= 0) c6Entries.splice(di, 1); renderC6List(); };
+          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
+
+          var countInp = document.createElement('input');
+          countInp.type = 'number'; countInp.value = e.count; countInp.min = 1; countInp.max = 20; countInp.step = 0.5;
+          countInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#e94560;font-size:11px;text-align:center;font-weight:600;';
+          countInp.title = '等效满命数量';
+          countInp.onchange = function() { e.count = parseFloat(countInp.value) || 1; };
+          row.appendChild(countInp);
+
+          var mingLab = document.createElement('span');
+          mingLab.textContent = '命'; mingLab.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(mingLab);
+
+          var plusLab = document.createElement('span');
+          plusLab.textContent = '+'; plusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
+          row.appendChild(plusLab);
+
+          var bonusInp = document.createElement('input');
+          bonusInp.type = 'number'; bonusInp.value = parseFloat((e.bonus * 100).toFixed(2)); bonusInp.min = 0; bonusInp.step = 5;
+          bonusInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+          bonusInp.title = '加成百分比（如50表示+50%，200表示+200%）';
+          bonusInp.onchange = function() { e.bonus = parseFloat(bonusInp.value) / 100 || 0; };
+          row.appendChild(bonusInp);
+
+          var pctLab = document.createElement('span');
+          pctLab.textContent = '%'; pctLab.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(pctLab);
+
+          var barWrap = document.createElement('div');
+          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
+          var barFill = document.createElement('div');
+          var ratio = maxBonus > minBonus ? (e.bonus - minBonus) / (maxBonus - minBonus) : 0.5;
+          barFill.className = 'price-bar';
+          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#e94560,#4ade80);border-radius:3px;transition:width 0.2s;';
+          barWrap.appendChild(barFill);
+          row.appendChild(barWrap);
+
+          var delBtn = document.createElement('button');
+          delBtn.textContent = '×'; delBtn.title = '删除';
+          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
+          delBtn.onclick = function () { var di = c6Entries.indexOf(e); if (di >= 0) c6Entries.splice(di, 1); renderC6List(); };
+          row.appendChild(delBtn);
+
           c6List.appendChild(row);
         })(i);
       }
@@ -833,10 +845,13 @@
     renderC6List();
     c6Section.appendChild(c6List);
 
-    // 载入默认按钮
+    // 载入默认按钮 + 添加新档位
+    var c6AddRow = document.createElement('div');
+    c6AddRow.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
+
     var loadC6DefaultBtn = document.createElement('button');
     loadC6DefaultBtn.textContent = '载入默认';
-    loadC6DefaultBtn.style.cssText = 'margin-right:10px;padding:5px 12px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;';
+    loadC6DefaultBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;margin-right:6px;';
     loadC6DefaultBtn.onclick = function () {
       c6Entries.length = 0;
       c6Entries.push({ count: 2, bonus: 0.50 });
@@ -845,43 +860,40 @@
       c6Entries.push({ count: 5, bonus: 2.00 });
       renderC6List();
     };
-    c6Section.appendChild(loadC6DefaultBtn);
+    c6AddRow.appendChild(loadC6DefaultBtn);
 
-    // 添加新档位
-    var addC6Row = document.createElement('div');
-    addC6Row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-top:10px;';
     var c6CountInput = document.createElement('input');
-    c6CountInput.type = 'number'; c6CountInput.min = '1'; c6CountInput.max = '20'; c6CountInput.step = '0.5'; c6CountInput.placeholder = '数量';
-    c6CountInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
-    addC6Row.appendChild(c6CountInput);
-    var c6Unit = document.createElement('span');
-    c6Unit.textContent = '个等效满命'; c6Unit.style.cssText = 'color:#888;font-size:11px;';
-    addC6Row.appendChild(c6Unit);
-    var c6Arrow = document.createElement('span');
-    c6Arrow.textContent = '→'; c6Arrow.style.cssText = 'color:#555;font-size:11px;';
-    addC6Row.appendChild(c6Arrow);
+    c6CountInput.type = 'number'; c6CountInput.min = '1'; c6CountInput.max = '20'; c6CountInput.step = '0.5'; c6CountInput.placeholder = '满命';
+    c6CountInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#e94560;font-size:11px;text-align:center;font-weight:600;';
+    c6AddRow.appendChild(c6CountInput);
+    var c6MingLab = document.createElement('span');
+    c6MingLab.textContent = '命'; c6MingLab.style.cssText = 'color:#555;font-size:10px;';
+    c6AddRow.appendChild(c6MingLab);
+    var c6PlusLab = document.createElement('span');
+    c6PlusLab.textContent = '+'; c6PlusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
+    c6AddRow.appendChild(c6PlusLab);
     var c6BonusInput = document.createElement('input');
-    c6BonusInput.type = 'number'; c6BonusInput.min = '0'; c6BonusInput.max = '5'; c6BonusInput.step = '0.1'; c6BonusInput.placeholder = '加成';
-    c6BonusInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
-    addC6Row.appendChild(c6BonusInput);
-    var c6BonusUnit = document.createElement('span');
-    c6BonusUnit.textContent = '(如0.2=20%)'; c6BonusUnit.style.cssText = 'color:#888;font-size:10px;';
-    addC6Row.appendChild(c6BonusUnit);
+    c6BonusInput.type = 'number'; c6BonusInput.min = '0'; c6BonusInput.step = '5'; c6BonusInput.placeholder = '加成%';
+    c6BonusInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+    c6AddRow.appendChild(c6BonusInput);
+    var c6PctLab = document.createElement('span');
+    c6PctLab.textContent = '%'; c6PctLab.style.cssText = 'color:#555;font-size:10px;';
+    c6AddRow.appendChild(c6PctLab);
     var addC6Btn = document.createElement('button');
     addC6Btn.textContent = '添加';
-    addC6Btn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#e94560;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
+    addC6Btn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#e94560;color:#fff;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
     addC6Btn.onclick = function () {
       var count = parseFloat(c6CountInput.value);
-      var bonus = parseFloat(c6BonusInput.value);
+      var bonus = parseFloat(c6BonusInput.value) / 100;
       if (isNaN(count) || count < 1) { alert('数量至少为1'); return; }
-      if (isNaN(bonus) || bonus < 0) { alert('请输入有效的加成比例'); return; }
+      if (isNaN(bonus) || bonus < 0) { alert('请输入加成百分比'); return; }
       var existingE = c6Entries.find(function (e) { return e.count === count; });
       if (existingE) { existingE.bonus = bonus; renderC6List(); }
       else { c6Entries.push({ count: count, bonus: bonus }); renderC6List(); }
       c6CountInput.value = ''; c6BonusInput.value = '';
     };
-    addC6Row.appendChild(addC6Btn);
-    c6Section.appendChild(addC6Row);
+    c6AddRow.appendChild(addC6Btn);
+    c6Section.appendChild(c6AddRow);
     dialog.appendChild(c6Section);
 
     // ===== 5. 黄数阶梯系数 =====
@@ -897,45 +909,73 @@
     yellowSection.appendChild(yellowDesc);
 
     var yellowList = document.createElement('div');
-    yellowList.style.cssText = 'margin-bottom:12px;';
+    yellowList.style.cssText = 'margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
     var yellowEntries = (w.yellowTiers || DEFAULT_YELLOW_TIERS).map(function (e) { return { minYellow: e.minYellow, maxYellow: e.maxYellow, coefficient: e.coefficient }; });
 
     function renderYellowList() {
       yellowList.innerHTML = '';
       if (yellowEntries.length === 0) { yellowList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无阶梯规则，可点击下方"载入默认"快速添加</div>'; return; }
       yellowEntries.sort(function (a, b) { return a.minYellow - b.minYellow; });
+      var coefs = yellowEntries.map(function(e) { return e.coefficient; });
+      var minCoef = Math.min.apply(null, coefs);
+      var maxCoef = Math.max.apply(null, coefs);
       for (var i = 0; i < yellowEntries.length; i++) {
         (function (idx) {
           var e = yellowEntries[idx];
           var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          var maxLabel = e.maxYellow === Infinity ? '+' : '~' + e.maxYellow;
-          row.innerHTML =
-            '<span style="color:#fbbf24;font-weight:600;min-width:80px;">' + e.minYellow + maxLabel + '黄</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#4ade80;font-weight:600;">×' + e.coefficient + '</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            openEditDialog({
-              title: '编辑黄数阶梯系数', titleColor: '#fbbf24', saveColor: '#4ade80',
-              fields: [
-                { label: '起始黄数', key: 'min', type: 'number', value: e.minYellow, min: 0 },
-                { label: '结束黄数（填99999表示无限）', key: 'max', type: 'number', value: (e.maxYellow === Infinity ? 99999 : e.maxYellow), min: 0 },
-                { label: '系数（如0.5=50%）', key: 'coef', type: 'number', value: e.coefficient, min: 0, max: 10, step: 0.1 },
-              ],
-              onSave: function (vals) {
-                var newMin = parseInt(vals.min);
-                var newMax = parseInt(vals.max);
-                var newCoef = parseFloat(vals.coef);
-                if (isNaN(newMin) || newMin < 0) { alert('起始黄数不能为负'); return false; }
-                if (isNaN(newCoef) || newCoef < 0) { alert('系数不能为负'); return false; }
-                e.minYellow = newMin; e.maxYellow = newMax >= 99999 ? Infinity : newMax; e.coefficient = newCoef;
-                renderYellowList(); return true;
-              }
-            });
+          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
+
+          var minInp = document.createElement('input');
+          minInp.type = 'number'; minInp.value = e.minYellow; minInp.min = 0;
+          minInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
+          minInp.title = '起始黄数';
+          minInp.onchange = function() { e.minYellow = parseInt(minInp.value) || 0; };
+          row.appendChild(minInp);
+
+          var dash = document.createElement('span');
+          dash.textContent = '~'; dash.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(dash);
+
+          var maxInp = document.createElement('input');
+          maxInp.type = 'number'; maxInp.value = (e.maxYellow === Infinity ? '' : e.maxYellow); maxInp.min = 0; maxInp.placeholder = '∞';
+          maxInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
+          maxInp.title = '结束黄数（留空表示无限）';
+          maxInp.onchange = function() {
+            var v = parseInt(maxInp.value);
+            e.maxYellow = (isNaN(v) || v >= 99999) ? Infinity : v;
           };
-          row.querySelector('.del-btn').onclick = function () { var di = yellowEntries.indexOf(e); if (di >= 0) yellowEntries.splice(di, 1); renderYellowList(); };
+          row.appendChild(maxInp);
+
+          var unitLab = document.createElement('span');
+          unitLab.textContent = '黄'; unitLab.style.cssText = 'color:#555;font-size:10px;';
+          row.appendChild(unitLab);
+
+          var xLab = document.createElement('span');
+          xLab.textContent = '×'; xLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
+          row.appendChild(xLab);
+
+          var coefInp = document.createElement('input');
+          coefInp.type = 'number'; coefInp.value = e.coefficient; coefInp.min = 0; coefInp.step = 0.05;
+          coefInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+          coefInp.title = '系数（如1.5表示×1.5）';
+          coefInp.onchange = function() { e.coefficient = parseFloat(coefInp.value) || 0; };
+          row.appendChild(coefInp);
+
+          var barWrap = document.createElement('div');
+          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
+          var barFill = document.createElement('div');
+          var ratio = maxCoef > minCoef ? (e.coefficient - minCoef) / (maxCoef - minCoef) : 0.5;
+          barFill.className = 'price-bar';
+          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#fbbf24,#4ade80);border-radius:3px;transition:width 0.2s;';
+          barWrap.appendChild(barFill);
+          row.appendChild(barWrap);
+
+          var delBtn = document.createElement('button');
+          delBtn.textContent = '×'; delBtn.title = '删除';
+          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
+          delBtn.onclick = function () { var di = yellowEntries.indexOf(e); if (di >= 0) yellowEntries.splice(di, 1); renderYellowList(); };
+          row.appendChild(delBtn);
+
           yellowList.appendChild(row);
         })(i);
       }
@@ -944,10 +984,13 @@
     renderYellowList();
     yellowSection.appendChild(yellowList);
 
-    // 载入默认按钮
+    // 载入默认按钮 + 添加新黄数阶梯
+    var yellowAddRow = document.createElement('div');
+    yellowAddRow.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
+
     var loadYellowDefaultBtn = document.createElement('button');
     loadYellowDefaultBtn.textContent = '载入默认';
-    loadYellowDefaultBtn.style.cssText = 'margin-right:10px;padding:5px 12px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;';
+    loadYellowDefaultBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;margin-right:6px;';
     loadYellowDefaultBtn.onclick = function () {
       yellowEntries.length = 0;
       for (var i = 0; i < DEFAULT_YELLOW_TIERS.length; i++) {
@@ -955,49 +998,44 @@
       }
       renderYellowList();
     };
-    yellowSection.appendChild(loadYellowDefaultBtn);
+    yellowAddRow.appendChild(loadYellowDefaultBtn);
 
-    // 添加新黄数阶梯
-    var addYellowRow = document.createElement('div');
-    addYellowRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-top:10px;';
     var yMinInput = document.createElement('input');
     yMinInput.type = 'number'; yMinInput.min = '0'; yMinInput.placeholder = '起始';
-    yMinInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
-    addYellowRow.appendChild(yMinInput);
+    yMinInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
+    yellowAddRow.appendChild(yMinInput);
     var yDash = document.createElement('span');
-    yDash.textContent = '~'; yDash.style.cssText = 'color:#555;font-size:11px;';
-    addYellowRow.appendChild(yDash);
+    yDash.textContent = '~'; yDash.style.cssText = 'color:#555;font-size:10px;';
+    yellowAddRow.appendChild(yDash);
     var yMaxInput = document.createElement('input');
-    yMaxInput.type = 'number'; yMaxInput.min = '0'; yMaxInput.placeholder = '结束';
-    yMaxInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
-    addYellowRow.appendChild(yMaxInput);
+    yMaxInput.type = 'number'; yMaxInput.min = '0'; yMaxInput.placeholder = '∞';
+    yMaxInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
+    yellowAddRow.appendChild(yMaxInput);
     var yUnit = document.createElement('span');
-    yUnit.textContent = '黄'; yUnit.style.cssText = 'color:#888;font-size:11px;';
-    addYellowRow.appendChild(yUnit);
-    var yArrow = document.createElement('span');
-    yArrow.textContent = '→'; yArrow.style.cssText = 'color:#555;font-size:11px;';
-    addYellowRow.appendChild(yArrow);
+    yUnit.textContent = '黄'; yUnit.style.cssText = 'color:#555;font-size:10px;';
+    yellowAddRow.appendChild(yUnit);
+    var yXLab = document.createElement('span');
+    yXLab.textContent = '×'; yXLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
+    yellowAddRow.appendChild(yXLab);
     var yCoefInput = document.createElement('input');
-    yCoefInput.type = 'number'; yCoefInput.min = '0'; yCoefInput.max = '10'; yCoefInput.step = '0.1'; yCoefInput.placeholder = '系数';
-    yCoefInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;text-align:center;';
-    addYellowRow.appendChild(yCoefInput);
-    var yCoefUnit = document.createElement('span');
-    yCoefUnit.textContent = '(如0.5=50%)'; yCoefUnit.style.cssText = 'color:#888;font-size:10px;';
-    addYellowRow.appendChild(yCoefUnit);
+    yCoefInput.type = 'number'; yCoefInput.min = '0'; yCoefInput.step = '0.05'; yCoefInput.placeholder = '系数';
+    yCoefInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+    yellowAddRow.appendChild(yCoefInput);
     var addYellowBtn = document.createElement('button');
     addYellowBtn.textContent = '添加';
-    addYellowBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#fbbf24;color:#0f0f23;font-size:12px;font-weight:600;cursor:pointer;';
+    addYellowBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#fbbf24;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
     addYellowBtn.onclick = function () {
       var min = parseInt(yMinInput.value);
-      var max = parseInt(yMaxInput.value);
+      var maxRaw = parseInt(yMaxInput.value);
+      var max = (isNaN(maxRaw) || maxRaw >= 99999) ? Infinity : maxRaw;
       var coef = parseFloat(yCoefInput.value);
       if (isNaN(min) || min < 0) { alert('起始黄数不能为负'); return; }
       if (isNaN(coef) || coef < 0) { alert('请输入有效的系数'); return; }
-      yellowEntries.push({ minYellow: min, maxYellow: isNaN(max) ? Infinity : max, coefficient: coef });
+      yellowEntries.push({ minYellow: min, maxYellow: max, coefficient: coef });
       renderYellowList(); yMinInput.value = ''; yMaxInput.value = ''; yCoefInput.value = '';
     };
-    addYellowRow.appendChild(addYellowBtn);
-    yellowSection.appendChild(addYellowRow);
+    yellowAddRow.appendChild(addYellowBtn);
+    yellowSection.appendChild(yellowAddRow);
     dialog.appendChild(yellowSection);
 
     // ===== 6. 配队溢价 =====
@@ -1242,7 +1280,7 @@
     teamSection.appendChild(teamMultiSection);
     dialog.appendChild(teamSection);
 
-    // ===== 8. 需要专武的角色（参考用） =====
+    // ===== 8. 需要专武的角色（无专武时按折扣扣价值） =====
     var needSigSection = document.createElement('div');
     needSigSection.style.cssText = 'margin-bottom:20px;';
     var needSigTitle = document.createElement('div');
@@ -1251,23 +1289,37 @@
     needSigSection.appendChild(needSigTitle);
     var needSigDesc = document.createElement('p');
     needSigDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    needSigDesc.innerHTML = '新版已自动按热门/冷门分类处理专武折扣（热门角色无专武仅值15%基础价）。此列表仅作参考，不再参与计算。';
+    needSigDesc.innerHTML = '列表中的角色无专武时，价值 = 基础价 × 折扣（0.5=仅值50%）。不在此列表的角色按热门/冷门统一倍率处理。';
     needSigSection.appendChild(needSigDesc);
 
     var needSigList = document.createElement('div');
-    needSigList.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:30px;';
+    needSigList.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin-bottom:12px;min-height:30px;';
     var needSigEntries = [].concat(w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS);
+    function getNeedSigName(e) { return typeof e === 'string' ? e : e.name; }
+    function getNeedSigDiscount(e) { return typeof e === 'string' ? 0.5 : (e.discount != null ? e.discount : 0.5); }
     function renderNeedSigList() {
       needSigList.innerHTML = '';
-      if (needSigEntries.length === 0) { needSigList.innerHTML = '<div style="font-size:12px;color:#555;padding:4px 0;">暂无角色，可点击下方"载入默认"</div>'; return; }
+      if (needSigEntries.length === 0) { needSigList.innerHTML = '<div style="font-size:12px;color:#555;padding:4px 0;">暂无角色，可在下方添加</div>'; return; }
       for (var i = 0; i < needSigEntries.length; i++) {
-        (function (name) {
-          var tag = document.createElement('span');
-          tag.style.cssText = 'font-size:11px;padding:4px 10px;border-radius:4px;background:rgba(248,113,113,0.15);color:#f87171;display:inline-flex;align-items:center;gap:4px;';
-          tag.innerHTML = name + ' <button style="border:none;background:none;color:#f87171;font-size:12px;cursor:pointer;padding:0;margin-left:2px;">×</button>';
-          tag.querySelector('button').onclick = function () { var di = needSigEntries.indexOf(name); if (di !== -1) needSigEntries.splice(di, 1); renderNeedSigList(); };
-          needSigList.appendChild(tag);
-        })(needSigEntries[i]);
+        (function (idx) {
+          var entry = needSigEntries[idx];
+          var nm = getNeedSigName(entry);
+          var dc = getNeedSigDiscount(entry);
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;background:rgba(248,113,113,0.1);border-radius:4px;';
+          row.innerHTML =
+            '<span style="font-size:12px;color:#f87171;font-weight:600;min-width:60px;">' + nm + '</span>' +
+            '<span style="font-size:11px;color:#888;">无专武值</span>' +
+            '<input type="number" class="ns-discount" value="' + dc + '" min="0" max="1" step="0.05" style="width:60px;padding:3px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;" />' +
+            '<span style="font-size:11px;color:#888;">倍</span>' +
+            '<button class="ns-del" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#f87171;font-size:11px;cursor:pointer;">删除</button>';
+          row.querySelector('.ns-discount').oninput = function () {
+            if (typeof entry === 'string') { needSigEntries[idx] = { name: entry, discount: parseFloat(this.value) || 0 }; entry = needSigEntries[idx]; }
+            else { entry.discount = parseFloat(this.value) || 0; }
+          };
+          row.querySelector('.ns-del').onclick = function () { needSigEntries.splice(idx, 1); renderNeedSigList(); };
+          needSigList.appendChild(row);
+        })(i);
       }
     }
     renderNeedSigList();
@@ -1280,23 +1332,32 @@
     var nsEmptyOpt = document.createElement('option');
     nsEmptyOpt.value = ''; nsEmptyOpt.textContent = '选择角色...';
     needSigSelect.appendChild(nsEmptyOpt);
-    for (var nsi = 0; nsi < allCharNames.length; nsi++) {
-      if (needSigEntries.indexOf(allCharNames[nsi]) !== -1) continue;
-      var nsOpt = document.createElement('option');
-      nsOpt.value = allCharNames[nsi]; nsOpt.textContent = allCharNames[nsi];
-      needSigSelect.appendChild(nsOpt);
+    function refreshNeedSigSelect() {
+      var selected = needSigSelect.value;
+      var opts = [nsEmptyOpt];
+      for (var nsi = 0; nsi < allCharNames.length; nsi++) {
+        var inList = needSigEntries.some(function(e) { return getNeedSigName(e) === allCharNames[nsi]; });
+        if (inList) continue;
+        var nsOpt = document.createElement('option');
+        nsOpt.value = allCharNames[nsi]; nsOpt.textContent = allCharNames[nsi];
+        opts.push(nsOpt);
+      }
+      needSigSelect.innerHTML = '';
+      for (var oi = 0; oi < opts.length; oi++) needSigSelect.appendChild(opts[oi]);
+      needSigSelect.value = selected;
     }
+    refreshNeedSigSelect();
     needSigRow.appendChild(needSigSelect);
     var needSigAddBtn = document.createElement('button');
     needSigAddBtn.textContent = '添加';
     needSigAddBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#f87171;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
     needSigAddBtn.onclick = function () {
       var nm = needSigSelect.value;
-      if (!nm || needSigEntries.indexOf(nm) !== -1) return;
-      needSigEntries.push(nm);
+      if (!nm) return;
+      if (needSigEntries.some(function(e) { return getNeedSigName(e) === nm; })) return;
+      needSigEntries.push({ name: nm, discount: 0.5 });
       renderNeedSigList();
-      var opt = needSigSelect.querySelector('option[value="' + nm + '"]');
-      if (opt) opt.remove();
+      refreshNeedSigSelect();
       needSigSelect.value = '';
     };
     needSigRow.appendChild(needSigAddBtn);
@@ -1308,9 +1369,13 @@
     needSigDefaultBtn.onclick = function () {
       var defaults = DEFAULT_NEED_SIG_WEAPONS;
       for (var di = 0; di < defaults.length; di++) {
-        if (needSigEntries.indexOf(defaults[di]) === -1) needSigEntries.push(defaults[di]);
+        var dName = getNeedSigName(defaults[di]);
+        if (!needSigEntries.some(function(e) { return getNeedSigName(e) === dName; })) {
+          needSigEntries.push({ name: dName, discount: getNeedSigDiscount(defaults[di]) });
+        }
       }
       renderNeedSigList();
+      refreshNeedSigSelect();
     };
     needSigSection.appendChild(needSigDefaultBtn);
     dialog.appendChild(needSigSection);
@@ -1694,20 +1759,11 @@
             weapon: SIG_WEAPONS[rName] || '',
             price: DEFAULT_CHAR_PRICES[rName] != null ? DEFAULT_CHAR_PRICES[rName] : rTier.price,
             tier: rtk,
+            premiums: DEFAULT_CONST_PREMIUMS[rName] ? Object.assign({}, DEFAULT_CONST_PREMIUMS[rName]) : {},
           });
         }
       }
       renderCharList();
-      // 重置命座溢价
-      premEntries.length = 0;
-      for (var cpName in DEFAULT_CONST_PREMIUMS) {
-        if (!DEFAULT_CONST_PREMIUMS.hasOwnProperty(cpName)) continue;
-        for (var cpBp in DEFAULT_CONST_PREMIUMS[cpName]) {
-          if (!DEFAULT_CONST_PREMIUMS[cpName].hasOwnProperty(cpBp)) continue;
-          premEntries.push({ name: cpName, bp: parseInt(cpBp), val: DEFAULT_CONST_PREMIUMS[cpName][cpBp] });
-        }
-      }
-      renderPremList();
       // 重置抽数阶梯
       pullEntries.length = 0;
       for (var pi2 = 0; pi2 < DEFAULT_PULL_TIERS.length; pi2++) {
@@ -1831,11 +1887,27 @@
       }
       newW.charTierOverride = newCharTierOverride;
 
-      // 收集命座溢价
+      // 收集命座溢价（从角色定价条目中提取）
       var newConstPremiums = {};
-      for (var ei = 0; ei < premEntries.length; ei++) {
-        if (!newConstPremiums[premEntries[ei].name]) newConstPremiums[premEntries[ei].name] = {};
-        newConstPremiums[premEntries[ei].name][premEntries[ei].bp] = premEntries[ei].val;
+      for (var ei = 0; ei < charEntries.length; ei++) {
+        if (charEntries[ei].premiums && Object.keys(charEntries[ei].premiums).length > 0) {
+          newConstPremiums[charEntries[ei].name] = {};
+          for (var pbp in charEntries[ei].premiums) {
+            if (charEntries[ei].premiums.hasOwnProperty(pbp)) {
+              newConstPremiums[charEntries[ei].name][pbp] = charEntries[ei].premiums[pbp];
+            }
+          }
+        }
+      }
+      // 保留不在charEntries中的角色命座溢价（如已删除角色），避免数据丢失
+      var _existingPrems = w.constPremiums || {};
+      var _charEntryNames = {};
+      for (var _cei3 = 0; _cei3 < charEntries.length; _cei3++) _charEntryNames[charEntries[_cei3].name] = true;
+      for (var _epName in _existingPrems) {
+        if (!_existingPrems.hasOwnProperty(_epName)) continue;
+        if (!_charEntryNames[_epName]) {
+          newConstPremiums[_epName] = _existingPrems[_epName];
+        }
       }
       newW.constPremiums = newConstPremiums;
 

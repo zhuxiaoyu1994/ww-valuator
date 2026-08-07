@@ -11,14 +11,14 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 10;
+const CONFIG_VERSION = 12;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
 // ============================================================
 const CHAR_TIERS = {
-  S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '秧秧玄翎'] },
-  A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '卡提希娅', '弗洛洛', '洛瑟菈'] },
+  S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅'] },
+  A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '弗洛洛', '洛瑟菈'] },
   B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '露西', '嘉贝莉娜', '奥古斯塔', '仇远', '尤诺', '陆赫斯', '赞妮', '布兰特', '守岸人', '西格莉卡'] },
   C: { price: 5, isHot: false, chars: ['露帕', '珂莱塔', '菲比', '坎特蕾拉', '椿'] },
   D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡'] },
@@ -55,7 +55,7 @@ const DEFAULT_WEIGHTS = {
   hotC0Mult: 1,          // C0+专武 倍率
   hotC3Mult: 2,          // C3+专武 倍率
   hotC6Mult: 3,          // C6+专武 倍率
-  hotStepMult: 0.08,     // 过渡命(C1/C2/C4/C5)每命加成倍率
+  hotStepMult: 0.1,      // 过渡命(C1/C2/C4/C5)每命加成倍率
   hotNoSigMult: 0.5,     // 无专武倍率
   hotNoSigC6Mult: 0.5,   // C6无专武倍率
   // 冷门角色加分参数
@@ -250,14 +250,14 @@ const DEFAULT_CHAR_PRICES = {
 const DEFAULT_CONST_PREMIUMS = {
   '爱弥斯': { '2': 30, '3': 50, '6': 180 },
   '绯雪': { '2': 35, '3': 60, '6': 200 },
-  '卡提希娅': { '2': 20, '3': 35, '6': 120 },
+  '卡提希娅': { '1': 10, '2': 20, '3': 30, '6': 125 },
   '弗洛洛': { '2': 20, '3': 50, '6': 100 },
   '奥古斯塔': { '2': 20, '6': 80 },
   '尤诺': { '2': 20, '6': 60 },
   '露西': { '3': 30, '6': 80 },
   '忌炎': { '6': 30 },
   '守岸人': { '2': 20, '6': 50 },
-  '赞妮': { '2': 20, '6': 80 },
+  '赞妮': { '2': 20, '6': 60 },
   '椿': { '6': 50 },
   '莫宁': { '1': 20, '6': 80 },
   '珂莱塔': { '6': 50 },
@@ -287,8 +287,19 @@ const DEFAULT_CONST_PREMIUMS = {
 
 // 需要专武的角色列表（对应油猴脚本 DEFAULT_NEED_SIG_WEAPONS）
 const DEFAULT_NEED_SIG_WEAPONS = [
-  '爱弥斯', '绯雪', '卡提希娅', '千咲', '今汐', '椿', '忌炎',
-  '嘉贝莉娜', '弗洛洛', '珂莱塔', '西格莉卡', '赞妮', '陆赫斯',
+  { name: '爱弥斯', discount: 0.3 },
+  { name: '绯雪', discount: 0.3 },
+  { name: '卡提希娅', discount: 0.3 },
+  { name: '今汐', discount: 0.3 },
+  { name: '椿', discount: 0.3 },
+  { name: '忌炎', discount: 0.3 },
+  { name: '嘉贝莉娜', discount: 0.3 },
+  { name: '弗洛洛', discount: 0.3 },
+  { name: '珂莱塔', discount: 0.3 },
+  { name: '西格莉卡', discount: 0.3 },
+  { name: '赞妮', discount: 0.3 },
+  { name: '陆赫斯', discount: 0.3 },
+  { name: '秧秧玄翎', discount: 0.3 },
 ];
 
 // ============================================================
@@ -374,7 +385,9 @@ function buildDefaultWeights(customWeights) {
       w.teams.push({ name: teamName, members: t.chars || [], multiplier: t.multiplier || 1.0 });
     }
   }
-  w.needSigWeapons = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  w.needSigWeapons = (saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS).map(function(n) {
+    return typeof n === 'string' ? { name: n, discount: 0.5 } : n;
+  });
   // 用户自定义专武映射覆盖
   if (saved.sigWeaponsOverride) {
     w.sigWeaponsOverride = saved.sigWeaponsOverride;
@@ -398,7 +411,7 @@ const WEIGHT_LABELS = {
   hotC0Mult: { label: '热门C0+专武倍率', desc: 'C0+专武 = 基础价 × 此倍率（1.0=100%）' },
   hotC3Mult: { label: '热门C3+专武倍率', desc: 'C3+专武 = 基础价 × 此倍率（2.0=200%，价值翻倍）' },
   hotC6Mult: { label: '热门C6+专武倍率', desc: 'C6+专武 = 基础价 × 此倍率（3.0=300%，满命三倍）' },
-  hotStepMult: { label: '热门过渡命倍率', desc: 'C1/C2/C4/C5每命加成 = 基础价 × 此倍率（0.08=8%）' },
+  hotStepMult: { label: '热门过渡命倍率', desc: 'C1/C2/C4/C5每命加成 = 基础价 × 此倍率（0.1=10%）' },
   hotNoSigMult: { label: '热门无专武倍率', desc: '热门角色无专武 = 基础价 × 此倍率（0.15=仅值15%）' },
   hotNoSigC6Mult: { label: '热门C6无专武倍率', desc: '满命但无专武 = 基础价 × 此倍率（0.25=25%）' },
   coldStep: { label: '冷门每命加分', desc: '冷门角色每命加此值（元）' },
@@ -811,12 +824,26 @@ function getCharValue(char, hasSigWeapon, w) {
   const charPrices = w.charPrices || {};
   const base = charPrices[char.name] != null ? charPrices[char.name] : char.price;
 
+  // 检查是否在"需要专武"列表中（有自定义折扣）
+  var needSigList = w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  for (var ni = 0; ni < needSigList.length; ni++) {
+    var nsEntry = needSigList[ni];
+    var nsName = typeof nsEntry === 'string' ? nsEntry : nsEntry.name;
+    if (nsName === char.name) {
+      if (!hasSigWeapon) {
+        var nsDiscount = typeof nsEntry === 'string' ? 0.5 : (nsEntry.discount != null ? nsEntry.discount : 0.5);
+        return base * nsDiscount;
+      }
+      break;
+    }
+  }
+
   if (char.isHot) {
     // 热门角色：里程碑估值
     const c0Mult = w.hotC0Mult != null ? w.hotC0Mult : 1.0;
     const c3Mult = w.hotC3Mult != null ? w.hotC3Mult : 2.0;
     const c6Mult = w.hotC6Mult != null ? w.hotC6Mult : 3.0;
-    const stepMult = w.hotStepMult != null ? w.hotStepMult : 0.08;
+    const stepMult = w.hotStepMult != null ? w.hotStepMult : 0.1;
     const noSigMult = w.hotNoSigMult != null ? w.hotNoSigMult : 0.15;
     const noSigC6Mult = w.hotNoSigC6Mult != null ? w.hotNoSigC6Mult : 0.25;
 
