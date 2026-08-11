@@ -239,7 +239,7 @@
 
     var subtitle = document.createElement('p');
     subtitle.style.cssText = 'font-size:12px;color:#888;margin-bottom:20px;line-height:1.5;';
-    subtitle.textContent = '热门角色(S/A/B)按里程碑估值：C0+专武=基础价, C3+专武=2倍, C6+专武=3倍, 无专武仅值15%。冷门角色(C/D/E)仅加分项。保存后立即生效。';
+    subtitle.textContent = '所有角色统一按基础价估值，命座价值通过每行"溢价"按钮单独配置。保存后立即生效。';
     dialog.appendChild(subtitle);
 
     // ===== 1. 五星角色定价 =====
@@ -252,7 +252,7 @@
 
     var charDesc = document.createElement('p');
     charDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    charDesc.innerHTML = '可自由添加、修改、删除角色定价及命座溢价。武器名自动匹配，也可手动修改。<br>S/A/B级为热门角色（按里程碑估值），C/D/E级为冷门角色（仅加分项）。<br>点击每行"溢价"按钮可设置该角色达到指定命座时的额外加价（如C3→+50元，C6→+180元，只取最高不叠加）。';
+    charDesc.innerHTML = '可自由添加、修改、删除角色定价及命座溢价。武器名自动匹配，也可手动修改。<br>所有角色统一按基础价估值，命座价值通过"溢价"按钮单独配置（如C3→+50元，C6→+180元，只取最高不叠加）。<br>勾选"专武"=需要专武（无专武时价值×折扣，折扣值在下方"其他权重"中配置）。<br>点击"强绑"按钮可设置强绑队友（队友全不在场时角色价值×折扣，可与无专武折扣叠加）。';
     charSection.appendChild(charDesc);
 
     // 角色定价数据（可增删改）
@@ -271,6 +271,33 @@
       return null;
     }
 
+    // 检查角色是否在需要专武列表中
+    var _needSigSet = {};
+    var _needSigList = w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+    for (var nsi = 0; nsi < _needSigList.length; nsi++) {
+      var _nsName = typeof _needSigList[nsi] === 'string' ? _needSigList[nsi] : _needSigList[nsi].name;
+      _needSigSet[_nsName] = true;
+    }
+    function isNeedSig(name) { return !!_needSigSet[name]; }
+
+    // 构建强绑队友映射（从 teamMates 或旧 c6TeamDependency 配置加载）
+    var _teamMatesMap = {};
+    var _rawTeamMates = w.teamMates || {};
+    for (var tmn in _rawTeamMates) {
+      if (!_rawTeamMates.hasOwnProperty(tmn)) continue;
+      var mates = _rawTeamMates[tmn];
+      if (Array.isArray(mates) && mates.length > 0) _teamMatesMap[tmn] = [].concat(mates);
+    }
+    var _oldC6Dep = w.c6TeamDependency || {};
+    for (var ocdn in _oldC6Dep) {
+      if (!_oldC6Dep.hasOwnProperty(ocdn)) continue;
+      if (_teamMatesMap[ocdn]) continue;
+      var ocdInfo = _oldC6Dep[ocdn];
+      var ocdMates = Array.isArray(ocdInfo.teammate) ? ocdInfo.teammate : [ocdInfo.teammate];
+      if (ocdMates.length > 0 && ocdMates[0]) _teamMatesMap[ocdn] = [].concat(ocdMates);
+    }
+    function getTeamMates(name) { return _teamMatesMap[name] ? [].concat(_teamMatesMap[name]) : []; }
+
     // 初始化角色列表（跳过已删除的角色）
     var _addedNames = {};
     for (var ti = 0; ti < tierOrder.length; ti++) {
@@ -285,7 +312,7 @@
         var defaultPrice = DEFAULT_CHAR_PRICES[cname] != null ? DEFAULT_CHAR_PRICES[cname] : tier.price;
         var userPrice = w.charPrices[cname] != null ? w.charPrices[cname] : defaultPrice;
         var weapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[cname]) || SIG_WEAPONS[cname] || '';
-        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk, premiums: w.constPremiums && w.constPremiums[cname] ? Object.assign({}, w.constPremiums[cname]) : {} });
+        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk, premiums: w.constPremiums && w.constPremiums[cname] ? Object.assign({}, w.constPremiums[cname]) : {}, needSig: isNeedSig(cname), teamMates: getTeamMates(cname) });
         _addedNames[cname] = true;
       }
     }
@@ -300,7 +327,7 @@
         var ovrDefaultPrice = DEFAULT_CHAR_PRICES[ovrName] != null ? DEFAULT_CHAR_PRICES[ovrName] : (ovrTierInfo ? ovrTierInfo.price : 0);
         var ovrUserPrice = w.charPrices[ovrName] != null ? w.charPrices[ovrName] : ovrDefaultPrice;
         var ovrWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[ovrName]) || SIG_WEAPONS[ovrName] || '';
-        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier, premiums: w.constPremiums && w.constPremiums[ovrName] ? Object.assign({}, w.constPremiums[ovrName]) : {} });
+        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier, premiums: w.constPremiums && w.constPremiums[ovrName] ? Object.assign({}, w.constPremiums[ovrName]) : {}, needSig: isNeedSig(ovrName), teamMates: getTeamMates(ovrName) });
         _addedNames[ovrName] = true;
       }
     }
@@ -312,7 +339,7 @@
         if (deletedChars.indexOf(customName) >= 0) continue;
         var customTier = (w.charTierOverride && w.charTierOverride[customName]) || 'C';
         var customWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[customName]) || SIG_WEAPONS[customName] || '';
-        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier, premiums: w.constPremiums && w.constPremiums[customName] ? Object.assign({}, w.constPremiums[customName]) : {} });
+        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier, premiums: w.constPremiums && w.constPremiums[customName] ? Object.assign({}, w.constPremiums[customName]) : {}, needSig: isNeedSig(customName), teamMates: getTeamMates(customName) });
       }
     }
 
@@ -387,6 +414,19 @@
             };
             row.appendChild(tierSelect);
 
+            // 专武复选框
+            var sigCheck = document.createElement('input');
+            sigCheck.type = 'checkbox'; sigCheck.checked = !!entry.needSig;
+            sigCheck.title = '勾选=需要专武（无专武时价值×' + (w.needSigDiscount != null ? w.needSigDiscount : 0.3) + '）';
+            sigCheck.style.cssText = 'margin:0;cursor:pointer;accent-color:#f87171;';
+            sigCheck.onchange = function() { entry.needSig = sigCheck.checked; };
+            row.appendChild(sigCheck);
+
+            var sigLabel = document.createElement('span');
+            sigLabel.textContent = '专武'; sigLabel.style.cssText = 'color:' + (entry.needSig ? '#f87171' : '#555') + ';font-size:10px;cursor:pointer;';
+            sigLabel.onclick = function() { sigCheck.checked = !sigCheck.checked; entry.needSig = sigCheck.checked; sigLabel.style.color = entry.needSig ? '#f87171' : '#555'; };
+            row.appendChild(sigLabel);
+
             // 命座溢价按钮
             var premBtn = document.createElement('button');
             var premCount = entry.premiums ? Object.keys(entry.premiums).length : 0;
@@ -430,6 +470,46 @@
               document.body.appendChild(premOverlay);
             };
             row.appendChild(premBtn);
+
+            // 强绑队友按钮
+            var mateBtn = document.createElement('button');
+            var mateCount = entry.teamMates ? entry.teamMates.length : 0;
+            mateBtn.textContent = '强绑' + (mateCount > 0 ? '(' + mateCount + ')' : '');
+            mateBtn.title = '编辑强绑队友（全不在场时价值×' + (w.teamDepDiscount != null ? w.teamDepDiscount : 0.7) + '）';
+            mateBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:' + (mateCount > 0 ? '#fbbf24' : '#555') + ';font-size:11px;cursor:pointer;line-height:1.4;';
+            mateBtn.onclick = function() {
+              var mateOverlay = document.createElement('div');
+              mateOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
+              var mateBox = document.createElement('div');
+              mateBox.style.cssText = 'background:#0f0f23;border-radius:12px;padding:20px;width:340px;max-height:500px;overflow-y:auto;color:#e0e0e0;';
+              var mateHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#fbbf24;">编辑强绑队友 - ' + entry.name + '</div>';
+              mateHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">勾选强绑队友，当这些队友全不在账号中时，角色价值×' + (w.teamDepDiscount != null ? w.teamDepDiscount : 0.7) + '。可与无专武折扣叠加。</div>';
+              var _curMates = entry.teamMates || [];
+              for (var mi = 0; mi < allCharNames.length; mi++) {
+                var mname = allCharNames[mi];
+                if (mname === entry.name) continue;
+                var checked = _curMates.indexOf(mname) >= 0 ? ' checked' : '';
+                mateHTML += '<label style="display:inline-flex;align-items:center;gap:4px;margin:3px 6px;font-size:12px;color:#e0e0e0;cursor:pointer;">' +
+                  '<input type="checkbox" class="mate-cb" value="' + mname + '"' + checked + ' style="margin:0;accent-color:#fbbf24;" />' + mname + '</label>';
+              }
+              mateHTML += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
+                '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
+                '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#fbbf24;color:#0f0f23;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
+              mateBox.innerHTML = mateHTML;
+              mateBox.querySelector('.cancel-btn').onclick = function() { mateOverlay.remove(); };
+              mateBox.querySelector('.save-btn').onclick = function() {
+                var cbs = mateBox.querySelectorAll('.mate-cb:checked');
+                var newMates = [];
+                for (var cbi = 0; cbi < cbs.length; cbi++) newMates.push(cbs[cbi].value);
+                entry.teamMates = newMates;
+                mateOverlay.remove();
+                renderCharList();
+              };
+              mateOverlay.appendChild(mateBox);
+              mateOverlay.onclick = function(ev) { if (ev.target === mateOverlay) mateOverlay.remove(); };
+              document.body.appendChild(mateOverlay);
+            };
+            row.appendChild(mateBtn);
 
             // 删除按钮
             var delBtn = document.createElement('button');
@@ -500,7 +580,7 @@
       if (!wpn && SIG_WEAPONS[nm]) wpn = SIG_WEAPONS[nm]; // 自动匹配
       var pr = parseFloat(addPriceInput.value);
       if (isNaN(pr)) pr = 15;
-      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value, premiums: {} });
+      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value, premiums: {}, needSig: false, teamMates: [] });
       // 如果角色之前被删除过，从 deletedChars 中移除
       var dcIdx = deletedChars.indexOf(nm);
       if (dcIdx >= 0) deletedChars.splice(dcIdx, 1);
@@ -517,7 +597,7 @@
     pullSection.style.cssText = 'margin-bottom:20px;';
     var pullTitle = document.createElement('div');
     pullTitle.style.cssText = 'font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    pullTitle.textContent = '抽数阶梯定价（公式：每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动）';
+    pullTitle.textContent = '抽数定价（资源越多每抽越值钱）';
     pullSection.appendChild(pullTitle);
     var pullDesc = document.createElement('p');
     pullDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
@@ -595,7 +675,7 @@
 
     var pullC6Title = document.createElement('div');
     pullC6Title.style.cssText = 'font-size:13px;font-weight:600;color:#fbbf24;margin-bottom:4px;';
-    pullC6Title.textContent = '满命抽数加成（公式：基准加成 + (加权满命 - 基准) / 每档 × 每档浮动）';
+    pullC6Title.textContent = '满命抽数加成（加权满命数 → 抽数价值加成）';
     pullSection.appendChild(pullC6Title);
 
     var pullC6Desc = document.createElement('p');
@@ -683,6 +763,63 @@
     }
     c6WeightInfo.appendChild(c6WeightRow);
     c6Section.appendChild(c6WeightInfo);
+
+    // 满命溢价公式配置
+    var c6FormulaRow = document.createElement('div');
+    c6FormulaRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
+
+    function c6fLabel(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      return s;
+    }
+    function c6fInput(val, step, color, title) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      return i;
+    }
+
+    c6FormulaRow.appendChild(c6fLabel('基准满命'));
+    var c6BaseInp = c6fInput(w.c6Base != null ? w.c6Base : DEFAULT_WEIGHTS.c6Base, '0.5', '#e94560', '此加权满命数对应的溢价为基准溢价');
+    c6FormulaRow.appendChild(c6BaseInp);
+    c6FormulaRow.appendChild(c6fLabel('基准溢价'));
+    var c6BaseBonusInp = c6fInput((w.c6BaseBonus != null ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus) * 100, '5', '#4ade80', '基准满命数对应的溢价百分比');
+    c6FormulaRow.appendChild(c6BaseBonusInp);
+    c6FormulaRow.appendChild(c6fLabel('%，每'));
+    var c6StepInp = c6fInput(w.c6Step != null ? w.c6Step : DEFAULT_WEIGHTS.c6Step, '0.1', '#e94560', '每N命浮动一档');
+    c6FormulaRow.appendChild(c6StepInp);
+    c6FormulaRow.appendChild(c6fLabel('命浮动'));
+    var c6StepBonusInp = c6fInput((w.c6StepBonus != null ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus) * 100, '0.5', '#4ade80', '每档浮动百分比');
+    c6FormulaRow.appendChild(c6StepBonusInp);
+    c6FormulaRow.appendChild(c6fLabel('%'));
+    c6Section.appendChild(c6FormulaRow);
+
+    // 预览
+    var c6Preview = document.createElement('div');
+    c6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(233,69,96,0.05);border-radius:6px;border:1px solid rgba(233,69,96,0.15);';
+    function updateC6Preview() {
+      var base = parseFloat(c6BaseInp.value) || 0;
+      var baseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
+      var step = parseFloat(c6StepInp.value) || 1;
+      var stepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var samples = [0, 1, 2, base, base + step, base + step * 5, base + step * 10, base + step * 20, base + step * 50];
+      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+      var html = '';
+      for (var si = 0; si < samples.length; si++) {
+        var c = samples[si];
+        var bonus = baseBonus + (c - base) / step * stepBonus;
+        if (bonus < 0) bonus = 0;
+        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
+      }
+      c6Preview.innerHTML = html;
+    }
+    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp].forEach(function(inp) {
+      inp.oninput = updateC6Preview;
+    });
+    updateC6Preview();
+    c6Section.appendChild(c6Preview);
 
     // 满命溢价档位列表
     var c6List = document.createElement('div');
@@ -801,12 +938,12 @@
     c6Section.appendChild(c6AddRow);
     dialog.appendChild(c6Section);
 
-    // ===== 5. 有效金系数（公式） =====
+    // ===== 5. 有效金阶梯系数 =====
     var yellowSection = document.createElement('div');
     yellowSection.style.cssText = 'margin-bottom:20px;';
     var yellowTitle = document.createElement('div');
     yellowTitle.style.cssText = 'font-size:14px;font-weight:600;color:#fbbf24;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    yellowTitle.textContent = '有效金系数（公式：系数 = 基准系数 + floor((有效金 - 基准) / 每档金数) × 每档浮动）';
+    yellowTitle.textContent = '有效金阶梯系数（有效金越多越稀有，估值乘以此系数）';
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
@@ -1138,106 +1275,6 @@
     teamSection.appendChild(teamMultiSection);
     dialog.appendChild(teamSection);
 
-    // ===== 8. 需要专武的角色（无专武时按折扣扣价值） =====
-    var needSigSection = document.createElement('div');
-    needSigSection.style.cssText = 'margin-bottom:20px;';
-    var needSigTitle = document.createElement('div');
-    needSigTitle.style.cssText = 'font-size:14px;font-weight:600;color:#f87171;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    needSigTitle.textContent = '需要专武的角色（无专武时扣价值）';
-    needSigSection.appendChild(needSigTitle);
-    var needSigDesc = document.createElement('p');
-    needSigDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    needSigDesc.innerHTML = '列表中的角色无专武时，价值 = 基础价 × 折扣（0.5=仅值50%）。不在此列表的角色按热门/冷门统一倍率处理。';
-    needSigSection.appendChild(needSigDesc);
-
-    var needSigList = document.createElement('div');
-    needSigList.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin-bottom:12px;min-height:30px;';
-    var needSigEntries = [].concat(w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS);
-    function getNeedSigName(e) { return typeof e === 'string' ? e : e.name; }
-    function getNeedSigDiscount(e) { return typeof e === 'string' ? 0.5 : (e.discount != null ? e.discount : 0.5); }
-    function renderNeedSigList() {
-      needSigList.innerHTML = '';
-      if (needSigEntries.length === 0) { needSigList.innerHTML = '<div style="font-size:12px;color:#555;padding:4px 0;">暂无角色，可在下方添加</div>'; return; }
-      for (var i = 0; i < needSigEntries.length; i++) {
-        (function (idx) {
-          var entry = needSigEntries[idx];
-          var nm = getNeedSigName(entry);
-          var dc = getNeedSigDiscount(entry);
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;background:rgba(248,113,113,0.1);border-radius:4px;';
-          row.innerHTML =
-            '<span style="font-size:12px;color:#f87171;font-weight:600;min-width:60px;">' + nm + '</span>' +
-            '<span style="font-size:11px;color:#888;">无专武值</span>' +
-            '<input type="number" class="ns-discount" value="' + dc + '" min="0" max="1" step="0.05" style="width:60px;padding:3px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:11px;" />' +
-            '<span style="font-size:11px;color:#888;">倍</span>' +
-            '<button class="ns-del" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#f87171;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.ns-discount').oninput = function () {
-            if (typeof entry === 'string') { needSigEntries[idx] = { name: entry, discount: parseFloat(this.value) || 0 }; entry = needSigEntries[idx]; }
-            else { entry.discount = parseFloat(this.value) || 0; }
-          };
-          row.querySelector('.ns-del').onclick = function () { needSigEntries.splice(idx, 1); renderNeedSigList(); };
-          needSigList.appendChild(row);
-        })(i);
-      }
-    }
-    renderNeedSigList();
-    needSigSection.appendChild(needSigList);
-
-    var needSigRow = document.createElement('div');
-    needSigRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;';
-    var needSigSelect = document.createElement('select');
-    needSigSelect.style.cssText = 'flex:1;min-width:120px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
-    var nsEmptyOpt = document.createElement('option');
-    nsEmptyOpt.value = ''; nsEmptyOpt.textContent = '选择角色...';
-    needSigSelect.appendChild(nsEmptyOpt);
-    function refreshNeedSigSelect() {
-      var selected = needSigSelect.value;
-      var opts = [nsEmptyOpt];
-      for (var nsi = 0; nsi < allCharNames.length; nsi++) {
-        var inList = needSigEntries.some(function(e) { return getNeedSigName(e) === allCharNames[nsi]; });
-        if (inList) continue;
-        var nsOpt = document.createElement('option');
-        nsOpt.value = allCharNames[nsi]; nsOpt.textContent = allCharNames[nsi];
-        opts.push(nsOpt);
-      }
-      needSigSelect.innerHTML = '';
-      for (var oi = 0; oi < opts.length; oi++) needSigSelect.appendChild(opts[oi]);
-      needSigSelect.value = selected;
-    }
-    refreshNeedSigSelect();
-    needSigRow.appendChild(needSigSelect);
-    var needSigAddBtn = document.createElement('button');
-    needSigAddBtn.textContent = '添加';
-    needSigAddBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#f87171;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
-    needSigAddBtn.onclick = function () {
-      var nm = needSigSelect.value;
-      if (!nm) return;
-      if (needSigEntries.some(function(e) { return getNeedSigName(e) === nm; })) return;
-      needSigEntries.push({ name: nm, discount: 0.5 });
-      renderNeedSigList();
-      refreshNeedSigSelect();
-      needSigSelect.value = '';
-    };
-    needSigRow.appendChild(needSigAddBtn);
-    needSigSection.appendChild(needSigRow);
-
-    var needSigDefaultBtn = document.createElement('button');
-    needSigDefaultBtn.textContent = '载入默认列表';
-    needSigDefaultBtn.style.cssText = 'padding:4px 12px;border:1px solid #f87171;border-radius:4px;background:transparent;color:#f87171;font-size:11px;cursor:pointer;';
-    needSigDefaultBtn.onclick = function () {
-      var defaults = DEFAULT_NEED_SIG_WEAPONS;
-      for (var di = 0; di < defaults.length; di++) {
-        var dName = getNeedSigName(defaults[di]);
-        if (!needSigEntries.some(function(e) { return getNeedSigName(e) === dName; })) {
-          needSigEntries.push({ name: dName, discount: getNeedSigDiscount(defaults[di]) });
-        }
-      }
-      renderNeedSigList();
-      refreshNeedSigSelect();
-    };
-    needSigSection.appendChild(needSigDefaultBtn);
-    dialog.appendChild(needSigSection);
-
     // ===== 8.5 低命折扣系数 =====
     var flatDiscountSection = document.createElement('div');
     flatDiscountSection.style.cssText = 'margin-bottom:20px;border:1px solid #2a2a4a;border-radius:8px;padding:12px;background:#0a0a1a;';
@@ -1402,167 +1439,18 @@
     flatDiscountSection.appendChild(fdDefaultBtn);
     dialog.appendChild(flatDiscountSection);
 
-    // ===== 8.6 C6配队依赖 =====
-    var c6DepSection = document.createElement('div');
-    c6DepSection.style.cssText = 'margin-bottom:20px;border:1px solid #2a2a4a;border-radius:8px;padding:12px;background:#0a0a1a;';
-    var c6DepTitle = document.createElement('div');
-    c6DepTitle.style.cssText = 'font-size:14px;font-weight:600;color:#fbbf24;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    c6DepTitle.textContent = 'C6配队依赖（满命角色缺少关键队友时降级）';
-    c6DepSection.appendChild(c6DepTitle);
-    var c6DepDesc = document.createElement('p');
-    c6DepDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    c6DepDesc.innerHTML = '满命角色缺少关键队友时：C6权重降级（影响满命溢价）+ 角色价值打折（影响基础价值）。例如卡提希娅C6缺夏空时，权重从S(1.0)降到A(0.6)，角色价值×80%。';
-    c6DepSection.appendChild(c6DepDesc);
-
-    var c6DepList = document.createElement('div');
-    c6DepList.style.cssText = 'margin-bottom:8px;';
-    var c6DepEntries = [];
-    var c6DepConfig = w.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency || {};
-    for (var cdk in c6DepConfig) {
-      if (!c6DepConfig.hasOwnProperty(cdk)) continue;
-      var cdInfo = c6DepConfig[cdk];
-      c6DepEntries.push({
-        name: cdk,
-        teammate: Array.isArray(cdInfo.teammate) ? cdInfo.teammate.join(',') : (cdInfo.teammate || ''),
-        weightTier: cdInfo.weightTier || 'A',
-        valueDiscount: cdInfo.valueDiscount != null ? cdInfo.valueDiscount : 1.0
-      });
-    }
-    function renderC6DepList() {
-      c6DepList.innerHTML = '';
-      if (c6DepEntries.length === 0) { c6DepList.innerHTML = '<div style="font-size:12px;color:#555;padding:4px 0;">暂无C6配队依赖规则，可点击下方"载入默认"</div>'; return; }
-      for (var i = 0; i < c6DepEntries.length; i++) {
-        (function (idx) {
-          var e = c6DepEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #2a2a4a;border-radius:4px;margin-bottom:4px;background:#12122a;';
-          var info = document.createElement('div');
-          info.style.cssText = 'flex:1;font-size:12px;color:#e0e0e0;';
-          info.innerHTML = '<b style="color:#fbbf24;">' + e.name + '</b> 缺 <b style="color:#f87171;">' + e.teammate + '</b> → C6降' + e.weightTier + ' ×' + Math.round(e.valueDiscount * 100) + '%';
-          row.appendChild(info);
-          var editBtn = document.createElement('button');
-          editBtn.textContent = '编辑';
-          editBtn.style.cssText = 'padding:3px 10px;border:1px solid #4a4a6a;border-radius:4px;background:transparent;color:#60a5fa;font-size:11px;cursor:pointer;';
-          editBtn.onclick = function () {
-            openEditDialog({
-              title: '编辑C6配队依赖',
-              titleColor: '#fbbf24', saveColor: '#fbbf24',
-              fields: [
-                { label: '角色名称', key: 'name', type: 'select', value: e.name, options: allCharNames },
-                { label: '所需队友', key: 'teammate', type: 'select', value: e.teammate.split(',')[0], options: allCharNames, allowEmpty: true },
-                { label: '降级权重档位', key: 'weightTier', type: 'text', value: e.weightTier },
-                { label: '角色价值折扣（0-1）', key: 'valueDiscount', type: 'number', value: e.valueDiscount, min: 0, max: 1, step: 0.05 }
-              ],
-              onSave: function (vals) {
-                if (!vals.name) { alert('请输入角色名称'); return false; }
-                c6DepEntries[idx] = {
-                  name: vals.name,
-                  teammate: vals.teammate || '',
-                  weightTier: (vals.weightTier || 'A').toUpperCase(),
-                  valueDiscount: isNaN(parseFloat(vals.valueDiscount)) ? 1.0 : parseFloat(vals.valueDiscount)
-                };
-                renderC6DepList();
-                return true;
-              }
-            });
-          };
-          row.appendChild(editBtn);
-          var delBtn = document.createElement('button');
-          delBtn.textContent = '删除';
-          delBtn.className = 'del-btn';
-          delBtn.style.cssText = 'padding:3px 10px;border:1px solid #4a4a6a;border-radius:4px;background:transparent;color:#f87171;font-size:11px;cursor:pointer;';
-          delBtn.onclick = function () { c6DepEntries.splice(idx, 1); renderC6DepList(); };
-          row.appendChild(delBtn);
-          c6DepList.appendChild(row);
-        })(i);
-      }
-    }
-    renderC6DepList();
-    c6DepSection.appendChild(c6DepList);
-
-    var c6DepAddRow = document.createElement('div');
-    c6DepAddRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;';
-    var c6DepNameInput = document.createElement('select');
-    c6DepNameInput.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
-    var c6DepNamePlaceholder = document.createElement('option');
-    c6DepNamePlaceholder.value = ''; c6DepNamePlaceholder.textContent = '角色名称';
-    c6DepNameInput.appendChild(c6DepNamePlaceholder);
-    for (var dni = 0; dni < allCharNames.length; dni++) {
-      var c6no = document.createElement('option');
-      c6no.value = allCharNames[dni]; c6no.textContent = allCharNames[dni];
-      c6DepNameInput.appendChild(c6no);
-    }
-    c6DepAddRow.appendChild(c6DepNameInput);
-    var c6DepMateInput = document.createElement('select');
-    c6DepMateInput.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
-    var c6DepMatePlaceholder = document.createElement('option');
-    c6DepMatePlaceholder.value = ''; c6DepMatePlaceholder.textContent = '所需队友';
-    c6DepMateInput.appendChild(c6DepMatePlaceholder);
-    for (var dmi = 0; dmi < allCharNames.length; dmi++) {
-      var c6mo = document.createElement('option');
-      c6mo.value = allCharNames[dmi]; c6mo.textContent = allCharNames[dmi];
-      c6DepMateInput.appendChild(c6mo);
-    }
-    c6DepAddRow.appendChild(c6DepMateInput);
-    var c6DepTierInput = document.createElement('select');
-    c6DepTierInput.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
-    var tierOpts = ['S', 'A', 'B', 'C', 'D', 'E'];
-    for (var ti2 = 0; ti2 < tierOpts.length; ti2++) {
-      var opt = document.createElement('option');
-      opt.value = tierOpts[ti2]; opt.textContent = tierOpts[ti2];
-      c6DepTierInput.appendChild(opt);
-    }
-    c6DepTierInput.value = 'A';
-    c6DepAddRow.appendChild(c6DepTierInput);
-    var c6DepDiscountInput = document.createElement('input');
-    c6DepDiscountInput.type = 'number'; c6DepDiscountInput.min = '0'; c6DepDiscountInput.max = '1'; c6DepDiscountInput.step = '0.05'; c6DepDiscountInput.value = '0.8';
-    c6DepDiscountInput.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;';
-    c6DepAddRow.appendChild(c6DepDiscountInput);
-    var c6DepAddBtn = document.createElement('button');
-    c6DepAddBtn.textContent = '添加';
-    c6DepAddBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#fbbf24;color:#12122a;font-size:12px;font-weight:600;cursor:pointer;';
-    c6DepAddBtn.onclick = function () {
-      var nm = c6DepNameInput.value.trim();
-      var mt = c6DepMateInput.value.trim();
-      if (!nm || !mt) { alert('请输入角色名称和所需队友'); return; }
-      c6DepEntries.push({ name: nm, teammate: mt, weightTier: c6DepTierInput.value, valueDiscount: parseFloat(c6DepDiscountInput.value) || 1.0 });
-      c6DepNameInput.value = ''; c6DepMateInput.value = '';
-      renderC6DepList();
-    };
-    c6DepAddRow.appendChild(c6DepAddBtn);
-    c6DepSection.appendChild(c6DepAddRow);
-
-    var c6DepDefaultBtn = document.createElement('button');
-    c6DepDefaultBtn.textContent = '载入默认';
-    c6DepDefaultBtn.style.cssText = 'padding:4px 12px;border:1px solid #fbbf24;border-radius:4px;background:transparent;color:#fbbf24;font-size:11px;cursor:pointer;';
-    c6DepDefaultBtn.onclick = function () {
-      var defaults = DEFAULT_WEIGHTS.c6TeamDependency || {};
-      c6DepEntries.length = 0;
-      for (var dname in defaults) {
-        if (!defaults.hasOwnProperty(dname)) continue;
-        var dInfo = defaults[dname];
-        c6DepEntries.push({
-          name: dname,
-          teammate: Array.isArray(dInfo.teammate) ? dInfo.teammate.join(',') : (dInfo.teammate || ''),
-          weightTier: dInfo.weightTier || 'A',
-          valueDiscount: dInfo.valueDiscount != null ? dInfo.valueDiscount : 1.0
-        });
-      }
-      renderC6DepList();
-    };
-    c6DepSection.appendChild(c6DepDefaultBtn);
-    dialog.appendChild(c6DepSection);
+    // ===== 8.6 C6配队依赖（已合并到五星角色定价的「强绑」功能） =====
 
     // ===== 9. 其他权重 =====
     var weightsSection = document.createElement('div');
     weightsSection.style.cssText = 'margin-bottom:20px;';
     var wsTitle = document.createElement('div');
     wsTitle.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:12px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    wsTitle.textContent = '其他权重（热门/冷门参数 + 资源定价）';
+    wsTitle.textContent = '其他权重（资源定价 + 折扣参数）';
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, needSigDiscount: true, teamDepDiscount: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -1632,6 +1520,12 @@
         c6Entries.push({ count: DEFAULT_WEIGHTS.c6MultiBonus[ci].count, bonus: DEFAULT_WEIGHTS.c6MultiBonus[ci].bonus });
       }
       renderC6List();
+      // 重置满命溢价公式参数
+      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
+      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
+      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
+      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
+      updateC6Preview();
       // 重置满命抽数加成公式参数
       pullC6BaseInput.value = 5;
       pullC6BaseBonusInput.value = 0.5;
@@ -1659,30 +1553,12 @@
         teamMultiEntries.push({ count: DEFAULT_WEIGHTS.teamMultiBonus[tm].count, coef: DEFAULT_WEIGHTS.teamMultiBonus[tm].coef });
       }
       renderTeamMultiList();
-      // 重置需要专武
-      needSigEntries.length = 0;
-      needSigEntries.push.apply(needSigEntries, DEFAULT_NEED_SIG_WEAPONS);
-      renderNeedSigList();
       // 重置低命折扣系数
       flatDiscountEntries.length = 0;
       for (var fdi = 0; fdi < DEFAULT_WEIGHTS.flatDiscountRules.length; fdi++) {
         flatDiscountEntries.push({ tiers: [].concat(DEFAULT_WEIGHTS.flatDiscountRules[fdi].tiers || []), maxConst: DEFAULT_WEIGHTS.flatDiscountRules[fdi].maxConst, discount: DEFAULT_WEIGHTS.flatDiscountRules[fdi].discount });
       }
       renderFlatDiscountList();
-      // 重置C6配队依赖
-      c6DepEntries.length = 0;
-      var defC6Dep = DEFAULT_WEIGHTS.c6TeamDependency || {};
-      for (var dname2 in defC6Dep) {
-        if (!defC6Dep.hasOwnProperty(dname2)) continue;
-        var dInfo2 = defC6Dep[dname2];
-        c6DepEntries.push({
-          name: dname2,
-          teammate: Array.isArray(dInfo2.teammate) ? dInfo2.teammate.join(',') : (dInfo2.teammate || ''),
-          weightTier: dInfo2.weightTier || 'A',
-          valueDiscount: dInfo2.valueDiscount != null ? dInfo2.valueDiscount : 1.0
-        });
-      }
-      renderC6DepList();
     };
 
     var cancelBtn = document.createElement('button');
@@ -1794,6 +1670,12 @@
       newW.pullC6Step = parseFloat(pullC6StepInput.value) || 0.1;
       newW.pullC6StepBonus = parseFloat(pullC6StepBonusInput.value) || 0.005;
 
+      // 收集满命溢价公式参数
+      newW.c6Base = parseFloat(c6BaseInp.value) || DEFAULT_WEIGHTS.c6Base;
+      newW.c6BaseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
+      newW.c6Step = parseFloat(c6StepInp.value) || DEFAULT_WEIGHTS.c6Step;
+      newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+
       // 收集满命溢价档位
       var newC6Bonus = [];
       for (var ci2 = 0; ci2 < c6Entries.length; ci2++) {
@@ -1826,23 +1708,18 @@
       }
       newW.flatDiscountRules = newFlatDiscountRules;
 
-      // 收集C6配队依赖
-      var newC6Dep = {};
-      for (var cdi = 0; cdi < c6DepEntries.length; cdi++) {
-        var depEntry = c6DepEntries[cdi];
-        if (!depEntry.name) continue;
-        var depMates = depEntry.teammate.split(/[,，]/).map(function (t) { return t.trim(); }).filter(function (t) { return t.length > 0; });
-        if (depMates.length === 0) continue;
-        newC6Dep[depEntry.name] = {
-          teammate: depMates.length === 1 ? depMates[0] : depMates,
-          weightTier: depEntry.weightTier || 'A',
-          valueDiscount: depEntry.valueDiscount != null ? depEntry.valueDiscount : 1.0
-        };
+      // 收集强绑队友（从角色定价行的 teamMates 生成）
+      var newTeamMates = {};
+      for (var tmi = 0; tmi < charEntries.length; tmi++) {
+        var te = charEntries[tmi];
+        if (te.teamMates && te.teamMates.length > 0) {
+          newTeamMates[te.name] = [].concat(te.teamMates);
+        }
       }
-      newW.c6TeamDependency = newC6Dep;
+      newW.teamMates = newTeamMates;
 
-      // 收集需要专武的角色
-      newW.needSigWeapons = needSigEntries;
+      // 收集需要专武的角色（从角色定价行的勾选状态生成）
+      newW.needSigWeapons = charEntries.filter(function(e) { return e.needSig; }).map(function(e) { return e.name; });
 
       // 从 teamPremiums 生成 teams 数组
       newW.teams = [];
