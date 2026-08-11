@@ -458,7 +458,7 @@ function getPageHTML() {
 
     <!-- 估值规则设置入口 -->
     <div class="settings-bar">
-      <button class="settings-btn" id="settings-btn" onclick="openValueSettings(reevaluateAfterSettings)">估值规则设置</button>
+      <button class="settings-btn" id="settings-btn" onclick="safeOpenValueSettings()">估值规则设置</button>
     </div>
 
     <!-- 按编号查询 -->
@@ -526,7 +526,7 @@ function getPageHTML() {
     <img src="/public/qq-group.jpg" alt="QQ群二维码" />
   </div>
 
-  <script src="/public/value-settings.js"></script>
+  <script src="/public/value-settings.js" onerror="window.__vsFailed=true"></script>
   <script>
     // ============================================================
     // 估值规则设置按钮状态更新
@@ -540,6 +540,17 @@ function getPageHTML() {
       } else {
         btn.textContent = '估值规则设置';
         btn.classList.remove('customized');
+      }
+    }
+
+    // 安全打开估值设置：如果 value-settings.js 加载失败则提示用户
+    function safeOpenValueSettings() {
+      if (typeof openValueSettings === 'function') {
+        openValueSettings(reevaluateAfterSettings);
+      } else if (window.__vsFailed) {
+        alert('估值设置面板加载失败，请刷新页面重试。如问题持续，请检查网络连接。');
+      } else {
+        alert('估值设置面板尚未加载完成，请稍后重试。');
       }
     }
     // 页面加载后初始化按钮状态
@@ -704,7 +715,7 @@ function getPageHTML() {
       const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
       const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(2) + '%' : d.costPerformance.toFixed(2) + '%';
       let summaryHtml = '';
-      summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="openValueSettings(reevaluateAfterSettings)">估值不准？修改规则</button>';
+      summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="safeOpenValueSettings()">估值不准？修改规则</button>';
       summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
       summaryHtml += '<div class="label">预估价值</div>';
       if (d.price && d.price > 0) {
