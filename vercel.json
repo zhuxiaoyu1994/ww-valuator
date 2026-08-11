@@ -11,7 +11,7 @@
       "destination": "/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/(.+)",
       "destination": "/api/server"
     }
   ]
