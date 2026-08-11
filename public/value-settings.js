@@ -74,8 +74,25 @@
     w.teamMultiBonus = (s.teamMultiBonus && s.teamMultiBonus.length) ? s.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
     w.flatDiscountRules = (s.flatDiscountRules && s.flatDiscountRules.length) ? s.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.c6TeamDependency = s.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
-    w.pullTiers = (s.pullTiers && s.pullTiers.length) ? s.pullTiers : defaults.pullTiers;
-    w.yellowTiers = (s.yellowTiers && s.yellowTiers.length) ? s.yellowTiers : defaults.yellowTiers;
+    w.pullBase = (s.pullBase != null) ? s.pullBase : (defaults.pullFormula || {}).pullBase;
+    w.pullBasePrice = (s.pullBasePrice != null) ? s.pullBasePrice : (defaults.pullFormula || {}).pullBasePrice;
+    w.pullStepPrice = (s.pullStepPrice != null) ? s.pullStepPrice : (defaults.pullFormula || {}).pullStepPrice;
+    w.yellowBase = (s.yellowBase != null) ? s.yellowBase : 40;
+    w.yellowStep = (s.yellowStep != null) ? s.yellowStep : 1;
+    w.yellowBaseCoeff = (s.yellowBaseCoeff != null) ? s.yellowBaseCoeff : 1.0;
+    w.yellowStepCoeff = (s.yellowStepCoeff != null) ? s.yellowStepCoeff : 0.01;
+    w.yellowMaxCoeff = (s.yellowMaxCoeff != null) ? s.yellowMaxCoeff : 3.0;
+    w.needSigDiscount = (s.needSigDiscount != null) ? s.needSigDiscount : 0.3;
+    w.teamDepDiscount = (s.teamDepDiscount != null) ? s.teamDepDiscount : 0.7;
+    w.c6Base = (s.c6Base != null) ? s.c6Base : 3;
+    w.c6BaseBonus = (s.c6BaseBonus != null) ? s.c6BaseBonus : 1.0;
+    w.c6Step = (s.c6Step != null) ? s.c6Step : 0.1;
+    w.c6StepBonus = (s.c6StepBonus != null) ? s.c6StepBonus : 0.05;
+    w.pullC6Base = (s.pullC6Base != null) ? s.pullC6Base : 5;
+    w.pullC6BaseBonus = (s.pullC6BaseBonus != null) ? s.pullC6BaseBonus : 0.5;
+    w.pullC6Step = (s.pullC6Step != null) ? s.pullC6Step : 0.1;
+    w.pullC6StepBonus = (s.pullC6StepBonus != null) ? s.pullC6StepBonus : 0.005;
+    w.teamMates = s.teamMates || (defaults.teamMates || {});
     w.charPrices = Object.assign({}, defaults.charPrices, s.charPrices || {});
     w.constPremiums = Object.assign({}, defaults.constPremiums, s.constPremiums || {});
     w.teamPremiums = s.teamPremiums || buildDefaultTeamPremiums(defaults.teams);
@@ -179,8 +196,8 @@
 
     var DEFAULT_WEIGHTS = defaults.weights;
     var DEFAULT_TEAMS = defaults.teams;
-    var DEFAULT_PULL_TIERS = defaults.pullTiers;
-    var DEFAULT_YELLOW_TIERS = defaults.yellowTiers;
+    // var DEFAULT_PULL_TIERS = defaults.pullTiers;   // 已迁移为公式参数
+    // var DEFAULT_YELLOW_TIERS = defaults.yellowTiers; // 已迁移为公式参数
     var DEFAULT_CONST_PREMIUMS = defaults.constPremiums;
     var DEFAULT_NEED_SIG_WEAPONS = defaults.needSigWeapons;
     var DEFAULT_CHAR_PRICES = defaults.charPrices;
@@ -496,132 +513,81 @@
 
     dialog.appendChild(charSection);
 
-    // ===== 2. 抽数阶梯定价 =====
+    // ===== 2. 抽数阶梯定价（公式） =====
     var pullSection = document.createElement('div');
     pullSection.style.cssText = 'margin-bottom:20px;';
     var pullTitle = document.createElement('div');
     pullTitle.style.cssText = 'font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    pullTitle.textContent = '抽数阶梯定价（资源越多每抽越值钱）';
+    pullTitle.textContent = '抽数阶梯定价（公式：每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动）';
     pullSection.appendChild(pullTitle);
     var pullDesc = document.createElement('p');
     pullDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    pullDesc.innerHTML = '抽数 = 星声/160 + 月相/160 + 余波珊瑚/8 + 浮金波纹 + 铸潮波纹。设置阶梯区间和每抽价值，资源越多越值钱。';
+    pullDesc.innerHTML = '抽数 = 星声/160 + 月相/160 + 余波珊瑚/8 + 浮金波纹 + 铸潮波纹。资源越多每抽越值钱，按公式线性递增。';
     pullSection.appendChild(pullDesc);
 
-    var pullList = document.createElement('div');
-    pullList.style.cssText = 'margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
-    var pullEntries = (w.pullTiers || DEFAULT_PULL_TIERS).map(function (e) { return { minPull: e.minPull, maxPull: e.maxPull, perPullPrice: e.perPullPrice }; });
+    // 公式参数输入区
+    var pullFormulaRow = document.createElement('div');
+    pullFormulaRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;';
 
-    function renderPullList() {
-      pullList.innerHTML = '';
-      if (pullEntries.length === 0) { pullList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无阶梯规则</div>'; return; }
-      pullEntries.sort(function (a, b) { return a.minPull - b.minPull; });
-      var prices = pullEntries.map(function(e) { return e.perPullPrice; });
-      var minPrice = Math.min.apply(null, prices);
-      var maxPrice = Math.max.apply(null, prices);
-      for (var i = 0; i < pullEntries.length; i++) {
-        (function (idx) {
-          var e = pullEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
+    // 基准抽数
+    var pullBaseLabel = document.createElement('span');
+    pullBaseLabel.textContent = '基准抽数';
+    pullBaseLabel.style.cssText = 'font-size:12px;color:#60a5fa;font-weight:600;';
+    pullFormulaRow.appendChild(pullBaseLabel);
+    var pullBaseInput = document.createElement('input');
+    pullBaseInput.type = 'number'; pullBaseInput.min = 0; pullBaseInput.step = 1;
+    pullBaseInput.value = w.pullBase != null ? w.pullBase : 200;
+    pullBaseInput.style.cssText = 'width:70px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#60a5fa;font-size:12px;text-align:center;';
+    pullBaseInput.title = '基准抽数（默认200）';
+    pullFormulaRow.appendChild(pullBaseInput);
 
-          var minInp = document.createElement('input');
-          minInp.type = 'number'; minInp.value = e.minPull; minInp.min = 0;
-          minInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
-          minInp.title = '起始抽数';
-          minInp.onchange = function() { e.minPull = parseInt(minInp.value) || 0; };
-          row.appendChild(minInp);
+    var pullBaseUnit = document.createElement('span');
+    pullBaseUnit.textContent = '抽'; pullBaseUnit.style.cssText = 'color:#555;font-size:11px;';
+    pullFormulaRow.appendChild(pullBaseUnit);
 
-          var dash = document.createElement('span');
-          dash.textContent = '~'; dash.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(dash);
+    // 分隔
+    var pullSep1 = document.createElement('span');
+    pullSep1.textContent = '|'; pullSep1.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
+    pullFormulaRow.appendChild(pullSep1);
 
-          var maxInp = document.createElement('input');
-          maxInp.type = 'number'; maxInp.value = (e.maxPull === Infinity ? '' : e.maxPull); maxInp.min = 0; maxInp.placeholder = '∞';
-          maxInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
-          maxInp.title = '结束抽数（留空表示无限）';
-          maxInp.onchange = function() {
-            var v = parseInt(maxInp.value);
-            e.maxPull = (isNaN(v) || v >= 99999) ? Infinity : v;
-          };
-          row.appendChild(maxInp);
+    // 基准每抽价格
+    var pullBasePriceLabel = document.createElement('span');
+    pullBasePriceLabel.textContent = '基准每抽价格';
+    pullBasePriceLabel.style.cssText = 'font-size:12px;color:#4ade80;font-weight:600;';
+    pullFormulaRow.appendChild(pullBasePriceLabel);
+    var pullBasePriceInput = document.createElement('input');
+    pullBasePriceInput.type = 'number'; pullBasePriceInput.min = 0; pullBasePriceInput.step = 0.1;
+    pullBasePriceInput.value = w.pullBasePrice != null ? w.pullBasePrice : 1.0;
+    pullBasePriceInput.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#4ade80;font-size:12px;text-align:right;font-weight:600;';
+    pullBasePriceInput.title = '基准每抽价格（元，默认1.0）';
+    pullFormulaRow.appendChild(pullBasePriceInput);
 
-          var unitLab = document.createElement('span');
-          unitLab.textContent = '抽'; unitLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(unitLab);
+    var pullBasePriceUnit = document.createElement('span');
+    pullBasePriceUnit.textContent = '元'; pullBasePriceUnit.style.cssText = 'color:#555;font-size:11px;';
+    pullFormulaRow.appendChild(pullBasePriceUnit);
 
-          var priceInp = document.createElement('input');
-          priceInp.type = 'number'; priceInp.value = e.perPullPrice; priceInp.step = 0.1; priceInp.min = 0;
-          priceInp.style.cssText = 'width:42px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-          priceInp.title = '每抽价值（元）';
-          priceInp.onchange = function() { e.perPullPrice = parseFloat(priceInp.value) || 0; };
-          row.appendChild(priceInp);
+    // 分隔
+    var pullSep2 = document.createElement('span');
+    pullSep2.textContent = '|'; pullSep2.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
+    pullFormulaRow.appendChild(pullSep2);
 
-          var yuanLab = document.createElement('span');
-          yuanLab.textContent = '元'; yuanLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(yuanLab);
+    // 每抽浮动价格
+    var pullStepPriceLabel = document.createElement('span');
+    pullStepPriceLabel.textContent = '每抽浮动';
+    pullStepPriceLabel.style.cssText = 'font-size:12px;color:#fbbf24;font-weight:600;';
+    pullFormulaRow.appendChild(pullStepPriceLabel);
+    var pullStepPriceInput = document.createElement('input');
+    pullStepPriceInput.type = 'number'; pullStepPriceInput.min = 0; pullStepPriceInput.step = 0.001;
+    pullStepPriceInput.value = w.pullStepPrice != null ? w.pullStepPrice : 0.002;
+    pullStepPriceInput.style.cssText = 'width:70px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#fbbf24;font-size:12px;text-align:right;font-weight:600;';
+    pullStepPriceInput.title = '每抽浮动价格（默认0.002）';
+    pullFormulaRow.appendChild(pullStepPriceInput);
 
-          var barWrap = document.createElement('div');
-          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
-          var barFill = document.createElement('div');
-          var ratio = maxPrice > minPrice ? (e.perPullPrice - minPrice) / (maxPrice - minPrice) : 0.5;
-          barFill.className = 'price-bar';
-          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#60a5fa,#4ade80);border-radius:3px;transition:width 0.2s;';
-          barWrap.appendChild(barFill);
-          row.appendChild(barWrap);
+    var pullStepPriceUnit = document.createElement('span');
+    pullStepPriceUnit.textContent = '元/抽'; pullStepPriceUnit.style.cssText = 'color:#555;font-size:11px;';
+    pullFormulaRow.appendChild(pullStepPriceUnit);
 
-          var delBtn = document.createElement('button');
-          delBtn.textContent = '×'; delBtn.title = '删除';
-          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
-          delBtn.onclick = function () { pullEntries.splice(idx, 1); renderPullList(); };
-          row.appendChild(delBtn);
-
-          pullList.appendChild(row);
-        })(i);
-      }
-    }
-
-    renderPullList();
-    pullSection.appendChild(pullList);
-
-    // 添加新抽数阶梯
-    var addPullRow = document.createElement('div');
-    addPullRow.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
-    var minInput = document.createElement('input');
-    minInput.type = 'number'; minInput.min = '0'; minInput.placeholder = '起始';
-    minInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
-    addPullRow.appendChild(minInput);
-    var dashSpan = document.createElement('span');
-    dashSpan.textContent = '~'; dashSpan.style.cssText = 'color:#555;font-size:10px;';
-    addPullRow.appendChild(dashSpan);
-    var maxInput = document.createElement('input');
-    maxInput.type = 'number'; maxInput.min = '0'; maxInput.placeholder = '∞';
-    maxInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:center;';
-    addPullRow.appendChild(maxInput);
-    var pullUnit = document.createElement('span');
-    pullUnit.textContent = '抽'; pullUnit.style.cssText = 'color:#555;font-size:10px;';
-    addPullRow.appendChild(pullUnit);
-    var priceInput = document.createElement('input');
-    priceInput.type = 'number'; priceInput.step = '0.1'; priceInput.placeholder = '每抽';
-    priceInput.style.cssText = 'width:46px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-    addPullRow.appendChild(priceInput);
-    var yuanSpan = document.createElement('span');
-    yuanSpan.textContent = '元'; yuanSpan.style.cssText = 'color:#555;font-size:10px;';
-    addPullRow.appendChild(yuanSpan);
-    var addPullBtn = document.createElement('button');
-    addPullBtn.textContent = '添加';
-    addPullBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#60a5fa;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
-    addPullBtn.onclick = function () {
-      var minVal = parseInt(minInput.value) || 0;
-      var maxRaw = parseInt(maxInput.value);
-      var maxVal = (isNaN(maxRaw) || maxRaw >= 99999) ? Infinity : maxRaw;
-      var priceVal = parseFloat(priceInput.value);
-      if (isNaN(priceVal) || priceVal < 0) { alert('请输入每抽价值'); return; }
-      pullEntries.push({ minPull: minVal, maxPull: maxVal, perPullPrice: priceVal });
-      renderPullList(); minInput.value = ''; maxInput.value = ''; priceInput.value = '';
-    };
-    addPullRow.appendChild(addPullBtn);
-    pullSection.appendChild(addPullRow);
+    pullSection.appendChild(pullFormulaRow);
 
     // 满命抽数加成档位
     var pullC6Divider = document.createElement('div');
@@ -896,146 +862,99 @@
     c6Section.appendChild(c6AddRow);
     dialog.appendChild(c6Section);
 
-    // ===== 5. 黄数阶梯系数 =====
+    // ===== 5. 有效金系数（公式） =====
     var yellowSection = document.createElement('div');
     yellowSection.style.cssText = 'margin-bottom:20px;';
     var yellowTitle = document.createElement('div');
     yellowTitle.style.cssText = 'font-size:14px;font-weight:600;color:#fbbf24;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    yellowTitle.textContent = '黄数阶梯系数（黄数越多越稀有，估值乘以此系数）';
+    yellowTitle.textContent = '有效金系数（公式：系数 = 基准系数 + floor((有效金 - 基准) / 每档金数) × 每档浮动）';
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '黄数 = 五星角色数 + 五星武器数。黄数越多越难搜集，最终估值 = 各项估值之和 × 匹配档位的系数。';
+    yellowDesc.innerHTML = '有效金 = S/A/B/C/D级角色(1+命座数) + 其专武精炼数。系数越高账号越值钱。';
     yellowSection.appendChild(yellowDesc);
 
-    var yellowList = document.createElement('div');
-    yellowList.style.cssText = 'margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
-    var yellowEntries = (w.yellowTiers || DEFAULT_YELLOW_TIERS).map(function (e) { return { minYellow: e.minYellow, maxYellow: e.maxYellow, coefficient: e.coefficient }; });
+    // 公式参数输入区
+    var yellowFormulaRow = document.createElement('div');
+    yellowFormulaRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;';
 
-    function renderYellowList() {
-      yellowList.innerHTML = '';
-      if (yellowEntries.length === 0) { yellowList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无阶梯规则，可点击下方"载入默认"快速添加</div>'; return; }
-      yellowEntries.sort(function (a, b) { return a.minYellow - b.minYellow; });
-      var coefs = yellowEntries.map(function(e) { return e.coefficient; });
-      var minCoef = Math.min.apply(null, coefs);
-      var maxCoef = Math.max.apply(null, coefs);
-      for (var i = 0; i < yellowEntries.length; i++) {
-        (function (idx) {
-          var e = yellowEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
+    // 基准有效金
+    var yellowBaseLabel = document.createElement('span');
+    yellowBaseLabel.textContent = '基准有效金';
+    yellowBaseLabel.style.cssText = 'font-size:12px;color:#fbbf24;font-weight:600;';
+    yellowFormulaRow.appendChild(yellowBaseLabel);
+    var yellowBaseInput = document.createElement('input');
+    yellowBaseInput.type = 'number'; yellowBaseInput.min = 0; yellowBaseInput.step = 1;
+    yellowBaseInput.value = w.yellowBase != null ? w.yellowBase : 40;
+    yellowBaseInput.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#fbbf24;font-size:12px;text-align:center;';
+    yellowBaseInput.title = '基准有效金（默认40）';
+    yellowFormulaRow.appendChild(yellowBaseInput);
 
-          var minInp = document.createElement('input');
-          minInp.type = 'number'; minInp.value = e.minYellow; minInp.min = 0;
-          minInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
-          minInp.title = '起始黄数';
-          minInp.onchange = function() { e.minYellow = parseInt(minInp.value) || 0; };
-          row.appendChild(minInp);
+    var ySep1 = document.createElement('span');
+    ySep1.textContent = '|'; ySep1.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
+    yellowFormulaRow.appendChild(ySep1);
 
-          var dash = document.createElement('span');
-          dash.textContent = '~'; dash.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(dash);
+    // 每档金数
+    var yellowStepLabel = document.createElement('span');
+    yellowStepLabel.textContent = '每档金数';
+    yellowStepLabel.style.cssText = 'font-size:12px;color:#fbbf24;font-weight:600;';
+    yellowFormulaRow.appendChild(yellowStepLabel);
+    var yellowStepInput = document.createElement('input');
+    yellowStepInput.type = 'number'; yellowStepInput.min = 1; yellowStepInput.step = 1;
+    yellowStepInput.value = w.yellowStep != null ? w.yellowStep : 1;
+    yellowStepInput.style.cssText = 'width:50px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#fbbf24;font-size:12px;text-align:center;';
+    yellowStepInput.title = '每档金数（默认1）';
+    yellowFormulaRow.appendChild(yellowStepInput);
 
-          var maxInp = document.createElement('input');
-          maxInp.type = 'number'; maxInp.value = (e.maxYellow === Infinity ? '' : e.maxYellow); maxInp.min = 0; maxInp.placeholder = '∞';
-          maxInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
-          maxInp.title = '结束黄数（留空表示无限）';
-          maxInp.onchange = function() {
-            var v = parseInt(maxInp.value);
-            e.maxYellow = (isNaN(v) || v >= 99999) ? Infinity : v;
-          };
-          row.appendChild(maxInp);
+    var ySep2 = document.createElement('span');
+    ySep2.textContent = '|'; ySep2.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
+    yellowFormulaRow.appendChild(ySep2);
 
-          var unitLab = document.createElement('span');
-          unitLab.textContent = '黄'; unitLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(unitLab);
+    // 基准系数
+    var yellowBaseCoeffLabel = document.createElement('span');
+    yellowBaseCoeffLabel.textContent = '基准系数';
+    yellowBaseCoeffLabel.style.cssText = 'font-size:12px;color:#4ade80;font-weight:600;';
+    yellowFormulaRow.appendChild(yellowBaseCoeffLabel);
+    var yellowBaseCoeffInput = document.createElement('input');
+    yellowBaseCoeffInput.type = 'number'; yellowBaseCoeffInput.min = 0; yellowBaseCoeffInput.step = 0.05;
+    yellowBaseCoeffInput.value = w.yellowBaseCoeff != null ? w.yellowBaseCoeff : 1.0;
+    yellowBaseCoeffInput.style.cssText = 'width:55px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#4ade80;font-size:12px;text-align:right;font-weight:600;';
+    yellowBaseCoeffInput.title = '基准系数（默认1.0）';
+    yellowFormulaRow.appendChild(yellowBaseCoeffInput);
 
-          var xLab = document.createElement('span');
-          xLab.textContent = '×'; xLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
-          row.appendChild(xLab);
+    var ySep3 = document.createElement('span');
+    ySep3.textContent = '|'; ySep3.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
+    yellowFormulaRow.appendChild(ySep3);
 
-          var coefInp = document.createElement('input');
-          coefInp.type = 'number'; coefInp.value = e.coefficient; coefInp.min = 0; coefInp.step = 0.05;
-          coefInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-          coefInp.title = '系数（如1.5表示×1.5）';
-          coefInp.onchange = function() { e.coefficient = parseFloat(coefInp.value) || 0; };
-          row.appendChild(coefInp);
+    // 每档浮动
+    var yellowStepCoeffLabel = document.createElement('span');
+    yellowStepCoeffLabel.textContent = '每档浮动';
+    yellowStepCoeffLabel.style.cssText = 'font-size:12px;color:#60a5fa;font-weight:600;';
+    yellowFormulaRow.appendChild(yellowStepCoeffLabel);
+    var yellowStepCoeffInput = document.createElement('input');
+    yellowStepCoeffInput.type = 'number'; yellowStepCoeffInput.min = 0; yellowStepCoeffInput.step = 0.005;
+    yellowStepCoeffInput.value = w.yellowStepCoeff != null ? w.yellowStepCoeff : 0.01;
+    yellowStepCoeffInput.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#60a5fa;font-size:12px;text-align:right;font-weight:600;';
+    yellowStepCoeffInput.title = '每档浮动（默认0.01）';
+    yellowFormulaRow.appendChild(yellowStepCoeffInput);
 
-          var barWrap = document.createElement('div');
-          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
-          var barFill = document.createElement('div');
-          var ratio = maxCoef > minCoef ? (e.coefficient - minCoef) / (maxCoef - minCoef) : 0.5;
-          barFill.className = 'price-bar';
-          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#fbbf24,#4ade80);border-radius:3px;transition:width 0.2s;';
-          barWrap.appendChild(barFill);
-          row.appendChild(barWrap);
+    var ySep4 = document.createElement('span');
+    ySep4.textContent = '|'; ySep4.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
+    yellowFormulaRow.appendChild(ySep4);
 
-          var delBtn = document.createElement('button');
-          delBtn.textContent = '×'; delBtn.title = '删除';
-          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
-          delBtn.onclick = function () { var di = yellowEntries.indexOf(e); if (di >= 0) yellowEntries.splice(di, 1); renderYellowList(); };
-          row.appendChild(delBtn);
+    // 系数上限
+    var yellowMaxCoeffLabel = document.createElement('span');
+    yellowMaxCoeffLabel.textContent = '系数上限';
+    yellowMaxCoeffLabel.style.cssText = 'font-size:12px;color:#e94560;font-weight:600;';
+    yellowFormulaRow.appendChild(yellowMaxCoeffLabel);
+    var yellowMaxCoeffInput = document.createElement('input');
+    yellowMaxCoeffInput.type = 'number'; yellowMaxCoeffInput.min = 0; yellowMaxCoeffInput.step = 0.1;
+    yellowMaxCoeffInput.value = w.yellowMaxCoeff != null ? w.yellowMaxCoeff : 3.0;
+    yellowMaxCoeffInput.style.cssText = 'width:55px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e94560;font-size:12px;text-align:right;font-weight:600;';
+    yellowMaxCoeffInput.title = '系数上限（0=不限，默认3.0）';
+    yellowFormulaRow.appendChild(yellowMaxCoeffInput);
 
-          yellowList.appendChild(row);
-        })(i);
-      }
-    }
-
-    renderYellowList();
-    yellowSection.appendChild(yellowList);
-
-    // 载入默认按钮 + 添加新黄数阶梯
-    var yellowAddRow = document.createElement('div');
-    yellowAddRow.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
-
-    var loadYellowDefaultBtn = document.createElement('button');
-    loadYellowDefaultBtn.textContent = '载入默认';
-    loadYellowDefaultBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;margin-right:6px;';
-    loadYellowDefaultBtn.onclick = function () {
-      yellowEntries.length = 0;
-      for (var i = 0; i < DEFAULT_YELLOW_TIERS.length; i++) {
-        yellowEntries.push({ minYellow: DEFAULT_YELLOW_TIERS[i].minYellow, maxYellow: DEFAULT_YELLOW_TIERS[i].maxYellow, coefficient: DEFAULT_YELLOW_TIERS[i].coefficient });
-      }
-      renderYellowList();
-    };
-    yellowAddRow.appendChild(loadYellowDefaultBtn);
-
-    var yMinInput = document.createElement('input');
-    yMinInput.type = 'number'; yMinInput.min = '0'; yMinInput.placeholder = '起始';
-    yMinInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
-    yellowAddRow.appendChild(yMinInput);
-    var yDash = document.createElement('span');
-    yDash.textContent = '~'; yDash.style.cssText = 'color:#555;font-size:10px;';
-    yellowAddRow.appendChild(yDash);
-    var yMaxInput = document.createElement('input');
-    yMaxInput.type = 'number'; yMaxInput.min = '0'; yMaxInput.placeholder = '∞';
-    yMaxInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
-    yellowAddRow.appendChild(yMaxInput);
-    var yUnit = document.createElement('span');
-    yUnit.textContent = '黄'; yUnit.style.cssText = 'color:#555;font-size:10px;';
-    yellowAddRow.appendChild(yUnit);
-    var yXLab = document.createElement('span');
-    yXLab.textContent = '×'; yXLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
-    yellowAddRow.appendChild(yXLab);
-    var yCoefInput = document.createElement('input');
-    yCoefInput.type = 'number'; yCoefInput.min = '0'; yCoefInput.step = '0.05'; yCoefInput.placeholder = '系数';
-    yCoefInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-    yellowAddRow.appendChild(yCoefInput);
-    var addYellowBtn = document.createElement('button');
-    addYellowBtn.textContent = '添加';
-    addYellowBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#fbbf24;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
-    addYellowBtn.onclick = function () {
-      var min = parseInt(yMinInput.value);
-      var maxRaw = parseInt(yMaxInput.value);
-      var max = (isNaN(maxRaw) || maxRaw >= 99999) ? Infinity : maxRaw;
-      var coef = parseFloat(yCoefInput.value);
-      if (isNaN(min) || min < 0) { alert('起始黄数不能为负'); return; }
-      if (isNaN(coef) || coef < 0) { alert('请输入有效的系数'); return; }
-      yellowEntries.push({ minYellow: min, maxYellow: max, coefficient: coef });
-      renderYellowList(); yMinInput.value = ''; yMaxInput.value = ''; yCoefInput.value = '';
-    };
-    yellowAddRow.appendChild(addYellowBtn);
-    yellowSection.appendChild(yellowAddRow);
+    yellowSection.appendChild(yellowFormulaRow);
     dialog.appendChild(yellowSection);
 
     // ===== 6. 配队溢价 =====
@@ -1704,7 +1623,7 @@
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, needSigDiscount: true, teamDepDiscount: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -1764,12 +1683,10 @@
         }
       }
       renderCharList();
-      // 重置抽数阶梯
-      pullEntries.length = 0;
-      for (var pi2 = 0; pi2 < DEFAULT_PULL_TIERS.length; pi2++) {
-        pullEntries.push({ minPull: DEFAULT_PULL_TIERS[pi2].minPull, maxPull: DEFAULT_PULL_TIERS[pi2].maxPull, perPullPrice: DEFAULT_PULL_TIERS[pi2].perPullPrice });
-      }
-      renderPullList();
+      // 重置抽数公式参数
+      pullBaseInput.value = 200;
+      pullBasePriceInput.value = 1.0;
+      pullStepPriceInput.value = 0.002;
       // 重置满命溢价
       c6Entries.length = 0;
       for (var ci = 0; ci < DEFAULT_WEIGHTS.c6MultiBonus.length; ci++) {
@@ -1786,12 +1703,12 @@
       for (var tw = 0; tw < c6TierList.length; tw++) {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
       }
-      // 重置黄数阶梯
-      yellowEntries.length = 0;
-      for (var yi2 = 0; yi2 < DEFAULT_YELLOW_TIERS.length; yi2++) {
-        yellowEntries.push({ minYellow: DEFAULT_YELLOW_TIERS[yi2].minYellow, maxYellow: DEFAULT_YELLOW_TIERS[yi2].maxYellow, coefficient: DEFAULT_YELLOW_TIERS[yi2].coefficient });
-      }
-      renderYellowList();
+      // 重置有效金公式参数
+      yellowBaseInput.value = 40;
+      yellowStepInput.value = 1;
+      yellowBaseCoeffInput.value = 1.0;
+      yellowStepCoeffInput.value = 0.01;
+      yellowMaxCoeffInput.value = 3.0;
       // 重置配队
       teamEntries.length = 0;
       for (var td = 0; td < DEFAULT_TEAMS.length; td++) {
@@ -1928,16 +1845,10 @@
       newTeamMultiBonus.sort(function (a, b) { return a.count - b.count; });
       newW.teamMultiBonus = newTeamMultiBonus;
 
-      // 收集抽数阶梯（去重：相同区间只保留最后一条）
-      var newPullTiers = [];
-      var pullSeen = {};
-      for (var pli = 0; pli < pullEntries.length; pli++) {
-        var plKey = pullEntries[pli].minPull + '-' + pullEntries[pli].maxPull;
-        pullSeen[plKey] = { minPull: pullEntries[pli].minPull, maxPull: pullEntries[pli].maxPull, perPullPrice: pullEntries[pli].perPullPrice };
-      }
-      for (var plk in pullSeen) { if (pullSeen.hasOwnProperty(plk)) newPullTiers.push(pullSeen[plk]); }
-      newPullTiers.sort(function (a, b) { return a.minPull - b.minPull; });
-      newW.pullTiers = newPullTiers;
+      // 收集抽数公式参数
+      newW.pullBase = parseFloat(pullBaseInput.value) || 200;
+      newW.pullBasePrice = parseFloat(pullBasePriceInput.value) || 1.0;
+      newW.pullStepPrice = parseFloat(pullStepPriceInput.value) || 0.002;
 
       // 收集抽数满命加成档位
       var newPullC6Bonus = [];
@@ -1962,16 +1873,12 @@
       }
       newW.c6TierWeights = newC6Weights;
 
-      // 收集黄数阶梯（去重：相同区间只保留最后一条）
-      var newYellowTiers = [];
-      var yellowSeen = {};
-      for (var yi3 = 0; yi3 < yellowEntries.length; yi3++) {
-        var yKey = yellowEntries[yi3].minYellow + '-' + yellowEntries[yi3].maxYellow;
-        yellowSeen[yKey] = { minYellow: yellowEntries[yi3].minYellow, maxYellow: yellowEntries[yi3].maxYellow, coefficient: yellowEntries[yi3].coefficient };
-      }
-      for (var yk in yellowSeen) { if (yellowSeen.hasOwnProperty(yk)) newYellowTiers.push(yellowSeen[yk]); }
-      newYellowTiers.sort(function (a, b) { return a.minYellow - b.minYellow; });
-      newW.yellowTiers = newYellowTiers;
+      // 收集有效金公式参数
+      newW.yellowBase = parseFloat(yellowBaseInput.value) || 40;
+      newW.yellowStep = parseFloat(yellowStepInput.value) || 1;
+      newW.yellowBaseCoeff = parseFloat(yellowBaseCoeffInput.value) || 1.0;
+      newW.yellowStepCoeff = parseFloat(yellowStepCoeffInput.value) || 0.01;
+      newW.yellowMaxCoeff = parseFloat(yellowMaxCoeffInput.value) || 3.0;
 
       // 收集低命折扣系数规则
       var newFlatDiscountRules = [];

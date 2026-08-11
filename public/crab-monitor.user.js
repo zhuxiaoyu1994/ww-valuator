@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      1.31.0
-// @description  监控螃蟹网鸣潮账号列表，自动发现高性价比账号
+// @version      1.32.0
+// @description  监控螃蟹网+盼之鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/product/*
@@ -11,6 +11,7 @@
 // @connect      api.day.app
 // @connect      sctapi.ftqq.com
 // @connect      www.pushplus.plus
+// @connect      www.pzds.com
 // @run-at       document-start
 // ==/UserScript==
 
@@ -18,7 +19,7 @@
   'use strict';
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 8;
+  const CONFIG_VERSION = 13;
 
   // ============================================================
   // 常量定义
@@ -26,8 +27,8 @@
 
   // 角色定价表
   const CHAR_TIERS = {
-    S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '卡提希娅'] },
-    A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '秧秧玄翎', '弗洛洛', '洛瑟菈'] },
+    S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅'] },
+    A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '弗洛洛', '洛瑟菈'] },
     B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '露西', '嘉贝莉娜', '奥古斯塔', '仇远', '尤诺', '陆赫斯', '赞妮', '布兰特', '守岸人', '西格莉卡'] },
     C: { price: 5, isHot: false, chars: ['露帕', '珂莱塔', '菲比', '坎特蕾拉', '椿'] },
     D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡'] },
@@ -85,66 +86,22 @@
 
   // 默认权重参数（参考性价比脚本 CONFIG.weights）
   const DEFAULT_WEIGHTS = {
-    // 五星武器
-    fiveStarWeapon: 0,       // 每个五星武器基础价（精1）
-    weaponRefineBonus: 2,    // 每级精炼额外加价
-    // 热门角色里程碑倍率
-    hotC0Mult: 1,          // C0+专武 倍率
-    hotC3Mult: 2,          // C3+专武 倍率
-    hotC6Mult: 3,          // C6+专武 倍率
-    hotStepMult: 0.08,     // 过渡命(C1/C2/C4/C5)每命加成倍率
-    hotNoSigMult: 0.5,     // 无专武倍率
-    hotNoSigC6Mult: 0.5,   // C6无专武倍率
-    // 冷门角色加分参数
-    coldStep: 0,           // 每命加价
-    coldC3Bonus: 0,        // C3额外加价
-    coldC6Bonus: 0,        // C6额外加价
-    coldSigBonus: 0,       // 有专武额外加价
     // 满命溢价（加权满命数档位）
     c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
-    c6MultiBonus: [
-      { count: 1.5, bonus: 0.25 },
-      { count: 2, bonus: 0.5 },
-      { count: 2.5, bonus: 0.75 },
-      { count: 3, bonus: 1 },
-      { count: 3.5, bonus: 1.25 },
-      { count: 4, bonus: 1.5 },
-      { count: 4.5, bonus: 1.75 },
-      { count: 5, bonus: 2 },
-      { count: 5.5, bonus: 2.25 },
-      { count: 6, bonus: 2.5 },
-      { count: 6.5, bonus: 2.75 },
-      { count: 7, bonus: 3 },
-      { count: 7.5, bonus: 3.25 },
-      { count: 8, bonus: 3.5 },
-      { count: 8.5, bonus: 3.75 },
-      { count: 9, bonus: 4 },
-      { count: 9.5, bonus: 4.25 },
-      { count: 10, bonus: 4.5 },
-    ],
+    c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
+    // 满命溢价公式参数（加权满命数 → 角色价值溢价系数）
+    c6Base: 3,          // 基准加权满命数
+    c6BaseBonus: 1.0,   // 基准溢价（100%）
+    c6Step: 0.1,        // 每档满命数
+    c6StepBonus: 0.05,  // 每档浮动（5%）
     // 资源定价
     outfit: 0,             // 服饰/皮肤单价
-    motoAccessory: 0,      // 摩托饰品单价
     motoFrame: 0,          // 车架模组单价
-    paint: 0,              // 涂装单价
-    // 满命抽数加成档位（加权满命数 → 抽数价值加成系数）
-    pullC6Bonus: [
-      { count: 1, bonus: 0.15 },
-      { count: 2, bonus: 0.25 },
-      { count: 3, bonus: 0.35 },
-      { count: 4, bonus: 0.45 },
-      { count: 5, bonus: 0.5 },
-      { count: 6, bonus: 0.55 },
-      { count: 7, bonus: 0.6 },
-      { count: 8, bonus: 0.65 },
-      { count: 9, bonus: 0.7 },
-      { count: 10, bonus: 0.75 },
-      { count: 11, bonus: 0.8 },
-      { count: 12, bonus: 0.85 },
-      { count: 13, bonus: 0.9 },
-      { count: 14, bonus: 0.95 },
-      { count: 15, bonus: 1 },
-    ],
+    // 满命抽数加成公式参数（加权满命数 → 抽数价值加成系数）
+    pullC6Base: 5,          // 基准加权满命数
+    pullC6BaseBonus: 0.5,   // 基准加成（50%）
+    pullC6Step: 0.1,        // 每档满命数
+    pullC6StepBonus: 0.005, // 每档浮动（0.5%）
     // 多配队额外系数
     teamMultiBonus: [
       { count: 2, coef: 1.05 },
@@ -163,12 +120,18 @@
     ],
     // C6配队依赖：满命角色缺少关键队友时，降级C6权重 + 打折角色价值
     c6TeamDependency: {
-      '卡提希娅': { teammate: '夏空', weightTier: 'A', valueDiscount: 0.8 },
-      '弗洛洛': { teammate: '坎特蕾拉', weightTier: 'A', valueDiscount: 0.85 },
-      '露西': { teammate: '丽贝卡', weightTier: 'B', valueDiscount: 0.85 },
-      '绯雪': { teammate: '洛瑟菈', weightTier: 'A', valueDiscount: 0.85 },
-      '秧秧玄翎': { teammate: '千咲', weightTier: 'A', valueDiscount: 0.85 },
+      '卡提希娅': { teammate: '夏空', weightTier: 'A', valueDiscount: 0.7 },
+      '弗洛洛': { teammate: '坎特蕾拉', weightTier: 'A', valueDiscount: 0.7 },
+      '露西': { teammate: '丽贝卡', weightTier: 'B', valueDiscount: 0.7 },
+      '绯雪': { teammate: '洛瑟菈', weightTier: 'A', valueDiscount: 0.7 },
+      '秧秧玄翎': { teammate: '穗穗', weightTier: 'A', valueDiscount: 0.7 },
     },
+    // 无专武折扣（需要专武的角色，无专武时价值 × 此值）
+    needSigDiscount: 0.3,
+    // 强绑角色折扣（强绑队友全不在场时，角色价值 × 此值）
+    teamDepDiscount: 0.7,
+    // 有效金系数上限
+    yellowMaxCoeff: 3.0,
   };
 
   // 默认配队列表
@@ -187,28 +150,17 @@
     { name: '秧千穗', members: ['秧秧玄翎', '千咲', '穗穗'], multiplier: 1.4 },
   ];
 
-  // 默认抽数阶梯定价
-  const DEFAULT_PULL_TIERS = [
-    { minPull: 0, maxPull: 100, perPullPrice: 0.7 },
-    { minPull: 100, maxPull: 200, perPullPrice: 0.9 },
-    { minPull: 200, maxPull: 300, perPullPrice: 1.1 },
-    { minPull: 300, maxPull: 400, perPullPrice: 1.3 },
-    { minPull: 400, maxPull: 500, perPullPrice: 1.5 },
-    { minPull: 500, maxPull: 600, perPullPrice: 1.7 },
-    { minPull: 600, maxPull: 700, perPullPrice: 1.9 },
-    { minPull: 700, maxPull: 800, perPullPrice: 2.1 },
-    { minPull: 800, maxPull: 900, perPullPrice: 2.3 },
-    { minPull: 900, maxPull: 1000, perPullPrice: 2.5 },
-    { minPull: 1000, maxPull: 1100, perPullPrice: 2.7 },
-    { minPull: 1100, maxPull: 1200, perPullPrice: 2.9 },
-    { minPull: 1200, maxPull: 1300, perPullPrice: 3.1 },
-    { minPull: 1300, maxPull: 1400, perPullPrice: 3.3 },
-    { minPull: 1400, maxPull: 9999, perPullPrice: 3.5 },
-  ];
+  // 默认抽数阶梯定价公式参数
+  const DEFAULT_PULL_FORMULA = {
+    pullBase: 200,        // 基准抽数
+    pullBasePrice: 1.0,   // 基准每抽价格（元）
+    pullStepPrice: 0.002, // 每多一抽的浮动价格
+  };
 
-  // 默认黄数阶梯系数
+  // 默认有效金阶梯系数
   const DEFAULT_YELLOW_TIERS = [
-    { minYellow: 0, maxYellow: 10, coefficient: 0.45 },
+    { minYellow: 0, maxYellow: 5, coefficient: 0.45 },
+    { minYellow: 5, maxYellow: 10, coefficient: 0.5 },
     { minYellow: 10, maxYellow: 20, coefficient: 0.55 },
     { minYellow: 20, maxYellow: 30, coefficient: 0.65 },
     { minYellow: 30, maxYellow: 40, coefficient: 0.75 },
@@ -228,23 +180,23 @@
     { minYellow: 170, maxYellow: 180, coefficient: 1.55 },
     { minYellow: 180, maxYellow: 190, coefficient: 1.6 },
     { minYellow: 190, maxYellow: 200, coefficient: 1.65 },
-    { minYellow: 200, maxYellow: 210, coefficient: 1.7 },
-    { minYellow: 210, maxYellow: 220, coefficient: 1.75 },
-    { minYellow: 220, maxYellow: 230, coefficient: 1.8 },
-    { minYellow: 230, maxYellow: 240, coefficient: 1.85 },
-    { minYellow: 240, maxYellow: 250, coefficient: 1.9 },
-    { minYellow: 250, maxYellow: 260, coefficient: 1.95 },
-    { minYellow: 260, maxYellow: 270, coefficient: 2 },
-    { minYellow: 270, maxYellow: 280, coefficient: 2.05 },
-    { minYellow: 280, maxYellow: 290, coefficient: 2.1 },
-    { minYellow: 290, maxYellow: 300, coefficient: 2.15 },
-    { minYellow: 300, maxYellow: 999, coefficient: 2.2 },
+    { minYellow: 200, maxYellow: 210, coefficient: 1.69 },
+    { minYellow: 210, maxYellow: 220, coefficient: 1.73 },
+    { minYellow: 220, maxYellow: 230, coefficient: 1.77 },
+    { minYellow: 230, maxYellow: 240, coefficient: 1.8 },
+    { minYellow: 240, maxYellow: 250, coefficient: 1.83 },
+    { minYellow: 250, maxYellow: 260, coefficient: 1.86 },
+    { minYellow: 260, maxYellow: 270, coefficient: 1.89 },
+    { minYellow: 270, maxYellow: 280, coefficient: 1.92 },
+    { minYellow: 280, maxYellow: 290, coefficient: 1.95 },
+    { minYellow: 290, maxYellow: 300, coefficient: 1.98 },
+    { minYellow: 300, maxYellow: 999, coefficient: 2 },
   ];
 
   // 默认角色价格表（用户自定义）
   const DEFAULT_CHAR_PRICES = {
     '爱弥斯': 45, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
-    '琳奈': 25, '守岸人': 20, '千咲': 25, '穗穗': 35, '莫宁': 25, '秧秧玄翎': 35,
+    '琳奈': 25, '守岸人': 15, '千咲': 25, '穗穗': 35, '莫宁': 25, '秧秧玄翎': 40,
     '洛瑟菈': 25,
     '达妮娅': 15, '夏空': 15,
     '露西': 20, '嘉贝莉娜': 18, '奥古斯塔': 18, '仇远': 15, '尤诺': 15,
@@ -258,39 +210,39 @@
   const DEFAULT_CONST_PREMIUMS = {
     '爱弥斯': { '1': 45, '2': 90, '3': 135, '4': 140, '5': 155, '6': 270 },
     '绯雪': { '1': 60, '2': 80, '3': 120, '4': 150, '5': 180, '6': 320 },
-    '卡提希娅': { '1': 35, '2': 70, '3': 105, '4': 110, '5': 125, '6': 210 },
-    '弗洛洛': { '1': 35, '2': 70, '3': 105, '4': 115, '5': 125, '6': 210 },
-    '奥古斯塔': { '2': 20, '6': 100 },
-    '尤诺': { '2': 20, '6': 60 },
-    '露西': { '3': 30, '6': 100 },
-    '忌炎': { '6': 30 },
-    '守岸人': { '2': 20, '6': 50 },
-    '赞妮': { '2': 20, '6': 100 },
-    '椿': { '6': 50 },
-    '莫宁': { '1': 20, '6': 100 },
-    '珂莱塔': { '6': 50 },
     '秧秧玄翎': { '1': 40, '2': 80, '3': 120, '4': 130, '5': 140, '6': 240 },
-    '千咲': { '3': 50, '6': 100 },
-    '嘉贝莉娜': { '3': 30, '6': 100 },
-    '陆赫斯': { '6': 100 },
-    '西格莉卡': { '6': 100 },
-    '丽贝卡': { '3': 20, '6': 50 },
-    '仇远': { '3': 30, '6': 50 },
-    '今汐': { '6': 30 },
-    '吟霖': { '6': 30 },
-    '坎特蕾拉': { '2': 30, '6': 50 },
-    '夏空': { '2': 20, '3': 30, '6': 50 },
-    '布兰特': { '6': 80 },
-    '长离': { '6': 30 },
-    '相里要': { '6': 30 },
-    '洛可可': { '6': 30 },
-    '琳奈': { '6': 80 },
-    '洛瑟菈': { '6': 80 },
-    '折枝': { '6': 20 },
-    '菲比': { '2': 30, '6': 80 },
-    '露帕': { '6': 80 },
-    '达妮娅': { '2': 30, '6': 80 },
-    '穗穗': { '2': 50, '6': 120 },
+    '卡提希娅': { '1': 35, '2': 70, '3': 105, '4': 110, '5': 125, '6': 210 },
+    '琳奈': { '1': 10, '2': 20, '3': 40, '4': 50, '5': 60, '6': 80 },
+    '千咲': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+    '穗穗': { '1': 20, '2': 50, '3': 60, '4': 70, '5': 80, '6': 120 },
+    '莫宁': { '1': 20, '2': 40, '3': 50, '4': 60, '5': 70, '6': 80 },
+    '弗洛洛': { '1': 35, '2': 70, '3': 105, '4': 115, '5': 125, '6': 210 },
+    '洛瑟菈': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+    '达妮娅': { '1': 15, '2': 30, '3': 40, '4': 50, '5': 60, '6': 80 },
+    '夏空': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '露西': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+    '嘉贝莉娜': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+    '奥古斯塔': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+    '仇远': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '尤诺': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '陆赫斯': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 100 },
+    '赞妮': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '布兰特': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+    '守岸人': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '西格莉卡': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 100 },
+    '露帕': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+    '珂莱塔': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '菲比': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '坎特蕾拉': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '椿': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+    '忌炎': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+    '吟霖': { '1': 3, '2': 6, '3': 10, '4': 14, '5': 17, '6': 20 },
+    '相里要': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+    '今汐': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+    '长离': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
+    '折枝': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
+    '洛可可': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
+    '丽贝卡': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
   };
 
   // 生成默认角色价格表（从 DEFAULT_CHAR_PRICES，回退到 CHAR_TIERS）
@@ -317,30 +269,44 @@
     return result;
   }
 
-  // 需要专武的角色列表
+  // 需要专武的角色列表（无专武时按 needSigDiscount 折扣，折扣值在权重中配置）
   const DEFAULT_NEED_SIG_WEAPONS = [
-    '爱弥斯', '绯雪', '卡提希娅', '千咲', '今汐', '椿', '忌炎',
-    '嘉贝莉娜', '弗洛洛', '珂莱塔', '西格莉卡', '赞妮', '陆赫斯',
+    '爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅', '弗洛洛', '嘉贝莉娜',
+    '陆赫斯', '赞妮', '西格莉卡', '珂莱塔', '椿', '忌炎', '今汐',
   ];
+
+  // 默认强绑队友配置
+  const DEFAULT_TEAM_MATES = {
+    '爱弥斯': ['千咲', '琳奈', '莫宁', '达妮娅'],
+    '绯雪': ['洛瑟菈'],
+    '秧秧玄翎': ['穗穗'],
+    '卡提希娅': ['夏空'],
+    '弗洛洛': ['仇远', '坎特蕾拉'],
+    '洛瑟菈': ['绯雪'],
+    '露西': ['丽贝卡'],
+    '嘉贝莉娜': ['仇远'],
+    '奥古斯塔': ['尤诺'],
+    '仇远': ['嘉贝莉娜', '弗洛洛'],
+    '尤诺': ['奥古斯塔', '忌炎'],
+    '陆赫斯': ['琳奈'],
+    '赞妮': ['菲比'],
+    '布兰特': ['露帕'],
+    '西格莉卡': ['仇远'],
+    '露帕': ['布兰特'],
+    '珂莱塔': ['折枝'],
+    '菲比': ['赞妮'],
+    '坎特蕾拉': ['弗洛洛', '西格莉卡'],
+    '椿': ['守岸人'],
+    '吟霖': ['今汐', '相里要'],
+    '相里要': ['吟霖'],
+  };
 
   // 权重标签定义（供设置面板显示用）
   const WEIGHT_LABELS = {
-    fiveStarWeapon: { label: '五星武器(基础)', desc: '每个五星武器基础价（元，精1）' },
-    weaponRefineBonus: { label: '武器精炼加成', desc: '每级精炼额外加价（元，精5=+4×此值）' },
-    hotC0Mult: { label: '热门C0+专武倍率', desc: 'C0+专武 = 基础价 × 此倍率（1.0=100%）' },
-    hotC3Mult: { label: '热门C3+专武倍率', desc: 'C3+专武 = 基础价 × 此倍率（2.0=200%，价值翻倍）' },
-    hotC6Mult: { label: '热门C6+专武倍率', desc: 'C6+专武 = 基础价 × 此倍率（3.0=300%，满命三倍）' },
-    hotStepMult: { label: '热门过渡命倍率', desc: 'C1/C2/C4/C5每命加成 = 基础价 × 此倍率（0.08=8%）' },
-    hotNoSigMult: { label: '热门无专武倍率', desc: '热门角色无专武 = 基础价 × 此倍率（0.15=仅值15%）' },
-    hotNoSigC6Mult: { label: '热门C6无专武倍率', desc: '满命但无专武 = 基础价 × 此倍率（0.25=25%）' },
-    coldStep: { label: '冷门每命加分', desc: '冷门角色每命加此值（元）' },
-    coldC3Bonus: { label: '冷门C3加分', desc: '冷门角色3命额外加此值（元）' },
-    coldC6Bonus: { label: '冷门C6加分', desc: '冷门角色满命额外加此值（元）' },
-    coldSigBonus: { label: '冷门专武加分', desc: '冷门角色有专武额外加此值（元）' },
     outfit: { label: '服饰/皮肤', desc: '每个服饰/皮肤（元）' },
-    motoAccessory: { label: '摩托饰品', desc: '每个摩托饰品（元）' },
     motoFrame: { label: '车架模组', desc: '每个车架模组（元）' },
-    paint: { label: '涂装', desc: '每个涂装（元）' },
+    needSigDiscount: { label: '无专武折扣', desc: '需要专武的角色无专武时，价值×此值（0.3=30%）' },
+    teamDepDiscount: { label: '强绑折扣', desc: '强绑队友全不在场时，角色价值×此值（0.7=70%）' },
   };
 
   // 存储键
@@ -363,6 +329,13 @@
     options: 'https://api-pc.pxb7.com/api/product/web/gameBizProd/selectSearchOption',
   };
 
+  // 盼之平台URL（SSR HTML抓取，无需API token）
+  const PZDS_URLS = {
+    list: 'https://www.pzds.com/goodsList/303',
+    detail: 'https://www.pzds.com/goodsDetails',
+    pay: 'https://www.pzds.com/confirmOrder/fullPayment?status=null&orderNo&gameId=303&goodsNo=',
+  };
+
   // 配置常量
   const CONFIG = {
     refreshInterval: 60000,      // 列表刷新间隔 60秒
@@ -371,7 +344,7 @@
     maxTableRows: 1200,           // 表格最大行数
     maxSeenIds: 2000,              // 已见ID最大数量
     maxNotifiedIds: 500,         // 已通知ID最大数量
-    scanPages: 3,                // 默认扫描页数
+    scanPages: 1,                // 默认扫描页数（每页20条，15秒刷新间隔下1页足够覆盖新增）
   };
 
   // 构建角色名查找表
@@ -408,15 +381,22 @@
   let notifyEnabled = false;     // 通知开关
   let threshold = 20;            // 估值阈值(%)
   let notifyRatioThreshold = 40; // 通知性价比阈值(%)
-  let notifyDiffThreshold = 150; // 通知差价阈值(元)
+  let notifyDiffThreshold = 150; // 通知差价阈值(元)，作为阶梯外的默认值
+  // 估价阶梯差价阈值：按估值范围设置不同差价阈值，未命中任何阶梯时回退到 notifyDiffThreshold
+  let notifyDiffTiers = [
+    { minValue: 500, maxValue: 1000, minDiff: 100 },
+    { minValue: 1000, maxValue: 3000, minDiff: 0 },
+    { minValue: 3000, maxValue: 6000, minDiff: 200 },
+  ];
   let autoBuyEnabled = true;   // 自动购买开关
   let autoBuyDiff = 380;        // 自动购买差价阈值(元)
   let notifyMinValue = 400;      // 通知估值下限(元)，低于此值不通知
   let notifyMinPrice = 0;        // 通知标价下限(元)，低于此值不通知
   let notifyMaxPrice = 20000;    // 通知标价上限(元)，高于此值不通知（0=不限制）
   let autoBuyMaxPrice = 6000;    // 自动抢购标价上限(元)，高于此值不抢购（0=不限制）
-  let refreshIntervalSec = 20;   // 刷新间隔（秒），可设置
+  let refreshIntervalSec = 15;   // 刷新间隔（秒），可设置
   let flashSaleEnabled = true;   // 秒杀库池监控开关
+  let pzdsEnabled = false;      // 盼之平台监控开关
   // 检查已售设置
   let soldCheckRatio = 40;       // 检查已售的性价比阈值(%)
   let soldCheckDiff = 0;         // 检查已售的差价阈值(元)
@@ -586,8 +566,16 @@
     // 第一次：尝试完整写入
     if (saveStorage(STORAGE_KEYS.table, tableData, true)) return true;
 
-    // 第一次失败：先清理其他存储释放空间，再重试
-    console.warn('[鸣潮监控] 表格数据写入失败，清理冗余存储后重试...');
+    // 第一次失败：移除200条差价最低的数据后重试
+    console.warn('[鸣潮监控] 表格数据写入失败，移除低差价数据后重试...');
+    removeLowDiffRows();
+    if (saveStorage(STORAGE_KEYS.table, tableData, true)) {
+      console.log('[鸣潮监控] 移除低差价数据后写入成功');
+      return true;
+    }
+
+    // 第二次失败：清理其他存储释放空间，再重试
+    console.warn('[鸣潮监控] 仍失败，清理冗余存储后重试...');
     cleanupSeenIds();
     cleanupNotifiedIds();
     if (saveStorage(STORAGE_KEYS.table, tableData, true)) {
@@ -595,7 +583,7 @@
       return true;
     }
 
-    // 第二次失败：精简每行数据（移除 valuation / parsed 等大字段）
+    // 第三次失败：精简每行数据（移除 valuation / parsed 等大字段）
     console.warn('[鸣潮监控] 仍失败，尝试精简数据...');
     const slimmed = tableData.map(slimRow);
     if (saveStorage(STORAGE_KEYS.table, slimmed, true)) {
@@ -604,7 +592,7 @@
       return true;
     }
 
-    // 第三次失败：按重要性排序后减少行数重试
+    // 第四次失败：按重要性排序后减少行数重试
     const importanceSorted = tableData.slice().sort((a, b) => {
       const timeA = a.firstSeen || a.listTime || 0;
       const timeB = b.firstSeen || b.listTime || 0;
@@ -628,7 +616,7 @@
       }
     }
 
-    // 第四次失败：超精简（截断 showTitle 至 500 + 移除 parsed/fingerprint）
+    // 第五次失败：超精简（截断 showTitle 至 500 + 移除 parsed/fingerprint）
     console.warn('[鸣潮监控] 常规精简仍失败，尝试超精简模式...');
     for (let limit = 800; limit >= 100; limit -= 100) {
       const ultraTrimmed = importanceSorted.slice(0, limit).map(ultraSlimRow);
@@ -650,7 +638,7 @@
 
   /**
    * 加载估值权重（合并默认值与localStorage中的用户设置）
-   * @returns {object} 权重对象（含 charPrices / constPremiums / teamPremiums / pullTiers / yellowTiers）
+   * @returns {object} 权重对象（含 charPrices / constPremiums / teamPremiums / pullBase / yellowBase）
    */
   function loadWeights() {
     // 配置版本检查：版本号不匹配时，有自定义配置则提醒，无则自动更新版本号
@@ -673,28 +661,32 @@
     // 嵌套对象单独合并
     w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
     // 列表类配置：优先用用户保存的，否则用默认
-    w.c6MultiBonus = (saved.c6MultiBonus && saved.c6MultiBonus.length) ? saved.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
-    w.pullC6Bonus = (saved.pullC6Bonus && saved.pullC6Bonus.length) ? saved.pullC6Bonus : DEFAULT_WEIGHTS.pullC6Bonus;
+    // 满命溢价公式参数
+    w.c6Base = (saved.c6Base != null) ? saved.c6Base : DEFAULT_WEIGHTS.c6Base;
+    w.c6BaseBonus = (saved.c6BaseBonus != null) ? saved.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
+    w.c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
+    w.c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+    // 满命抽数加成公式参数
+    w.pullC6Base = (saved.pullC6Base != null) ? saved.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
+    w.pullC6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
+    w.pullC6Step = (saved.pullC6Step != null) ? saved.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
+    w.pullC6StepBonus = (saved.pullC6StepBonus != null) ? saved.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
     w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
     w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
-    w.pullTiers = (saved.pullTiers && saved.pullTiers.length) ? saved.pullTiers : DEFAULT_PULL_TIERS;
-    w.yellowTiers = (saved.yellowTiers && saved.yellowTiers.length) ? saved.yellowTiers : DEFAULT_YELLOW_TIERS;
+    // 抽数阶梯定价公式参数
+    w.pullBase = (saved.pullBase != null) ? saved.pullBase : DEFAULT_PULL_FORMULA.pullBase;
+    w.pullBasePrice = (saved.pullBasePrice != null) ? saved.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
+    w.pullStepPrice = (saved.pullStepPrice != null) ? saved.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
+    // 有效金系数公式参数
+    w.yellowBase = (saved.yellowBase != null) ? saved.yellowBase : 40;
+    w.yellowStep = (saved.yellowStep != null) ? saved.yellowStep : 1;
+    w.yellowBaseCoeff = (saved.yellowBaseCoeff != null) ? saved.yellowBaseCoeff : 1.0;
+    w.yellowStepCoeff = (saved.yellowStepCoeff != null) ? saved.yellowStepCoeff : 0.01;
+    w.yellowMaxCoeff = (saved.yellowMaxCoeff != null) ? saved.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
 
     // 改进5：角色价格表（按角色名，合并默认值与用户自定义）
     w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
-    // 用户已删除的角色列表（用于设置面板初始化时跳过）
-    w.deletedChars = saved.deletedChars || ['卡卡罗', '秧秧', '卡提希娅', '秧秧玄翎'];
-    // 用户自定义角色级别覆盖
-    w.charTierOverride = saved.charTierOverride || {};
-    for (var ctoName in w.charTierOverride) {
-      if (!w.charTierOverride.hasOwnProperty(ctoName)) continue;
-      if (CHAR_LOOKUP[ctoName]) {
-        var ctoTier = w.charTierOverride[ctoName];
-        CHAR_LOOKUP[ctoName].tier = ctoTier;
-        CHAR_LOOKUP[ctoName].isHot = ctoTier === 'S' || ctoTier === 'A' || ctoTier === 'B';
-      }
-    }
     // 数据迁移：旧的'秧秧'是五星角色(价格35)，现已改名为'秧秧玄翎'
     // 四星'秧秧'价格应为0，如果旧配置中'秧秧'价格>0说明是旧数据，重置为0
     if (saved.charPrices && saved.charPrices['秧秧'] != null && saved.charPrices['秧秧'] > 0) {
@@ -712,11 +704,30 @@
         w.teams.push({ name: teamName, members: t.chars || [], multiplier: t.multiplier || 1.0 });
       }
     }
-    // 改进5：需要专武的角色列表
-    w.needSigWeapons = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+    // 需要专武的角色列表（兼容旧格式，统一为名字数组）
+    var rawNeedSig = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+    w.needSigWeapons = rawNeedSig.map(function(n) { return typeof n === 'string' ? n : n.name; });
+    // 无专武折扣（可配置）
+    w.needSigDiscount = (saved.needSigDiscount != null) ? saved.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
+    // 强绑队友配置
+    w.teamMates = saved.teamMates || DEFAULT_TEAM_MATES;
+    // 强绑折扣（可配置）
+    w.teamDepDiscount = (saved.teamDepDiscount != null) ? saved.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount;
     // 用户自定义专武映射覆盖
     if (saved.sigWeaponsOverride) {
       w.sigWeaponsOverride = saved.sigWeaponsOverride;
+    }
+    // 用户已删除的角色列表
+    w.deletedChars = saved.deletedChars || [];
+    // 用户自定义角色级别覆盖
+    w.charTierOverride = saved.charTierOverride || {};
+    for (var ctoName in w.charTierOverride) {
+      if (!w.charTierOverride.hasOwnProperty(ctoName)) continue;
+      if (CHAR_LOOKUP[ctoName]) {
+        var ctoTier = w.charTierOverride[ctoName];
+        CHAR_LOOKUP[ctoName].tier = ctoTier;
+        CHAR_LOOKUP[ctoName].isHot = ctoTier === 'S' || ctoTier === 'A' || ctoTier === 'B';
+      }
     }
     return w;
   }
@@ -774,9 +785,12 @@
     // 格式1: keyword：数字
     const match1 = text.match(new RegExp(escaped + '[：:]\\s*(\\d[\\d,]*)', 'i'));
     if (match1) return parseInt(match1[1].replace(/,/g, ''));
-    // 格式2: 【keyword】：数字（盼之格式）
+    // 格式2: 【keyword】：数字（盼之详情页格式）
     const match2 = text.match(new RegExp('【' + escaped + '】\\s*[：:]?\\s*(\\d[\\d,]*)', 'i'));
     if (match2) return parseInt(match2[1].replace(/,/g, ''));
+    // 格式3: 数字+keyword（盼之列表页内联格式，如"1088星声"）
+    const match3 = text.match(new RegExp('(\\d[\\d,]*)\\s*' + escaped, 'i'));
+    if (match3) return parseInt(match3[1].replace(/,/g, ''));
     return 0;
   }
 
@@ -808,21 +822,28 @@
           constNum = parseInt(m[1]);
           name = m[2];
         } else {
-          // 尝试 "XXX(满命)"
-          m = item.match(/^(.+?)\(满命\)$/);
+          // 尝试 "X+Y角色名"（盼之标题格式，如 "0+1爱弥斯"、"3+0维里奈"）
+          m = item.match(/^(\d+)\+(\d+)(.+)$/);
           if (m) {
-            name = m[1];
-            constNum = 6;
+            constNum = parseInt(m[1]);
+            name = m[3].replace(/^常驻武器/, '');
           } else {
-            // 尝试 "XXX(N命)"
-            m = item.match(/^(.+?)\((\d+)命\)$/);
+            // 尝试 "XXX(满命)"
+            m = item.match(/^(.+?)\(满命\)$/);
             if (m) {
               name = m[1];
-              constNum = parseInt(m[2]);
+              constNum = 6;
             } else {
-              // 仅名称
-              name = item;
-              constNum = 0;
+              // 尝试 "XXX(N命)"
+              m = item.match(/^(.+?)\((\d+)命\)$/);
+              if (m) {
+                name = m[1];
+                constNum = parseInt(m[2]);
+              } else {
+                // 仅名称
+                name = item;
+                constNum = 0;
+              }
             }
           }
         }
@@ -1128,110 +1149,72 @@
     const charPrices = w.charPrices || {};
     const base = charPrices[char.name] != null ? charPrices[char.name] : char.price;
 
-    if (char.isHot) {
-      // 热门角色：里程碑估值
-      const c0Mult = w.hotC0Mult != null ? w.hotC0Mult : 1.0;
-      const c3Mult = w.hotC3Mult != null ? w.hotC3Mult : 2.0;
-      const c6Mult = w.hotC6Mult != null ? w.hotC6Mult : 3.0;
-      const stepMult = w.hotStepMult != null ? w.hotStepMult : 0.08;
-      const noSigMult = w.hotNoSigMult != null ? w.hotNoSigMult : 0.15;
-      const noSigC6Mult = w.hotNoSigC6Mult != null ? w.hotNoSigC6Mult : 0.25;
-
-      if (!hasSigWeapon) {
-        // 热门角色无专武，大幅贬值
-        if (char.const >= 6) return base * noSigC6Mult;
-        return base * noSigMult;
-      }
-      // 有专武：按里程碑计算
-      if (char.const >= 6) return base * c6Mult;
-      if (char.const >= 3) return base * c3Mult;
-      if (char.const >= 1) return base * (c0Mult + char.const * stepMult); // C1/C2/C4/C5 过渡命
-      return base * c0Mult;
-    } else {
-      // 冷门角色：基础价 + 命数加分
-      const coldStep = w.coldStep != null ? w.coldStep : 1;
-      const coldC3Bonus = w.coldC3Bonus != null ? w.coldC3Bonus : 3;
-      const coldC6Bonus = w.coldC6Bonus != null ? w.coldC6Bonus : 5;
-      const coldSigBonus = w.coldSigBonus != null ? w.coldSigBonus : 2;
-
-      let val = base + char.const * coldStep;
-      if (char.const >= 3) val += coldC3Bonus;
-      if (char.const >= 6) val += coldC6Bonus;
-      if (hasSigWeapon) val += coldSigBonus;
-      return val;
-    }
-  }
-
-  /**
-   * 计算抽数阶梯价值（从 weights.pullTiers 读取阶梯）
-   * 按阶梯区间累加计算（保留原累计逻辑），并返回当前所处阶梯信息
-   * @param {number} pulls - 总抽数
-   * @returns {object} { pulls, perPull, tierLabel, total }
-   */
-  function calculatePullValue(pulls) {
-    const tiers = (weights && weights.pullTiers) || DEFAULT_PULL_TIERS;
-    // 去重：相同区间只保留一条（修复历史数据重复问题）
-    const dedupMap = {};
-    for (const t of tiers) {
-      const key = (t.minPull || 0) + '-' + (t.maxPull == null ? 'inf' : t.maxPull);
-      dedupMap[key] = t;
-    }
-    const deduped = Object.values(dedupMap);
-    const sorted = [...deduped].sort((a, b) => (a.minPull || 0) - (b.minPull || 0));
-
-    // 找到抽数所在的阶梯，按该阶梯单价 × 总抽数计算（不分段累计）
-    let matchedTier = sorted[0] || { minPull: 0, maxPull: Infinity, perPullPrice: 0.8 };
-    for (const tier of sorted) {
-      const minPull = tier.minPull != null ? tier.minPull : 0;
-      const maxPull = (tier.maxPull == null || tier.maxPull === Infinity) ? Infinity : tier.maxPull;
-      if (pulls >= minPull && pulls < maxPull) {
-        matchedTier = { ...tier, minPull, maxPull };
+    // 检查是否在"需要专武"列表中（可配置折扣 needSigDiscount）
+    var needSigList = w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+    var _nsDiscount = w.needSigDiscount != null ? w.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
+    for (var ni = 0; ni < needSigList.length; ni++) {
+      var entry = needSigList[ni];
+      var entryName = typeof entry === 'string' ? entry : entry.name;
+      if (entryName === char.name) {
+        if (!hasSigWeapon) {
+          return base * _nsDiscount;
+        }
         break;
       }
     }
 
-    const value = pulls * matchedTier.perPullPrice;
-    const matchedMax = (matchedTier.maxPull == null || matchedTier.maxPull === Infinity) ? Infinity : matchedTier.maxPull;
-    const tierLabel = matchedMax === Infinity
-      ? matchedTier.minPull + '抽+'
-      : matchedTier.minPull + '~' + matchedMax + '抽';
+    // 纯基础价，命座价值由 per-character 溢价控制
+    return base;
+  }
+
+  /**
+   * 计算抽数价值（公式：每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动）
+   * @param {number} pulls - 总抽数
+   * @returns {object} { pulls, perPull, tierLabel, total }
+   */
+  function calculatePullValue(pulls) {
+    var base = (weights && weights.pullBase != null) ? weights.pullBase : DEFAULT_PULL_FORMULA.pullBase;
+    var basePrice = (weights && weights.pullBasePrice != null) ? weights.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
+    var stepPrice = (weights && weights.pullStepPrice != null) ? weights.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
+
+    var perPull = basePrice + (pulls - base) * stepPrice;
+    if (perPull < 0) perPull = 0;
+
+    var value = pulls * perPull;
+    var tierLabel = pulls + '抽';
 
     return {
       pulls: Math.round(pulls),
-      perPull: matchedTier.perPullPrice,
+      perPull: Math.round(perPull * 1000) / 1000,
       tierLabel: tierLabel,
       total: Math.round(value),
     };
   }
 
   /**
-   * 计算黄数系数（从 weights.yellowTiers 读取阶梯）
-   * @param {number} yellowCount - 黄数
+   * 计算有效金系数（公式：baseCoeff + floor((yellowCount - base) / step) * stepCoeff）
+   * @param {number} yellowCount - 有效金数
    * @returns {object} { yellowCount, coefficient, tierLabel }
    */
   function getYellowCoeff(yellowCount) {
-    const rawTiers = (weights && weights.yellowTiers) || DEFAULT_YELLOW_TIERS;
-    // 去重：相同区间只保留一条（修复历史数据重复问题）
-    const dedupMap = {};
-    for (const t of rawTiers) {
-      const key = (t.minYellow || 0) + '-' + (t.maxYellow == null ? 'inf' : t.maxYellow);
-      dedupMap[key] = t;
-    }
-    const tiers = Object.values(dedupMap);
-    let matchedTier = tiers[0] || { minYellow: 0, maxYellow: Infinity, coefficient: 0.3 };
-    for (const tier of tiers) {
-      const maxYellow = (tier.maxYellow == null || tier.maxYellow === Infinity) ? Infinity : tier.maxYellow;
-      if (yellowCount >= tier.minYellow && yellowCount < maxYellow) {
-        matchedTier = { ...tier, maxYellow };
-        break;
-      }
-    }
-    const tierLabel = matchedTier.maxYellow === Infinity
-      ? matchedTier.minYellow + '黄+'
-      : matchedTier.minYellow + '~' + matchedTier.maxYellow + '黄';
+    var base = (weights && weights.yellowBase != null) ? weights.yellowBase : 40;
+    var step = (weights && weights.yellowStep != null) ? weights.yellowStep : 1;
+    var baseCoeff = (weights && weights.yellowBaseCoeff != null) ? weights.yellowBaseCoeff : 1.0;
+    var stepCoeff = (weights && weights.yellowStepCoeff != null) ? weights.yellowStepCoeff : 0.01;
+    var maxCoeff = (weights && weights.yellowMaxCoeff != null) ? weights.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
+
+    var tierIndex = Math.floor((yellowCount - base) / step);
+    var coefficient = baseCoeff + tierIndex * stepCoeff;
+    if (coefficient < 0.1) coefficient = 0.1;
+    if (maxCoeff > 0 && coefficient > maxCoeff) coefficient = maxCoeff;
+
+    var tierStart = base + tierIndex * step;
+    var tierEnd = tierStart + step;
+    var tierLabel = tierStart + '~' + tierEnd + '有效';
+
     return {
       yellowCount: yellowCount,
-      coefficient: matchedTier.coefficient,
+      coefficient: Math.round(coefficient * 1000) / 1000,
       tierLabel: tierLabel,
     };
   }
@@ -1242,10 +1225,19 @@
    * @param {string} keyword - 关键词
    * @returns {Array} 条目列表
    */
+  function isDescriptiveJunk(s) {
+    if (!s) return true;
+    // 含【】括号描述（如"详情看图【官服】【官方截图】"）
+    if (/【.+?】/.test(s)) return true;
+    // 含账号交易常见描述词
+    if (/(详情|看图|官服|截图|私聊|联系|微信|加微|加v|\+v|qq|议价|包赔|回收|代售|租号|出售|买号|诚收|甩卖|清仓|特价|秒杀|送号|免费|包邮|担保|验号|包过)/i.test(s)) return true;
+    return false;
+  }
+
   function extractListItems(text, keyword) {
     const section = extractSection(text, keyword);
     if (!section) return [];
-    return section.split(/[,，、\s;；]+/).filter(s => s.length > 0);
+    return section.split(/[,，、\s;；]+/).filter(s => s.length > 0).filter(s => !isDescriptiveJunk(s));
   }
 
   /**
@@ -1316,65 +1308,54 @@
       });
     }
 
-    // 1.5 C6配队依赖检查：满命角色缺少关键队友时，降级C6权重 + 打折角色价值
-    const c6DepConfig = w.c6TeamDependency || {};
-    const c6DepNotes = [];
+    // 1.5 强绑队友检查：角色缺少强绑队友时，价值打折（适用于所有命座，不限C6）
+    var _teamMatesConfig = w.teamMates || {};
+    // 向后兼容：从旧 c6TeamDependency 迁移
+    var _oldC6DepConfig = w.c6TeamDependency || {};
+    for (var _ocd in _oldC6DepConfig) {
+      if (!_oldC6DepConfig.hasOwnProperty(_ocd)) continue;
+      if (_teamMatesConfig[_ocd]) continue;
+      var _ocdInfo = _oldC6DepConfig[_ocd];
+      var _ocdMates = Array.isArray(_ocdInfo.teammate) ? _ocdInfo.teammate : [_ocdInfo.teammate];
+      if (_ocdMates.length > 0 && _ocdMates[0]) _teamMatesConfig[_ocd] = [].concat(_ocdMates);
+    }
+    var _teamDepDiscount = w.teamDepDiscount != null ? w.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount;
+    const teamDepNotes = [];
     const charNamesSet = new Set(parsed.characters.map(c => c.name));
     for (const cb of charBreakdown) {
-      if (cb.const < 6) continue;
-      const dep = c6DepConfig[cb.name];
-      if (!dep || !dep.teammate) continue;
-      const depTeammates = Array.isArray(dep.teammate) ? dep.teammate : [dep.teammate];
-      const hasTeammate = depTeammates.some(t => charNamesSet.has(t));
+      const mates = _teamMatesConfig[cb.name];
+      if (!mates || !Array.isArray(mates) || mates.length === 0) continue;
+      const hasTeammate = mates.some(t => charNamesSet.has(t));
       if (!hasTeammate) {
-        // 1. 降级C6权重
-        const originalWeight = c6Weights[cb.tier] != null ? c6Weights[cb.tier] : (FULL_CONST_WEIGHT[cb.tier] || 0);
-        const newTier = dep.weightTier || 'A';
-        const newWeight = c6Weights[newTier] != null ? c6Weights[newTier] : (FULL_CONST_WEIGHT[newTier] || 0);
-        weightedFullConst += newWeight - originalWeight;
-        // 2. 打折角色价值
-        const discount = dep.valueDiscount != null ? dep.valueDiscount : 1.0;
-        if (discount < 1.0) {
-          const originalVal = cb.value;
-          const discountedVal = Math.round(originalVal * discount);
-          charValue -= originalVal - discountedVal;
-          cb.value = discountedVal;
-          const cd = charDetails.find(c => c.name === cb.name);
-          if (cd) cd.value = discountedVal;
-        }
-        c6DepNotes.push(cb.name + '缺' + depTeammates.join('/') + ' C6降' + newTier + (discount < 1.0 ? ' x' + Math.round(discount * 100) + '%' : ''));
+        const originalVal = cb.value;
+        const discountedVal = Math.round(originalVal * _teamDepDiscount);
+        charValue -= originalVal - discountedVal;
+        cb.value = discountedVal;
+        const cd = charDetails.find(c => c.name === cb.name);
+        if (cd) cd.value = discountedVal;
+        teamDepNotes.push(cb.name + '缺' + mates.join('/') + ' x' + Math.round(_teamDepDiscount * 100) + '%');
       }
     }
 
-    // 2. 满命溢价（使用 weights.c6MultiBonus 档位）
+    // 2. 满命溢价（公式：基准溢价 + (加权满命 - 基准) / 每档 × 每档浮动）
     // 注意：保持与原版一致，溢价以全部角色价值 charValue 为基数
     let fullConstPremium = 0;
     const c6BonusNotes = [];
-    const c6BonusRules = w.c6MultiBonus || [];
     const allC6Chars = charBreakdown.filter(cb => cb.const >= 6 && cb.tier && cb.tier !== 'E');
     const tierCounts = {};
     for (const cb of allC6Chars) {
       tierCounts[cb.tier] = (tierCounts[cb.tier] || 0) + 1;
     }
-    // 计算满命加成系数（用于满命溢价）
-    let c6BonusMultiplier = 0;
-    if (c6BonusRules.length > 0) {
-      const sortedRules = [...c6BonusRules].sort((a, b) => a.count - b.count);
-      const minRuleCount = sortedRules[0].count;
-      if (weightedFullConst >= minRuleCount) {
-        let lower = null, upper = null;
-        for (const rule of sortedRules) {
-          if (weightedFullConst >= rule.count) lower = rule;
-          else if (!upper) upper = rule;
-        }
-        if (lower && upper) {
-          const ratio = (weightedFullConst - lower.count) / (upper.count - lower.count);
-          c6BonusMultiplier = Math.max(upper.bonus * ratio, lower.bonus);
-        } else if (lower) {
-          c6BonusMultiplier = lower.bonus;
-        }
-      }
-    }
+    // 计算满命加成系数（公式）
+    var c6Base = (w.c6Base != null) ? w.c6Base : DEFAULT_WEIGHTS.c6Base;
+    var c6BaseBonus = (w.c6BaseBonus != null) ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
+    var c6Step = (w.c6Step != null) ? w.c6Step : DEFAULT_WEIGHTS.c6Step;
+    var c6StepBonus = (w.c6StepBonus != null) ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+
+    let c6BonusMultiplier = weightedFullConst > 0
+      ? c6BaseBonus + (weightedFullConst - c6Base) / c6Step * c6StepBonus
+      : 0;
+    if (c6BonusMultiplier < 0) c6BonusMultiplier = 0;
     if (c6BonusMultiplier > 0) {
       fullConstPremium = charValue * c6BonusMultiplier;
       const tierSummary = Object.entries(tierCounts)
@@ -1383,26 +1364,16 @@
       c6BonusNotes.push('满命(' + tierSummary + ') 加权' + weightedFullConst.toFixed(1) + ' +' + Math.round(c6BonusMultiplier * 100) + '%');
     }
 
-    // 计算抽数满命加成系数（独立档位 pullC6Bonus）
-    const pullC6Rules = w.pullC6Bonus || [];
-    let pullC6Multiplier = 0;
-    if (pullC6Rules.length > 0) {
-      const sortedPullRules = [...pullC6Rules].sort((a, b) => a.count - b.count);
-      const minPullCount = sortedPullRules[0].count;
-      if (weightedFullConst >= minPullCount) {
-        let plower = null, pupper = null;
-        for (const rule of sortedPullRules) {
-          if (weightedFullConst >= rule.count) plower = rule;
-          else if (!pupper) pupper = rule;
-        }
-        if (plower && pupper) {
-          const pratio = (weightedFullConst - plower.count) / (pupper.count - plower.count);
-          pullC6Multiplier = Math.max(pupper.bonus * pratio, plower.bonus);
-        } else if (plower) {
-          pullC6Multiplier = plower.bonus;
-        }
-      }
-    }
+    // 计算抽数满命加成系数（公式：基准加成 + (加权满命 - 基准) / 每档 × 每档浮动）
+    var pc6Base = (w.pullC6Base != null) ? w.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
+    var pc6BaseBonus = (w.pullC6BaseBonus != null) ? w.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
+    var pc6Step = (w.pullC6Step != null) ? w.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
+    var pc6StepBonus = (w.pullC6StepBonus != null) ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
+
+    var pullC6Multiplier = weightedFullConst > 0
+      ? pc6BaseBonus + (weightedFullConst - pc6Base) / pc6Step * pc6StepBonus
+      : 0;
+    if (pullC6Multiplier < 0) pullC6Multiplier = 0;
 
     // 3. 配队溢价（使用 weights.teams 和 teamMultiBonus）
     let teamPremium = 0;
@@ -1464,10 +1435,8 @@
     const paints = extractListItems(parsed.rawText, '涂装');
 
     const outfitValue = outfits.length * (w.outfit || 0);
-    const motoAccValue = motoAccessories.length * (w.motoAccessory || 0);
     const motoFrameValue = motoFrames.length * (w.motoFrame || 0);
-    const paintValue = paints.length * (w.paint || 0);
-    const otherResources = outfitValue + motoAccValue + motoFrameValue + paintValue;
+    const otherResources = outfitValue + motoFrameValue;
 
     // 武器明细
     const weaponDetails = parsed.weapons.map(weapon => {
@@ -1478,12 +1447,32 @@
       return { name: weapon.name, refine: weapon.refine, isSig: isSig };
     });
 
-    // 6. 黄数系数（getYellowCoeff 返回对象）
-    const yellowInfo = getYellowCoeff(parsed.yellowCount);
+    // 有效黄数：S/A/B/C/D级角色(1+命座) + 其专武(精炼数)
+    const EFFECTIVE_TIERS = ['S', 'A', 'B', 'C', 'D'];
+    var effectiveYellow = 0;
+    var countedWeapons = {};
+    for (var ci = 0; ci < parsed.characters.length; ci++) {
+      var char = parsed.characters[ci];
+      if (EFFECTIVE_TIERS.indexOf(char.tier) < 0) continue;
+      effectiveYellow += 1 + (char.const || 0);
+      var sigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[char.name]) || SIG_WEAPONS[char.name];
+      if (sigName && hasSignatureWeapons.indexOf(char.name) >= 0 && !countedWeapons[sigName]) {
+        var sigWeapon = parsed.weapons.find(function(wp) { return wp.name === sigName; });
+        if (sigWeapon) {
+          effectiveYellow += sigWeapon.refine || 1;
+          countedWeapons[sigName] = true;
+        }
+      }
+    }
+
+    // 6. 有效金系数（基于有效黄数计算，而非原始黄数）
+    const yellowInfo = getYellowCoeff(effectiveYellow);
+    yellowInfo.rawYellowCount = parsed.yellowCount;
     const yellowCoeff = yellowInfo.coefficient;
 
     // 账号等级、四星角色数
-    const levelMatch = (parsed.rawText || '').match(/(\d+)级/);
+    // 优先从"联觉等级"提取，避免误匹配"数据坞等级"等其他含"级"的字段
+    const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
     const level = levelMatch ? parseInt(levelMatch[1]) : 1;
     const fourStarMatch = (parsed.rawText || '').match(/(\d+)个四星角色/);
     const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
@@ -1493,7 +1482,7 @@
     // 总价值
     const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
 
-    // 低命折扣系数（指定级别角色均不超过maxConst命时，与黄数系数取较低值）
+    // 低命折扣系数（指定级别角色均不超过maxConst命时，与有效金系数取较低值）
     let flatDiscount = 1;
     const flatDiscountNotes = [];
     const flatRules = w.flatDiscountRules || [];
@@ -1513,8 +1502,8 @@
       }
     }
 
-    // 低命折扣系数与黄数系数取较低值（不重复计算）
-    // 仅当低命折扣规则匹配（flatDiscount < 1）时才取较低值，否则直接用黄数系数
+    // 低命折扣系数与有效金系数取较低值（不重复计算）
+    // 仅当低命折扣规则匹配（flatDiscount < 1）时才取较低值，否则直接用有效金系数
     const finalCoeff = flatDiscount < 1 ? Math.min(yellowCoeff, flatDiscount) : yellowCoeff;
     const totalValue = totalBeforeYellow * finalCoeff;
 
@@ -1540,7 +1529,7 @@
       hasSignatureWeapons: hasSignatureWeapons, // 有专武的角色名列表
       weaponDetails: weaponDetails,        // 武器详情列表
       matchedTeams: satisfiedTeams,        // 匹配的配队列表
-      c6DepNotes: c6DepNotes,                 // C6配队依赖降级信息
+      c6DepNotes: teamDepNotes,                 // 强绑队友降级信息（保留旧字段名兼容）
       c6Bonus: { value: Math.round(fullConstPremium), notes: c6BonusNotes }, // 满命溢价信息
       teamBonus: { value: Math.round(teamPremium), notes: teamBonusNotes },  // 配队溢价信息
       flatDiscount: { value: flatDiscount, notes: flatDiscountNotes },       // 低命折扣系数信息
@@ -1554,6 +1543,7 @@
         total: pullValue,
       },
       yellowInfo: yellowInfo,              // 黄数信息
+      effectiveYellow: effectiveYellow,    // 有效黄数(S/A/B/C/D角色+专武)
       outfits: outfits,                    // 服饰列表
       motoAccessories: motoAccessories,    // 摩托饰品列表
       motoFrames: motoFrames,              // 车架列表
@@ -1612,9 +1602,12 @@
           combineFilterList: [],
         }),
         credentials: 'include',
+        referrerPolicy: 'no-referrer',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
+      var ct = response.headers.get('content-type') || '';
+      if (ct.indexOf('json') < 0) throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
       return await response.json();
     } finally {
       clearTimeout(timeoutId);
@@ -1655,9 +1648,12 @@
           combineFilterList: [],
         }),
         credentials: 'include',
+        referrerPolicy: 'no-referrer',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
+      var ct = response.headers.get('content-type') || '';
+      if (ct.indexOf('json') < 0) throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
       return await response.json();
     } finally {
       clearTimeout(timeoutId);
@@ -1712,6 +1708,536 @@
     }
   }
 
+  // ============================================================
+  // 盼之平台 SSR HTML 抓取
+  // ============================================================
+
+  /**
+   * 获取商品链接URL（根据平台来源）
+   */
+  function getProductUrl(row) {
+    if (row.platform === 'pzds') {
+      return PZDS_URLS.detail + '/' + row.productId.replace(/^pz_/, '') + '/6';
+    }
+    return 'https://www.pxb7.com/product/' + row.productId + '/1';
+  }
+
+  /**
+   * 抓取盼之商品列表页SSR HTML
+   * 盼之使用Vite SSR，商品数据直接渲染在HTML中，无需API token
+   * @param {number} page - 页码（从1开始）
+   * @returns {Promise<Array>} 商品数组
+   */
+  function fetchListPZ(page) {
+    return new Promise((resolve, reject) => {
+      const url = PZDS_URLS.list + '?page=' + page;
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        headers: {
+          'User-Agent': navigator.userAgent,
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+        timeout: 15000,
+        onload(res) {
+          try {
+            const products = parsePZListHTML(res.responseText);
+            resolve(products);
+          } catch (e) {
+            console.error('[鸣潮监控] 盼之HTML解析失败:', e);
+            resolve([]);
+          }
+        },
+        onerror(err) {
+          console.error('[鸣潮监控] 盼之请求失败:', err);
+          resolve([]);
+        },
+        ontimeout() {
+          console.error('[鸣潮监控] 盼之请求超时');
+          resolve([]);
+        },
+      });
+    });
+  }
+
+  /**
+   * 抓取盼之商品详情页SSR HTML，提取完整描述
+   * 列表页标题被截断（角色列表以...结尾），详情页有完整角色/武器列表
+   * 详情页格式: 【五星角色】:6命弗洛洛,3命维里奈,... 【金色武器】:精1焰光裁定,...
+   * @param {string} productUniqueNo - 商品编号（如MC9S1Y）
+   * @returns {Promise<string>} 完整描述文本，失败时返回空字符串
+   */
+  function fetchPZDetail(productUniqueNo) {
+    return new Promise((resolve) => {
+      const url = PZDS_URLS.detail + '/' + productUniqueNo + '/6';
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        headers: {
+          'User-Agent': navigator.userAgent,
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+        timeout: 15000,
+        onload(res) {
+          try {
+            const html = res.responseText || '';
+            // WAF拦截检测：阿里云WAF页面特征
+            if (html.includes('errors.aliyun.com') || html.includes('acsAlidwError') || html.includes('window.ACS')) {
+              console.warn('[鸣潮监控-盼之] 详情页被WAF拦截: ' + productUniqueNo);
+              resolve('');
+              return;
+            }
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const span = doc.querySelector('div.text-overflow span');
+            if (span) {
+              const text = (span.textContent || '').trim();
+              // 验证提取的文本是否为有效商品描述
+              if (text.length > 20 && /(?:级[，,]|黄|金角色|星声|命|精\d)/.test(text)) {
+                resolve(text);
+                return;
+              }
+            }
+            const match = html.match(/【联觉等级】[\s\S]*?(?=<\/)/);
+            if (match) { resolve(match[0].trim()); return; }
+            resolve('');
+          } catch (e) {
+            console.error('[鸣潮监控-盼之] 详情页解析失败:', e);
+            resolve('');
+          }
+        },
+        onerror() {
+          console.error('[鸣潮监控-盼之] 详情页请求失败: ' + productUniqueNo);
+          resolve('');
+        },
+        ontimeout() {
+          console.error('[鸣潮监控-盼之] 详情页请求超时: ' + productUniqueNo);
+          resolve('');
+        },
+      });
+    });
+  }
+
+  /**
+   * 解析盼之列表页SSR HTML，提取商品数据
+   * 商品链接格式: /goodsDetails/MCCRX0/6?from=商品列表
+   * 商品文本: "80级，65黄，25金角色，19金武器，1皮肤，1088星声，2月相... ¥400 1小时前发布 9人想要"
+   * SSR数据中含 onStandTime 字段，用于过滤旧商品
+   * @param {string} htmlText - SSR HTML原文
+   * @returns {Array} 商品数组 [{productId, showTitle, price, discount, productUniqueNo, onStandTime}]
+   */
+  function parsePZListHTML(htmlText) {
+    if (!htmlText) return [];
+    const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+    const links = doc.querySelectorAll('a[href*="goodsDetails"]');
+    const products = [];
+    const seenNos = new Set();
+
+    // 从SSR数据中提取 goodsNo → onStandTime 映射
+    const timeMap = {};
+    const timeRegex = /goodsNo:"([A-Za-z0-9]+)"[\s\S]*?onStandTime:"([^"]+)"/g;
+    let tm;
+    while ((tm = timeRegex.exec(htmlText)) !== null) {
+      timeMap[tm[1]] = tm[2];
+    }
+
+    for (const link of links) {
+      const href = link.getAttribute('href') || '';
+      const match = href.match(/goodsDetails\/([A-Za-z0-9]+)\//);
+      if (!match) continue;
+      const goodsNo = match[1];
+      if (seenNos.has(goodsNo)) continue;
+      seenNos.add(goodsNo);
+
+      const text = (link.textContent || '').trim();
+      if (text.length < 10) continue;
+
+      // 解析价格: "¥ 400" 或 "￥700"
+      const priceMatch = text.match(/[¥￥]\s*(\d+)/);
+      const price = priceMatch ? parseFloat(priceMatch[1]) : 0;
+      if (price <= 0) continue;
+
+      // 解析折扣: "已减55"
+      const discountMatch = text.match(/已减(\d+)/);
+      const discount = discountMatch ? parseFloat(discountMatch[1]) : 0;
+
+      // 提取描述文本：优先使用 title 属性（纯净描述），回退到 textContent 处理
+      const titleAttr = link.getAttribute('title') || '';
+      let descText;
+      if (titleAttr && titleAttr.length > 10) {
+        descText = titleAttr.trim();
+      } else {
+        descText = text.split(/[¥￥]/)[0].trim();
+        descText = descText.replace(/\s+官服.*$/, '').replace(/\s+能解绑.*$/, '').trim();
+      }
+
+      // 解析上架时间
+      const onStandTimeStr = timeMap[goodsNo] || '';
+      let onStandTime = 0;
+      if (onStandTimeStr) {
+        onStandTime = new Date(onStandTimeStr.replace(/-/g, '/')).getTime() || 0;
+      }
+
+      products.push({
+        productId: 'pz_' + goodsNo,
+        productUniqueNo: goodsNo,
+        showTitle: descText,
+        price: price,
+        discount: discount,
+        platform: 'pzds',
+        listTime: onStandTime || Date.now(),
+        onStandTime: onStandTime,
+        onStandTimeStr: onStandTimeStr,
+      });
+    }
+
+    // 从NUXT SSR数据中提取 sellingPointLabels，补充角色和专武信息
+    // SSR HTML中 sellingPointLabels 部分标签是Vue模板变量（如bp/bq/aR），需解析NUXT函数获取完整字符串
+    // 标签格式1: "角色名X+Y"（Y>=1表示有专武，如 "赞妮0+1"、"卡提希娅6+2"）
+    // 标签格式2: "X命角色名"（无专武，如 "0命今汐"）
+    let nuxtLabelMap = {};
+    try {
+      const nuxtStart = htmlText.indexOf('window.__NUXT__=');
+      if (nuxtStart >= 0) {
+        const nuxtEnd = htmlText.indexOf('</script>', nuxtStart);
+        if (nuxtEnd > nuxtStart) {
+          const nuxtCode = htmlText.substring(nuxtStart + 'window.__NUXT__='.length, nuxtEnd);
+          const getNuxt = new Function('return ' + nuxtCode);
+          const nuxt = getNuxt();
+          const nuxtGoods = nuxt && nuxt.data && nuxt.data[0] && nuxt.data[0].goodsList;
+          if (Array.isArray(nuxtGoods)) {
+            for (const ng of nuxtGoods) {
+              if (ng.goodsNo && Array.isArray(ng.sellingPointLabels)) {
+                nuxtLabelMap[ng.goodsNo] = ng.sellingPointLabels.filter(l => typeof l === 'string');
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[鸣潮监控-盼之] NUXT解析失败，回退到正则提取:', e.message);
+    }
+
+    // 对每个商品，用 sellingPointLabels 补全角色和专武信息
+    for (const product of products) {
+      let labels = nuxtLabelMap[product.productUniqueNo];
+      if (!labels) {
+        const ssrMatch = htmlText.match(new RegExp('goodsNo:"' + product.productUniqueNo + '"[\\s\\S]*?sellingPointLabels:\\[([^\\]]*)\\]'));
+        if (!ssrMatch) continue;
+        labels = [];
+        const strRegex = /"([^"]+)"/g;
+        let sm;
+        while ((sm = strRegex.exec(ssrMatch[1])) !== null) labels.push(sm[1]);
+      }
+
+      const weapons = new Set();
+      const labelChars = [];
+      const seenLabelChars = new Set();
+      for (const rawLabel of labels) {
+        const label = rawLabel.trim();
+        const m1 = label.match(/^(.+?)(\d+)\+(\d+)$/);
+        if (m1) {
+          let rawName = m1[1].replace(/[・·]/g, '');
+          const canonicalName = CHAR_ALIASES[rawName] || rawName;
+          if (CHAR_LOOKUP[canonicalName] && !seenLabelChars.has(canonicalName)) {
+            seenLabelChars.add(canonicalName);
+            labelChars.push({ name: canonicalName, const: parseInt(m1[2]) });
+            if (parseInt(m1[3]) >= 1) {
+              const sigName = SIG_WEAPONS[canonicalName];
+              if (sigName) weapons.add('精1' + sigName);
+            }
+          }
+          continue;
+        }
+        const m2 = label.match(/^(\d+)命(.+)$/);
+        if (m2) {
+          let rawName = m2[2].replace(/[・·]/g, '');
+          const canonicalName = CHAR_ALIASES[rawName] || rawName;
+          if (CHAR_LOOKUP[canonicalName] && !seenLabelChars.has(canonicalName)) {
+            seenLabelChars.add(canonicalName);
+            labelChars.push({ name: canonicalName, const: parseInt(m2[1]) });
+          }
+        }
+      }
+      const missingChars = labelChars.filter(c => !product.showTitle.includes(c.name));
+      if (missingChars.length > 0) {
+        product.showTitle += ' ' + missingChars.map(c => c.const + '命' + c.name).join('，');
+      }
+      if (weapons.size > 0) {
+        product.showTitle += ' 【金色武器】:' + Array.from(weapons).join(',');
+      }
+    }
+
+    // 按上架时间降序排序（SSR默认排序非按时间，需手动排序确保最新商品优先）
+    products.sort((a, b) => (b.onStandTime || 0) - (a.onStandTime || 0));
+
+    // 打印盼之商品信息
+    if (products.length > 0) {
+      console.log('%c[鸣潮监控-盼之] 解析到 ' + products.length + ' 条商品（已按上架时间排序）：', 'color:#38bdf8;font-weight:bold');
+      products.forEach((p, i) => {
+        console.log(
+          '%c  [' + (i + 1) + '] ' + p.productUniqueNo +
+          ' | ¥' + p.price +
+          (p.discount > 0 ? ' (已减¥' + p.discount + ')' : '') +
+          (p.onStandTimeStr ? ' | 上架:' + p.onStandTimeStr : '') +
+          ' | ' + p.showTitle,
+          'color:#94a3b8'
+        );
+      });
+    }
+
+    return products;
+  }
+
+  /**
+   * 处理盼之平台商品（类似processProduct，但适配盼之数据格式）
+   * 盼之价格单位为元（螃蟹网为分），商品ID为字母编号
+   * @param {object} product - parsePZListHTML返回的商品对象
+   * @param {string} detailText - 从详情页获取的完整描述（可选，列表页标题被截断）
+   */
+  function processPZProduct(product, detailText) {
+    const productId = product.productId;
+    if (!productId) return;
+    console.log('[鸣潮监控-盼之] processPZProduct开始: ' + product.productUniqueNo + ' ¥' + (product.price || 0) + ' showTitle长度:' + (product.showTitle || '').length + ' detailText长度:' + (detailText || '').length);
+
+    const showTitle = product.showTitle || '';
+    const price = product.price || 0;
+
+    // 验证detailText是否为有效商品描述（防止WAF拦截页面覆盖好的showTitle）
+    let parseText = showTitle;
+    if (detailText && detailText.length > 20) {
+      // 检查是否包含商品特征关键词
+      const hasProductPattern = /(?:级[，,]|黄[，,]|金角色|金武器|星声|月相|命|精\d)/.test(detailText);
+      if (hasProductPattern) {
+        parseText = detailText;
+      } else {
+        console.warn('[鸣潮监控-盼之] detailText无效(WAF?)，回退到showTitle: ' + product.productUniqueNo + ' detailText前50字: ' + detailText.substring(0, 50));
+      }
+    }
+
+    if (/自主截图/.test(parseText)) {
+      console.log('[鸣潮监控-盼之] 跳过自主截图商品: ' + product.productUniqueNo);
+      return;
+    }
+
+    // 过滤旧商品：跳过超过48小时的上架商品
+    if (product.onStandTime > 0) {
+      const ageHours = (Date.now() - product.onStandTime) / 3600000;
+      if (ageHours > 48) {
+        console.log('[鸣潮监控-盼之] 跳过旧商品: ' + product.productUniqueNo + ' 上架于' + product.onStandTimeStr + ' (' + Math.round(ageHours) + '小时前)');
+        return;
+      }
+    }
+
+    // 去重：已见商品检查价格变化
+    if (seenIds.includes(productId)) {
+      const existRow = tableData.find(r => r.productId === productId);
+      if (!existRow) {
+        // 已见过但不在表格中（之前被估值过滤），移除后重新评估
+        const idx = seenIds.indexOf(productId);
+        if (idx > -1) seenIds.splice(idx, 1);
+        console.log('[鸣潮监控-盼之] 重新评估: ' + product.productUniqueNo + ' ¥' + price);
+      } else {
+        // 补充武器信息：已有行但 showTitle 缺少武器段时，用详情页文本更新
+        if (detailText && (existRow.showTitle || '').indexOf('【金色武器】') === -1) {
+          existRow.showTitle = detailText;
+          var newParsed = parseAccountInfo(detailText);
+          var newValuation = calculateValue(newParsed, price);
+          existRow.parsed = {
+            yellowCount: newParsed.yellowCount,
+            pulls: Math.round(newParsed.pulls * 10) / 10,
+            motoCount: newParsed.motoCount,
+            characters: newParsed.characters.map(c => ({ name: c.name, const: c.const, tier: c.tier, isHot: c.isHot, price: c.price })),
+            weapons: newParsed.weapons.map(w => ({ name: w.name, refine: w.refine })),
+          };
+          existRow.valuation = newValuation;
+          existRow._cachedValuation = newValuation;
+          existRow.value = newValuation.totalValue;
+          existRow.ratio = newValuation.ratio;
+          existRow.effectiveYellow = newValuation.effectiveYellow || 0;
+          console.log('[鸣潮监控-盼之] 补充武器信息: ' + product.productUniqueNo + ' 武器' + newParsed.weapons.length + '个 估值¥' + newValuation.totalValue.toFixed(0));
+          if (!batchMode) { saveTableData(); refreshTableDisplay(); }
+        }
+        if (price < existRow.price) {
+          if (!existRow.priceHistory) existRow.priceHistory = [];
+          existRow.priceHistory.push({ price: existRow.price, time: Date.now() });
+          const oldPrice = existRow.price;
+          existRow.price = price;
+          if (existRow.value && existRow.value > 0) {
+            existRow.ratio = ((existRow.value - price) / price) * 100;
+          }
+          existRow.priceDrop = (existRow.priceDrop || 0) + (oldPrice - price);
+          existRow.status = '降价';
+          if (!batchMode) {
+            sortTableData();
+            saveTableData();
+            refreshTableDisplay();
+          }
+          console.log('[鸣潮监控-盼之] 降价: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
+          // 降价通知
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+              (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+              (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
+            const { title, body, mdBody } = buildNotifyContent('降价', existRow, oldPrice, price);
+            notify(productId + '_drop', title, body, mdBody);
+            notifiedIds.push(productId + '_drop');
+            if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          }
+        }
+        return;
+      }
+    }
+    seenIds.push(productId);
+    if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    // 解析和估值（优先使用详情页完整文本）
+    const parsed = parseAccountInfo(parseText);
+    const valuation = calculateValue(parsed, price);
+
+    console.log('[鸣潮监控-盼之] 解析结果: ' + product.productUniqueNo +
+      ' | 角色' + parsed.characters.length + '个:' + parsed.characters.map(c => c.const + '命' + c.name).join(',') +
+      ' | 武器' + parsed.weapons.length + '个' +
+      ' | 星声' + parsed.starSound + ' 月相' + parsed.moonPhase + ' 黄' + parsed.yellowCount +
+      ' | 估值¥' + valuation.totalValue.toFixed(0) +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : ''));
+
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) {
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
+    // 内容指纹去重（跨平台）
+    const fingerprint = generateFingerprint(parsed);
+    const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
+    if (dupRow) {
+      console.log('[鸣潮监控-盼之] 跨平台重复(指纹匹配): ' + product.productUniqueNo + ' ¥' + price + ' → 已有:' + dupRow.productId + ' ¥' + dupRow.price);
+      seenIds.push(productId);
+      if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+      if (price < dupRow.price) {
+        if (!dupRow.priceHistory) dupRow.priceHistory = [];
+        dupRow.priceHistory.push({ price: dupRow.price, time: Date.now() });
+        const oldPrice = dupRow.price;
+        dupRow.price = price;
+        dupRow.productId = productId;
+        if (product.productUniqueNo) dupRow.productUniqueNo = product.productUniqueNo;
+        dupRow.platform = 'pzds';
+        dupRow.ratio = ((dupRow.value - price) / price) * 100;
+        dupRow.priceDrop = (dupRow.priceDrop || 0) + (oldPrice - price);
+        dupRow.status = '降价';
+        if (!batchMode) {
+          sortTableData();
+          saveTableData();
+          refreshTableDisplay();
+        }
+        console.log('[鸣潮监控-盼之] 跨平台重复: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+            (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+            (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
+          const { title, body, mdBody } = buildNotifyContent('降价', dupRow, oldPrice, price);
+          notify(productId + '_drop', title, body, mdBody);
+          notifiedIds.push(productId + '_drop');
+          if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+        }
+      }
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
+    // 添加到表格（showTitle 用完整详情文本，确保存储后可重新解析武器信息）
+    addTableRow({
+      productId,
+      productUniqueNo: product.productUniqueNo || '',
+      fingerprint,
+      showTitle: parseText,
+      price,
+      value: valuation.totalValue,
+      ratio: valuation.ratio,
+      status: '初估',
+      platform: 'pzds',
+      effectiveYellow: valuation.effectiveYellow || 0,
+      parsed: {
+        yellowCount: parsed.yellowCount,
+        pulls: Math.round(parsed.pulls * 10) / 10,
+        motoCount: parsed.motoCount,
+        characters: parsed.characters.map(c => ({ name: c.name, const: c.const, tier: c.tier, isHot: c.isHot, price: c.price })),
+        weapons: parsed.weapons.map(w => ({ name: w.name, refine: w.refine })),
+      },
+      valuation: valuation,
+      listTime: product.listTime || Date.now(),
+      firstSeen: Date.now(),
+    });
+
+    console.log('[鸣潮监控-盼之] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
+
+    // 入详情队列条件（与螃蟹网一致）
+    const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
+    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule =>
+      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
+    );
+    const meetsBasicThreshold = valuation.totalValue > 500 && valuation.diff != null && valuation.diff > 100;
+    if (meetsBasicThreshold || hasSC6 || matchesCharRule) {
+      enqueueDetail(productId, valuation.diff || 0);
+    }
+
+    // 初估即推送通知（盼之商品跳过详情队列，必须在初估阶段推送）
+    tryNotifyNewProduct(productId, parsed, valuation, price, parseText, product.productUniqueNo || '', null);
+  }
+
+  /**
+   * 处理盼之商品列表（批量模式）
+   * 列表页标题被截断，需先抓取详情页获取完整角色/武器数据
+   */
+  async function handlePZListResponse(list) {
+    if (!Array.isArray(list)) return;
+    console.log('[鸣潮监控-盼之] handlePZListResponse: 收到' + list.length + '条商品，当前表格' + tableData.length + '行');
+    list.forEach(function(p) {
+      var title = (p.showTitle || '').substring(0, 60);
+      var price = (p.price || 0).toFixed(0);
+      var uniqueNo = p.productUniqueNo || '';
+      console.log('  - ' + uniqueNo + ' ¥' + price + ' ' + title);
+    });
+
+    // 为新商品预取详情页（跳过超过48小时的旧商品；已在表格中的也检查是否缺少武器信息）
+    const PZ_MAX_AGE_HOURS = 48;
+    const detailMap = {};
+    const needDetail = list.filter(p => {
+      if (p.onStandTime > 0 && (Date.now() - p.onStandTime) / 3600000 > PZ_MAX_AGE_HOURS) return false;
+      if (!seenIds.includes(p.productId)) return true;
+      const existRow = tableData.find(r => r.productId === p.productId);
+      if (!existRow) return true;
+      // 已在表格中但 showTitle 缺少武器段（旧数据），需要补充详情
+      if (existRow.platform === 'pzds' && (existRow.showTitle || '').indexOf('【金色武器】') === -1) return true;
+      return false;
+    });
+    if (needDetail.length > 0) {
+      console.log('[鸣潮监控-盼之] 预取' + needDetail.length + '个新商品详情页');
+      const details = await Promise.all(needDetail.map(p => fetchPZDetail(p.productUniqueNo)));
+      needDetail.forEach((p, i) => { detailMap[p.productId] = details[i]; });
+    }
+
+    batchMode = true;
+    try {
+      for (const product of list) {
+        try {
+          processPZProduct(product, detailMap[product.productId] || '');
+        } catch (e) {
+          console.error('[鸣潮监控-盼之] 处理商品失败: ' + (product.productUniqueNo || product.productId), e);
+        }
+      }
+    } finally {
+      batchMode = false;
+    }
+    trimTableData();
+    sortTableData();
+    saveTableData();
+    saveStorage(STORAGE_KEYS.seen, seenIds);
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[鸣潮监控-盼之] 批量处理完成，表格共' + tableData.length + '行');
+  }
+
   /**
    * 调用详情API
    */
@@ -1724,9 +2250,12 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ productId: productId }),
         credentials: 'include',
+        referrerPolicy: 'no-referrer',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
+      var ct = response.headers.get('content-type') || '';
+      if (ct.indexOf('json') < 0) throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
       return await response.json();
     } finally {
       clearTimeout(timeoutId);
@@ -1795,6 +2324,14 @@
    */
   function handleListResponse(list, fromIntercept, fromFlashSale) {
     if (!Array.isArray(list)) return;
+    console.log('[鸣潮监控] 获取到' + list.length + '条商品' + (fromFlashSale ? '(秒杀池)' : '') + (fromIntercept ? '(拦截)' : ''));
+    list.forEach(function(item) {
+      var pid = item.productId || item.id || '';
+      var title = (item.showTitle || item.title || '').substring(0, 60);
+      var price = ((item.price || 0) / 100).toFixed(0);
+      var uniqueNo = item.productUniqueNo || '';
+      console.log('  - ' + uniqueNo + ' ¥' + price + ' ' + title);
+    });
 
     if (fromIntercept) {
       interceptCount++;
@@ -1868,9 +2405,9 @@
           console.log('[鸣潮监控] 秒杀: ' + (existRow.productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
 
           // 秒杀通知（与降价通知相同逻辑，但标题不同）
-          if (notifyEnabled && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
               (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
-              (existRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_flash')) {
+              (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_flash')) {
             const { title: flashTitle, body: flashMsg, mdBody: flashMd } = buildNotifyContent('秒杀', existRow, oldPrice, price);
             notify(productId + '_flash', flashTitle, flashMsg, flashMd);
             notifiedIds.push(productId + '_flash');
@@ -1921,9 +2458,9 @@
         console.log('[鸣潮监控] 降价: ' + (existRow.productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
 
         // 降价通知（如果估值仍满足通知条件，且标价不高于上限）
-        if (existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+        if ((getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
-            (existRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
+            (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
           const { title: dropTitle, body: dropMsg, mdBody: dropMd } = buildNotifyContent('降价', existRow, oldPrice, price);
           notify(productId + '_drop', dropTitle, dropMsg, dropMd);
           notifiedIds.push(productId + '_drop');
@@ -1984,9 +2521,9 @@
         }
         console.log('[鸣潮监控] 重复上架合并(' + mergeStatus + '): ' + (productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
         // 降价/秒杀通知
-        if (notifyEnabled && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
-            (dupRow.value - price) > notifyDiffThreshold && !notifiedIds.includes(productId + '_drop')) {
+            (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
           const { title: mergeTitle, body: mergeMsg, mdBody: mergeMd } = buildNotifyContent(mergeStatus, dupRow, oldPrice, price);
           notify(productId + '_drop', mergeTitle, mergeMsg, mergeMd);
           notifiedIds.push(productId + '_drop');
@@ -2015,6 +2552,7 @@
       value: valuation.totalValue,
       ratio: valuation.ratio,
       status: fromFlashSale ? '秒杀' : '初估',
+      effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
         pulls: Math.round(parsed.pulls * 10) / 10,
@@ -2044,10 +2582,76 @@
     if (meetsBasicThreshold || hasSC6 || matchesCharRule) {
       enqueueDetail(productId, valuation.diff || 0);
     }
+
+    // 初估即推送通知（不等详情API，减少通知延迟）
+    tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, productUniqueNo, fromFlashSale ? '秒杀' : null);
   }
 
-  // ============================================================
-  // 详情API队列管理
+  /**
+   * 初估阶段通知检查：估值达标时立即推送，不等详情API
+   * 避免详情队列堆积导致通知延迟（队列60+条时延迟可达5分钟）
+   * @returns {boolean} 是否已发送通知
+   */
+  function tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, productUniqueNo, platform) {
+    if (!notifyEnabled) return false;
+    if (notifiedIds.includes(productId)) return false;
+    if (/自主截图/.test(showTitle)) return false;
+    if ((valuation.level || 0) < 70) return false;
+
+    const notifyDiff = valuation.totalValue - price;
+    // 检查指定账号通知规则
+    const matchedRules = charNotifyRules.filter(rule =>
+      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
+    );
+    // 常规通知条件
+    const shouldNotifyRegular = (notifyDiff > getNotifyDiffThreshold(valuation.totalValue))
+      && valuation.totalValue >= notifyMinValue
+      && price >= notifyMinPrice
+      && (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
+    // 指定账号通知条件
+    let charRuleTriggered = false;
+    let triggeredRule = null;
+    const priceWithinMax = (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
+    const meetsMinValue = valuation.totalValue >= notifyMinValue;
+    const meetsMinPrice = price >= notifyMinPrice;
+    if (matchedRules.length > 0 && priceWithinMax && meetsMinValue && meetsMinPrice) {
+      for (const r of matchedRules) {
+        if (r.minDiff === 0 || notifyDiff > r.minDiff) {
+          charRuleTriggered = true;
+          triggeredRule = r;
+          break;
+        }
+      }
+    }
+
+    if (!charRuleTriggered && !shouldNotifyRegular) return false;
+
+    const matchedCharNames = triggeredRule
+      ? triggeredRule.chars.map(c => c.name + (c.minConst > 0 ? c.minConst + '命+' : '')).join('+')
+      : '';
+    const prefix = charRuleTriggered ? '指定账号' : '高差价';
+    const notifyRow = {
+      value: valuation.totalValue,
+      ratio: valuation.ratio,
+      parsed: { pulls: parsed.pulls },
+      valuation: valuation,
+      showTitle: showTitle,
+      productUniqueNo: productUniqueNo,
+      platform: platform === '秒杀' ? '' : (productId.indexOf('pz_') === 0 ? 'pzds' : ''),
+    };
+    const { title, body, mdBody } = buildNotifyContent(prefix, notifyRow, null, price, matchedCharNames || undefined);
+    notify(productId, title, body, mdBody);
+    notifiedIds.push(productId);
+    if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+    saveStorage(STORAGE_KEYS.notified, notifiedIds);
+    console.log('[鸣潮监控] 初估推送: ' + (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' 差价¥' + notifyDiff.toFixed(0));
+
+    // 自动抢购
+    if (autoBuyEnabled && notifyDiff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || price <= autoBuyMaxPrice)) {
+      autoBuy(productId, notifyDiff, productUniqueNo);
+    }
+    return true;
+  }
   // ============================================================
 
   /**
@@ -2107,6 +2711,12 @@
     detailCallsThisMinute++;
     updateBottomBar();
 
+    // 盼之平台商品跳过详情API（使用列表页SSR数据的初估结果）
+    if (item.productId && item.productId.indexOf('pz_') === 0) {
+      processNextDetail();
+      return;
+    }
+
     fetchDetail(item.productId).then(data => {
       if (data && data.success && data.data) {
         const showTitle = data.data.showTitle || data.data.title || '';
@@ -2146,6 +2756,7 @@
           value: valuation.totalValue,
           ratio: finalRatio,
           status: preserveStatus,
+          effectiveYellow: valuation.effectiveYellow || 0,
           parsed: {
             yellowCount: parsed.yellowCount,
             pulls: Math.round(parsed.pulls * 10) / 10,
@@ -2159,9 +2770,9 @@
         });
 
         // ===== 通知逻辑 =====
-        // 自主截图账号不通知（信息不可靠）
+        // 自主截图账号不通知（信息不可靠），等级低于70不通知
         const isSelfScreenshot = /自主截图/.test(showTitle);
-        if (notifyEnabled && !isSelfScreenshot && !notifiedIds.includes(item.productId)) {
+        if (notifyEnabled && !isSelfScreenshot && !notifiedIds.includes(item.productId) && (valuation.level || 0) >= 70) {
           // 秒杀商品使用秒杀价计算差价和通知条件
           const notifyPrice = finalPrice;
           const notifyDiff = valuation.totalValue - notifyPrice;
@@ -2170,7 +2781,7 @@
             rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
           );
           // 常规通知条件：差价超过阈值，且估值/标价不低于各自下限，且标价不高于上限
-          const shouldNotifyRegular = (notifyDiff > notifyDiffThreshold)
+          const shouldNotifyRegular = (notifyDiff > getNotifyDiffThreshold(valuation.totalValue))
             && valuation.totalValue >= notifyMinValue
             && notifyPrice >= notifyMinPrice
             && (notifyMaxPrice <= 0 || notifyPrice <= notifyMaxPrice);
@@ -2205,6 +2816,7 @@
               valuation: valuation,
               showTitle: showTitle,
               productUniqueNo: productUniqueNo,
+              platform: item.productId.indexOf('pz_') === 0 ? 'pzds' : '',
             };
             const { title: notifyTitle, body: notifyBody, mdBody: notifyMd } = buildNotifyContent(prefix, notifyRow, null, notifyPrice, matchedCharNames || undefined);
             notify(item.productId, notifyTitle, notifyBody, notifyMd);
@@ -2214,7 +2826,7 @@
 
             // 自动抢购：差价超过阈值且标价不超过上限时自动打开商品页
             if (autoBuyEnabled && notifyDiff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || notifyPrice <= autoBuyMaxPrice)) {
-              autoBuy(item.productId, notifyDiff);
+              autoBuy(item.productId, notifyDiff, productUniqueNo);
             }
           }
         }
@@ -2230,6 +2842,17 @@
   // ============================================================
   // 表格数据管理
   // ============================================================
+
+  /**
+   * 根据估值获取通知差价阈值（命中阶梯返回对应值，否则回退到 notifyDiffThreshold）
+   */
+  function getNotifyDiffThreshold(value) {
+    for (var i = 0; i < notifyDiffTiers.length; i++) {
+      var t = notifyDiffTiers[i];
+      if (value >= t.minValue && value < t.maxValue) return t.minDiff;
+    }
+    return notifyDiffThreshold;
+  }
 
   /**
    * 添加表格行
@@ -2287,35 +2910,72 @@
     }
   }
 
+  const TRIM_BATCH = 200; // 达到上限或写入失败时一次清理的行数
+
   /**
-   * 截断表格数据：始终按差价降序排序后截断，确保低价值数据被移除
-   * 截断后恢复用户当前的排序方式用于显示
+   * 综合排序移除 TRIM_BATCH 条数据（差价低 + 时间旧优先删除，近30分钟新增保护）
+   * 不修改原数组顺序，通过索引过滤移除
+   */
+  function removeLowDiffRows() {
+    if (tableData.length === 0) return 0;
+    var now = Date.now();
+    var PROTECT_MS = 30 * 60 * 1000; // 30分钟保护期
+    var targetCount = Math.min(TRIM_BATCH, tableData.length);
+
+    // 计算每行的差价和年龄，标记保护状态
+    var scored = tableData.map(function (row, i) {
+      var diff = (row.value || 0) - (row.price || 0);
+      var time = row.firstSeen || row.listTime || 0;
+      var ageMs = now - time;
+      if (ageMs < PROTECT_MS) return { idx: i, protected: true };
+      return { idx: i, protected: false, diff: diff, ageMs: ageMs };
+    });
+
+    // 筛选未被保护的候选行
+    var candidates = scored.filter(function (s) { return !s.protected; });
+    if (candidates.length === 0) {
+      console.log('[鸣潮监控] 所有数据均在30分钟保护期内，跳过清理');
+      return 0;
+    }
+
+    // 归一化差价和年龄到 0~1 范围（基于当前数据集）
+    var diffs = candidates.map(function (c) { return c.diff; });
+    var ages = candidates.map(function (c) { return c.ageMs; });
+    var minDiff = Math.min.apply(null, diffs);
+    var maxDiff = Math.max.apply(null, diffs);
+    var minAge = Math.min.apply(null, ages);
+    var maxAge = Math.max.apply(null, ages);
+    var diffRange = maxDiff - minDiff || 1;
+    var ageRange = maxAge - minAge || 1;
+
+    // 综合分数：差价低(→1) + 时间旧(→1)，权重各50%，越高越优先删除
+    candidates.forEach(function (c) {
+      var diffNorm = 1 - (c.diff - minDiff) / diffRange; // 差价越低 → 越接近1
+      var ageNorm = (c.ageMs - minAge) / ageRange;        // 时间越旧 → 越接近1
+      c.score = diffNorm * 0.5 + ageNorm * 0.5;
+    });
+
+    // 按分数降序，取前 targetCount 个
+    candidates.sort(function (a, b) { return b.score - a.score; });
+    var actualRemove = Math.min(targetCount, candidates.length);
+    var toRemove = new Set();
+    for (var si = 0; si < actualRemove; si++) {
+      toRemove.add(candidates[si].idx);
+    }
+
+    // 通过索引过滤移除，不改变原数组顺序
+    tableData = tableData.filter(function (_, i) { return !toRemove.has(i); });
+
+    console.log('[鸣潮监控] 综合清理' + actualRemove + '条数据（差价低+时间旧优先，30分钟内保护），剩余' + tableData.length + '条');
+    return actualRemove;
+  }
+
+  /**
+   * 截断表格数据：达到上限时综合排序移除 TRIM_BATCH 条（差价低+时间旧优先，30分钟内保护）
    */
   function trimTableData() {
-    if (tableData.length <= CONFIG.maxTableRows) return;
-    // 清理优先级：1.上架时间未知的优先清理 2.估值低于600的优先清理 3.时间越久越优先清理
-    const CLEAN_THRESHOLD = 600;
-    tableData.sort((a, b) => {
-      // 上架时间未知（listTime为0或不存在）的排最后（优先被清理）
-      const timeA = a.firstSeen || a.listTime || 0;
-      const timeB = b.firstSeen || b.listTime || 0;
-      const unknownA = timeA === 0 ? 1 : 0;
-      const unknownB = timeB === 0 ? 1 : 0;
-      if (unknownA !== unknownB) return unknownA - unknownB;
-      // 估值低的排后面（优先被清理）
-      const valA = a.value || 0;
-      const valB = b.value || 0;
-      const lowA = valA < CLEAN_THRESHOLD ? 1 : 0;
-      const lowB = valB < CLEAN_THRESHOLD ? 1 : 0;
-      if (lowA !== lowB) return lowA - lowB;
-      // 同组内按时间降序，最新的排前面（优先保留），时间越早的排后面（优先被清理）
-      return timeB - timeA;
-    });
-    const removed = tableData.slice(CONFIG.maxTableRows);
-    tableData = tableData.slice(0, CONFIG.maxTableRows);
-    // 不清除 seenIds：被截断的商品可能仍在详情队列中，
-    // 清除后会导致重新按初估覆盖详估数据，引发数据丢失
-    console.log('[鸣潮监控] 表格截断：移除' + removed.length + '条旧数据');
+    if (tableData.length < CONFIG.maxTableRows) return;
+    removeLowDiffRows();
   }
 
   // 排序状态：默认按差价降序
@@ -2346,8 +3006,8 @@
           valB = b.price || 0;
           break;
         case 'yellow':
-          valA = (a.parsed && a.parsed.yellowCount) ? a.parsed.yellowCount : 0;
-          valB = (b.parsed && b.parsed.yellowCount) ? b.parsed.yellowCount : 0;
+          valA = a.effectiveYellow || 0;
+          valB = b.effectiveYellow || 0;
           break;
         case 'pulls':
           valA = (a.parsed && a.parsed.pulls) ? a.parsed.pulls : 0;
@@ -2670,6 +3330,7 @@
         .mw-badge-detail { background: #1a3a1a; color: #10b981; }
         .mw-badge-sold { background: #3a1a1a; color: #e94560; }
         .mw-badge-drop { background: #3a2a1a; color: #f59e0b; }
+        .mw-badge-flash { background: #3a1a2a; color: #e94560; }
         .mw-empty {
           text-align: center;
           padding: 40px 20px;
@@ -2747,7 +3408,7 @@
               <th class="mw-sortable" data-col="diff">差价</th>
               <th class="mw-sortable" data-col="ratio">性价比</th>
               <th class="mw-sortable" data-col="price">标价</th>
-              <th class="mw-sortable" data-col="yellow">黄</th>
+              <th class="mw-sortable" data-col="yellow">有效黄</th>
               <th class="mw-sortable" data-col="pulls">抽数</th>
               <th>摩托</th>
               <th>五星角色</th>
@@ -2929,22 +3590,35 @@
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">刷新设置</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">刷新间隔（秒）</label>' +
-        '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="10" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="5" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">自动刷新列表的时间间隔，建议30~120秒</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">自动刷新列表的时间间隔，建议10~60秒</div>' +
         // 秒杀库池监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
         '<input type="checkbox" id="mwFlashSaleEnabled" ' + (flashSaleEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控秒杀库池（还价成交的低价账号）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">扫描秒杀库池前2页，捕获还价后卖家同意的降价商品</div>' +
+        // 盼之平台监控
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwPzdsEnabled" ' + (pzdsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控盼之平台（pzds.com鸣潮商品池）</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过SSR HTML抓取盼之平台商品列表，无需API token，扫描前2页</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">差价阈值（元）</label>' +
         '<input type="number" id="mwNotifyDiff" value="' + notifyDiffThreshold + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">差价超过阈值时发送通知</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">差价超过阈值时发送通知（阶梯外估值使用此默认值）</div>' +
+        // 估价阶梯差价阈值
+        '<div style="font-size:12px;font-weight:600;color:#f59e0b;margin-bottom:6px;">估价阶梯差价阈值</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">按估值范围设置不同差价阈值，命中阶梯优先于上方默认值。范围左闭右开（如500~1000表示500≤估值&lt;1000）</div>' +
+        '<div id="mwDiffTiersList" style="margin-bottom:8px;"></div>' +
+        '<div style="display:flex;gap:6px;margin-bottom:16px;">' +
+        '<button id="mwDiffTierAdd" type="button" style="padding:5px 12px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:12px;cursor:pointer;">+ 添加阶梯</button>' +
+        '</div>' +
         // 自动购买
         '<div style="font-size:13px;font-weight:600;color:#e94560;margin-bottom:8px;">自动抢购</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
@@ -3131,6 +3805,43 @@
         box.querySelector('#mwCharNotifyDiff').value = '0';
       };
 
+      // ===== 估价阶梯差价阈值管理 =====
+      var diffTiersListEl = box.querySelector('#mwDiffTiersList');
+
+      function renderDiffTiersList() {
+        diffTiersListEl.innerHTML = '';
+        if (notifyDiffTiers.length === 0) {
+          diffTiersListEl.innerHTML = '<div style="font-size:11px;color:#555;padding:4px 0;">暂无阶梯，所有估值使用上方默认差价阈值</div>';
+          return;
+        }
+        for (var i = 0; i < notifyDiffTiers.length; i++) {
+          (function (idx) {
+            var t = notifyDiffTiers[idx];
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;margin-bottom:4px;background:#16213e;border-radius:6px;flex-wrap:wrap;';
+            row.innerHTML =
+              '<span style="font-size:11px;color:#888;white-space:nowrap;">估值</span>' +
+              '<input type="number" class="dt-min" value="' + t.minValue + '" min="0" max="999999" style="width:70px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:11px;" />' +
+              '<span style="font-size:11px;color:#888;">~</span>' +
+              '<input type="number" class="dt-max" value="' + t.maxValue + '" min="0" max="999999" style="width:70px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:11px;" />' +
+              '<span style="font-size:11px;color:#888;white-space:nowrap;">差价≥</span>' +
+              '<input type="number" class="dt-diff" value="' + t.minDiff + '" min="0" max="999999" style="width:60px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:11px;" />' +
+              '<button class="dt-del" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
+            row.querySelector('.dt-min').oninput = function () { t.minValue = parseFloat(this.value) || 0; };
+            row.querySelector('.dt-max').oninput = function () { t.maxValue = parseFloat(this.value) || 0; };
+            row.querySelector('.dt-diff').oninput = function () { t.minDiff = parseFloat(this.value) || 0; };
+            row.querySelector('.dt-del').onclick = function () { notifyDiffTiers.splice(idx, 1); renderDiffTiersList(); };
+            diffTiersListEl.appendChild(row);
+          })(i);
+        }
+      }
+      renderDiffTiersList();
+
+      box.querySelector('#mwDiffTierAdd').onclick = function () {
+        notifyDiffTiers.push({ minValue: 0, maxValue: 0, minDiff: 0 });
+        renderDiffTiersList();
+      };
+
       // ===== PushPlus 订阅者管理 =====
       var ppListEl = box.querySelector('#mwPushPlusList');
       var ppEditingIdx = -1; // 正在编辑的订阅者索引，-1=新增模式
@@ -3237,11 +3948,12 @@
         notifyMinPrice = parseFloat(box.querySelector('#mwNotifyMinPrice').value) || 0;
         notifyMaxPrice = parseFloat(box.querySelector('#mwNotifyMaxPrice').value) || 0;
         var newInterval = parseInt(box.querySelector('#mwRefreshInterval').value) || 60;
-        if (newInterval < 10) newInterval = 10;
+        if (newInterval < 5) newInterval = 5;
         if (newInterval > 3600) newInterval = 3600;
         var intervalChanged = newInterval !== refreshIntervalSec;
         refreshIntervalSec = newInterval;
         flashSaleEnabled = box.querySelector('#mwFlashSaleEnabled').checked;
+        pzdsEnabled = box.querySelector('#mwPzdsEnabled').checked;
         soldCheckRatio = parseFloat(box.querySelector('#mwSoldCheckRatio').value) || 0;
         soldCheckDiff = parseFloat(box.querySelector('#mwSoldCheckDiff').value) || 0;
         soldCheckMinValue = parseFloat(box.querySelector('#mwSoldCheckMinValue').value) || 0;
@@ -3511,6 +4223,7 @@
         row.parsed && row.parsed.characters && row.parsed.characters.some(c => c.name === charFilter)
       );
     }
+    // 隐藏已售
     // 只显示已售
     if (showOnlySold) {
       displayData = displayData.filter(row => row.status === '已售');
@@ -3589,13 +4302,20 @@
         statusBadge = '<span class="mw-status-badge mw-badge-sold" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击重新检查">已售</span>';
       } else if (row.status === '降价') {
         statusBadge = '<span class="mw-status-badge mw-badge-drop" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">降价</span>';
+      } else if (row.status === '秒杀') {
+        statusBadge = '<span class="mw-status-badge mw-badge-flash" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">秒杀</span>';
       }
 
       // 悬浮提示
       const tooltip = (row.showTitle || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').substring(0, 500);
 
+      // 平台标识
+      const platformBadge = row.platform === 'pzds'
+        ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#38bdf8;background:rgba(56,189,248,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="盼之平台">盼</span>'
+        : '<span style="display:inline-block;font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="螃蟹网">蟹</span>';
+
       html += '<tr class="' + rowClass + '" data-product-id="' + row.productId + '" title="' + tooltip + '">' +
-        '<td>' + listStr + '</td>' +
+        '<td>' + platformBadge + listStr + '</td>' +
         '<td>' + row.value.toFixed(0) + '</td>' +
         '<td class="' + diffColorClass + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(0) + '</td>' +
         '<td class="' + ratioColorClass + '">' + ratio.toFixed(1) + '%</td>' +
@@ -3604,7 +4324,7 @@
           : row.status === '秒杀'
             ? '<span style="color:#e94560;font-weight:600;">秒杀 ¥' + row.price.toFixed(0) + '</span>'
             : row.price.toFixed(0)) + '</td>' +
-        '<td>' + (row.parsed ? row.parsed.yellowCount : 0) + '</td>' +
+        '<td>' + (row.effectiveYellow || 0) + '/' + (row.parsed ? row.parsed.yellowCount : 0) + '</td>' +
         '<td>' + (row.parsed ? row.parsed.pulls : 0) + '</td>' +
         '<td>' + (row.parsed ? row.parsed.motoCount : 0) + '</td>' +
         '<td class="mw-chars-cell">' + charsHtml + '</td>' +
@@ -3735,6 +4455,7 @@
         row.valuation = valuation;
         row.value = valuation.totalValue;
         row.ratio = valuation.ratio;
+        row.effectiveYellow = valuation.effectiveYellow || 0;
         // 同步 parsed 摘要
         row.parsed = {
           yellowCount: parsed.yellowCount,
@@ -3776,6 +4497,7 @@
         row.valuation = calculateValue(parsed, row.price);
         row.value = row.valuation.totalValue;
         row.ratio = row.valuation.ratio;
+        row.effectiveYellow = row.valuation.effectiveYellow || 0;
       }
     } catch (e) {
       // 解析失败，保持原样
@@ -3798,6 +4520,7 @@
         // 同步 row.value 和 row.ratio，避免旧值（可能来自完整 showTitle）与重算值不一致
         row.value = row._cachedValuation.totalValue;
         row.ratio = row._cachedValuation.ratio;
+        row.effectiveYellow = row._cachedValuation.effectiveYellow || 0;
       } catch (e) {
         row._cachedValuation = row.valuation || {};
       }
@@ -3835,8 +4558,7 @@
     const price = row.price || 0;
     const estValue = v.totalValue || row.value || 0;
     const diff = estValue - price;
-    // 改进1：商品详情页跳转URL改为 /product/{productId}/1 格式
-    const productLink = 'https://www.pxb7.com/product/' + row.productId + '/1';
+    const productLink = getProductUrl(row);
 
     // 转义辅助
     const esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
@@ -3887,9 +4609,7 @@
     const matchedTeams = v.matchedTeams || [];
 
     const outfitVal = outfits.length * (w.outfit || 0);
-    const motoAccVal = motoAccessories.length * (w.motoAccessory || 0);
     const motoFrameVal = motoFrames.length * (w.motoFrame || 0);
-    const paintVal = paints.length * (w.paint || 0);
 
     const resItems = [
       { label: '抽数(星声/160+月相/160+珊瑚/8+浮金波纹+铸潮波纹)', val: pullInfo.pulls, unit: '抽', weight: pullInfo.perPull, total: pullInfo.baseTotal || pullInfo.total, tierLabel: pullInfo.tierLabel },
@@ -3901,9 +4621,7 @@
     }
     resItems.push(
       { label: '服饰/皮肤', val: outfits.length, unit: '个', weight: w.outfit, total: outfitVal },
-      { label: '摩托饰品', val: motoAccessories.length, unit: '个', weight: w.motoAccessory, total: motoAccVal },
       { label: '车架模组', val: motoFrames.length, unit: '个', weight: w.motoFrame, total: motoFrameVal },
-      { label: '涂装', val: paints.length, unit: '个', weight: w.paint, total: paintVal },
     );
     if (teamBonus.value > 0) {
       const noteStr = teamBonus.notes.join('，');
@@ -3953,11 +4671,11 @@
       '<div style="font-size:12px;color:#e94560;font-weight:600;">' + c6Bonus.notes.join('，') + '</div>' +
       '<div style="font-size:11px;color:#888;margin-top:2px;">满命角色难度递增，额外加成 ' + c6Bonus.value + '元</div></div>' : '';
 
-    // 生效系数：低命折扣与黄数系数取较低值，只显示生效的那个
+    // 生效系数：低命折扣与有效金系数取较低值，只显示生效的那个
     const flatActive = (flatDiscount.value < 1 && flatDiscount.notes.length > 0 && flatDiscount.value < yellowInfo.coefficient);
     const yellowHTML = (!flatActive && yellowInfo.yellowCount > 0) ?
       '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">' +
-      '<div style="font-size:12px;color:#f59e0b;font-weight:600;">黄数系数：' + yellowInfo.yellowCount + '黄 [' + yellowInfo.tierLabel + '] × ' + yellowInfo.coefficient + '</div>' +
+      '<div style="font-size:12px;color:#f59e0b;font-weight:600;">有效金系数：' + yellowInfo.yellowCount + '有效 [' + yellowInfo.tierLabel + '] × ' + yellowInfo.coefficient + '</div>' +
       '<div style="font-size:11px;color:#888;margin-top:2px;">最终估值乘以此系数</div></div>' : '';
 
     const flatDiscountHTML = (flatActive) ?
@@ -3970,7 +4688,10 @@
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #0f3460;">' +
         '<div><span style="font-size:16px;font-weight:700;color:' + color + ';">' + (ratio >= 0 ? '+' : '') + ratio.toFixed(2) + '%</span>' +
         '<span style="margin-left:8px;font-size:12px;padding:2px 8px;border-radius:4px;background:' + color + ';color:#fff;font-weight:600;">' + getRatioLabel(ratio) + '</span></div>' +
-        '<div><a href="' + productLink + '" target="_blank" style="font-size:11px;color:#6a9fff;text-decoration:none;cursor:pointer;" title="点击查看账号详情">' + (row.productUniqueNo || String(row.productId).slice(-6)) + ' 🔗</a>' +
+        '<div>' + (row.platform === 'pzds'
+          ? '<span style="font-size:10px;font-weight:600;color:#38bdf8;background:rgba(56,189,248,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">盼之</span>'
+          : '<span style="font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">螃蟹</span>')
+        + '<a href="' + productLink + '" target="_blank" style="font-size:11px;color:#6a9fff;text-decoration:none;cursor:pointer;" title="点击查看账号详情">' + (row.productUniqueNo || String(row.productId).slice(-6)) + ' 🔗</a>' +
         '<span id="mw-hover-close" style="font-size:18px;color:#666;cursor:pointer;line-height:1;padding:2px 6px;margin-left:8px;border-radius:4px;">✕</span></div>' +
       '</div>' +
       // 价格对比
@@ -4158,7 +4879,7 @@
 
   /**
    * 打开估值设置对话框
-   * 参考性价比脚本的设置面板，支持编辑角色定价/倍率/资源定价/抽数阶梯/黄数阶梯/配队
+   * 估值设置面板：角色定价/命座溢价/抽数定价/有效金系数/满命溢价/配队
    */
 function openSettings() {
     // 移除已有对话框
@@ -4203,7 +4924,7 @@ function openSettings() {
 
     const subtitle = document.createElement('p');
     subtitle.style.cssText = 'font-size:12px;color:#888;margin-bottom:20px;line-height:1.5;';
-    subtitle.textContent = '热门角色(S/A/B)按里程碑估值：C0+专武=基础价, C3+专武=2倍, C6+专武=3倍, 无专武仅值15%。冷门角色(C/D/E)仅加分项。保存后立即生效。';
+    subtitle.textContent = '所有角色统一按基础价估值，命座价值通过每行"溢价"按钮单独配置。保存后立即生效。';
     dialog.appendChild(subtitle);
 
     // 收集所有角色名（按级别排序）
@@ -4218,16 +4939,17 @@ function openSettings() {
     charSection.style.cssText = 'margin-bottom:20px;';
     const charTitle = document.createElement('div');
     charTitle.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:6px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
-    charTitle.textContent = '五星角色定价（角色名 + 专武 + 估值）';
+    charTitle.textContent = '五星角色定价（角色名 + 专武 + 估值 + 命座溢价）';
     charSection.appendChild(charTitle);
 
     const charDesc = document.createElement('p');
     charDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    charDesc.innerHTML = '可自由添加、修改、删除角色定价。武器名自动匹配，也可手动修改。<br>S/A/B级为热门角色（按里程碑估值），C/D/E级为冷门角色（仅加分项）。';
+    charDesc.innerHTML = '可自由添加、修改、删除角色定价及命座溢价。武器名自动匹配，也可手动修改。<br>所有角色统一按基础价估值，命座价值通过"溢价"按钮单独配置（如C3→+50元，C6→+180元，只取最高不叠加）。<br>勾选"专武"=需要专武（无专武时价值×折扣，折扣值在下方"其他权重"中配置）。<br>点击"强绑"按钮可设置强绑队友（队友全不在场时角色价值×折扣，可与无专武折扣叠加）。';
     charSection.appendChild(charDesc);
 
     // 角色定价数据（可增删改）
     var charEntries = [];
+    var deletedChars = w.deletedChars || [];
     const tierLabels = { S: 'S级 热门人权', A: 'A级 热门限定', B: 'B级 温门核心', C: 'C级 冷门限定', D: 'D级 退环境', E: 'E级 常驻五星' };
     const tierColors = { S: '#10b981', A: '#e94560', B: '#f59e0b', C: '#6b7280', D: '#4b5563', E: '#374151' };
     var tierOrder = ['S', 'A', 'B', 'C', 'D', 'E'];
@@ -4238,12 +4960,39 @@ function openSettings() {
         var dtk = tierOrder[dti];
         if (CHAR_TIERS[dtk] && CHAR_TIERS[dtk].chars.indexOf(name) >= 0) return dtk;
       }
-      return null;
+      return null; // 不在CHAR_TIERS中的自定义角色
     }
 
-    // 初始化角色列表
+    // 检查角色是否在需要专武列表中
+    var _needSigSet = {};
+    var _needSigList = w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+    for (var nsi = 0; nsi < _needSigList.length; nsi++) {
+      var _nsName = typeof _needSigList[nsi] === 'string' ? _needSigList[nsi] : _needSigList[nsi].name;
+      _needSigSet[_nsName] = true;
+    }
+    function isNeedSig(name) { return !!_needSigSet[name]; }
+
+    // 构建强绑队友映射（从旧的 c6TeamDependency 或新的 teamMates 配置加载）
+    var _teamMatesMap = {};
+    var _rawTeamMates = w.teamMates || {};
+    for (var tmn in _rawTeamMates) {
+      if (!_rawTeamMates.hasOwnProperty(tmn)) continue;
+      var mates = _rawTeamMates[tmn];
+      if (Array.isArray(mates) && mates.length > 0) _teamMatesMap[tmn] = [].concat(mates);
+    }
+    // 向后兼容：从旧 c6TeamDependency 迁移
+    var _oldC6Dep = w.c6TeamDependency || {};
+    for (var ocdn in _oldC6Dep) {
+      if (!_oldC6Dep.hasOwnProperty(ocdn)) continue;
+      if (_teamMatesMap[ocdn]) continue;
+      var ocdInfo = _oldC6Dep[ocdn];
+      var ocdMates = Array.isArray(ocdInfo.teammate) ? ocdInfo.teammate : [ocdInfo.teammate];
+      if (ocdMates.length > 0 && ocdMates[0]) _teamMatesMap[ocdn] = [].concat(ocdMates);
+    }
+    function getTeamMates(name) { return _teamMatesMap[name] ? [].concat(_teamMatesMap[name]) : []; }
+
+    // 初始化角色列表（跳过已删除的角色）
     var defPrices = buildDefaultCharPrices();
-    var deletedChars = w.deletedChars || [];
     var _addedNames = {};
     for (var ti = 0; ti < tierOrder.length; ti++) {
       var tk = tierOrder[ti];
@@ -4257,11 +5006,11 @@ function openSettings() {
         var defaultPrice = defPrices[cname] != null ? defPrices[cname] : tier.price;
         var userPrice = w.charPrices[cname] != null ? w.charPrices[cname] : defaultPrice;
         var weapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[cname]) || SIG_WEAPONS[cname] || '';
-        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk });
+        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk, premiums: w.constPremiums && w.constPremiums[cname] ? Object.assign({}, w.constPremiums[cname]) : {}, needSig: isNeedSig(cname), teamMates: getTeamMates(cname) });
         _addedNames[cname] = true;
       }
     }
-    // 加载级别被覆盖的角色（在CHAR_TIERS中但级别被用户修改）
+    // 加载级别被覆盖的角色（在 CHAR_TIERS 中但级别被用户修改）
     if (w.charTierOverride) {
       for (var ovrName in w.charTierOverride) {
         if (!w.charTierOverride.hasOwnProperty(ovrName)) continue;
@@ -4272,18 +5021,20 @@ function openSettings() {
         var ovrDefaultPrice = defPrices[ovrName] != null ? defPrices[ovrName] : (ovrTierInfo ? ovrTierInfo.price : 0);
         var ovrUserPrice = w.charPrices[ovrName] != null ? w.charPrices[ovrName] : ovrDefaultPrice;
         var ovrWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[ovrName]) || SIG_WEAPONS[ovrName] || '';
-        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier });
+        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier, premiums: w.constPremiums && w.constPremiums[ovrName] ? Object.assign({}, w.constPremiums[ovrName]) : {}, needSig: isNeedSig(ovrName), teamMates: getTeamMates(ovrName) });
         _addedNames[ovrName] = true;
       }
     }
-    // 补充用户自定义添加的角色（不在CHAR_TIERS中的角色）
-    for (var customName in w.charPrices) {
-      if (!w.charPrices.hasOwnProperty(customName)) continue;
-      if (_addedNames[customName]) continue;
-      if (deletedChars.indexOf(customName) >= 0) continue;
-      var customTier = (w.charTierOverride && w.charTierOverride[customName]) || 'C';
-      var customWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[customName]) || '';
-      charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier });
+    // 加载用户自定义添加的角色（不在 CHAR_TIERS 中的角色）
+    if (w.charPrices) {
+      for (var customName in w.charPrices) {
+        if (!w.charPrices.hasOwnProperty(customName)) continue;
+        if (_addedNames[customName]) continue;
+        if (deletedChars.indexOf(customName) >= 0) continue;
+        var customTier = (w.charTierOverride && w.charTierOverride[customName]) || 'C';
+        var customWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[customName]) || SIG_WEAPONS[customName] || '';
+        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier, premiums: w.constPremiums && w.constPremiums[customName] ? Object.assign({}, w.constPremiums[customName]) : {}, needSig: isNeedSig(customName), teamMates: getTeamMates(customName) });
+      }
     }
 
     var charList = document.createElement('div');
@@ -4350,6 +5101,100 @@ function openSettings() {
             };
             row.appendChild(tierSelect);
 
+            var sigCheck = document.createElement('input');
+            sigCheck.type = 'checkbox'; sigCheck.checked = !!entry.needSig;
+            sigCheck.title = '勾选=需要专武（无专武时价值×' + (w.needSigDiscount != null ? w.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount) + '）';
+            sigCheck.style.cssText = 'margin:0;cursor:pointer;accent-color:#ef4444;';
+            sigCheck.onchange = function() { entry.needSig = sigCheck.checked; };
+            row.appendChild(sigCheck);
+
+            var sigLabel = document.createElement('span');
+            sigLabel.textContent = '专武'; sigLabel.style.cssText = 'color:' + (entry.needSig ? '#ef4444' : '#555') + ';font-size:10px;cursor:pointer;';
+            sigLabel.onclick = function() { sigCheck.checked = !sigCheck.checked; entry.needSig = sigCheck.checked; sigLabel.style.color = entry.needSig ? '#ef4444' : '#555'; };
+            row.appendChild(sigLabel);
+
+            var premBtn = document.createElement('button');
+            var premCount = entry.premiums ? Object.keys(entry.premiums).length : 0;
+            premBtn.textContent = '溢价' + (premCount > 0 ? '(' + premCount + ')' : '');
+            premBtn.title = '编辑命座溢价';
+            premBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a2e;color:' + (premCount > 0 ? '#10b981' : '#555') + ';font-size:11px;cursor:pointer;line-height:1.4;';
+            premBtn.onclick = function() {
+              var premOverlay = document.createElement('div');
+              premOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
+              var premBox = document.createElement('div');
+              premBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:300px;color:#e0e0e0;';
+              var premHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#10b981;">编辑命座溢价 - ' + entry.name + '</div>';
+              premHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">达到指定命座时额外加价（只取最高溢价，不叠加）。留空或0表示无溢价。</div>';
+              for (var pci = 1; pci <= 6; pci++) {
+                var curPremVal = entry.premiums && entry.premiums[pci] != null ? entry.premiums[pci] : '';
+                premHTML += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+                  '<span style="font-size:12px;color:#e94560;font-weight:600;min-width:30px;">C' + pci + '</span>' +
+                  '<span style="color:#555;font-size:11px;">→ +</span>' +
+                  '<input type="number" class="prem-c' + pci + '" value="' + curPremVal + '" placeholder="0" min="0" style="width:80px;padding:4px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:right;" />' +
+                  '<span style="color:#555;font-size:11px;">元</span>' +
+                  '</div>';
+              }
+              premHTML += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
+                '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
+                '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
+              premBox.innerHTML = premHTML;
+              premBox.querySelector('.cancel-btn').onclick = function() { premOverlay.remove(); };
+              premBox.querySelector('.save-btn').onclick = function() {
+                entry.premiums = {};
+                for (var sci = 1; sci <= 6; sci++) {
+                  var pv = parseFloat(premBox.querySelector('.prem-c' + sci).value);
+                  if (!isNaN(pv) && pv > 0) {
+                    entry.premiums[sci] = pv;
+                  }
+                }
+                premOverlay.remove();
+                renderCharList();
+              };
+              premOverlay.appendChild(premBox);
+              premOverlay.onclick = function(ev) { if (ev.target === premOverlay) premOverlay.remove(); };
+              document.body.appendChild(premOverlay);
+            };
+            row.appendChild(premBtn);
+
+            var mateBtn = document.createElement('button');
+            var mateCount = entry.teamMates ? entry.teamMates.length : 0;
+            mateBtn.textContent = '强绑' + (mateCount > 0 ? '(' + mateCount + ')' : '');
+            mateBtn.title = '编辑强绑队友（全不在场时价值×' + (w.teamDepDiscount != null ? w.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount) + '）';
+            mateBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a2e;color:' + (mateCount > 0 ? '#fbbf24' : '#555') + ';font-size:11px;cursor:pointer;line-height:1.4;';
+            mateBtn.onclick = function() {
+              var mateOverlay = document.createElement('div');
+              mateOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
+              var mateBox = document.createElement('div');
+              mateBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:340px;max-height:500px;overflow-y:auto;color:#e0e0e0;';
+              var mateHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#fbbf24;">编辑强绑队友 - ' + entry.name + '</div>';
+              mateHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">勾选强绑队友，当这些队友全不在账号中时，角色价值×' + (w.teamDepDiscount != null ? w.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount) + '。可与无专武折扣叠加。</div>';
+              var _curMates = entry.teamMates || [];
+              for (var mi = 0; mi < allCharNames.length; mi++) {
+                var mname = allCharNames[mi];
+                if (mname === entry.name) continue;
+                var checked = _curMates.indexOf(mname) >= 0 ? ' checked' : '';
+                mateHTML += '<label style="display:inline-flex;align-items:center;gap:4px;margin:3px 6px;font-size:12px;color:#e0e0e0;cursor:pointer;">' +
+                  '<input type="checkbox" class="mate-cb" value="' + mname + '"' + checked + ' style="margin:0;accent-color:#fbbf24;" />' + mname + '</label>';
+              }
+              mateHTML += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
+                '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
+                '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#fbbf24;color:#12122a;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
+              mateBox.innerHTML = mateHTML;
+              mateBox.querySelector('.cancel-btn').onclick = function() { mateOverlay.remove(); };
+              mateBox.querySelector('.save-btn').onclick = function() {
+                var cbs = mateBox.querySelectorAll('.mate-cb:checked');
+                var newMates = [];
+                for (var cbi = 0; cbi < cbs.length; cbi++) newMates.push(cbs[cbi].value);
+                entry.teamMates = newMates;
+                mateOverlay.remove();
+                renderCharList();
+              };
+              mateOverlay.appendChild(mateBox);
+              mateOverlay.onclick = function(ev) { if (ev.target === mateOverlay) mateOverlay.remove(); };
+              document.body.appendChild(mateOverlay);
+            };
+            row.appendChild(mateBtn);
+
             var delBtn = document.createElement('button');
             delBtn.textContent = '×'; delBtn.title = '删除';
             delBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a2e;color:#e94560;font-size:14px;cursor:pointer;line-height:1;';
@@ -4415,7 +5260,7 @@ function openSettings() {
       if (!wpn && SIG_WEAPONS[nm]) wpn = SIG_WEAPONS[nm];
       var pr = parseFloat(addPriceInput.value);
       if (isNaN(pr)) pr = 15;
-      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value });
+      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value, premiums: {} });
       // 如果角色之前被删除过，从 deletedChars 中移除，否则重新打开设置时会跳过
       var dcIdx = deletedChars.indexOf(nm);
       if (dcIdx >= 0) deletedChars.splice(dcIdx, 1);
@@ -4427,233 +5272,86 @@ function openSettings() {
 
     dialog.appendChild(charSection);
 
-    // ===== 2. 命座溢价 =====
-    var premSection = document.createElement('div');
-    premSection.style.cssText = 'margin-bottom:20px;';
-    var premTitle = document.createElement('div');
-    premTitle.style.cssText = 'font-size:14px;font-weight:600;color:#10b981;margin-bottom:6px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
-    premTitle.textContent = '命座溢价（特定角色达到指定命座时额外加价）';
-    premSection.appendChild(premTitle);
-
-    var premDesc = document.createElement('p');
-    premDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    premDesc.innerHTML = '设置方法：选择角色 → 输入命座数和对应溢价 → 添加。例如：绯雪 3命→+100元，6命→+200元。达到3命加100，达到6命加200（只取最高溢价，不叠加）。';
-    premSection.appendChild(premDesc);
-
-    var premList = document.createElement('div');
-    premList.style.cssText = 'margin-bottom:12px;';
-    // premEntries 统一使用 val 字段，在下方从 weights.constPremiums 初始化
-    var premEntries = [];
-
-    function renderPremList() {
-      premList.innerHTML = '';
-      if (premEntries.length === 0) {
-        premList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无溢价规则</div>';
-        return;
-      }
-      for (var i = 0; i < premEntries.length; i++) {
-        (function (idx) {
-          var e = premEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          row.innerHTML =
-            '<span style="color:#e94560;font-weight:600;min-width:60px;">' + e.name + '</span>' +
-            '<span style="color:#f59e0b;">' + e.bp + '命</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#10b981;font-weight:600;">+' + e.val + '元</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            var editOverlay = document.createElement('div');
-            editOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
-            var editBox = document.createElement('div');
-            editBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:280px;color:#e0e0e0;';
-            editBox.innerHTML =
-              '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#f59e0b;">编辑命座溢价</div>' +
-              '<div style="margin-bottom:8px;font-size:12px;color:#888;">角色：<span style="color:#e94560;font-weight:600;">' + e.name + '</span></div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">命座数</label>' +
-              '<input type="number" class="edit-bp" value="' + e.bp + '" min="1" max="6" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">溢价金额（元）</label>' +
-              '<input type="number" class="edit-val" value="' + e.val + '" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-              '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
-              '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#f59e0b;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
-            editBox.querySelector('.cancel-btn').onclick = function () { editOverlay.remove(); };
-            editBox.querySelector('.save-btn').onclick = function () {
-              var newBp = parseInt(editBox.querySelector('.edit-bp').value);
-              var newVal = parseFloat(editBox.querySelector('.edit-val').value);
-              if (newBp >= 1 && newBp <= 6 && !isNaN(newVal)) { e.bp = newBp; e.val = newVal; renderPremList(); }
-              editOverlay.remove();
-            };
-            editOverlay.appendChild(editBox);
-            editOverlay.onclick = function (ev) { if (ev.target === editOverlay) editOverlay.remove(); };
-            document.body.appendChild(editOverlay);
-          };
-          row.querySelector('.del-btn').onclick = function () { premEntries.splice(idx, 1); renderPremList(); };
-          premList.appendChild(row);
-        })(i);
-      }
-    }
-
-    // 初始化已有规则
-    var existingPrems = w.constPremiums || {};
-    for (var premName of Object.keys(existingPrems)) {
-      for (var premBp of Object.keys(existingPrems[premName])) {
-        premEntries.push({ name: premName, bp: parseInt(premBp), val: existingPrems[premName][premBp] });
-      }
-    }
-    renderPremList();
-    premSection.appendChild(premList);
-
-    // 添加新规则的输入行
-    var addRow = document.createElement('div');
-    addRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
-    var nameSelect = document.createElement('select');
-    nameSelect.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
-    for (var ni = 0; ni < allCharNames.length; ni++) {
-      var opt = document.createElement('option');
-      opt.value = allCharNames[ni]; opt.textContent = allCharNames[ni];
-      nameSelect.appendChild(opt);
-    }
-    addRow.appendChild(nameSelect);
-    var bpInput = document.createElement('input');
-    bpInput.type = 'number'; bpInput.min = '1'; bpInput.max = '6'; bpInput.placeholder = '命座';
-    bpInput.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;';
-    addRow.appendChild(bpInput);
-    var arrowSpan = document.createElement('span');
-    arrowSpan.textContent = '→'; arrowSpan.style.cssText = 'color:#555;font-size:12px;';
-    addRow.appendChild(arrowSpan);
-    var valInput = document.createElement('input');
-    valInput.type = 'number'; valInput.placeholder = '溢价';
-    valInput.style.cssText = 'width:70px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:right;';
-    addRow.appendChild(valInput);
-    var addBtn = document.createElement('button');
-    addBtn.textContent = '添加';
-    addBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
-    addBtn.onclick = function () {
-      var nm = nameSelect.value; var bp = parseInt(bpInput.value); var vl = parseFloat(valInput.value);
-      if (isNaN(bp) || bp < 1 || bp > 6) { alert('命座数请填1-6'); return; }
-      if (isNaN(vl)) { alert('请输入溢价金额'); return; }
-      premEntries.push({ name: nm, bp: bp, val: vl });
-      renderPremList(); bpInput.value = ''; valInput.value = '';
-    };
-    addRow.appendChild(addBtn);
-    premSection.appendChild(addRow);
-    dialog.appendChild(premSection);
-
-    // ===== 3. 抽数阶梯定价 =====
+    // ===== 2. 抽数阶梯定价（公式） =====
     var pullSection = document.createElement('div');
     pullSection.style.cssText = 'margin-bottom:20px;';
     var pullTitle = document.createElement('div');
     pullTitle.style.cssText = 'font-size:14px;font-weight:600;color:#8ecdf5;margin-bottom:6px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
-    pullTitle.textContent = '抽数阶梯定价（资源越多每抽越值钱）';
+    pullTitle.textContent = '抽数定价（资源越多每抽越值钱）';
     pullSection.appendChild(pullTitle);
     var pullDesc = document.createElement('p');
     pullDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    pullDesc.innerHTML = '抽数 = 星声/160 + 月相/160 + 余波珊瑚/8 + 浮金波纹 + 铸潮波纹。设置阶梯区间和每抽价值，资源越多越值钱。';
+    pullDesc.innerHTML = '抽数 = 星声/160 + 月相/160 + 余波珊瑚/8 + 浮金波纹 + 铸潮波纹。每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动。';
     pullSection.appendChild(pullDesc);
 
-    var pullList = document.createElement('div');
-    pullList.style.cssText = 'margin-bottom:12px;';
-    var pullEntries = (weights.pullTiers || DEFAULT_PULL_TIERS).map(function (e) { return { minPull: e.minPull, maxPull: e.maxPull, perPullPrice: e.perPullPrice }; });
+    var pullFormulaRow = document.createElement('div');
+    pullFormulaRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
 
-    function renderPullList() {
-      pullList.innerHTML = '';
-      if (pullEntries.length === 0) { pullList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无阶梯规则</div>'; return; }
-      pullEntries.sort(function (a, b) { return a.minPull - b.minPull; });
-      for (var i = 0; i < pullEntries.length; i++) {
-        (function (idx) {
-          var e = pullEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          var maxLabel = e.maxPull === Infinity ? '+' : '~' + e.maxPull;
-          row.innerHTML =
-            '<span style="color:#8ecdf5;font-weight:600;min-width:80px;">' + e.minPull + maxLabel + '抽</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#10b981;font-weight:600;">' + e.perPullPrice + '元/抽</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            var editOverlay = document.createElement('div');
-            editOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
-            var editBox = document.createElement('div');
-            editBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:300px;color:#e0e0e0;';
-            editBox.innerHTML =
-              '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#8ecdf5;">编辑抽数阶梯</div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">起始抽数</label>' +
-              '<input type="number" class="edit-min" value="' + e.minPull + '" min="0" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">结束抽数（填99999表示无限）</label>' +
-              '<input type="number" class="edit-max" value="' + (e.maxPull === Infinity ? 99999 : e.maxPull) + '" min="0" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">每抽价值（元）</label>' +
-              '<input type="number" class="edit-price" value="' + e.perPullPrice + '" step="0.1" min="0" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-              '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
-              '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#8ecdf5;color:#1a1a2e;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
-            editBox.querySelector('.cancel-btn').onclick = function () { editOverlay.remove(); };
-            editBox.querySelector('.save-btn').onclick = function () {
-              var newMin = parseInt(editBox.querySelector('.edit-min').value) || 0;
-              var newMaxRaw = parseInt(editBox.querySelector('.edit-max').value) || 99999;
-              var newMax = newMaxRaw >= 99999 ? Infinity : newMaxRaw;
-              var newPrice = parseFloat(editBox.querySelector('.edit-price').value) || 0;
-              if (newMin >= 0 && newPrice >= 0) { e.minPull = newMin; e.maxPull = newMax; e.perPullPrice = newPrice; renderPullList(); }
-              editOverlay.remove();
-            };
-            editOverlay.appendChild(editBox);
-            editOverlay.onclick = function (ev) { if (ev.target === editOverlay) editOverlay.remove(); };
-            document.body.appendChild(editOverlay);
-          };
-          row.querySelector('.del-btn').onclick = function () { pullEntries.splice(idx, 1); renderPullList(); };
-          pullList.appendChild(row);
-        })(i);
-      }
+    function pfLabel(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      return s;
+    }
+    function pfInput(val, step, color, title) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:70px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      return i;
     }
 
-    renderPullList();
-    pullSection.appendChild(pullList);
+    pullFormulaRow.appendChild(pfLabel('基准抽数'));
+    var pfBaseInp = pfInput(weights.pullBase != null ? weights.pullBase : DEFAULT_PULL_FORMULA.pullBase, '1', '#8ecdf5', '此抽数对应的每抽价格为基准价格');
+    pullFormulaRow.appendChild(pfBaseInp);
+    pullFormulaRow.appendChild(pfLabel('基准每抽'));
+    var pfBasePriceInp = pfInput(weights.pullBasePrice != null ? weights.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice, '0.1', '#10b981', '基准抽数对应的每抽价格（元）');
+    pullFormulaRow.appendChild(pfBasePriceInp);
+    pullFormulaRow.appendChild(pfLabel('元，每多1抽浮动'));
+    var pfStepPriceInp = pfInput(weights.pullStepPrice != null ? weights.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice, '0.001', '#10b981', '每多1抽增加的价格（元）');
+    pullFormulaRow.appendChild(pfStepPriceInp);
+    pullFormulaRow.appendChild(pfLabel('元'));
+    pullSection.appendChild(pullFormulaRow);
 
-    // 添加新抽数阶梯
-    var addPullRow = document.createElement('div');
-    addPullRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;';
-    var minInput = document.createElement('input');
-    minInput.type = 'number'; minInput.min = '0'; minInput.placeholder = '起始';
-    minInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addPullRow.appendChild(minInput);
-    var dashSpan = document.createElement('span');
-    dashSpan.textContent = '~'; dashSpan.style.cssText = 'color:#555;font-size:11px;';
-    addPullRow.appendChild(dashSpan);
-    var maxInput = document.createElement('input');
-    maxInput.type = 'number'; maxInput.min = '0'; maxInput.placeholder = '结束';
-    maxInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addPullRow.appendChild(maxInput);
-    var pullUnit = document.createElement('span');
-    pullUnit.textContent = '抽'; pullUnit.style.cssText = 'color:#888;font-size:11px;';
-    addPullRow.appendChild(pullUnit);
-    var arrowSpan2 = document.createElement('span');
-    arrowSpan2.textContent = '→'; arrowSpan2.style.cssText = 'color:#555;font-size:11px;margin-left:4px;';
-    addPullRow.appendChild(arrowSpan2);
-    var priceInput = document.createElement('input');
-    priceInput.type = 'number'; priceInput.step = '0.1'; priceInput.placeholder = '每抽';
-    priceInput.style.cssText = 'width:60px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:right;';
-    addPullRow.appendChild(priceInput);
-    var yuanSpan = document.createElement('span');
-    yuanSpan.textContent = '元'; yuanSpan.style.cssText = 'color:#888;font-size:11px;';
-    addPullRow.appendChild(yuanSpan);
-    var addPullBtn = document.createElement('button');
-    addPullBtn.textContent = '添加';
-    addPullBtn.style.cssText = 'padding:5px 12px;border:none;border-radius:4px;background:#8ecdf5;color:#1a1a2e;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
-    addPullBtn.onclick = function () {
-      var minVal = parseInt(minInput.value) || 0;
-      var maxValRaw = parseInt(maxInput.value) || 99999;
-      var maxVal = maxValRaw >= 99999 ? Infinity : maxValRaw;
-      var priceVal = parseFloat(priceInput.value);
-      if (isNaN(priceVal) || priceVal < 0) { alert('请输入每抽价值'); return; }
-      pullEntries.push({ minPull: minVal, maxPull: maxVal, perPullPrice: priceVal });
-      renderPullList(); minInput.value = ''; maxInput.value = ''; priceInput.value = '';
+    // 预览
+    var pullPreview = document.createElement('div');
+    pullPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(142,205,245,0.05);border-radius:6px;border:1px solid rgba(142,205,245,0.15);';
+    function updatePullPreview() {
+      var base = parseFloat(pfBaseInp.value) || 0;
+      var basePrice = parseFloat(pfBasePriceInp.value) || 0;
+      var stepPrice = parseFloat(pfStepPriceInp.value) || 0;
+      var samples = [0, 50, 100, 150, base, base + 50, base + 100, base + 200, base + 400, base + 800];
+      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+      var html = '';
+      for (var si = 0; si < samples.length; si++) {
+        var p = samples[si];
+        var perPull = basePrice + (p - base) * stepPrice;
+        if (perPull < 0) perPull = 0;
+        html += p + '抽 → ' + (Math.round(perPull * 1000) / 1000) + '元/抽　';
+      }
+      pullPreview.innerHTML = html;
+    }
+    [pfBaseInp, pfBasePriceInp, pfStepPriceInp].forEach(function(inp) {
+      inp.oninput = updatePullPreview;
+    });
+    updatePullPreview();
+    pullSection.appendChild(pullPreview);
+
+    // 载入默认按钮
+    var pullDefaultRow = document.createElement('div');
+    pullDefaultRow.style.cssText = 'margin-top:8px;';
+    var loadPullDefaultBtn = document.createElement('button');
+    loadPullDefaultBtn.textContent = '载入默认（200抽基准1.0元，每抽浮动0.002元）';
+    loadPullDefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#333;color:#8ecdf5;font-size:11px;cursor:pointer;';
+    loadPullDefaultBtn.onclick = function () {
+      pfBaseInp.value = DEFAULT_PULL_FORMULA.pullBase;
+      pfBasePriceInp.value = DEFAULT_PULL_FORMULA.pullBasePrice;
+      pfStepPriceInp.value = DEFAULT_PULL_FORMULA.pullStepPrice;
+      updatePullPreview();
     };
-    addPullRow.appendChild(addPullBtn);
-    pullSection.appendChild(addPullRow);
+    pullDefaultRow.appendChild(loadPullDefaultBtn);
+    pullSection.appendChild(pullDefaultRow);
 
-    // 满命抽数加成档位
+    // 满命抽数加成（公式）
     var pullC6Divider = document.createElement('div');
     pullC6Divider.style.cssText = 'border-top:1px dashed #0f3460;margin:16px 0 12px 0;';
     pullSection.appendChild(pullC6Divider);
@@ -4665,91 +5363,80 @@ function openSettings() {
 
     var pullC6Desc = document.createElement('p');
     pullC6Desc.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;';
-    pullC6Desc.innerHTML = '根据加权满命数（与满命溢价共用），对抽数价值额外加成。如加权满命1 → 抽数价值+30%，加权满命2 → +50%。';
+    pullC6Desc.innerHTML = '根据加权满命数（与满命溢价共用），对抽数价值额外加成。加成 = 基准加成 + (加权满命 - 基准) / 每档 × 每档浮动。';
     pullSection.appendChild(pullC6Desc);
 
-    var pullC6List = document.createElement('div');
-    pullC6List.style.cssText = 'margin-bottom:10px;';
-    var pullC6Entries = (weights.pullC6Bonus || DEFAULT_WEIGHTS.pullC6Bonus).map(function (e) { return { count: e.count, bonus: e.bonus }; });
+    var pullC6FormulaRow = document.createElement('div');
+    pullC6FormulaRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
 
-    function renderPullC6List() {
-      pullC6List.innerHTML = '';
-      if (pullC6Entries.length === 0) { pullC6List.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无加成规则</div>'; return; }
-      pullC6Entries.sort(function (a, b) { return a.count - b.count; });
-      for (var i = 0; i < pullC6Entries.length; i++) {
-        (function (idx) {
-          var e = pullC6Entries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          row.innerHTML =
-            '<span style="color:#f59e0b;font-weight:600;min-width:80px;">加权满命' + e.count + '</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#10b981;font-weight:600;">+' + (e.bonus * 100) + '%</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            var editOverlay = document.createElement('div');
-            editOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
-            var editBox = document.createElement('div');
-            editBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:300px;color:#e0e0e0;';
-            editBox.innerHTML =
-              '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#f59e0b;">编辑抽数满命加成</div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">加权满命数</label>' +
-              '<input type="number" class="edit-count" value="' + e.count + '" min="1" step="0.5" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">加成系数（0.5=+50%）</label>' +
-              '<input type="number" class="edit-bonus" value="' + e.bonus + '" min="0" step="0.05" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-              '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
-              '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#f59e0b;color:#1a1a2e;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
-            editBox.querySelector('.cancel-btn').onclick = function () { editOverlay.remove(); };
-            editBox.querySelector('.save-btn').onclick = function () {
-              var newCount = parseFloat(editBox.querySelector('.edit-count').value) || 0;
-              var newBonus = parseFloat(editBox.querySelector('.edit-bonus').value) || 0;
-              if (newCount >= 1 && newBonus >= 0) { e.count = newCount; e.bonus = newBonus; renderPullC6List(); }
-              editOverlay.remove();
-            };
-            editOverlay.appendChild(editBox);
-            editOverlay.onclick = function (ev) { if (ev.target === editOverlay) editOverlay.remove(); };
-            document.body.appendChild(editOverlay);
-          };
-          row.querySelector('.del-btn').onclick = function () { pullC6Entries.splice(idx, 1); renderPullC6List(); };
-          pullC6List.appendChild(row);
-        })(i);
-      }
+    function pc6Label(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      return s;
     }
-    renderPullC6List();
-    pullSection.appendChild(pullC6List);
+    function pc6Input(val, step, color, title) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      return i;
+    }
 
-    // 添加新抽数满命加成
-    var addPullC6Row = document.createElement('div');
-    addPullC6Row.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;';
-    var pc6CountInput = document.createElement('input');
-    pc6CountInput.type = 'number'; pc6CountInput.min = '1'; pc6CountInput.step = '0.5'; pc6CountInput.placeholder = '加权满命';
-    pc6CountInput.style.cssText = 'width:80px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addPullC6Row.appendChild(pc6CountInput);
-    var pc6Arrow = document.createElement('span');
-    pc6Arrow.textContent = '→'; pc6Arrow.style.cssText = 'color:#555;font-size:11px;';
-    addPullC6Row.appendChild(pc6Arrow);
-    var pc6BonusInput = document.createElement('input');
-    pc6BonusInput.type = 'number'; pc6BonusInput.min = '0'; pc6BonusInput.step = '0.05'; pc6BonusInput.placeholder = '加成';
-    pc6BonusInput.style.cssText = 'width:60px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:right;';
-    addPullC6Row.appendChild(pc6BonusInput);
-    var pc6Pct = document.createElement('span');
-    pc6Pct.textContent = '(0.5=+50%)'; pc6Pct.style.cssText = 'color:#888;font-size:11px;';
-    addPullC6Row.appendChild(pc6Pct);
-    var addPullC6Btn = document.createElement('button');
-    addPullC6Btn.textContent = '添加';
-    addPullC6Btn.style.cssText = 'padding:5px 12px;border:none;border-radius:4px;background:#f59e0b;color:#1a1a2e;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
-    addPullC6Btn.onclick = function () {
-      var cVal = parseFloat(pc6CountInput.value);
-      var bVal = parseFloat(pc6BonusInput.value);
-      if (isNaN(cVal) || cVal < 1) { alert('加权满命数至少为1'); return; }
-      if (isNaN(bVal) || bVal < 0) { alert('请输入加成系数'); return; }
-      pullC6Entries.push({ count: cVal, bonus: bVal });
-      renderPullC6List(); pc6CountInput.value = ''; pc6BonusInput.value = '';
+    pullC6FormulaRow.appendChild(pc6Label('基准满命'));
+    var pc6BaseInp = pc6Input(weights.pullC6Base != null ? weights.pullC6Base : DEFAULT_WEIGHTS.pullC6Base, '0.5', '#f59e0b', '此加权满命数对应的加成为基准加成');
+    pullC6FormulaRow.appendChild(pc6BaseInp);
+    pullC6FormulaRow.appendChild(pc6Label('基准加成'));
+    var pc6BaseBonusInp = pc6Input((weights.pullC6BaseBonus != null ? weights.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus) * 100, '1', '#10b981', '基准满命数对应的加成百分比');
+    pullC6FormulaRow.appendChild(pc6BaseBonusInp);
+    pullC6FormulaRow.appendChild(pc6Label('%，每'));
+    var pc6StepInp = pc6Input(weights.pullC6Step != null ? weights.pullC6Step : DEFAULT_WEIGHTS.pullC6Step, '0.1', '#f59e0b', '每N命浮动一档');
+    pullC6FormulaRow.appendChild(pc6StepInp);
+    pullC6FormulaRow.appendChild(pc6Label('命浮动'));
+    var pc6StepBonusInp = pc6Input((weights.pullC6StepBonus != null ? weights.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus) * 100, '0.1', '#10b981', '每档浮动百分比');
+    pullC6FormulaRow.appendChild(pc6StepBonusInp);
+    pullC6FormulaRow.appendChild(pc6Label('%'));
+    pullSection.appendChild(pullC6FormulaRow);
+
+    // 预览
+    var pullC6Preview = document.createElement('div');
+    pullC6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(245,158,11,0.05);border-radius:6px;border:1px solid rgba(245,158,11,0.15);';
+    function updatePullC6Preview() {
+      var base = parseFloat(pc6BaseInp.value) || 0;
+      var baseBonus = (parseFloat(pc6BaseBonusInp.value) || 0) / 100;
+      var step = parseFloat(pc6StepInp.value) || 1;
+      var stepBonus = (parseFloat(pc6StepBonusInp.value) || 0) / 100;
+      var samples = [0, 1, 2, 3, 4, base, base + step, base + step * 2, base + step * 5, base + step * 10, base + step * 20];
+      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+      var html = '';
+      for (var si = 0; si < samples.length; si++) {
+        var c = samples[si];
+        var bonus = baseBonus + (c - base) / step * stepBonus;
+        if (bonus < 0) bonus = 0;
+        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
+      }
+      pullC6Preview.innerHTML = html;
+    }
+    [pc6BaseInp, pc6BaseBonusInp, pc6StepInp, pc6StepBonusInp].forEach(function(inp) {
+      inp.oninput = updatePullC6Preview;
+    });
+    updatePullC6Preview();
+    pullSection.appendChild(pullC6Preview);
+
+    // 载入默认按钮
+    var pullC6DefaultRow = document.createElement('div');
+    pullC6DefaultRow.style.cssText = 'margin-top:8px;';
+    var loadPullC6DefaultBtn = document.createElement('button');
+    loadPullC6DefaultBtn.textContent = '载入默认（5命基准50%，每0.1命浮动0.5%）';
+    loadPullC6DefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;';
+    loadPullC6DefaultBtn.onclick = function () {
+      pc6BaseInp.value = DEFAULT_WEIGHTS.pullC6Base;
+      pc6BaseBonusInp.value = DEFAULT_WEIGHTS.pullC6BaseBonus * 100;
+      pc6StepInp.value = DEFAULT_WEIGHTS.pullC6Step;
+      pc6StepBonusInp.value = DEFAULT_WEIGHTS.pullC6StepBonus * 100;
+      updatePullC6Preview();
     };
-    addPullC6Row.appendChild(addPullC6Btn);
-    pullSection.appendChild(addPullC6Row);
+    pullC6DefaultRow.appendChild(loadPullC6DefaultBtn);
+    pullSection.appendChild(pullC6DefaultRow);
     dialog.appendChild(pullSection);
 
     // ===== 4. 满命多角色溢价 =====
@@ -4793,249 +5480,165 @@ function openSettings() {
     c6WeightInfo.appendChild(c6WeightRow);
     c6Section.appendChild(c6WeightInfo);
 
-    // 满命溢价档位列表
-    var c6List = document.createElement('div');
-    c6List.style.cssText = 'margin-bottom:12px;';
-    var c6Entries = (weights.c6MultiBonus || DEFAULT_WEIGHTS.c6MultiBonus).map(function (e) { return { count: e.count, bonus: e.bonus }; });
+    // 满命溢价公式配置
+    var c6FormulaRow = document.createElement('div');
+    c6FormulaRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
 
-    function renderC6List() {
-      c6List.innerHTML = '';
-      if (c6Entries.length === 0) { c6List.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无溢价档位，可点击下方"载入默认"快速添加</div>'; return; }
-      c6Entries.sort(function (a, b) { return a.count - b.count; });
-      for (var i = 0; i < c6Entries.length; i++) {
-        (function (idx) {
-          var e = c6Entries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          row.innerHTML =
-            '<span style="color:#e94560;font-weight:600;min-width:80px;">等效' + e.count + '个满命</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#10b981;font-weight:600;">加' + Math.round(e.bonus * 100) + '%</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            var editOverlay = document.createElement('div');
-            editOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
-            var editBox = document.createElement('div');
-            editBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:300px;color:#e0e0e0;';
-            editBox.innerHTML =
-              '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#e94560;">编辑满命溢价档位</div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">等效满命数量</label>' +
-              '<input type="number" class="edit-count" value="' + e.count + '" min="1" max="20" step="0.5" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">加成比例（如0.2=20%）</label>' +
-              '<input type="number" class="edit-bonus" value="' + e.bonus + '" min="0" max="5" step="0.1" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="display:flex;gap:10px;margin-top:12px;">' +
-              '<button class="cancel-edit" style="padding:8px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
-              '<button class="save-edit" style="padding:8px 16px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;cursor:pointer;">保存</button></div>';
-            editOverlay.appendChild(editBox);
-            document.body.appendChild(editOverlay);
-            editBox.querySelector('.cancel-edit').onclick = function () { editOverlay.remove(); };
-            editBox.querySelector('.save-edit').onclick = function () {
-              var newCount = parseFloat(editBox.querySelector('.edit-count').value);
-              var newBonus = parseFloat(editBox.querySelector('.edit-bonus').value);
-              if (newCount < 1) { alert('数量至少为1'); return; }
-              if (newBonus < 0) { alert('加成比例不能为负'); return; }
-              e.count = newCount; e.bonus = newBonus; renderC6List(); editOverlay.remove();
-            };
-          };
-          row.querySelector('.del-btn').onclick = function () { var di = c6Entries.indexOf(e); if (di >= 0) c6Entries.splice(di, 1); renderC6List(); };
-          c6List.appendChild(row);
-        })(i);
+    function c6fLabel(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      return s;
+    }
+    function c6fInput(val, step, color, title) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      return i;
+    }
+
+    c6FormulaRow.appendChild(c6fLabel('基准满命'));
+    var c6BaseInp = c6fInput(weights.c6Base != null ? weights.c6Base : DEFAULT_WEIGHTS.c6Base, '0.5', '#e94560', '此加权满命数对应的溢价为基准溢价');
+    c6FormulaRow.appendChild(c6BaseInp);
+    c6FormulaRow.appendChild(c6fLabel('基准溢价'));
+    var c6BaseBonusInp = c6fInput((weights.c6BaseBonus != null ? weights.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus) * 100, '5', '#10b981', '基准满命数对应的溢价百分比');
+    c6FormulaRow.appendChild(c6BaseBonusInp);
+    c6FormulaRow.appendChild(c6fLabel('%，每'));
+    var c6StepInp = c6fInput(weights.c6Step != null ? weights.c6Step : DEFAULT_WEIGHTS.c6Step, '0.1', '#e94560', '每N命浮动一档');
+    c6FormulaRow.appendChild(c6StepInp);
+    c6FormulaRow.appendChild(c6fLabel('命浮动'));
+    var c6StepBonusInp = c6fInput((weights.c6StepBonus != null ? weights.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus) * 100, '0.5', '#10b981', '每档浮动百分比');
+    c6FormulaRow.appendChild(c6StepBonusInp);
+    c6FormulaRow.appendChild(c6fLabel('%'));
+    c6Section.appendChild(c6FormulaRow);
+
+    // 预览
+    var c6Preview = document.createElement('div');
+    c6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(233,69,96,0.05);border-radius:6px;border:1px solid rgba(233,69,96,0.15);';
+    function updateC6Preview() {
+      var base = parseFloat(c6BaseInp.value) || 0;
+      var baseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
+      var step = parseFloat(c6StepInp.value) || 1;
+      var stepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var samples = [0, 1, 2, base, base + step, base + step * 5, base + step * 10, base + step * 20, base + step * 50];
+      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+      var html = '';
+      for (var si = 0; si < samples.length; si++) {
+        var c = samples[si];
+        var bonus = baseBonus + (c - base) / step * stepBonus;
+        if (bonus < 0) bonus = 0;
+        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
       }
+      c6Preview.innerHTML = html;
     }
-
-    var existingC6Bonus = w.c6MultiBonus || DEFAULT_WEIGHTS.c6MultiBonus;
-    for (var c6i = 0; c6i < existingC6Bonus.length; c6i++) {
-      var rule = existingC6Bonus[c6i];
-      var existingC6 = c6Entries.find(function (e) { return e.count === rule.count; });
-      if (existingC6) { existingC6.bonus = Math.max(existingC6.bonus, rule.bonus); }
-      else { c6Entries.push({ count: rule.count, bonus: rule.bonus }); }
-    }
-    renderC6List();
-    c6Section.appendChild(c6List);
+    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp].forEach(function(inp) {
+      inp.oninput = updateC6Preview;
+    });
+    updateC6Preview();
+    c6Section.appendChild(c6Preview);
 
     // 载入默认按钮
+    var c6DefaultRow = document.createElement('div');
+    c6DefaultRow.style.cssText = 'margin-top:8px;';
     var loadC6DefaultBtn = document.createElement('button');
-    loadC6DefaultBtn.textContent = '载入默认';
-    loadC6DefaultBtn.style.cssText = 'margin-right:10px;padding:5px 12px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;';
+    loadC6DefaultBtn.textContent = '载入默认（3命基准100%，每0.1命浮动5%）';
+    loadC6DefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;';
     loadC6DefaultBtn.onclick = function () {
-      c6Entries.length = 0;
-      c6Entries.push({ count: 2, bonus: 0.20 });
-      c6Entries.push({ count: 3, bonus: 0.50 });
-      c6Entries.push({ count: 4, bonus: 1.00 });
-      c6Entries.push({ count: 5, bonus: 1.50 });
-      renderC6List();
+      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
+      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
+      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
+      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
+      updateC6Preview();
     };
-    c6Section.appendChild(loadC6DefaultBtn);
-
-    // 添加新档位
-    var addC6Row = document.createElement('div');
-    addC6Row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-top:10px;';
-    var c6CountInput = document.createElement('input');
-    c6CountInput.type = 'number'; c6CountInput.min = '1'; c6CountInput.max = '20'; c6CountInput.step = '0.5'; c6CountInput.placeholder = '数量';
-    c6CountInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addC6Row.appendChild(c6CountInput);
-    var c6Unit = document.createElement('span');
-    c6Unit.textContent = '个等效满命'; c6Unit.style.cssText = 'color:#888;font-size:11px;';
-    addC6Row.appendChild(c6Unit);
-    var c6Arrow = document.createElement('span');
-    c6Arrow.textContent = '→'; c6Arrow.style.cssText = 'color:#555;font-size:11px;';
-    addC6Row.appendChild(c6Arrow);
-    var c6BonusInput = document.createElement('input');
-    c6BonusInput.type = 'number'; c6BonusInput.min = '0'; c6BonusInput.max = '5'; c6BonusInput.step = '0.1'; c6BonusInput.placeholder = '加成';
-    c6BonusInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addC6Row.appendChild(c6BonusInput);
-    var c6BonusUnit = document.createElement('span');
-    c6BonusUnit.textContent = '(如0.2=20%)'; c6BonusUnit.style.cssText = 'color:#888;font-size:10px;';
-    addC6Row.appendChild(c6BonusUnit);
-    var addC6Btn = document.createElement('button');
-    addC6Btn.textContent = '添加';
-    addC6Btn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#e94560;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
-    addC6Btn.onclick = function () {
-      var count = parseFloat(c6CountInput.value);
-      var bonus = parseFloat(c6BonusInput.value);
-      if (isNaN(count) || count < 1) { alert('数量至少为1'); return; }
-      if (isNaN(bonus) || bonus < 0) { alert('请输入有效的加成比例'); return; }
-      var existingE = c6Entries.find(function (e) { return e.count === count; });
-      if (existingE) { existingE.bonus = bonus; renderC6List(); }
-      else { c6Entries.push({ count: count, bonus: bonus }); renderC6List(); }
-      c6CountInput.value = ''; c6BonusInput.value = '';
-    };
-    addC6Row.appendChild(addC6Btn);
-    c6Section.appendChild(addC6Row);
+    c6DefaultRow.appendChild(loadC6DefaultBtn);
+    c6Section.appendChild(c6DefaultRow);
     dialog.appendChild(c6Section);
 
-    // ===== 5. 黄数阶梯系数 =====
+    // ===== 5. 有效金阶梯系数 =====
     var yellowSection = document.createElement('div');
     yellowSection.style.cssText = 'margin-bottom:20px;';
     var yellowTitle = document.createElement('div');
     yellowTitle.style.cssText = 'font-size:14px;font-weight:600;color:#f59e0b;margin-bottom:6px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
-    yellowTitle.textContent = '黄数阶梯系数（黄数越多越稀有，估值乘以此系数）';
+    yellowTitle.textContent = '有效金阶梯系数（有效金越多越稀有，估值乘以此系数）';
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '黄数 = 五星角色数 + 五星武器数。黄数越多越难搜集，最终估值 = 各项估值之和 × 匹配档位的系数。';
+    yellowDesc.innerHTML = '有效金 = S/A/B/C/D级角色(含命座) + 其专武(含精炼)。系数按公式自动计算：基准系数 + floor((有效金 - 基准) / 每档) × 每档浮动，上限为系数上限（0表示不限制）。';
     yellowSection.appendChild(yellowDesc);
 
-    var yellowList = document.createElement('div');
-    yellowList.style.cssText = 'margin-bottom:12px;';
-    var yellowEntries = (weights.yellowTiers || DEFAULT_YELLOW_TIERS).map(function (e) { return { minYellow: e.minYellow, maxYellow: e.maxYellow, coefficient: e.coefficient }; });
+    var yellowFormulaRow = document.createElement('div');
+    yellowFormulaRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
 
-    function renderYellowList() {
-      yellowList.innerHTML = '';
-      if (yellowEntries.length === 0) { yellowList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无阶梯规则，可点击下方"载入默认"快速添加</div>'; return; }
-      yellowEntries.sort(function (a, b) { return a.minYellow - b.minYellow; });
-      for (var i = 0; i < yellowEntries.length; i++) {
-        (function (idx) {
-          var e = yellowEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;';
-          var maxLabel = e.maxYellow === Infinity ? '+' : '~' + e.maxYellow;
-          row.innerHTML =
-            '<span style="color:#f59e0b;font-weight:600;min-width:80px;">' + e.minYellow + maxLabel + '黄</span>' +
-            '<span style="color:#555;">→</span>' +
-            '<span style="color:#10b981;font-weight:600;">×' + e.coefficient + '</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            var editOverlay = document.createElement('div');
-            editOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
-            var editBox = document.createElement('div');
-            editBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:300px;color:#e0e0e0;';
-            editBox.innerHTML =
-              '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#f59e0b;">编辑黄数阶梯系数</div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">起始黄数</label>' +
-              '<input type="number" class="edit-min" value="' + e.minYellow + '" min="0" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">结束黄数（填99999表示无限）</label>' +
-              '<input type="number" class="edit-max" value="' + (e.maxYellow === Infinity ? 99999 : e.maxYellow) + '" min="0" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:10px;"><label style="font-size:12px;color:#888;">系数（如0.5=50%）</label>' +
-              '<input type="number" class="edit-coef" value="' + e.coefficient + '" min="0" max="10" step="0.1" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="display:flex;gap:10px;margin-top:12px;">' +
-              '<button class="cancel-edit" style="padding:8px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
-              '<button class="save-edit" style="padding:8px 16px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;cursor:pointer;">保存</button></div>';
-            editOverlay.appendChild(editBox);
-            document.body.appendChild(editOverlay);
-            editBox.querySelector('.cancel-edit').onclick = function () { editOverlay.remove(); };
-            editBox.querySelector('.save-edit').onclick = function () {
-              var newMin = parseInt(editBox.querySelector('.edit-min').value);
-              var newMax = parseInt(editBox.querySelector('.edit-max').value);
-              var newCoef = parseFloat(editBox.querySelector('.edit-coef').value);
-              if (isNaN(newMin) || newMin < 0) { alert('起始黄数不能为负'); return; }
-              if (isNaN(newCoef) || newCoef < 0) { alert('系数不能为负'); return; }
-              e.minYellow = newMin; e.maxYellow = newMax >= 99999 ? Infinity : newMax; e.coefficient = newCoef;
-              renderYellowList(); editOverlay.remove();
-            };
-          };
-          row.querySelector('.del-btn').onclick = function () { var di = yellowEntries.indexOf(e); if (di >= 0) yellowEntries.splice(di, 1); renderYellowList(); };
-          yellowList.appendChild(row);
-        })(i);
-      }
+    function yfLabel(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      return s;
+    }
+    function yfInput(val, step, color, title) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      return i;
     }
 
-    renderYellowList();
-    yellowSection.appendChild(yellowList);
+    yellowFormulaRow.appendChild(yfLabel('基准有效金'));
+    var yfBaseInp = yfInput(weights.yellowBase, '1', '#f59e0b', '此有效金对应的系数为基准系数');
+    yellowFormulaRow.appendChild(yfBaseInp);
+    yellowFormulaRow.appendChild(yfLabel('基准系数'));
+    var yfBaseCoeffInp = yfInput(weights.yellowBaseCoeff, '0.05', '#10b981', '基准有效金对应的系数');
+    yellowFormulaRow.appendChild(yfBaseCoeffInp);
+    yellowFormulaRow.appendChild(yfLabel('每'));
+    var yfStepInp = yfInput(weights.yellowStep, '1', '#f59e0b', '每N个有效金浮动一档');
+    yellowFormulaRow.appendChild(yfStepInp);
+    yellowFormulaRow.appendChild(yfLabel('金浮动'));
+    var yfStepCoeffInp = yfInput(weights.yellowStepCoeff, '0.01', '#10b981', '每档浮动多少系数');
+    yellowFormulaRow.appendChild(yfStepCoeffInp);
+    yellowFormulaRow.appendChild(yfLabel('系数上限'));
+    var yfMaxCoeffInp = yfInput(weights.yellowMaxCoeff, '0.1', '#e94560', '系数最大值，0表示不限制');
+    yellowFormulaRow.appendChild(yfMaxCoeffInp);
+    yellowSection.appendChild(yellowFormulaRow);
+
+    // 预览
+    var yellowPreview = document.createElement('div');
+    yellowPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(245,158,11,0.05);border-radius:6px;border:1px solid rgba(245,158,11,0.15);';
+    function updateYellowPreview() {
+      var base = parseFloat(yfBaseInp.value) || 0;
+      var step = parseFloat(yfStepInp.value) || 1;
+      var baseCoeff = parseFloat(yfBaseCoeffInp.value) || 0;
+      var stepCoeff = parseFloat(yfStepCoeffInp.value) || 0;
+      var maxCoeff = parseFloat(yfMaxCoeffInp.value) || 0;
+      var samples = [0, 10, 20, 30, base, base + step, base + step * 2, base + step * 4, base + step * 8];
+      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+      var html = '';
+      for (var si = 0; si < samples.length; si++) {
+        var eff = samples[si];
+        var idx = Math.floor((eff - base) / step);
+        var coeff = baseCoeff + idx * stepCoeff;
+        if (coeff < 0.1) coeff = 0.1;
+        if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
+        html += eff + '有效 → ×' + (Math.round(coeff * 1000) / 1000) + '　';
+      }
+      yellowPreview.innerHTML = html;
+    }
+    [yfBaseInp, yfBaseCoeffInp, yfStepInp, yfStepCoeffInp, yfMaxCoeffInp].forEach(function(inp) {
+      inp.oninput = updateYellowPreview;
+    });
+    updateYellowPreview();
+    yellowSection.appendChild(yellowPreview);
 
     // 载入默认按钮
+    var yellowDefaultRow = document.createElement('div');
+    yellowDefaultRow.style.cssText = 'margin-top:8px;';
     var loadYellowDefaultBtn = document.createElement('button');
-    loadYellowDefaultBtn.textContent = '载入默认';
-    loadYellowDefaultBtn.style.cssText = 'margin-right:10px;padding:5px 12px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;';
+    loadYellowDefaultBtn.textContent = '载入默认（40基准 ×1.0，每1金浮动0.01，上限3.0）';
+    loadYellowDefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;';
     loadYellowDefaultBtn.onclick = function () {
-      yellowEntries.length = 0;
-      yellowEntries.push({ minYellow: 0, maxYellow: 10, coefficient: 0.3 });
-      yellowEntries.push({ minYellow: 10, maxYellow: 20, coefficient: 0.5 });
-      yellowEntries.push({ minYellow: 20, maxYellow: 30, coefficient: 0.7 });
-      yellowEntries.push({ minYellow: 30, maxYellow: 40, coefficient: 0.9 });
-      yellowEntries.push({ minYellow: 40, maxYellow: 50, coefficient: 1.0 });
-      yellowEntries.push({ minYellow: 50, maxYellow: 60, coefficient: 1.1 });
-      yellowEntries.push({ minYellow: 60, maxYellow: 70, coefficient: 1.2 });
-      yellowEntries.push({ minYellow: 70, maxYellow: 80, coefficient: 1.3 });
-      yellowEntries.push({ minYellow: 80, maxYellow: 90, coefficient: 1.4 });
-      yellowEntries.push({ minYellow: 90, maxYellow: Infinity, coefficient: 1.5 });
-      renderYellowList();
+      yfBaseInp.value = 40; yfBaseCoeffInp.value = 1.0; yfStepInp.value = 1; yfStepCoeffInp.value = 0.01; yfMaxCoeffInp.value = 3.0;
+      updateYellowPreview();
     };
-    yellowSection.appendChild(loadYellowDefaultBtn);
-
-    // 添加新黄数阶梯
-    var addYellowRow = document.createElement('div');
-    addYellowRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-top:10px;';
-    var yMinInput = document.createElement('input');
-    yMinInput.type = 'number'; yMinInput.min = '0'; yMinInput.placeholder = '起始';
-    yMinInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addYellowRow.appendChild(yMinInput);
-    var yDash = document.createElement('span');
-    yDash.textContent = '~'; yDash.style.cssText = 'color:#555;font-size:11px;';
-    addYellowRow.appendChild(yDash);
-    var yMaxInput = document.createElement('input');
-    yMaxInput.type = 'number'; yMaxInput.min = '0'; yMaxInput.placeholder = '结束';
-    yMaxInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addYellowRow.appendChild(yMaxInput);
-    var yUnit = document.createElement('span');
-    yUnit.textContent = '黄'; yUnit.style.cssText = 'color:#888;font-size:11px;';
-    addYellowRow.appendChild(yUnit);
-    var yArrow = document.createElement('span');
-    yArrow.textContent = '→'; yArrow.style.cssText = 'color:#555;font-size:11px;';
-    addYellowRow.appendChild(yArrow);
-    var yCoefInput = document.createElement('input');
-    yCoefInput.type = 'number'; yCoefInput.min = '0'; yCoefInput.max = '10'; yCoefInput.step = '0.1'; yCoefInput.placeholder = '系数';
-    yCoefInput.style.cssText = 'width:55px;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
-    addYellowRow.appendChild(yCoefInput);
-    var yCoefUnit = document.createElement('span');
-    yCoefUnit.textContent = '(如0.5=50%)'; yCoefUnit.style.cssText = 'color:#888;font-size:10px;';
-    addYellowRow.appendChild(yCoefUnit);
-    var addYellowBtn = document.createElement('button');
-    addYellowBtn.textContent = '添加';
-    addYellowBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#f59e0b;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
-    addYellowBtn.onclick = function () {
-      var min = parseInt(yMinInput.value);
-      var max = parseInt(yMaxInput.value);
-      var coef = parseFloat(yCoefInput.value);
-      if (isNaN(min) || min < 0) { alert('起始黄数不能为负'); return; }
-      if (isNaN(coef) || coef < 0) { alert('请输入有效的系数'); return; }
-      yellowEntries.push({ minYellow: min, maxYellow: isNaN(max) ? Infinity : max, coefficient: coef });
-      renderYellowList(); yMinInput.value = ''; yMaxInput.value = ''; yCoefInput.value = '';
-    };
-    addYellowRow.appendChild(addYellowBtn);
-    yellowSection.appendChild(addYellowRow);
+    yellowDefaultRow.appendChild(loadYellowDefaultBtn);
+    yellowSection.appendChild(yellowDefaultRow);
     dialog.appendChild(yellowSection);
 
     // ===== 6. 配队溢价 =====
@@ -5290,79 +5893,6 @@ function openSettings() {
     teamSection.appendChild(teamMultiSection);
     dialog.appendChild(teamSection);
 
-    // ===== 8. 需要专武的角色（参考用） =====
-    var needSigSection = document.createElement('div');
-    needSigSection.style.cssText = 'margin-bottom:20px;';
-    var needSigTitle = document.createElement('div');
-    needSigTitle.style.cssText = 'font-size:14px;font-weight:600;color:#ef4444;margin-bottom:6px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
-    needSigTitle.textContent = '需要专武的角色（无专武时扣价值）';
-    needSigSection.appendChild(needSigTitle);
-    var needSigDesc = document.createElement('p');
-    needSigDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    needSigDesc.innerHTML = '新版已自动按热门/冷门分类处理专武折扣（热门角色无专武仅值15%基础价）。此列表仅作参考，不再参与计算。';
-    needSigSection.appendChild(needSigDesc);
-
-    var needSigList = document.createElement('div');
-    needSigList.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:30px;';
-    var needSigEntries = [].concat(w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS);
-    function renderNeedSigList() {
-      needSigList.innerHTML = '';
-      if (needSigEntries.length === 0) { needSigList.innerHTML = '<div style="font-size:12px;color:#555;padding:4px 0;">暂无角色，可点击下方"载入默认"</div>'; return; }
-      for (var i = 0; i < needSigEntries.length; i++) {
-        (function (name) {
-          var tag = document.createElement('span');
-          tag.style.cssText = 'font-size:11px;padding:4px 10px;border-radius:4px;background:#2d1a3b;color:#ef4444;display:inline-flex;align-items:center;gap:4px;';
-          tag.innerHTML = name + ' <button style="border:none;background:none;color:#ef4444;font-size:12px;cursor:pointer;padding:0;margin-left:2px;">×</button>';
-          tag.querySelector('button').onclick = function () { var di = needSigEntries.indexOf(name); if (di !== -1) needSigEntries.splice(di, 1); renderNeedSigList(); };
-          needSigList.appendChild(tag);
-        })(needSigEntries[i]);
-      }
-    }
-    renderNeedSigList();
-    needSigSection.appendChild(needSigList);
-
-    var needSigRow = document.createElement('div');
-    needSigRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;';
-    var needSigSelect = document.createElement('select');
-    needSigSelect.style.cssText = 'flex:1;min-width:120px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
-    var nsEmptyOpt = document.createElement('option');
-    nsEmptyOpt.value = ''; nsEmptyOpt.textContent = '选择角色...';
-    needSigSelect.appendChild(nsEmptyOpt);
-    for (var nsi = 0; nsi < allCharNames.length; nsi++) {
-      if (needSigEntries.includes(allCharNames[nsi])) continue;
-      var nsOpt = document.createElement('option');
-      nsOpt.value = allCharNames[nsi]; nsOpt.textContent = allCharNames[nsi];
-      needSigSelect.appendChild(nsOpt);
-    }
-    needSigRow.appendChild(needSigSelect);
-    var needSigAddBtn = document.createElement('button');
-    needSigAddBtn.textContent = '添加';
-    needSigAddBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#ef4444;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
-    needSigAddBtn.onclick = function () {
-      var nm = needSigSelect.value;
-      if (!nm || needSigEntries.includes(nm)) return;
-      needSigEntries.push(nm);
-      renderNeedSigList();
-      var opt = needSigSelect.querySelector('option[value="' + nm + '"]');
-      if (opt) opt.remove();
-      needSigSelect.value = '';
-    };
-    needSigRow.appendChild(needSigAddBtn);
-    needSigSection.appendChild(needSigRow);
-
-    var needSigDefaultBtn = document.createElement('button');
-    needSigDefaultBtn.textContent = '载入默认列表';
-    needSigDefaultBtn.style.cssText = 'padding:4px 12px;border:1px solid #ef4444;border-radius:4px;background:transparent;color:#ef4444;font-size:11px;cursor:pointer;';
-    needSigDefaultBtn.onclick = function () {
-      var defaults = DEFAULT_NEED_SIG_WEAPONS;
-      for (var di = 0; di < defaults.length; di++) {
-        if (!needSigEntries.includes(defaults[di])) needSigEntries.push(defaults[di]);
-      }
-      renderNeedSigList();
-    };
-    needSigSection.appendChild(needSigDefaultBtn);
-    dialog.appendChild(needSigSection);
-
     // ===== 8.5 低命折扣系数 =====
     var flatDiscountSection = document.createElement('div');
     flatDiscountSection.style.cssText = 'margin-bottom:20px;';
@@ -5372,7 +5902,7 @@ function openSettings() {
     flatDiscountSection.appendChild(fdTitle);
     var fdDesc = document.createElement('p');
     fdDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    fdDesc.innerHTML = '当账号中指定级别(S/A/B/C/D/E)的所有角色命座均不超过设定值时，折扣系数与黄数阶梯系数取较低值。如指定S+A级且全≤2命，折扣系数0.9。';
+    fdDesc.innerHTML = '当账号中指定级别(S/A/B/C/D/E)的所有角色命座均不超过设定值时，折扣系数与有效金阶梯系数取较低值。如指定S+A级且全≤2命，折扣系数0.9。';
     flatDiscountSection.appendChild(fdDesc);
 
     var flatDiscountEntries = (w.flatDiscountRules || DEFAULT_WEIGHTS.flatDiscountRules).map(function (e) { return { tiers: [].concat(e.tiers || []), maxConst: e.maxConst, discount: e.discount }; });
@@ -5520,161 +6050,19 @@ function openSettings() {
     flatDiscountSection.appendChild(fdDefaultBtn);
     dialog.appendChild(flatDiscountSection);
 
-    // ===== 8.6 C6配队依赖 =====
-    var c6DepSection = document.createElement('div');
-    c6DepSection.style.cssText = 'margin-bottom:20px;border:1px solid #2a2a4a;border-radius:8px;padding:12px;background:#0a0a1a;';
-    var c6DepTitle = document.createElement('div');
-    c6DepTitle.style.cssText = 'font-size:14px;font-weight:600;color:#fbbf24;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    c6DepTitle.textContent = 'C6配队依赖（满命角色缺少关键队友时降级）';
-    c6DepSection.appendChild(c6DepTitle);
-    var c6DepDesc = document.createElement('p');
-    c6DepDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    c6DepDesc.innerHTML = '满命角色缺少关键队友时：C6权重降级（影响满命溢价）+ 角色价值打折（影响基础价值）。例如卡提希娅C6缺夏空时，权重从S(1.0)降到A(0.6)，角色价值×80%。';
-    c6DepSection.appendChild(c6DepDesc);
+    // ===== 8.6 C6配队依赖（已合并到五星角色定价的「强绑」功能） =====
 
-    var c6DepList = document.createElement('div');
-    c6DepList.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-bottom:12px;min-height:30px;';
-    var c6DepEntries = [];
-    var c6DepConfig = w.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency || {};
-    for (var cdk in c6DepConfig) {
-      if (!c6DepConfig.hasOwnProperty(cdk)) continue;
-      var cdInfo = c6DepConfig[cdk];
-      c6DepEntries.push({
-        name: cdk,
-        teammate: Array.isArray(cdInfo.teammate) ? cdInfo.teammate.join(',') : (cdInfo.teammate || ''),
-        weightTier: cdInfo.weightTier || 'A',
-        valueDiscount: cdInfo.valueDiscount != null ? cdInfo.valueDiscount : 1.0
-      });
-    }
-    function renderC6DepList() {
-      c6DepList.innerHTML = '';
-      if (c6DepEntries.length === 0) { c6DepList.innerHTML = '<div style="font-size:12px;color:#555;padding:4px 0;">暂无C6配队依赖规则，可点击下方"载入默认"</div>'; return; }
-      for (var i = 0; i < c6DepEntries.length; i++) {
-        (function (idx) {
-          var e = c6DepEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;flex-wrap:wrap;';
-          row.innerHTML =
-            '<span style="color:#fbbf24;font-weight:600;">' + e.name + '</span>' +
-            '<span style="color:#888;">缺</span>' +
-            '<span style="color:#f87171;font-weight:600;">' + e.teammate + '</span>' +
-            '<span style="color:#888;">→ C6降</span>' +
-            '<span style="color:#a78bfa;font-weight:600;">' + e.weightTier + '</span>' +
-            '<span style="color:#4ade80;font-weight:600;">×' + Math.round(e.valueDiscount * 100) + '%</span>' +
-            '<button class="edit-btn" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#60a5fa;font-size:11px;cursor:pointer;">编辑</button>' +
-            '<button class="del-btn" style="padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-          row.querySelector('.edit-btn').onclick = function () {
-            var editOverlay = document.createElement('div');
-            editOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
-            var editBox = document.createElement('div');
-            editBox.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:20px;width:340px;color:#e0e0e0;';
-            editBox.innerHTML =
-              '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#fbbf24;">编辑C6配队依赖</div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">角色名称</label>' +
-              '<input type="text" class="c6dep-edit-name" value="' + e.name + '" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">所需队友（多个用逗号分隔）</label>' +
-              '<input type="text" class="c6dep-edit-teammate" value="' + e.teammate + '" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">降级权重档位</label>' +
-              '<select class="c6dep-edit-tier" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;">' +
-              '<option value="S">S</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option></select></div>' +
-              '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">角色价值折扣（0~1）</label>' +
-              '<input type="number" class="c6dep-edit-discount" value="' + e.valueDiscount + '" min="0" max="1" step="0.05" style="width:100%;padding:6px 8px;margin-top:4px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-              '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-              '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
-              '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#fbbf24;color:#12122a;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
-            editBox.querySelector('.c6dep-edit-tier').value = e.weightTier;
-            editBox.querySelector('.cancel-btn').onclick = function () { editOverlay.remove(); };
-            editBox.querySelector('.save-btn').onclick = function () {
-              var newName = editBox.querySelector('.c6dep-edit-name').value.trim();
-              if (!newName) { alert('请输入角色名称'); return; }
-              e.name = newName;
-              e.teammate = editBox.querySelector('.c6dep-edit-teammate').value.trim() || '';
-              e.weightTier = editBox.querySelector('.c6dep-edit-tier').value;
-              e.valueDiscount = parseFloat(editBox.querySelector('.c6dep-edit-discount').value);
-              if (isNaN(e.valueDiscount) || e.valueDiscount < 0 || e.valueDiscount > 1) { alert('折扣应在0~1之间'); return; }
-              renderC6DepList(); editOverlay.remove();
-            };
-            editOverlay.appendChild(editBox);
-            editOverlay.onclick = function (ev) { if (ev.target === editOverlay) editOverlay.remove(); };
-            document.body.appendChild(editOverlay);
-          };
-          row.querySelector('.del-btn').onclick = function () { c6DepEntries.splice(idx, 1); renderC6DepList(); };
-          c6DepList.appendChild(row);
-        })(i);
-      }
-    }
-    renderC6DepList();
-    c6DepSection.appendChild(c6DepList);
-
-    var c6DepAddRow = document.createElement('div');
-    c6DepAddRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;';
-    var c6DepNameInput = document.createElement('input');
-    c6DepNameInput.type = 'text'; c6DepNameInput.placeholder = '角色名称';
-    c6DepNameInput.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
-    c6DepAddRow.appendChild(c6DepNameInput);
-    var c6DepMateInput = document.createElement('input');
-    c6DepMateInput.type = 'text'; c6DepMateInput.placeholder = '所需队友';
-    c6DepMateInput.style.cssText = 'flex:1;min-width:100px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
-    c6DepAddRow.appendChild(c6DepMateInput);
-    var c6DepTierSelect = document.createElement('select');
-    c6DepTierSelect.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
-    var c6DepTierOpts = ['S', 'A', 'B', 'C', 'D', 'E'];
-    for (var cdti = 0; cdti < c6DepTierOpts.length; cdti++) {
-      var cdOpt = document.createElement('option');
-      cdOpt.value = c6DepTierOpts[cdti]; cdOpt.textContent = c6DepTierOpts[cdti];
-      c6DepTierSelect.appendChild(cdOpt);
-    }
-    c6DepTierSelect.value = 'A';
-    c6DepAddRow.appendChild(c6DepTierSelect);
-    var c6DepDiscountInput = document.createElement('input');
-    c6DepDiscountInput.type = 'number'; c6DepDiscountInput.min = '0'; c6DepDiscountInput.max = '1'; c6DepDiscountInput.step = '0.05'; c6DepDiscountInput.value = '0.8';
-    c6DepDiscountInput.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
-    c6DepAddRow.appendChild(c6DepDiscountInput);
-    var c6DepAddBtn = document.createElement('button');
-    c6DepAddBtn.textContent = '添加';
-    c6DepAddBtn.style.cssText = 'padding:5px 14px;border:none;border-radius:4px;background:#fbbf24;color:#12122a;font-size:12px;font-weight:600;cursor:pointer;';
-    c6DepAddBtn.onclick = function () {
-      var nm = c6DepNameInput.value.trim();
-      var mt = c6DepMateInput.value.trim();
-      if (!nm || !mt) { alert('请输入角色名称和所需队友'); return; }
-      c6DepEntries.push({ name: nm, teammate: mt, weightTier: c6DepTierSelect.value, valueDiscount: parseFloat(c6DepDiscountInput.value) || 1.0 });
-      c6DepNameInput.value = ''; c6DepMateInput.value = '';
-      renderC6DepList();
-    };
-    c6DepAddRow.appendChild(c6DepAddBtn);
-    c6DepSection.appendChild(c6DepAddRow);
-
-    var c6DepDefaultBtn = document.createElement('button');
-    c6DepDefaultBtn.textContent = '载入默认';
-    c6DepDefaultBtn.style.cssText = 'padding:4px 12px;border:1px solid #fbbf24;border-radius:4px;background:transparent;color:#fbbf24;font-size:11px;cursor:pointer;';
-    c6DepDefaultBtn.onclick = function () {
-      var depDefaults = DEFAULT_WEIGHTS.c6TeamDependency || {};
-      c6DepEntries.length = 0;
-      for (var dname in depDefaults) {
-        if (!depDefaults.hasOwnProperty(dname)) continue;
-        var dInfo = depDefaults[dname];
-        c6DepEntries.push({
-          name: dname,
-          teammate: Array.isArray(dInfo.teammate) ? dInfo.teammate.join(',') : (dInfo.teammate || ''),
-          weightTier: dInfo.weightTier || 'A',
-          valueDiscount: dInfo.valueDiscount != null ? dInfo.valueDiscount : 1.0
-        });
-      }
-      renderC6DepList();
-    };
-    c6DepSection.appendChild(c6DepDefaultBtn);
-    dialog.appendChild(c6DepSection);
 
     // ===== 9. 其他权重 =====
     var weightsSection = document.createElement('div');
     weightsSection.style.cssText = 'margin-bottom:20px;';
     var wsTitle = document.createElement('div');
     wsTitle.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:12px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
-    wsTitle.textContent = '其他权重（热门/冷门参数 + 资源定价）';
+    wsTitle.textContent = '其他权重（资源定价 + 折扣参数）';
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true };
     for (var wk of Object.keys(DEFAULT_WEIGHTS)) {
       if (skipKeys[wk]) continue;
       var meta = WEIGHT_LABELS[wk] || { label: wk, desc: '' };
@@ -5740,46 +6128,35 @@ function openSettings() {
             weapon: SIG_WEAPONS[rName] || '',
             price: rstDefPrices[rName] != null ? rstDefPrices[rName] : rTier.price,
             tier: rtk,
+            premiums: DEFAULT_CONST_PREMIUMS[rName] ? Object.assign({}, DEFAULT_CONST_PREMIUMS[rName]) : {},
           });
         }
       }
       renderCharList();
-      // 重置命座溢价
-      premEntries.length = 0;
-      for (var cpName of Object.keys(DEFAULT_CONST_PREMIUMS)) {
-        for (var cpBp of Object.keys(DEFAULT_CONST_PREMIUMS[cpName])) {
-          premEntries.push({ name: cpName, bp: parseInt(cpBp), val: DEFAULT_CONST_PREMIUMS[cpName][cpBp] });
-        }
-      }
-      renderPremList();
-      // 重置抽数阶梯
-      pullEntries.length = 0;
-      for (var pi2 = 0; pi2 < DEFAULT_PULL_TIERS.length; pi2++) {
-        pullEntries.push({ minPull: DEFAULT_PULL_TIERS[pi2].minPull, maxPull: DEFAULT_PULL_TIERS[pi2].maxPull, perPullPrice: DEFAULT_PULL_TIERS[pi2].perPullPrice });
-      }
-      renderPullList();
-      // 重置满命溢价
-      c6Entries.length = 0;
-      for (var ci = 0; ci < DEFAULT_WEIGHTS.c6MultiBonus.length; ci++) {
-        c6Entries.push({ count: DEFAULT_WEIGHTS.c6MultiBonus[ci].count, bonus: DEFAULT_WEIGHTS.c6MultiBonus[ci].bonus });
-      }
-      renderC6List();
-      // 重置抽数满命加成
-      pullC6Entries.length = 0;
-      for (var pci2 = 0; pci2 < DEFAULT_WEIGHTS.pullC6Bonus.length; pci2++) {
-        pullC6Entries.push({ count: DEFAULT_WEIGHTS.pullC6Bonus[pci2].count, bonus: DEFAULT_WEIGHTS.pullC6Bonus[pci2].bonus });
-      }
-      renderPullC6List();
+      // 重置抽数阶梯公式参数
+      pfBaseInp.value = DEFAULT_PULL_FORMULA.pullBase;
+      pfBasePriceInp.value = DEFAULT_PULL_FORMULA.pullBasePrice;
+      pfStepPriceInp.value = DEFAULT_PULL_FORMULA.pullStepPrice;
+      updatePullPreview();
+      // 重置满命溢价公式参数
+      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
+      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
+      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
+      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
+      updateC6Preview();
+      // 重置满命抽数加成公式参数
+      pc6BaseInp.value = DEFAULT_WEIGHTS.pullC6Base;
+      pc6BaseBonusInp.value = DEFAULT_WEIGHTS.pullC6BaseBonus * 100;
+      pc6StepInp.value = DEFAULT_WEIGHTS.pullC6Step;
+      pc6StepBonusInp.value = DEFAULT_WEIGHTS.pullC6StepBonus * 100;
+      updatePullC6Preview();
       // 重置满命权重
       for (var tw = 0; tw < c6TierList.length; tw++) {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
       }
-      // 重置黄数阶梯
-      yellowEntries.length = 0;
-      for (var yi2 = 0; yi2 < DEFAULT_YELLOW_TIERS.length; yi2++) {
-        yellowEntries.push({ minYellow: DEFAULT_YELLOW_TIERS[yi2].minYellow, maxYellow: DEFAULT_YELLOW_TIERS[yi2].maxYellow, coefficient: DEFAULT_YELLOW_TIERS[yi2].coefficient });
-      }
-      renderYellowList();
+      // 重置有效金阶梯公式参数
+      yfBaseInp.value = 40; yfBaseCoeffInp.value = 1.0; yfStepInp.value = 1; yfStepCoeffInp.value = 0.01; yfMaxCoeffInp.value = 3.0;
+      updateYellowPreview();
       // 重置配队
       teamEntries.length = 0;
       for (var td = 0; td < DEFAULT_TEAMS.length; td++) {
@@ -5792,30 +6169,35 @@ function openSettings() {
         teamMultiEntries.push({ count: DEFAULT_WEIGHTS.teamMultiBonus[tm].count, coef: DEFAULT_WEIGHTS.teamMultiBonus[tm].coef });
       }
       renderTeamMultiList();
-      // 重置需要专武
-      needSigEntries.length = 0;
-      needSigEntries.push.apply(needSigEntries, DEFAULT_NEED_SIG_WEAPONS);
-      renderNeedSigList();
+      // 重置需要专武（从默认列表恢复勾选状态）
+      var _defSigSet = {};
+      for (var dsi = 0; dsi < DEFAULT_NEED_SIG_WEAPONS.length; dsi++) {
+        var dsn = typeof DEFAULT_NEED_SIG_WEAPONS[dsi] === 'string' ? DEFAULT_NEED_SIG_WEAPONS[dsi] : DEFAULT_NEED_SIG_WEAPONS[dsi].name;
+        _defSigSet[dsn] = true;
+      }
+      for (var ci2 = 0; ci2 < charEntries.length; ci2++) {
+        charEntries[ci2].needSig = !!_defSigSet[charEntries[ci2].name];
+      }
+      renderCharList();
       // 重置低命折扣系数
       flatDiscountEntries.length = 0;
       for (var fdi = 0; fdi < DEFAULT_WEIGHTS.flatDiscountRules.length; fdi++) {
         flatDiscountEntries.push({ tiers: [].concat(DEFAULT_WEIGHTS.flatDiscountRules[fdi].tiers), maxConst: DEFAULT_WEIGHTS.flatDiscountRules[fdi].maxConst, discount: DEFAULT_WEIGHTS.flatDiscountRules[fdi].discount });
       }
       renderFlatDiscountList();
-      // 重置C6配队依赖
-      c6DepEntries.length = 0;
-      var depDefs = DEFAULT_WEIGHTS.c6TeamDependency || {};
-      for (var ddn in depDefs) {
-        if (!depDefs.hasOwnProperty(ddn)) continue;
-        var ddInfo = depDefs[ddn];
-        c6DepEntries.push({
-          name: ddn,
-          teammate: Array.isArray(ddInfo.teammate) ? ddInfo.teammate.join(',') : (ddInfo.teammate || ''),
-          weightTier: ddInfo.weightTier || 'A',
-          valueDiscount: ddInfo.valueDiscount != null ? ddInfo.valueDiscount : 1.0
-        });
+      // 重置强绑队友（从默认 c6TeamDependency 迁移恢复勾选状态）
+      var _defMatesMap = {};
+      var _defDep = DEFAULT_WEIGHTS.c6TeamDependency || {};
+      for (var ddn in _defDep) {
+        if (!_defDep.hasOwnProperty(ddn)) continue;
+        var ddInfo = _defDep[ddn];
+        var ddMates = Array.isArray(ddInfo.teammate) ? ddInfo.teammate : [ddInfo.teammate];
+        if (ddMates.length > 0 && ddMates[0]) _defMatesMap[ddn] = [].concat(ddMates);
       }
-      renderC6DepList();
+      for (var ci3 = 0; ci3 < charEntries.length; ci3++) {
+        charEntries[ci3].teamMates = _defMatesMap[charEntries[ci3].name] ? [].concat(_defMatesMap[charEntries[ci3].name]) : [];
+      }
+      renderCharList();
     };
 
     var cancelBtn = document.createElement('button');
@@ -5873,11 +6255,27 @@ function openSettings() {
       }
       newW.charTierOverride = newCharTierOverride;
 
-      // 收集命座溢价
+      // 收集命座溢价（从角色定价条目中提取）
       var newConstPremiums = {};
-      for (var ei = 0; ei < premEntries.length; ei++) {
-        if (!newConstPremiums[premEntries[ei].name]) newConstPremiums[premEntries[ei].name] = {};
-        newConstPremiums[premEntries[ei].name][premEntries[ei].bp] = premEntries[ei].val;
+      for (var ei = 0; ei < charEntries.length; ei++) {
+        if (charEntries[ei].premiums && Object.keys(charEntries[ei].premiums).length > 0) {
+          newConstPremiums[charEntries[ei].name] = {};
+          for (var pbp in charEntries[ei].premiums) {
+            if (charEntries[ei].premiums.hasOwnProperty(pbp)) {
+              newConstPremiums[charEntries[ei].name][pbp] = charEntries[ei].premiums[pbp];
+            }
+          }
+        }
+      }
+      // 保留不在charEntries中的角色命座溢价（如已删除角色），避免数据丢失
+      var _existingPrems = w.constPremiums || {};
+      var _charEntryNames = {};
+      for (var _cei3 = 0; _cei3 < charEntries.length; _cei3++) _charEntryNames[charEntries[_cei3].name] = true;
+      for (var _epName in _existingPrems) {
+        if (!_existingPrems.hasOwnProperty(_epName)) continue;
+        if (!_charEntryNames[_epName]) {
+          newConstPremiums[_epName] = _existingPrems[_epName];
+        }
       }
       newW.constPremiums = newConstPremiums;
 
@@ -5898,31 +6296,22 @@ function openSettings() {
       newTeamMultiBonus.sort(function (a, b) { return a.count - b.count; });
       newW.teamMultiBonus = newTeamMultiBonus;
 
-      // 收集抽数阶梯（去重：相同 minPull 只保留最后一条）
-      var newPullTiers = [];
-      var pullSeen = {};
-      for (var pli = 0; pli < pullEntries.length; pli++) {
-        var plKey = pullEntries[pli].minPull + '-' + pullEntries[pli].maxPull;
-        pullSeen[plKey] = { minPull: pullEntries[pli].minPull, maxPull: pullEntries[pli].maxPull, perPullPrice: pullEntries[pli].perPullPrice };
-      }
-      for (var plk in pullSeen) { newPullTiers.push(pullSeen[plk]); }
-      newPullTiers.sort(function (a, b) { return a.minPull - b.minPull; });
-      newW.pullTiers = newPullTiers;
+      // 收集抽数阶梯公式参数
+      newW.pullBase = parseFloat(pfBaseInp.value) || DEFAULT_PULL_FORMULA.pullBase;
+      newW.pullBasePrice = parseFloat(pfBasePriceInp.value) || DEFAULT_PULL_FORMULA.pullBasePrice;
+      newW.pullStepPrice = parseFloat(pfStepPriceInp.value) || DEFAULT_PULL_FORMULA.pullStepPrice;
 
-      // 收集抽数满命加成档位
-      var newPullC6Bonus = [];
-      for (var pci = 0; pci < pullC6Entries.length; pci++) {
-        newPullC6Bonus.push({ count: pullC6Entries[pci].count, bonus: pullC6Entries[pci].bonus });
-      }
-      newW.pullC6Bonus = newPullC6Bonus;
+      // 收集满命抽数加成公式参数
+      newW.pullC6Base = parseFloat(pc6BaseInp.value) || DEFAULT_WEIGHTS.pullC6Base;
+      newW.pullC6BaseBonus = (parseFloat(pc6BaseBonusInp.value) || 0) / 100;
+      newW.pullC6Step = parseFloat(pc6StepInp.value) || DEFAULT_WEIGHTS.pullC6Step;
+      newW.pullC6StepBonus = (parseFloat(pc6StepBonusInp.value) || 0) / 100;
 
-      // 收集满命溢价档位
-      var newC6Bonus = [];
-      for (var ci2 = 0; ci2 < c6Entries.length; ci2++) {
-        newC6Bonus.push({ count: c6Entries[ci2].count, bonus: c6Entries[ci2].bonus });
-      }
-      newC6Bonus.sort(function (a, b) { return a.count - b.count; });
-      newW.c6MultiBonus = newC6Bonus;
+      // 收集满命溢价公式参数
+      newW.c6Base = parseFloat(c6BaseInp.value) || DEFAULT_WEIGHTS.c6Base;
+      newW.c6BaseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
+      newW.c6Step = parseFloat(c6StepInp.value) || DEFAULT_WEIGHTS.c6Step;
+      newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
 
       // 收集满命权重
       var newC6Weights = {};
@@ -5932,16 +6321,12 @@ function openSettings() {
       }
       newW.c6TierWeights = newC6Weights;
 
-      // 收集黄数阶梯（去重：相同 minYellow 只保留最后一条）
-      var newYellowTiers = [];
-      var yellowSeen = {};
-      for (var yi3 = 0; yi3 < yellowEntries.length; yi3++) {
-        var yKey = yellowEntries[yi3].minYellow + '-' + yellowEntries[yi3].maxYellow;
-        yellowSeen[yKey] = { minYellow: yellowEntries[yi3].minYellow, maxYellow: yellowEntries[yi3].maxYellow, coefficient: yellowEntries[yi3].coefficient };
-      }
-      for (var yk in yellowSeen) { newYellowTiers.push(yellowSeen[yk]); }
-      newYellowTiers.sort(function (a, b) { return a.minYellow - b.minYellow; });
-      newW.yellowTiers = newYellowTiers;
+      // 收集有效金阶梯公式参数
+      newW.yellowBase = parseFloat(yfBaseInp.value) || 35;
+      newW.yellowStep = parseFloat(yfStepInp.value) || 5;
+      newW.yellowBaseCoeff = parseFloat(yfBaseCoeffInp.value) || 1.0;
+      newW.yellowStepCoeff = parseFloat(yfStepCoeffInp.value) || 0.05;
+      newW.yellowMaxCoeff = parseFloat(yfMaxCoeffInp.value) || 0;
 
       // 收集低命折扣系数规则
       var newFlatDiscountRules = [];
@@ -5952,22 +6337,18 @@ function openSettings() {
       }
       newW.flatDiscountRules = newFlatDiscountRules;
 
-      // 收集C6配队依赖
-      var newC6Dep = {};
-      for (var cdi = 0; cdi < c6DepEntries.length; cdi++) {
-        var ce = c6DepEntries[cdi];
-        if (!ce.name) continue;
-        var mates = ce.teammate.split(/[,，]/).map(function (s) { return s.trim(); }).filter(function (s) { return s; });
-        newC6Dep[ce.name] = {
-          teammate: mates.length > 1 ? mates : (mates[0] || ''),
-          weightTier: ce.weightTier || 'A',
-          valueDiscount: ce.valueDiscount != null ? ce.valueDiscount : 1.0
-        };
+      // 收集强绑队友（从角色定价行的 teamMates 生成）
+      var newTeamMates = {};
+      for (var tmi = 0; tmi < charEntries.length; tmi++) {
+        var te = charEntries[tmi];
+        if (te.teamMates && te.teamMates.length > 0) {
+          newTeamMates[te.name] = [].concat(te.teamMates);
+        }
       }
-      newW.c6TeamDependency = newC6Dep;
+      newW.teamMates = newTeamMates;
 
-      // 收集需要专武的角色
-      newW.needSigWeapons = needSigEntries;
+      // 收集需要专武的角色（从角色定价行的勾选状态生成）
+      newW.needSigWeapons = charEntries.filter(function(e) { return e.needSig; }).map(function(e) { return e.name; });
 
       // 从 teamPremiums 生成 teams 数组
       newW.teams = [];
@@ -5993,6 +6374,23 @@ function openSettings() {
     btnArea.appendChild(resetBtn);
     btnArea.appendChild(cancelBtn);
     btnArea.appendChild(saveBtn);
+
+    // 导出配置按钮
+    var exportBtn = document.createElement('button');
+    exportBtn.textContent = '导出配置';
+    exportBtn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;background:#0f3460;color:#8ecdf5;font-size:14px;font-weight:600;cursor:pointer;';
+    exportBtn.onclick = function () {
+      var config = localStorage.getItem('mw_monitor_config') || '{}';
+      var blob = new Blob([config], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'mw_monitor_config_' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+    btnArea.appendChild(exportBtn);
+
     dialog.appendChild(btnArea);
 
     overlay.appendChild(dialog);
@@ -6094,9 +6492,14 @@ function openSettings() {
    * 自动抢购：打开商品页并自动点击"立即购买"
    * 通过URL参数传递指令，商品页脚本检测到后自动执行
    */
-  function autoBuy(productId, diff) {
+  function autoBuy(productId, diff, productUniqueNo) {
     console.log('[鸣潮监控] 自动抢购触发: ' + productId + ' 差价' + diff.toFixed(0) + '元');
-    var buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
+    var buyUrl;
+    if (productId.indexOf('pz_') === 0) {
+      buyUrl = PZDS_URLS.pay + (productUniqueNo || productId.replace(/^pz_/, ''));
+    } else {
+      buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
+    }
     // 尝试打开新标签页（可能被浏览器拦截，用户需允许弹窗）
     var win = window.open(buyUrl, '_blank');
     if (!win) {
@@ -6204,6 +6607,7 @@ function openSettings() {
     // ===== 提取核心卖点数据 =====
     var fullConstChars = [];
     var yellowCount = 0;
+    var effectiveYellow = 0;
     var teamCount = 0;
     var level = 0;
     var fiveStarCount = 0;
@@ -6212,19 +6616,17 @@ function openSettings() {
       if (valuation.charBreakdown) {
         fullConstChars = valuation.charBreakdown.filter(function(cb) { return cb.const >= 6 && cb.tier && cb.tier !== 'E'; });
       }
-      if (valuation.yellowInfo) yellowCount = valuation.yellowInfo.yellowCount || 0;
+      if (valuation.yellowInfo) yellowCount = valuation.yellowInfo.rawYellowCount || valuation.yellowInfo.yellowCount || 0;
+      effectiveYellow = valuation.effectiveYellow || 0;
       if (valuation.satisfiedTeams) teamCount = valuation.satisfiedTeams.length;
       level = valuation.level || 0;
       fiveStarCount = valuation.fiveStarChars || 0;
       fourStarCount = valuation.fourStarChars || 0;
     }
 
-    // ===== 标题：差价 + 现价 + 估值 =====
-    var titlePrefix = prefix;
-    if (prefix !== '指定账号' && prefix.indexOf('提醒') < 0) {
-      titlePrefix = prefix + '提醒';
-    }
-    var title = titlePrefix + ' | 差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估值¥' + value.toFixed(0);
+    // ===== 标题：差价 + 现价 + 估价 + 类型 + 平台 =====
+    var platformName = row.platform === 'pzds' ? '盼之' : '螃蟹网';
+    var title = '差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估价¥' + value.toFixed(0) + ' ' + prefix + ' ' + platformName;
     if (suffix) title += ' ' + suffix;
 
     // ===== 角色明细（按价值降序取前5）=====
@@ -6256,6 +6658,61 @@ function openSettings() {
       if (valuation.otherResources > 0) resourceLines.push('其他:' + Math.round(valuation.otherResources) + '元');
     }
 
+    // ===== 估价计算明细 =====
+    var calcLines = [];
+    if (valuation) {
+      var cv = valuation.charValue || 0;
+      var fcp = valuation.fullConstPremium || 0;
+      var tp = valuation.teamPremium || 0;
+      var pv = valuation.pullValue || 0;
+      var or = valuation.otherResources || 0;
+      var subtotal = cv + fcp + tp + pv + or;
+
+      calcLines.push('角色价值: ¥' + Math.round(cv));
+      if (fcp > 0) {
+        var c6Note = (valuation.c6Bonus && valuation.c6Bonus.notes && valuation.c6Bonus.notes.length > 0)
+          ? ' (' + valuation.c6Bonus.notes.join('; ') + ')' : '';
+        calcLines.push('+满命溢价: +¥' + Math.round(fcp) + c6Note);
+      }
+      if (tp > 0) {
+        var teamNote = (valuation.teamBonus && valuation.teamBonus.notes && valuation.teamBonus.notes.length > 0)
+          ? ' (' + valuation.teamBonus.notes.join('; ') + ')' : '';
+        calcLines.push('+配队溢价: +¥' + Math.round(tp) + teamNote);
+      }
+      if (pv > 0) {
+        var pi = valuation.pullInfo;
+        var pullNote = pi ? ' (' + pi.pulls + '抽×' + pi.perPull + '/抽)' : '';
+        if (pi && pi.c6Bonus > 0) {
+          pullNote += ' (+满命加成' + Math.round(pi.c6Bonus) + ')';
+        }
+        calcLines.push('+抽数价值: +¥' + Math.round(pv) + pullNote);
+      }
+      if (or > 0) {
+        calcLines.push('+其他资源: +¥' + Math.round(or));
+      }
+      calcLines.push('=小计: ¥' + Math.round(subtotal));
+
+      // 系数
+      var yc = valuation.yellowCoeff || 1;
+      var yellowLabel = '';
+      if (valuation.yellowInfo && valuation.yellowInfo.tierLabel) {
+        yellowLabel = ' (' + valuation.effectiveYellow + '有效金,' + valuation.yellowInfo.tierLabel + ')';
+      }
+      var fd = (valuation.flatDiscount && valuation.flatDiscount.value < 1) ? valuation.flatDiscount.value : 1;
+      var fdNotes = (valuation.flatDiscount && valuation.flatDiscount.notes && valuation.flatDiscount.notes.length > 0)
+        ? valuation.flatDiscount.notes.join('; ') : '';
+      var finalCoeff = fd < 1 ? Math.min(yc, fd) : yc;
+
+      if (fd < 1) {
+        calcLines.push('有效金系数: ×' + yc.toFixed(3) + yellowLabel);
+        calcLines.push('低命折扣: ×' + fd.toFixed(2) + (fdNotes ? ' (' + fdNotes + ')' : ''));
+        calcLines.push('取较低值: ×' + finalCoeff.toFixed(3));
+      } else {
+        calcLines.push('×有效金系数: ×' + yc.toFixed(3) + yellowLabel);
+      }
+      calcLines.push('=最终估值: ¥' + Math.round(valuation.totalValue || 0));
+    }
+
     // ===== 卖点摘要 =====
     var fullConstStr = '';
     if (fullConstChars.length > 0) {
@@ -6277,7 +6734,7 @@ function openSettings() {
     // ===== 纯文本版（桌面通知用）=====
     var lines = [];
     lines.push('💰 价格信息');
-    if (uniqueNo) lines.push('编号:' + uniqueNo);
+    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : '螃蟹网') + ')');
     lines.push(priceInfo);
     lines.push('估值¥' + value.toFixed(0) + ' 差价¥' + diff.toFixed(0) + ' 性价比' + ratio.toFixed(1) + '%');
     lines.push('');
@@ -6290,7 +6747,7 @@ function openSettings() {
       lines.push('⭐ 核心亮点');
       if (fullConstStr) lines.push('满命:' + fullConstStr);
       var hlParts = [];
-      if (yellowCount > 0) hlParts.push(yellowCount + '黄');
+      if (yellowCount > 0) hlParts.push('有效' + effectiveYellow + '/' + yellowCount + '黄');
       if (teamCount > 0) hlParts.push(teamCount + '配队');
       if (pullCount > 0) hlParts.push(pullCount + '抽');
       if (hlParts.length > 0) lines.push(hlParts.join(' | '));
@@ -6310,6 +6767,12 @@ function openSettings() {
       lines.push('━━ 📦 资源 ━━');
       for (var ri = 0; ri < resourceLines.length; ri++) lines.push(resourceLines[ri]);
     }
+    // 估价计算模块
+    if (calcLines.length > 0) {
+      if (resourceLines.length > 0) lines.push('');
+      lines.push('━━ 📊 估价计算 ━━');
+      for (var ci = 0; ci < calcLines.length; ci++) lines.push(calcLines[ci]);
+    }
     // 商品标题
     if (row.showTitle) lines.push('\n' + (row.showTitle || '').substring(0, 80));
 
@@ -6318,7 +6781,7 @@ function openSettings() {
     // 价格模块
     mdLines.push('**💰 价格信息**');
     mdLines.push('');
-    if (uniqueNo) mdLines.push('编号: ' + uniqueNo);
+    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : '螃蟹网') + ')');
     if (oldPrice != null && oldPrice !== newPrice) {
       mdLines.push('原价 ~~¥' + oldPrice.toFixed(0) + '~~ → <font color="#e94560">**现价 ¥' + newPrice.toFixed(0) + '**</font>' + (dropAmtStr ? ' 🔥**' + dropAmtStr + '**' : ''));
     } else {
@@ -6332,7 +6795,7 @@ function openSettings() {
       mdLines.push('');
       if (fullConstStr) mdLines.push('**满命**: ' + fullConstStr.split(' ').join(' + '));
       var mdHlParts = [];
-      if (yellowCount > 0) mdHlParts.push(yellowCount + '黄');
+      if (yellowCount > 0) mdHlParts.push('有效' + effectiveYellow + '/' + yellowCount + '黄');
       if (teamCount > 0) mdHlParts.push(teamCount + '配队');
       if (pullCount > 0) mdHlParts.push(pullCount + '抽');
       if (mdHlParts.length > 0) mdLines.push(mdHlParts.join(' | '));
@@ -6354,6 +6817,22 @@ function openSettings() {
       mdLines.push('**📦 资源明细**');
       mdLines.push('');
       for (var rmi = 0; rmi < resourceLines.length; rmi++) mdLines.push(resourceLines[rmi]);
+      mdLines.push('');
+    }
+    // 估价计算模块
+    if (calcLines.length > 0) {
+      mdLines.push('**📊 估价计算**');
+      mdLines.push('');
+      for (var mci = 0; mci < calcLines.length; mci++) {
+        var calcLine = calcLines[mci];
+        if (calcLine.indexOf('=最终估值') >= 0) {
+          mdLines.push('<font color="#fbbf24">**' + calcLine + '**</font>');
+        } else if (calcLine.indexOf('=小计') >= 0) {
+          mdLines.push('**' + calcLine + '**');
+        } else {
+          mdLines.push(calcLine);
+        }
+      }
       mdLines.push('');
     }
     // 商品标题
@@ -6496,6 +6975,9 @@ function openSettings() {
   function showAlertBanner(title, body, productId) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
+    const bannerLink = cleanId.indexOf('pz_') === 0
+      ? PZDS_URLS.detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
+      : 'https://www.pxb7.com/product/' + cleanId + '/1';
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
 
@@ -6513,7 +6995,7 @@ function openSettings() {
         '<div style="font-size:16px;font-weight:700;margin-bottom:2px;">' + title + '</div>' +
         '<div style="font-size:13px;opacity:0.9;white-space:pre-line;">' + body + '</div>' +
       '</div>' +
-      '<a href="https://www.pxb7.com/product/' + cleanId + '/1" target="_blank" ' +
+      '<a href="' + bannerLink + '" target="_blank" ' +
         'style="padding:8px 24px;background:#fff;color:#e94560;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;white-space:nowrap;">立即查看</a>' +
       '<button id="mwAlertClose" style="padding:8px 12px;background:rgba(0,0,0,0.3);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:18px;">✕</button>';
     document.body.appendChild(banner);
@@ -6565,7 +7047,9 @@ function openSettings() {
   function sendPhonePush(title, body, productId) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
-    const productUrl = 'https://www.pxb7.com/product/' + cleanId + '/1';
+    const productUrl = cleanId.indexOf('pz_') === 0
+      ? PZDS_URLS.detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
+      : 'https://www.pxb7.com/product/' + cleanId + '/1';
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
     // Server酱推送（微信）- 支持多个SendKey
@@ -6821,7 +7305,7 @@ function openSettings() {
    */
   function exportCSV() {
     // 改进1：移除"商品码"列
-    const headers = ['上架时间', '估值', '差价', '性价比', '标价', '原价', '累计降价', '黄数', '抽数', '摩托', '五星角色', '状态'];
+    const headers = ['上架时间', '估值', '差价', '性价比', '标价', '原价', '累计降价', '有效黄', '总黄数', '抽数', '摩托', '五星角色', '状态'];
 
     const rows = tableData.map(function (row) {
       const diff = row.value - row.price;
@@ -6836,6 +7320,7 @@ function openSettings() {
         row.price.toFixed(2),
         origPrice.toFixed(2),
         (row.priceDrop || 0).toFixed(2),
+        row.effectiveYellow || 0,
         row.parsed ? row.parsed.yellowCount : 0,
         row.parsed ? row.parsed.pulls : 0,
         row.parsed ? row.parsed.motoCount : 0,
@@ -6873,6 +7358,7 @@ function openSettings() {
       threshold: threshold,
       notifyRatioThreshold: notifyRatioThreshold,
       notifyDiffThreshold: notifyDiffThreshold,
+      notifyDiffTiers: notifyDiffTiers,
       autoBuyEnabled: autoBuyEnabled,
       autoBuyDiff: autoBuyDiff,
       autoBuyMaxPrice: autoBuyMaxPrice,
@@ -6881,12 +7367,14 @@ function openSettings() {
       notifyMaxPrice: notifyMaxPrice,
       refreshIntervalSec: refreshIntervalSec,
       flashSaleEnabled: flashSaleEnabled,
+      pzdsEnabled: pzdsEnabled,
       soldCheckRatio: soldCheckRatio,
       soldCheckDiff: soldCheckDiff,
       soldCheckMinValue: soldCheckMinValue,
       soldCheckMaxValue: soldCheckMaxValue,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
+      _intervalMigrated: true,
     });
   }
 
@@ -6899,11 +7387,9 @@ function openSettings() {
     saveState();
     updateStatusText();
 
-    // 立即刷新一次
-    doRefresh();
-
-    // 启动定时刷新
-    monitorTimeout = setTimeout(monitorTick, refreshIntervalSec * 1000);
+    // 立即开始第一次刷新（通过monitorTick统一管理refreshInProgress）
+    nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
+    monitorTick();
 
     // 启动倒计时
     startCountdown();
@@ -6928,13 +7414,25 @@ function openSettings() {
     updateBottomBar();
   }
 
+  let refreshInProgress = false;
+
   /**
    * 监控tick
    */
   function monitorTick() {
     if (!monitorRunning) return;
-    doRefresh();
-    monitorTimeout = setTimeout(monitorTick, refreshIntervalSec * 1000);
+    if (!refreshInProgress) {
+      refreshInProgress = true;
+      doRefresh().finally(() => {
+        refreshInProgress = false;
+        // 刷新完成后才设置下次倒计时，避免API耗时导致倒计时卡在0
+        nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
+        monitorTimeout = setTimeout(monitorTick, refreshIntervalSec * 1000);
+      });
+    } else {
+      // 刷新仍在进行，2秒后重试
+      monitorTimeout = setTimeout(monitorTick, 2000);
+    }
   }
 
   /**
@@ -6942,7 +7440,6 @@ function openSettings() {
    */
   async function doRefresh() {
     lastRefreshTime = Date.now();
-    nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
 
     try {
       // 扫描第1页
@@ -7002,6 +7499,26 @@ function openSettings() {
           console.log('[鸣潮监控] 秒杀库扫描完成，共获取' + flashTotal + '条');
         }
       }
+
+      // 盼之平台扫描（SSR HTML抓取）
+      if (pzdsEnabled) {
+        let pzdsTotal = 0;
+        for (let page = 1; page <= 1; page++) {
+          try {
+            const pzdsProducts = await fetchListPZ(page);
+            if (pzdsProducts.length > 0) {
+              pzdsTotal += pzdsProducts.length;
+              await handlePZListResponse(pzdsProducts);
+              console.log('[鸣潮监控-盼之] 第' + page + '页扫描完成，获取' + pzdsProducts.length + '条');
+            }
+          } catch (e) {
+            console.error('[鸣潮监控-盼之] 第' + page + '页获取失败:', e);
+          }
+        }
+        if (pzdsTotal > 0) {
+          console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzdsTotal + '条');
+        }
+      }
     } catch (e) {
       lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
       console.error('[鸣潮监控] 列表刷新失败:', e);
@@ -7049,14 +7566,20 @@ function openSettings() {
     notifyEnabled = savedState.notifyEnabled || false;
     notifyRatioThreshold = savedState.notifyRatioThreshold != null ? savedState.notifyRatioThreshold : 40;
     notifyDiffThreshold = savedState.notifyDiffThreshold != null ? savedState.notifyDiffThreshold : 150;
+    notifyDiffTiers = Array.isArray(savedState.notifyDiffTiers) ? savedState.notifyDiffTiers : notifyDiffTiers;
     autoBuyEnabled = savedState.autoBuyEnabled != null ? savedState.autoBuyEnabled : true;
     autoBuyDiff = savedState.autoBuyDiff != null ? savedState.autoBuyDiff : 380;
     autoBuyMaxPrice = savedState.autoBuyMaxPrice != null ? savedState.autoBuyMaxPrice : 6000;
     notifyMinValue = savedState.notifyMinValue != null ? savedState.notifyMinValue : 400;
     notifyMinPrice = savedState.notifyMinPrice != null ? savedState.notifyMinPrice : 0;
     notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 20000;
-    refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 20;
+    refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 15;
+    // 迁移：旧默认值20秒 → 新默认值15秒（用户手动设过其他值则保留）
+    if (refreshIntervalSec === 20 && savedState._intervalMigrated !== true) {
+      refreshIntervalSec = 15;
+    }
     flashSaleEnabled = savedState.flashSaleEnabled != null ? savedState.flashSaleEnabled : true;
+    pzdsEnabled = savedState.pzdsEnabled != null ? savedState.pzdsEnabled : false;
     soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 40;
     soldCheckDiff = savedState.soldCheckDiff != null ? savedState.soldCheckDiff : 0;
     soldCheckMinValue = savedState.soldCheckMinValue != null ? savedState.soldCheckMinValue : 0;

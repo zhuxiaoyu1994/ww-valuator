@@ -48,66 +48,22 @@ const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 };
 // 估值权重默认值（对应油猴脚本 DEFAULT_WEIGHTS）
 // ============================================================
 const DEFAULT_WEIGHTS = {
-  // 五星武器
-  fiveStarWeapon: 0,       // 每个五星武器基础价（精1）
-  weaponRefineBonus: 2,    // 每级精炼额外加价
-  // 热门角色里程碑倍率
-  hotC0Mult: 1,          // C0+专武 倍率
-  hotC3Mult: 2,          // C3+专武 倍率
-  hotC6Mult: 3,          // C6+专武 倍率
-  hotStepMult: 0.1,      // 过渡命(C1/C2/C4/C5)每命加成倍率
-  hotNoSigMult: 0.5,     // 无专武倍率
-  hotNoSigC6Mult: 0.5,   // C6无专武倍率
-  // 冷门角色加分参数
-  coldStep: 0,           // 每命加价
-  coldC3Bonus: 0,        // C3额外加价
-  coldC6Bonus: 0,        // C6额外加价
-  coldSigBonus: 0,       // 有专武额外加价
   // 满命溢价（加权满命数档位）
   c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
-  c6MultiBonus: [
-    { count: 1.5, bonus: 0.25 },
-    { count: 2, bonus: 0.5 },
-    { count: 2.5, bonus: 0.75 },
-    { count: 3, bonus: 1 },
-    { count: 3.5, bonus: 1.25 },
-    { count: 4, bonus: 1.5 },
-    { count: 4.5, bonus: 1.75 },
-    { count: 5, bonus: 2 },
-    { count: 5.5, bonus: 2.25 },
-    { count: 6, bonus: 2.5 },
-    { count: 6.5, bonus: 2.75 },
-    { count: 7, bonus: 3 },
-    { count: 7.5, bonus: 3.25 },
-    { count: 8, bonus: 3.5 },
-    { count: 8.5, bonus: 3.75 },
-    { count: 9, bonus: 4 },
-    { count: 9.5, bonus: 4.25 },
-    { count: 10, bonus: 4.5 },
-  ],
+  c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
+  // 满命溢价公式参数（加权满命数 → 角色价值溢价系数）
+  c6Base: 3,          // 基准加权满命数
+  c6BaseBonus: 1.0,   // 基准溢价（100%）
+  c6Step: 0.1,        // 每档满命数
+  c6StepBonus: 0.05,  // 每档浮动（5%）
   // 资源定价
   outfit: 0,             // 服饰/皮肤单价
-  motoAccessory: 0,      // 摩托饰品单价
   motoFrame: 0,          // 车架模组单价
-  paint: 0,              // 涂装单价
-  // 满命抽数加成档位（加权满命数 → 抽数价值加成系数）
-  pullC6Bonus: [
-    { count: 1, bonus: 0.15 },
-    { count: 2, bonus: 0.25 },
-    { count: 3, bonus: 0.35 },
-    { count: 4, bonus: 0.45 },
-    { count: 5, bonus: 0.5 },
-    { count: 6, bonus: 0.55 },
-    { count: 7, bonus: 0.6 },
-    { count: 8, bonus: 0.65 },
-    { count: 9, bonus: 0.7 },
-    { count: 10, bonus: 0.75 },
-    { count: 11, bonus: 0.8 },
-    { count: 12, bonus: 0.85 },
-    { count: 13, bonus: 0.9 },
-    { count: 14, bonus: 0.95 },
-    { count: 15, bonus: 1 },
-  ],
+  // 满命抽数加成公式参数（加权满命数 → 抽数价值加成系数）
+  pullC6Base: 5,          // 基准加权满命数
+  pullC6BaseBonus: 0.5,   // 基准加成（50%）
+  pullC6Step: 0.1,        // 每档满命数
+  pullC6StepBonus: 0.005, // 每档浮动（0.5%）
   // 多配队额外系数
   teamMultiBonus: [
     { count: 2, coef: 1.05 },
@@ -122,17 +78,56 @@ const DEFAULT_WEIGHTS = {
   ],
   // 低命折扣系数规则（指定级别角色均不超过N命时，总价值打折）
   flatDiscountRules: [
-      { tiers: ['S', 'A'], maxConst: 2, discount: 0.8 },
-    ],
-    // C6配队依赖：满命角色缺少关键队友时，降级C6权重 + 打折角色价值
-    c6TeamDependency: {
-      '卡提希娅': { teammate: '夏空', weightTier: 'A', valueDiscount: 0.7 },
-      '弗洛洛': { teammate: '坎特蕾拉', weightTier: 'A', valueDiscount: 0.7 },
-      '露西': { teammate: '丽贝卡', weightTier: 'B', valueDiscount: 0.7 },
-      '绯雪': { teammate: '洛瑟菈', weightTier: 'A', valueDiscount: 0.7 },
-      '秧秧玄翎': { teammate: '穗穗', weightTier: 'A', valueDiscount: 0.7 },
-    },
-  };
+    { tiers: ['S', 'A'], maxConst: 2, discount: 0.8 },
+  ],
+  // C6配队依赖：满命角色缺少关键队友时，降级C6权重 + 打折角色价值
+  c6TeamDependency: {
+    '卡提希娅': { teammate: '夏空', weightTier: 'A', valueDiscount: 0.7 },
+    '弗洛洛': { teammate: '坎特蕾拉', weightTier: 'A', valueDiscount: 0.7 },
+    '露西': { teammate: '丽贝卡', weightTier: 'B', valueDiscount: 0.7 },
+    '绯雪': { teammate: '洛瑟菈', weightTier: 'A', valueDiscount: 0.7 },
+    '秧秧玄翎': { teammate: '穗穗', weightTier: 'A', valueDiscount: 0.7 },
+  },
+  // 无专武折扣（需要专武的角色，无专武时价值 × 此值）
+  needSigDiscount: 0.3,
+  // 强绑角色折扣（强绑队友全不在场时，角色价值 × 此值）
+  teamDepDiscount: 0.7,
+  // 有效金系数上限
+  yellowMaxCoeff: 3.0,
+};
+
+// 默认抽数阶梯定价公式参数（对应油猴脚本 DEFAULT_PULL_FORMULA）
+const DEFAULT_PULL_FORMULA = {
+  pullBase: 200,        // 基准抽数
+  pullBasePrice: 1.0,   // 基准每抽价格（元）
+  pullStepPrice: 0.002, // 每多一抽的浮动价格
+};
+
+// 默认强绑队友配置（对应油猴脚本 DEFAULT_TEAM_MATES）
+const DEFAULT_TEAM_MATES = {
+  '爱弥斯': ['千咲', '琳奈', '莫宁', '达妮娅'],
+  '绯雪': ['洛瑟菈'],
+  '秧秧玄翎': ['穗穗'],
+  '卡提希娅': ['夏空'],
+  '弗洛洛': ['仇远', '坎特蕾拉'],
+  '洛瑟菈': ['绯雪'],
+  '露西': ['丽贝卡'],
+  '嘉贝莉娜': ['仇远'],
+  '奥古斯塔': ['尤诺'],
+  '仇远': ['嘉贝莉娜', '弗洛洛'],
+  '尤诺': ['奥古斯塔', '忌炎'],
+  '陆赫斯': ['琳奈'],
+  '赞妮': ['菲比'],
+  '布兰特': ['露帕'],
+  '西格莉卡': ['仇远'],
+  '露帕': ['布兰特'],
+  '珂莱塔': ['折枝'],
+  '菲比': ['赞妮'],
+  '坎特蕾拉': ['弗洛洛', '西格莉卡'],
+  '椿': ['守岸人'],
+  '吟霖': ['今汐', '相里要'],
+  '相里要': ['吟霖'],
+};
 
 // ============================================================
 // 默认配队列表（对应油猴脚本 DEFAULT_TEAMS）
@@ -285,21 +280,10 @@ const DEFAULT_CONST_PREMIUMS = {
   '穗穗': { '2': 50, '6': 120 },
 };
 
-// 需要专武的角色列表（对应油猴脚本 DEFAULT_NEED_SIG_WEAPONS）
+// 需要专武的角色列表（无专武时按 needSigDiscount 折扣，折扣值在权重中配置）
 const DEFAULT_NEED_SIG_WEAPONS = [
-  { name: '爱弥斯', discount: 0.3 },
-  { name: '绯雪', discount: 0.3 },
-  { name: '卡提希娅', discount: 0.3 },
-  { name: '今汐', discount: 0.3 },
-  { name: '椿', discount: 0.3 },
-  { name: '忌炎', discount: 0.3 },
-  { name: '嘉贝莉娜', discount: 0.3 },
-  { name: '弗洛洛', discount: 0.3 },
-  { name: '珂莱塔', discount: 0.3 },
-  { name: '西格莉卡', discount: 0.3 },
-  { name: '赞妮', discount: 0.3 },
-  { name: '陆赫斯', discount: 0.3 },
-  { name: '秧秧玄翎', discount: 0.3 },
+  '爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅', '弗洛洛', '嘉贝莉娜',
+  '陆赫斯', '赞妮', '西格莉卡', '珂莱塔', '椿', '忌炎', '今汐',
 ];
 
 // ============================================================
@@ -369,13 +353,34 @@ function buildDefaultWeights(customWeights) {
   const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
   w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
   w.c6MultiBonus = (saved.c6MultiBonus && saved.c6MultiBonus.length) ? saved.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
-  w.pullC6Bonus = (saved.pullC6Bonus && saved.pullC6Bonus.length) ? saved.pullC6Bonus : DEFAULT_WEIGHTS.pullC6Bonus;
+  // 满命溢价公式参数
+  w.c6Base = (saved.c6Base != null) ? saved.c6Base : DEFAULT_WEIGHTS.c6Base;
+  w.c6BaseBonus = (saved.c6BaseBonus != null) ? saved.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
+  w.c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
+  w.c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+  // 满命抽数加成公式参数
+  w.pullC6Base = (saved.pullC6Base != null) ? saved.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
+  w.pullC6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
+  w.pullC6Step = (saved.pullC6Step != null) ? saved.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
+  w.pullC6StepBonus = (saved.pullC6StepBonus != null) ? saved.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
   w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
   w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
   w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
-  w.pullTiers = (saved.pullTiers && saved.pullTiers.length) ? saved.pullTiers : DEFAULT_PULL_TIERS;
-  w.yellowTiers = (saved.yellowTiers && saved.yellowTiers.length) ? saved.yellowTiers : DEFAULT_YELLOW_TIERS;
+  // 抽数阶梯定价公式参数
+  w.pullBase = (saved.pullBase != null) ? saved.pullBase : DEFAULT_PULL_FORMULA.pullBase;
+  w.pullBasePrice = (saved.pullBasePrice != null) ? saved.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
+  w.pullStepPrice = (saved.pullStepPrice != null) ? saved.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
+  // 有效金系数公式参数
+  w.yellowBase = (saved.yellowBase != null) ? saved.yellowBase : 40;
+  w.yellowStep = (saved.yellowStep != null) ? saved.yellowStep : 1;
+  w.yellowBaseCoeff = (saved.yellowBaseCoeff != null) ? saved.yellowBaseCoeff : 1.0;
+  w.yellowStepCoeff = (saved.yellowStepCoeff != null) ? saved.yellowStepCoeff : 0.01;
+  w.yellowMaxCoeff = (saved.yellowMaxCoeff != null) ? saved.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
   w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
+  // 数据迁移：旧的'秧秧'是五星角色，现已改名为'秧秧玄翎'，四星'秧秧'价格应为0
+  if (saved.charPrices && saved.charPrices['秧秧'] != null && saved.charPrices['秧秧'] > 0) {
+    w.charPrices['秧秧'] = 0;
+  }
   w.constPremiums = Object.assign({}, DEFAULT_CONST_PREMIUMS, saved.constPremiums || {});
   w.teamPremiums = saved.teamPremiums || buildDefaultTeamPremiums();
   w.teams = [];
@@ -385,13 +390,21 @@ function buildDefaultWeights(customWeights) {
       w.teams.push({ name: teamName, members: t.chars || [], multiplier: t.multiplier || 1.0 });
     }
   }
-  w.needSigWeapons = (saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS).map(function(n) {
-    return typeof n === 'string' ? { name: n, discount: 0.5 } : n;
-  });
+  // 需要专武的角色列表（兼容旧格式，统一为名字数组）
+  var rawNeedSig = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  w.needSigWeapons = rawNeedSig.map(function(n) { return typeof n === 'string' ? n : n.name; });
+  // 无专武折扣（可配置）
+  w.needSigDiscount = (saved.needSigDiscount != null) ? saved.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
+  // 强绑队友配置
+  w.teamMates = saved.teamMates || DEFAULT_TEAM_MATES;
+  // 强绑折扣（可配置）
+  w.teamDepDiscount = (saved.teamDepDiscount != null) ? saved.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount;
   // 用户自定义专武映射覆盖
   if (saved.sigWeaponsOverride) {
     w.sigWeaponsOverride = saved.sigWeaponsOverride;
   }
+  // 用户已删除的角色列表
+  w.deletedChars = saved.deletedChars || [];
   // 用户自定义角色级别覆盖
   w.charTierOverride = saved.charTierOverride || {};
   for (const ctoName in w.charTierOverride) {
@@ -406,22 +419,10 @@ function buildDefaultWeights(customWeights) {
 
 // 权重标签定义（供设置面板显示用，对应油猴脚本 WEIGHT_LABELS）
 const WEIGHT_LABELS = {
-  fiveStarWeapon: { label: '五星武器(基础)', desc: '每个五星武器基础价（元，精1）' },
-  weaponRefineBonus: { label: '武器精炼加成', desc: '每级精炼额外加价（元，精5=+4×此值）' },
-  hotC0Mult: { label: '热门C0+专武倍率', desc: 'C0+专武 = 基础价 × 此倍率（1.0=100%）' },
-  hotC3Mult: { label: '热门C3+专武倍率', desc: 'C3+专武 = 基础价 × 此倍率（2.0=200%，价值翻倍）' },
-  hotC6Mult: { label: '热门C6+专武倍率', desc: 'C6+专武 = 基础价 × 此倍率（3.0=300%，满命三倍）' },
-  hotStepMult: { label: '热门过渡命倍率', desc: 'C1/C2/C4/C5每命加成 = 基础价 × 此倍率（0.1=10%）' },
-  hotNoSigMult: { label: '热门无专武倍率', desc: '热门角色无专武 = 基础价 × 此倍率（0.15=仅值15%）' },
-  hotNoSigC6Mult: { label: '热门C6无专武倍率', desc: '满命但无专武 = 基础价 × 此倍率（0.25=25%）' },
-  coldStep: { label: '冷门每命加分', desc: '冷门角色每命加此值（元）' },
-  coldC3Bonus: { label: '冷门C3加分', desc: '冷门角色3命额外加此值（元）' },
-  coldC6Bonus: { label: '冷门C6加分', desc: '冷门角色满命额外加此值（元）' },
-  coldSigBonus: { label: '冷门专武加分', desc: '冷门角色有专武额外加此值（元）' },
   outfit: { label: '服饰/皮肤', desc: '每个服饰/皮肤（元）' },
-  motoAccessory: { label: '摩托饰品', desc: '每个摩托饰品（元）' },
   motoFrame: { label: '车架模组', desc: '每个车架模组（元）' },
-  paint: { label: '涂装', desc: '每个涂装（元）' },
+  needSigDiscount: { label: '无专武折扣', desc: '需要专武的角色无专武时，价值×此值（0.3=30%）' },
+  teamDepDiscount: { label: '强绑折扣', desc: '强绑队友全不在场时，角色价值×此值（0.7=70%）' },
 };
 
 /**
@@ -436,8 +437,8 @@ function getDefaults() {
     sigWeapons: SIG_WEAPONS,
     constPremiums: DEFAULT_CONST_PREMIUMS,
     teams: DEFAULT_TEAMS,
-    pullTiers: DEFAULT_PULL_TIERS,
-    yellowTiers: DEFAULT_YELLOW_TIERS,
+    pullFormula: DEFAULT_PULL_FORMULA,
+    teamMates: DEFAULT_TEAM_MATES,
     charPrices: buildDefaultCharPrices(),
     needSigWeapons: DEFAULT_NEED_SIG_WEAPONS,
     weightLabels: WEIGHT_LABELS,
@@ -816,7 +817,8 @@ function calcConstPremium(charName, constCount, w) {
 }
 
 /**
- * 计算单个角色价值（从 weights 读取参数，里程碑估值）
+ * 计算单个角色价值（从 weights 读取参数）
+ * 纯基础价模式：命座价值由 constPremiums 字段控制
  */
 function getCharValue(char, hasSigWeapon, w) {
   w = w || weights || DEFAULT_WEIGHTS;
@@ -824,120 +826,68 @@ function getCharValue(char, hasSigWeapon, w) {
   const charPrices = w.charPrices || {};
   const base = charPrices[char.name] != null ? charPrices[char.name] : char.price;
 
-  // 检查是否在"需要专武"列表中（有自定义折扣）
+  // 检查是否在"需要专武"列表中（可配置折扣 needSigDiscount）
   var needSigList = w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  var _nsDiscount = w.needSigDiscount != null ? w.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
   for (var ni = 0; ni < needSigList.length; ni++) {
-    var nsEntry = needSigList[ni];
-    var nsName = typeof nsEntry === 'string' ? nsEntry : nsEntry.name;
-    if (nsName === char.name) {
+    var entry = needSigList[ni];
+    var entryName = typeof entry === 'string' ? entry : entry.name;
+    if (entryName === char.name) {
       if (!hasSigWeapon) {
-        var nsDiscount = typeof nsEntry === 'string' ? 0.5 : (nsEntry.discount != null ? nsEntry.discount : 0.5);
-        return base * nsDiscount;
+        return base * _nsDiscount;
       }
       break;
     }
   }
 
-  if (char.isHot) {
-    // 热门角色：里程碑估值
-    const c0Mult = w.hotC0Mult != null ? w.hotC0Mult : 1.0;
-    const c3Mult = w.hotC3Mult != null ? w.hotC3Mult : 2.0;
-    const c6Mult = w.hotC6Mult != null ? w.hotC6Mult : 3.0;
-    const stepMult = w.hotStepMult != null ? w.hotStepMult : 0.1;
-    const noSigMult = w.hotNoSigMult != null ? w.hotNoSigMult : 0.15;
-    const noSigC6Mult = w.hotNoSigC6Mult != null ? w.hotNoSigC6Mult : 0.25;
-
-    if (!hasSigWeapon) {
-      // 热门角色无专武，大幅贬值
-      if (char.const >= 6) return base * noSigC6Mult;
-      return base * noSigMult;
-    }
-    // 有专武：按里程碑计算
-    if (char.const >= 6) return base * c6Mult;
-    if (char.const >= 3) return base * c3Mult;
-    if (char.const >= 1) return base * (c0Mult + char.const * stepMult); // C1/C2/C4/C5 过渡命
-    return base * c0Mult;
-  } else {
-    // 冷门角色：基础价 + 命数加分
-    const coldStep = w.coldStep != null ? w.coldStep : 1;
-    const coldC3Bonus = w.coldC3Bonus != null ? w.coldC3Bonus : 3;
-    const coldC6Bonus = w.coldC6Bonus != null ? w.coldC6Bonus : 5;
-    const coldSigBonus = w.coldSigBonus != null ? w.coldSigBonus : 2;
-
-    let val = base + char.const * coldStep;
-    if (char.const >= 3) val += coldC3Bonus;
-    if (char.const >= 6) val += coldC6Bonus;
-    if (hasSigWeapon) val += coldSigBonus;
-    return val;
-  }
+  // 纯基础价，命座价值由 per-character 溢价控制
+  return base;
 }
 
 /**
- * 计算抽数阶梯价值（从 weights.pullTiers 读取阶梯）
- * 按抽数所在阶梯的单价 × 总抽数计算（不分段累计）
+ * 计算抽数价值（公式：每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动）
  */
 function calculatePullValue(pulls) {
-  const tiers = (weights && weights.pullTiers) || DEFAULT_PULL_TIERS;
-  // 去重：相同区间只保留一条（修复历史数据重复问题）
-  const dedupMap = {};
-  for (const t of tiers) {
-    const key = (t.minPull || 0) + '-' + (t.maxPull == null ? 'inf' : t.maxPull);
-    dedupMap[key] = t;
-  }
-  const deduped = Object.values(dedupMap);
-  const sorted = [...deduped].sort((a, b) => (a.minPull || 0) - (b.minPull || 0));
+  var base = (weights && weights.pullBase != null) ? weights.pullBase : DEFAULT_PULL_FORMULA.pullBase;
+  var basePrice = (weights && weights.pullBasePrice != null) ? weights.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
+  var stepPrice = (weights && weights.pullStepPrice != null) ? weights.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
 
-  // 找到抽数所在的阶梯，按该阶梯单价 × 总抽数计算（不分段累计）
-  let matchedTier = sorted[0] || { minPull: 0, maxPull: Infinity, perPullPrice: 0.8 };
-  for (const tier of sorted) {
-    const minPull = tier.minPull != null ? tier.minPull : 0;
-    const maxPull = (tier.maxPull == null || tier.maxPull === Infinity) ? Infinity : tier.maxPull;
-    if (pulls >= minPull && pulls < maxPull) {
-      matchedTier = { ...tier, minPull, maxPull };
-      break;
-    }
-  }
+  var perPull = basePrice + (pulls - base) * stepPrice;
+  if (perPull < 0) perPull = 0;
 
-  const value = pulls * matchedTier.perPullPrice;
-  const matchedMax = (matchedTier.maxPull == null || matchedTier.maxPull === Infinity) ? Infinity : matchedTier.maxPull;
-  const tierLabel = matchedMax === Infinity
-    ? matchedTier.minPull + '抽+'
-    : matchedTier.minPull + '~' + matchedMax + '抽';
+  var value = pulls * perPull;
+  var tierLabel = pulls + '抽';
 
   return {
     pulls: Math.round(pulls),
-    perPull: matchedTier.perPullPrice,
+    perPull: Math.round(perPull * 1000) / 1000,
     tierLabel: tierLabel,
     total: Math.round(value),
   };
 }
 
 /**
- * 计算黄数系数（从 weights.yellowTiers 读取阶梯）
+ * 计算有效金系数（公式：baseCoeff + floor((yellowCount - base) / step) * stepCoeff）
  */
 function getYellowCoeff(yellowCount) {
-  const rawTiers = (weights && weights.yellowTiers) || DEFAULT_YELLOW_TIERS;
-  // 去重：相同区间只保留一条（修复历史数据重复问题）
-  const dedupMap = {};
-  for (const t of rawTiers) {
-    const key = (t.minYellow || 0) + '-' + (t.maxYellow == null ? 'inf' : t.maxYellow);
-    dedupMap[key] = t;
-  }
-  const tiers = Object.values(dedupMap);
-  let matchedTier = tiers[0] || { minYellow: 0, maxYellow: Infinity, coefficient: 0.3 };
-  for (const tier of tiers) {
-    const maxYellow = (tier.maxYellow == null || tier.maxYellow === Infinity) ? Infinity : tier.maxYellow;
-    if (yellowCount >= tier.minYellow && yellowCount < maxYellow) {
-      matchedTier = { ...tier, maxYellow };
-      break;
-    }
-  }
-  const tierLabel = matchedTier.maxYellow === Infinity
-    ? matchedTier.minYellow + '黄+'
-    : matchedTier.minYellow + '~' + matchedTier.maxYellow + '黄';
+  var base = (weights && weights.yellowBase != null) ? weights.yellowBase : 40;
+  var step = (weights && weights.yellowStep != null) ? weights.yellowStep : 1;
+  var baseCoeff = (weights && weights.yellowBaseCoeff != null) ? weights.yellowBaseCoeff : 1.0;
+  var stepCoeff = (weights && weights.yellowStepCoeff != null) ? weights.yellowStepCoeff : 0.01;
+  var maxCoeff = (weights && weights.yellowMaxCoeff != null) ? weights.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
+
+  var tierIndex = Math.floor((yellowCount - base) / step);
+  var coefficient = baseCoeff + tierIndex * stepCoeff;
+  if (coefficient < 0.1) coefficient = 0.1;
+  if (maxCoeff > 0 && coefficient > maxCoeff) coefficient = maxCoeff;
+
+  var tierStart = base + tierIndex * step;
+  var tierEnd = tierStart + step;
+  var tierLabel = tierStart + '~' + tierEnd + '有效';
+
   return {
     yellowCount: yellowCount,
-    coefficient: matchedTier.coefficient,
+    coefficient: Math.round(coefficient * 1000) / 1000,
     tierLabel: tierLabel,
   };
 }
@@ -963,19 +913,16 @@ function calculateValue(parsed, price) {
   for (const char of parsed.characters) {
     const hasSig = checkHasSigWeapon(char.name, weaponNames, weaponSectionText);
     const val = getCharValue(char, hasSig, w);
-    // 命座溢价（用户自定义的额外加价）
     const premium = calcConstPremium(char.name, char.const, w);
     charValue += val + premium;
     if (hasSig && !hasSignatureWeapons.includes(char.name)) hasSignatureWeapons.push(char.name);
 
-    // 统计加权满命数
     let fullConstWeightVal = 0;
     if (char.const >= 6) {
       fullConstWeightVal = c6Weights[char.tier] != null ? c6Weights[char.tier] : (FULL_CONST_WEIGHT[char.tier] || 0);
       weightedFullConst += fullConstWeightVal;
     }
 
-    // 获取专武精炼数（0表示无专武，1-5表示精1-5）
     let sigRefine = 0;
     if (hasSig) {
       const sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[char.name] || SIG_WEAPONS[char.name]) : SIG_WEAPONS[char.name];
@@ -987,7 +934,6 @@ function calculateValue(parsed, price) {
       }
     }
 
-    // 角色估值明细
     charBreakdown.push({
       name: char.name,
       const: char.const,
@@ -1007,65 +953,52 @@ function calculateValue(parsed, price) {
     });
   }
 
-  // 1.5 C6配队依赖检查：满命角色缺少关键队友时，降级C6权重 + 打折角色价值
-  const c6DepConfig = w.c6TeamDependency || {};
-  const c6DepNotes = [];
+  // 1.5 强绑队友检查：角色缺少强绑队友时，价值打折（适用于所有命座，不限C6）
+  var _teamMatesConfig = w.teamMates || {};
+  // 向后兼容：从旧 c6TeamDependency 迁移
+  var _oldC6DepConfig = w.c6TeamDependency || {};
+  for (var _ocd in _oldC6DepConfig) {
+    if (!_oldC6DepConfig.hasOwnProperty(_ocd)) continue;
+    if (_teamMatesConfig[_ocd]) continue;
+    var _ocdInfo = _oldC6DepConfig[_ocd];
+    var _ocdMates = Array.isArray(_ocdInfo.teammate) ? _ocdInfo.teammate : [_ocdInfo.teammate];
+    if (_ocdMates.length > 0 && _ocdMates[0]) _teamMatesConfig[_ocd] = [].concat(_ocdMates);
+  }
+  var _teamDepDiscount = w.teamDepDiscount != null ? w.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount;
+  const teamDepNotes = [];
   const charNamesSet = new Set(parsed.characters.map(c => c.name));
   for (const cb of charBreakdown) {
-    if (cb.const < 6) continue;
-    const dep = c6DepConfig[cb.name];
-    if (!dep || !dep.teammate) continue;
-    const depTeammates = Array.isArray(dep.teammate) ? dep.teammate : [dep.teammate];
-    const hasTeammate = depTeammates.some(t => charNamesSet.has(t));
+    const mates = _teamMatesConfig[cb.name];
+    if (!mates || !Array.isArray(mates) || mates.length === 0) continue;
+    const hasTeammate = mates.some(t => charNamesSet.has(t));
     if (!hasTeammate) {
-      // 1. 降级C6权重
-      const originalWeight = c6Weights[cb.tier] != null ? c6Weights[cb.tier] : (FULL_CONST_WEIGHT[cb.tier] || 0);
-      const newTier = dep.weightTier || 'A';
-      const newWeight = c6Weights[newTier] != null ? c6Weights[newTier] : (FULL_CONST_WEIGHT[newTier] || 0);
-      weightedFullConst += newWeight - originalWeight;
-      // 2. 打折角色价值
-      const discount = dep.valueDiscount != null ? dep.valueDiscount : 1.0;
-      if (discount < 1.0) {
-        const originalVal = cb.value;
-        const discountedVal = Math.round(originalVal * discount);
-        charValue -= originalVal - discountedVal;
-        cb.value = discountedVal;
-        const cd = charDetails.find(c => c.name === cb.name);
-        if (cd) cd.value = discountedVal;
-      }
-      c6DepNotes.push(cb.name + '缺' + depTeammates.join('/') + ' C6降' + newTier + (discount < 1.0 ? ' x' + Math.round(discount * 100) + '%' : ''));
+      const originalVal = cb.value;
+      const discountedVal = Math.round(originalVal * _teamDepDiscount);
+      charValue -= originalVal - discountedVal;
+      cb.value = discountedVal;
+      const cd = charDetails.find(c => c.name === cb.name);
+      if (cd) cd.value = discountedVal;
+      teamDepNotes.push(cb.name + '缺' + mates.join('/') + ' x' + Math.round(_teamDepDiscount * 100) + '%');
     }
   }
 
-  // 2. 满命溢价（使用 weights.c6MultiBonus 档位）
-  // 注意：保持与原版一致，溢价以全部角色价值 charValue 为基数
+  // 2. 满命溢价（公式：基准溢价 + (加权满命 - 基准) / 每档 × 每档浮动）
   let fullConstPremium = 0;
   const c6BonusNotes = [];
-  const c6BonusRules = w.c6MultiBonus || [];
   const allC6Chars = charBreakdown.filter(cb => cb.const >= 6 && cb.tier && cb.tier !== 'E');
   const tierCounts = {};
   for (const cb of allC6Chars) {
     tierCounts[cb.tier] = (tierCounts[cb.tier] || 0) + 1;
   }
-  // 计算满命加成系数（用于满命溢价）
-  let c6BonusMultiplier = 0;
-  if (c6BonusRules.length > 0) {
-    const sortedRules = [...c6BonusRules].sort((a, b) => a.count - b.count);
-    const minRuleCount = sortedRules[0].count;
-    if (weightedFullConst >= minRuleCount) {
-      let lower = null, upper = null;
-      for (const rule of sortedRules) {
-        if (weightedFullConst >= rule.count) lower = rule;
-        else if (!upper) upper = rule;
-      }
-      if (lower && upper) {
-        const ratio = (weightedFullConst - lower.count) / (upper.count - lower.count);
-        c6BonusMultiplier = Math.max(upper.bonus * ratio, lower.bonus);
-      } else if (lower) {
-        c6BonusMultiplier = lower.bonus;
-      }
-    }
-  }
+  var c6Base = (w.c6Base != null) ? w.c6Base : DEFAULT_WEIGHTS.c6Base;
+  var c6BaseBonus = (w.c6BaseBonus != null) ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
+  var c6Step = (w.c6Step != null) ? w.c6Step : DEFAULT_WEIGHTS.c6Step;
+  var c6StepBonus = (w.c6StepBonus != null) ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+
+  let c6BonusMultiplier = weightedFullConst > 0
+    ? c6BaseBonus + (weightedFullConst - c6Base) / c6Step * c6StepBonus
+    : 0;
+  if (c6BonusMultiplier < 0) c6BonusMultiplier = 0;
   if (c6BonusMultiplier > 0) {
     fullConstPremium = charValue * c6BonusMultiplier;
     const tierSummary = Object.entries(tierCounts)
@@ -1074,26 +1007,16 @@ function calculateValue(parsed, price) {
     c6BonusNotes.push('满命(' + tierSummary + ') 加权' + weightedFullConst.toFixed(1) + ' +' + Math.round(c6BonusMultiplier * 100) + '%');
   }
 
-  // 计算抽数满命加成系数（独立档位 pullC6Bonus）
-  const pullC6Rules = w.pullC6Bonus || [];
-  let pullC6Multiplier = 0;
-  if (pullC6Rules.length > 0) {
-    const sortedPullRules = [...pullC6Rules].sort((a, b) => a.count - b.count);
-    const minPullCount = sortedPullRules[0].count;
-    if (weightedFullConst >= minPullCount) {
-      let plower = null, pupper = null;
-      for (const rule of sortedPullRules) {
-        if (weightedFullConst >= rule.count) plower = rule;
-        else if (!pupper) pupper = rule;
-      }
-      if (plower && pupper) {
-        const pratio = (weightedFullConst - plower.count) / (pupper.count - plower.count);
-        pullC6Multiplier = Math.max(pupper.bonus * pratio, plower.bonus);
-      } else if (plower) {
-        pullC6Multiplier = plower.bonus;
-      }
-    }
-  }
+  // 计算抽数满命加成系数（公式：基准加成 + (加权满命 - 基准) / 每档 × 每档浮动）
+  var pc6Base = (w.pullC6Base != null) ? w.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
+  var pc6BaseBonus = (w.pullC6BaseBonus != null) ? w.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
+  var pc6Step = (w.pullC6Step != null) ? w.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
+  var pc6StepBonus = (w.pullC6StepBonus != null) ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
+
+  var pullC6Multiplier = weightedFullConst > 0
+    ? pc6BaseBonus + (weightedFullConst - pc6Base) / pc6Step * pc6StepBonus
+    : 0;
+  if (pullC6Multiplier < 0) pullC6Multiplier = 0;
 
   // 3. 配队溢价（使用 weights.teams 和 teamMultiBonus）
   let teamPremium = 0;
@@ -1107,7 +1030,6 @@ function calculateValue(parsed, price) {
     if (allPresent) satisfiedTeams.push(team);
   }
 
-  // 多配队额外系数（从 teamMultiBonus 读取，去重防止历史数据重复）
   const rawMultiRules = w.teamMultiBonus || [];
   const tmDedup = {};
   for (const r of rawMultiRules) { tmDedup[r.count] = r; }
@@ -1119,14 +1041,19 @@ function calculateValue(parsed, price) {
     }
   }
 
-  for (const team of satisfiedTeams) {
-    for (const member of team.members) {
-      const char = parsed.characters.find(c => c.name === member);
-      if (char) {
-        const hasSig = checkHasSigWeapon(member, weaponNames, weaponSectionText);
-        const memberVal = getCharValue(char, hasSig, w);
-        teamPremium += memberVal * (team.multiplier - 1);
+  // 去重：每个角色只取参与配队中的最高溢价系数，不重复累加
+  for (const char of parsed.characters) {
+    let bestCoeff = 0;
+    for (const team of satisfiedTeams) {
+      if (team.members.indexOf(char.name) >= 0) {
+        const coeff = team.multiplier - 1;
+        if (coeff > bestCoeff) bestCoeff = coeff;
       }
+    }
+    if (bestCoeff > 0) {
+      const hasSig = checkHasSigWeapon(char.name, weaponNames, weaponSectionText);
+      const memberVal = getCharValue(char, hasSig, w);
+      teamPremium += memberVal * bestCoeff;
     }
   }
   teamPremium *= multiTeamCoeff;
@@ -1138,21 +1065,16 @@ function calculateValue(parsed, price) {
   // 4. 抽数价值（基础抽数价值 × (1 + 满命抽数加成系数)）
   const pullInfo = calculatePullValue(parsed.pulls);
   const basePullValue = pullInfo.total;
-  // 满命角色多则抽数价值更高：用独立的抽数满命加成系数
   const pullC6Bonus = Math.round(basePullValue * pullC6Multiplier);
   const pullValue = basePullValue + pullC6Bonus;
 
-  // 5. 其他资源（提取明细列表，按 weights 单价计价）
+  // 5. 其他资源
   const outfits = extractListItems(parsed.rawText, '服饰');
-  const motoAccessories = extractListItems(parsed.rawText, '摩托饰品').concat(extractListItems(parsed.rawText, '摩托'));
   const motoFrames = extractListItems(parsed.rawText, '车架模组').concat(extractListItems(parsed.rawText, '车架'));
-  const paints = extractListItems(parsed.rawText, '涂装');
 
   const outfitValue = outfits.length * (w.outfit || 0);
-  const motoAccValue = motoAccessories.length * (w.motoAccessory || 0);
   const motoFrameValue = motoFrames.length * (w.motoFrame || 0);
-  const paintValue = paints.length * (w.paint || 0);
-  const otherResources = outfitValue + motoAccValue + motoFrameValue + paintValue;
+  const otherResources = outfitValue + motoFrameValue;
 
   // 武器明细
   const weaponDetails = parsed.weapons.map(weapon => {
@@ -1163,32 +1085,49 @@ function calculateValue(parsed, price) {
     return { name: weapon.name, refine: weapon.refine, isSig: isSig };
   });
 
-  // 6. 黄数系数（getYellowCoeff 返回对象）
-  const yellowInfo = getYellowCoeff(parsed.yellowCount);
+  // 有效黄数：S/A/B/C/D级角色(1+命座) + 其专武(精炼数)
+  const EFFECTIVE_TIERS = ['S', 'A', 'B', 'C', 'D'];
+  var effectiveYellow = 0;
+  var countedWeapons = {};
+  for (var ci = 0; ci < parsed.characters.length; ci++) {
+    var char = parsed.characters[ci];
+    if (EFFECTIVE_TIERS.indexOf(char.tier) < 0) continue;
+    effectiveYellow += 1 + (char.const || 0);
+    var sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[char.name] || SIG_WEAPONS[char.name]) : SIG_WEAPONS[char.name];
+    if (sigName && hasSignatureWeapons.indexOf(char.name) >= 0 && !countedWeapons[sigName]) {
+      var sigWeapon = parsed.weapons.find(function(wp) { return wp.name === sigName; });
+      if (sigWeapon) {
+        effectiveYellow += sigWeapon.refine || 1;
+        countedWeapons[sigName] = true;
+      }
+    }
+  }
+
+  // 6. 有效金系数（基于有效黄数计算）
+  const yellowInfo = getYellowCoeff(effectiveYellow);
+  yellowInfo.rawYellowCount = parsed.yellowCount;
   const yellowCoeff = yellowInfo.coefficient;
 
   // 账号等级、四星角色数
-  const levelMatch = (parsed.rawText || '').match(/(\d+)级/);
+  const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
   const level = levelMatch ? parseInt(levelMatch[1]) : 1;
   const fourStarMatch = (parsed.rawText || '').match(/(\d+)个四星角色/);
   const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
   const fiveStarChars = parsed.characters.length;
   const maxConstChars = parsed.characters.filter(c => c.const >= 6).length;
 
-  // 总价值（各项直接相加后乘以黄数系数，不再使用简单倍率调整）
+  // 总价值
   const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
 
-  // 低命折扣系数（指定级别角色均不超过maxConst命时，与黄数系数取较低值）
+  // 低命折扣系数
   let flatDiscount = 1;
   const flatDiscountNotes = [];
   const flatRules = w.flatDiscountRules || [];
   if (flatRules.length > 0) {
     for (const rule of flatRules) {
       if (!rule.tiers || rule.tiers.length === 0) continue;
-      // 获取账号中属于指定级别的所有角色
       const tierChars = parsed.characters.filter(c => rule.tiers.includes(c.tier));
       if (tierChars.length === 0) continue;
-      // 检查这些角色是否都没有超过maxConst
       const allWithinLimit = tierChars.every(c => c.const <= rule.maxConst);
       if (allWithinLimit) {
         flatDiscount = Math.min(flatDiscount, rule.discount);
@@ -1198,12 +1137,9 @@ function calculateValue(parsed, price) {
     }
   }
 
-  // 低命折扣系数与黄数系数取较低值（不重复计算）
-  // 仅当低命折扣规则匹配（flatDiscount < 1）时才取较低值，否则直接用黄数系数
   const finalCoeff = flatDiscount < 1 ? Math.min(yellowCoeff, flatDiscount) : yellowCoeff;
   const totalValue = totalBeforeYellow * finalCoeff;
 
-  // 性价比
   const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
   const diff = Math.round((totalValue - price) * 100) / 100;
 
@@ -1219,16 +1155,15 @@ function calculateValue(parsed, price) {
     weightedFullConst,
     satisfiedTeams: satisfiedTeams.map(t => t.name),
     ratio: Math.round(ratio * 10) / 10,
-    // ===== 明细字段 =====
     charBreakdown: charBreakdown,
     charDetails: charDetails,
     hasSignatureWeapons: hasSignatureWeapons,
     weaponDetails: weaponDetails,
     matchedTeams: satisfiedTeams,
-    c6DepNotes: c6DepNotes,                 // C6配队依赖降级信息
-    c6Bonus: { value: Math.round(fullConstPremium), notes: c6BonusNotes }, // 满命溢价信息
+    c6DepNotes: teamDepNotes,
+    c6Bonus: { value: Math.round(fullConstPremium), notes: c6BonusNotes },
     teamBonus: { value: Math.round(teamPremium), notes: teamBonusNotes },
-    flatDiscount: { value: flatDiscount, notes: flatDiscountNotes },    // 低命折扣系数信息
+    flatDiscount: { value: flatDiscount, notes: flatDiscountNotes },
     pullInfo: {
       pulls: pullInfo.pulls,
       perPull: pullInfo.perPull,
@@ -1240,9 +1175,7 @@ function calculateValue(parsed, price) {
     },
     yellowInfo: yellowInfo,
     outfits: outfits,
-    motoAccessories: motoAccessories,
     motoFrames: motoFrames,
-    paints: paints,
     level: level,
     fourStarChars: fourStarChars,
     fiveStarChars: fiveStarChars,
@@ -1362,8 +1295,8 @@ module.exports = {
   SECTION_KEYWORDS,
   DEFAULT_WEIGHTS,
   DEFAULT_TEAMS,
-  DEFAULT_PULL_TIERS,
-  DEFAULT_YELLOW_TIERS,
+  DEFAULT_PULL_FORMULA,
+  DEFAULT_TEAM_MATES,
   DEFAULT_CHAR_PRICES,
   DEFAULT_CONST_PREMIUMS,
   DEFAULT_NEED_SIG_WEAPONS,
