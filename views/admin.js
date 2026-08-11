@@ -613,13 +613,14 @@ function getAdminPage() {
   function renderDealDetail(d) {
     const det = d.details;
     if (!det) return '';
-    const chars = (d.characters || []).sort((a, b) => b.value - a.value);
+    const chars = (d.characters || []).sort((a, b) => (b.value || 0) - (a.value || 0));
     const charTags = chars.map(c => {
       let cls = 'd-char-item';
       if (c.const >= 6) cls += ' full-const';
       if (c.hasSig) cls += ' has-sig';
       const constStr = c.const >= 6 ? '满命' : c.const + '命';
-      return '<span class="' + cls + '">' + constStr + c.name + (c.hasSig ? '+专武' : '') + ' (¥' + Math.round(c.value) + ')</span>';
+      const valStr = (c.value != null && !isNaN(c.value)) ? '¥' + Math.round(c.value) : '-';
+      return '<span class="' + cls + '">' + constStr + c.name + (c.hasSig ? '+专武' : '') + ' (' + valStr + ')</span>';
     }).join('');
 
     return '<div class="d-detail-content">' +

@@ -652,7 +652,7 @@ app.post('/api/deals', async (req, res) => {
         shortDescription: shortDesc,
         yellowCount: valuation ? valuation.info.yellowCount : 0,
         pulls: valuation ? valuation.info.pulls : 0,
-        characters: valuation ? valuation.info.characters : [],
+        characters: valuation ? valuation.details.characters : [],
         attrNameList: item.attrNameList || [],
         mainImageUrl: item.mainImageUrl,
         url: `https://www.pxb7.com/buy/10302/detail?productId=${item.productId}`,
