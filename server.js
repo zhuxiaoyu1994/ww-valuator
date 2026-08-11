@@ -474,6 +474,168 @@ function fetchProductBySearch(keyword) {
   });
 }
 
+/**
+ * 获取昨日成交商品列表（螃蟹网 selectSelledList API）
+ * 优先走 Cloudflare Worker 代理，无配置时直连
+ */
+function fetchSoldProducts(pageIndex, pageSize) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({
+      gameId: '10302',
+      pageIndex: pageIndex || 1,
+      pageSize: pageSize || 20,
+    });
+    const apiPath = '/api/search/product/selectSelledList';
+
+    function handleResult(data) {
+      try {
+        const json = JSON.parse(data);
+        if (json.success && json.data) {
+          resolve(json.data);
+        } else {
+          resolve([]);
+        }
+      } catch (e) {
+        reject(new Error('解析成交数据失败'));
+      }
+    }
+
+    // 走 CF Worker 代理
+    if (PXB7_PROXY_URL) {
+      const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
+      const proxyReq = https.request(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        res.setEncoding('utf8');
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => handleResult(data));
+      });
+      proxyReq.on('error', (err) => reject(err));
+      proxyReq.setTimeout(15000, () => {
+        proxyReq.destroy(new Error('请求超时'));
+      });
+      proxyReq.write(postData);
+      proxyReq.end();
+      return;
+    }
+
+    // 直连螃蟹网
+    const options = {
+      hostname: 'api-pc.pxb7.com',
+      port: 443,
+      path: apiPath,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Origin': 'https://www.pxb7.com',
+        'Referer': 'https://www.pxb7.com/',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      res.setEncoding('utf8');
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => handleResult(data));
+    });
+
+    req.on('error', (err) => reject(err));
+    req.setTimeout(15000, () => {
+      req.destroy(new Error('请求超时'));
+    });
+    req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * 成交记录接口 - 获取昨日成交商品并计算估值偏差（需管理密码）
+ */
+app.post('/api/deals', async (req, res) => {
+  const { password, page, pageSize, customWeights } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  const pageIndex = parseInt(page) || 1;
+  const ps = parseInt(pageSize) || 50;
+
+  try {
+    const products = await fetchSoldProducts(pageIndex, ps);
+    if (!products || products.length === 0) {
+      return res.json({ success: true, data: { list: [], summary: null, page: pageIndex, pageSize: ps } });
+    }
+
+    // 对每个商品运行估价引擎
+    const enriched = products.map(item => {
+      const showTitle = item.showTitle || '';
+      const priceInCents = item.price || 0;
+      const priceInYuan = priceInCents / 100;
+
+      let valuation = null;
+      let shortDesc = '';
+      if (showTitle) {
+        try {
+          valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, customWeights);
+          shortDesc = valueEngine.generateShortDescription(valuation);
+        } catch (e) {
+          // 估价失败不阻断流程
+        }
+      }
+
+      const estimatedValue = valuation ? valuation.details.finalValue : 0;
+      const deviation = estimatedValue - priceInYuan;
+      const deviationPercent = priceInYuan > 0 ? (deviation / priceInYuan * 100) : 0;
+
+      return {
+        productId: item.productId,
+        productUniqueNo: item.productUniqueNo,
+        price: priceInYuan,
+        estimatedValue: Math.round(estimatedValue * 100) / 100,
+        deviation: Math.round(deviation * 100) / 100,
+        deviationPercent: Math.round(deviationPercent * 100) / 100,
+        payTime: item.payTime,
+        showTitle,
+        shortDescription: shortDesc,
+        yellowCount: valuation ? valuation.info.yellowCount : 0,
+        pulls: valuation ? valuation.info.pulls : 0,
+        characters: valuation ? valuation.info.characters : [],
+        attrNameList: item.attrNameList || [],
+        mainImageUrl: item.mainImageUrl,
+        url: `https://www.pxb7.com/buy/10302/detail?productId=${item.productId}`,
+        details: valuation ? valuation.details : null,
+        costPerformance: valuation ? valuation.costPerformance : 0,
+      };
+    });
+
+    // 汇总统计
+    const validItems = enriched.filter(e => e.estimatedValue > 0);
+    const summary = {
+      total: enriched.length,
+      valued: validItems.length,
+      avgPrice: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.price, 0) / validItems.length * 100) / 100 : 0,
+      avgEstimated: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.estimatedValue, 0) / validItems.length * 100) / 100 : 0,
+      avgDeviation: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.deviation, 0) / validItems.length * 100) / 100 : 0,
+      avgDeviationPercent: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.deviationPercent, 0) / validItems.length * 100) / 100 : 0,
+      overvalued: validItems.filter(e => e.deviation < 0).length,   // 成交价 > 估值（买贵了）
+      undervalued: validItems.filter(e => e.deviation > 0).length,  // 估值 > 成交价（买赚了）
+    };
+
+    res.json({ success: true, data: { list: enriched, summary, page: pageIndex, pageSize: ps } });
+  } catch (err) {
+    console.error('[/api/deals] Error:', err.message);
+    res.json({ success: false, error: '获取成交数据失败: ' + err.message });
+  }
+});
+
 // ============================================================
 // Web 页面
 // ============================================================

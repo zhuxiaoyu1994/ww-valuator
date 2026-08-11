@@ -9,7 +9,7 @@ function getAdminPage() {
 <title>管理后台 - 鸣潮估价助手</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0f0f23; color: #e0e0e0; font-family: -apple-system, 'Segoe UI', sans-serif; min-height: 100vh; }
+  body { background: #0f0f23; color: #e0e0e0; font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; min-height: 100vh; }
   .login-box { max-width: 400px; margin: 100px auto; background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 32px; }
   .login-box h1 { font-size: 20px; color: #4ade80; margin-bottom: 20px; text-align: center; }
   .login-box input { width: 100%; padding: 12px; border: 1px solid #2a2a4a; border-radius: 8px; background: #0f0f23; color: #e0e0e0; font-size: 14px; margin-bottom: 12px; }
@@ -18,21 +18,30 @@ function getAdminPage() {
   .login-box .error { color: #ef4444; font-size: 13px; margin-bottom: 8px; display: none; }
 
   .dashboard { display: none; max-width: 1200px; margin: 0 auto; padding: 24px; }
-  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .header h1 { font-size: 22px; color: #4ade80; }
   .header .logout { color: #888; cursor: pointer; font-size: 13px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #1f1f3a; }
+  .tab-btn { padding: 10px 24px; background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+  .tab-btn:hover { color: #ccc; }
+  .tab-btn.active { color: #4ade80; border-bottom-color: #4ade80; font-weight: 600; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Logs Tab */
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
   .stat-card { background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 10px; padding: 20px; text-align: center; }
   .stat-card .num { font-size: 28px; font-weight: 700; color: #4ade80; }
   .stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
-
-  .filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+  .filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
   .filters select, .filters input { padding: 8px 12px; border: 1px solid #2a2a4a; border-radius: 6px; background: #1a1a3a; color: #e0e0e0; font-size: 13px; }
-
-  table { width: 100%; border-collapse: collapse; background: #1a1a3a; border-radius: 10px; overflow: hidden; }
-  th { background: #12122a; padding: 12px; text-align: left; font-size: 12px; color: #888; font-weight: 600; border-bottom: 1px solid #2a2a4a; white-space: nowrap; }
-  td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #1f1f3a; }
-  tr:hover { background: #1f1f3f; }
+  .log-table-wrap { background: #1a1a3a; border-radius: 10px; overflow-x: auto; }
+  .log-table-wrap table { width: 100%; border-collapse: collapse; }
+  .log-table-wrap th { background: #12122a; padding: 12px; text-align: left; font-size: 12px; color: #888; font-weight: 600; border-bottom: 1px solid #2a2a4a; white-space: nowrap; }
+  .log-table-wrap td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #1f1f3a; }
+  .log-table-wrap tr:hover { background: #1f1f3f; }
   .tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
   .tag-eval { background: #1e3a1e; color: #4ade80; }
   .tag-lookup { background: #1e2a3a; color: #60a5fa; }
@@ -45,6 +54,83 @@ function getAdminPage() {
   .pagination button { padding: 6px 14px; border: 1px solid #2a2a4a; border-radius: 6px; background: #1a1a3a; color: #e0e0e0; cursor: pointer; font-size: 13px; }
   .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
   .pagination span { color: #888; font-size: 13px; }
+
+  /* Deals Tab */
+  .d-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .d-stat-card { background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px 18px; text-align: center; }
+  .d-stat-card .d-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+  .d-stat-card .d-val { font-size: 22px; font-weight: 700; }
+  .d-stat-card .d-sub { font-size: 11px; color: #666; margin-top: 4px; }
+  .d-stat-card.green .d-val { color: #4ade80; }
+  .d-stat-card.red .d-val { color: #f87171; }
+  .d-stat-card.blue .d-val { color: #60a5fa; }
+  .d-stat-card.yellow .d-val { color: #fbbf24; }
+
+  .d-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .d-controls select, .d-controls button { background: #1a1a3a; border: 1px solid #2a2a4a; color: #ccc; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; outline: none; transition: all 0.2s; }
+  .d-controls select:hover, .d-controls button:hover { border-color: #3a3a5a; background: #222244; }
+  .d-controls .fetch-btn { background: rgba(74,222,128,0.15); border-color: rgba(74,222,128,0.3); color: #4ade80; font-weight: 600; }
+  .d-controls .fetch-btn:hover { background: rgba(74,222,128,0.25); }
+  .d-controls .more-btn { background: rgba(96,165,250,0.15); border-color: rgba(96,165,250,0.3); color: #60a5fa; }
+  .d-controls .more-btn:hover { background: rgba(96,165,250,0.25); }
+  .d-controls .clear-btn { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.2); color: #f87171; }
+  .d-controls .clear-btn:hover { background: rgba(248,113,113,0.2); }
+  .d-controls .d-info { margin-left: auto; font-size: 12px; color: #888; }
+
+  .d-table-wrap { background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 10px; overflow-x: auto; }
+  .d-table { width: 100%; border-collapse: collapse; }
+  .d-table thead { background: #12122a; }
+  .d-table th { padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 600; color: #888; border-bottom: 1px solid #2a2a4a; white-space: nowrap; }
+  .d-table td { padding: 10px 12px; border-bottom: 1px solid #1a1a30; font-size: 13px; vertical-align: top; }
+  .d-table tbody tr { transition: background 0.15s; }
+  .d-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .d-table tbody tr.expanded { background: rgba(74,222,128,0.04); }
+
+  .d-no a { color: #8ecdf5; text-decoration: none; font-weight: 600; }
+  .d-no a:hover { text-decoration: underline; }
+  .d-desc { max-width: 350px; cursor: pointer; line-height: 1.5; }
+  .d-desc .short { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #ccc; }
+  .d-desc .full { display: none; color: #aaa; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  .d-desc.expanded .short { display: none; }
+  .d-desc.expanded .full { display: block; }
+  .d-price { font-weight: 600; white-space: nowrap; }
+  .d-price-actual { color: #fbbf24; }
+  .d-price-est { color: #60a5fa; }
+  .d-dev { font-weight: 700; white-space: nowrap; }
+  .d-dev-pos { color: #4ade80; }
+  .d-dev-neg { color: #f87171; }
+  .d-dev-zero { color: #888; }
+
+  .d-detail-row td { background: #0d0d22; padding: 16px 20px; border-bottom: 1px solid #1f1f3a; }
+  .d-detail-content { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .d-detail-section h4 { font-size: 13px; color: #4ade80; margin-bottom: 8px; }
+  .d-detail-section table.inner { width: 100%; font-size: 12px; }
+  .d-detail-section table.inner td { padding: 4px 8px; border: none; background: none; }
+  .d-detail-section table.inner td:first-child { color: #888; width: 100px; }
+  .d-detail-section table.inner td:last-child { color: #ccc; text-align: right; }
+  .d-char-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .d-char-item { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: #1a1a35; border: 1px solid #2a2a4a; }
+  .d-char-item.has-sig { border-color: rgba(251,191,36,0.3); color: #fbbf24; }
+  .d-char-item.full-const { border-color: rgba(74,222,128,0.3); color: #4ade80; }
+  .d-tag-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .d-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #1a1a35; color: #aaa; border: 1px solid #2a2a4a; }
+
+  /* Monitor Tab */
+  .mon-card { background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .mon-card h2 { font-size: 18px; color: #4ade80; margin-bottom: 16px; }
+  .mon-feature-list { list-style: none; }
+  .mon-feature-list li { padding: 10px 0; border-bottom: 1px solid #1f1f3a; font-size: 14px; display: flex; align-items: flex-start; gap: 10px; }
+  .mon-feature-list li:last-child { border-bottom: none; }
+  .mon-feature-list li::before { content: '✓'; color: #4ade80; font-weight: bold; flex-shrink: 0; }
+  .mon-steps { counter-reset: step; }
+  .mon-steps li { list-style: none; padding: 12px 0 12px 40px; position: relative; font-size: 14px; line-height: 1.6; border-bottom: 1px solid #1f1f3a; }
+  .mon-steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: #4ade80; color: #0f0f23; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .mon-download-area { text-align: center; padding: 20px 0; }
+  .mon-download-btn { display: inline-block; padding: 14px 32px; border: none; border-radius: 10px; background: #4ade80; color: #0f0f23; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; transition: all 0.2s; text-align: center; }
+  .mon-download-btn:hover { background: #22c55e; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(74,222,128,0.3); }
+  .mon-note { font-size: 12px; color: #666; margin-top: 10px; }
+  .mon-ext-link { color: #60a5fa; text-decoration: none; }
+  .mon-ext-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -57,53 +143,165 @@ function getAdminPage() {
 
   <div class="dashboard" id="dashboard">
     <div class="header">
-      <h1>查询日志</h1>
+      <h1>管理后台</h1>
       <div style="display:flex;align-items:center;gap:16px;">
-        <span class="refresh-btn" onclick="refreshLogs()" id="refresh-btn" style="color:#4ade80;cursor:pointer;font-size:13px;user-select:none;">↻ 刷新</span>
         <span class="logout" onclick="logout()">退出</span>
       </div>
     </div>
-    <div class="stats">
-      <div class="stat-card"><div class="num" id="stat-total">0</div><div class="label">总查询数</div></div>
-      <div class="stat-card"><div class="num" id="stat-success">0</div><div class="label">成功</div></div>
-      <div class="stat-card"><div class="num" id="stat-lookup">0</div><div class="label">编号查询</div></div>
-      <div class="stat-card"><div class="num" id="stat-eval">0</div><div class="label">粘贴估价</div></div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('logs', this)">查询日志</button>
+      <button class="tab-btn" onclick="switchTab('deals', this)">成交记录</button>
+      <button class="tab-btn" onclick="switchTab('monitor', this)">监控脚本</button>
     </div>
-    <div class="filters">
-      <select id="filter-type" onchange="renderTable()">
-        <option value="">全部类型</option>
-        <option value="编号查询">编号查询</option>
-        <option value="粘贴估价">粘贴估价</option>
-      </select>
-      <input type="text" id="filter-search" placeholder="搜索编号/描述/IP..." oninput="renderTable()">
+
+    <!-- Tab 1: 查询日志 -->
+    <div id="tab-logs" class="tab-content active">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+        <span class="refresh-btn" onclick="refreshLogs()" id="refresh-btn" style="color:#4ade80;cursor:pointer;font-size:13px;user-select:none;">↻ 刷新</span>
+      </div>
+      <div class="stats">
+        <div class="stat-card"><div class="num" id="stat-total">0</div><div class="label">总查询数</div></div>
+        <div class="stat-card"><div class="num" id="stat-success">0</div><div class="label">成功</div></div>
+        <div class="stat-card"><div class="num" id="stat-lookup">0</div><div class="label">编号查询</div></div>
+        <div class="stat-card"><div class="num" id="stat-eval">0</div><div class="label">粘贴估价</div></div>
+      </div>
+      <div class="filters">
+        <select id="filter-type" onchange="renderTable()">
+          <option value="">全部类型</option>
+          <option value="编号查询">编号查询</option>
+          <option value="粘贴估价">粘贴估价</option>
+        </select>
+        <input type="text" id="filter-search" placeholder="搜索编号/描述/IP..." oninput="renderTable()">
+      </div>
+      <div class="log-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>时间</th><th>类型</th><th>IP</th><th>输入</th><th>标价</th><th>估值</th><th>性价比</th><th>黄数</th><th>抽数</th><th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="pagination"></div>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>时间</th>
-          <th>类型</th>
-          <th>IP</th>
-          <th>输入</th>
-          <th>标价</th>
-          <th>估值</th>
-          <th>性价比</th>
-          <th>黄数</th>
-          <th>抽数</th>
-          <th>状态</th>
-        </tr>
-      </thead>
-      <tbody id="log-tbody"></tbody>
-    </table>
-    <div class="pagination" id="pagination"></div>
+
+    <!-- Tab 2: 成交记录 -->
+    <div id="tab-deals" class="tab-content">
+      <div class="d-stats">
+        <div class="d-stat-card blue"><div class="d-label">成交商品</div><div class="d-val" id="d-total">-</div><div class="d-sub" id="d-valued"></div></div>
+        <div class="d-stat-card yellow"><div class="d-label">平均成交价</div><div class="d-val" id="d-avg-price">-</div></div>
+        <div class="d-stat-card blue"><div class="d-label">平均估值</div><div class="d-val" id="d-avg-est">-</div></div>
+        <div class="d-stat-card" id="d-dev-card"><div class="d-label">平均偏差</div><div class="d-val" id="d-avg-dev">-</div><div class="d-sub" id="d-avg-dev-pct"></div></div>
+        <div class="d-stat-card green"><div class="d-label">估值偏高(买赚)</div><div class="d-val" id="d-undervalued">-</div></div>
+        <div class="d-stat-card red"><div class="d-label">估值偏低(买贵)</div><div class="d-val" id="d-overvalued">-</div></div>
+      </div>
+      <div class="d-controls">
+        <select id="d-pagesize" onchange="dealsPageSize=parseInt(this.value)">
+          <option value="50">每页50条</option>
+          <option value="100">每页100条</option>
+          <option value="200">每页200条</option>
+        </select>
+        <button class="fetch-btn" onclick="fetchDeals(true)">获取数据</button>
+        <button class="more-btn" id="d-more-btn" onclick="fetchDeals(false)">加载更多</button>
+        <button class="clear-btn" onclick="clearDeals()">清空</button>
+        <select id="d-filter" onchange="applyDealsFilter()">
+          <option value="all">全部</option>
+          <option value="undervalued">估值偏高(买赚)</option>
+          <option value="overvalued">估值偏低(买贵)</option>
+          <option value="unvalued">未能估价</option>
+        </select>
+        <select id="d-sort" onchange="applyDealsSort()">
+          <option value="deviation-desc">偏差率 ↓</option>
+          <option value="deviation-asc">偏差率 ↑</option>
+          <option value="price-desc">成交价 ↓</option>
+          <option value="price-asc">成交价 ↑</option>
+          <option value="est-desc">估值 ↓</option>
+          <option value="est-asc">估值 ↑</option>
+        </select>
+        <span class="d-info" id="d-info"></span>
+      </div>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr>
+              <th style="width:90px">编号</th><th style="width:80px">成交日</th><th>商品描述</th>
+              <th style="width:80px">成交价</th><th style="width:80px">估值</th><th style="width:80px">偏差值</th>
+              <th style="width:70px">偏差率</th><th style="width:50px">黄数</th><th style="width:50px">详情</th>
+            </tr>
+          </thead>
+          <tbody id="d-tbody">
+            <tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 3: 监控脚本 -->
+    <div id="tab-monitor" class="tab-content">
+      <div class="mon-card">
+        <h2>功能特性</h2>
+        <ul class="mon-feature-list">
+          <li>自动监控螃蟹网鸣潮账号商品列表，实时发现新上架账号</li>
+          <li>智能估价引擎，自动计算每个账号的预估价值和性价比</li>
+          <li>多渠道通知推送：企业微信、Server酱、Bark、钉钉机器人、飞书</li>
+          <li>支持按角色、黄数、估值、性价比等条件筛选和排序</li>
+          <li>自定义估值规则：角色价格、命座溢价、配队溢价、抽数阶梯等</li>
+          <li>指定角色监控：设置关注角色，匹配到时立即通知</li>
+          <li>降价提醒：已监控的账号降价时自动通知</li>
+          <li>数据本地存储，支持暂停/恢复监控，不丢失历史数据</li>
+        </ul>
+      </div>
+      <div class="mon-card">
+        <h2>安装步骤</h2>
+        <ol class="mon-steps">
+          <li>安装 <a class="mon-ext-link" href="https://www.tampermonkey.net/" target="_blank">Tampermonkey</a> 浏览器扩展（推荐 Chrome/Edge）</li>
+          <li>点击下方"安装监控脚本"按钮，Tampermonkey 会自动弹出安装确认页</li>
+          <li>确认安装后，打开 <a class="mon-ext-link" href="https://www.pangxie100.com/game/wuwa" target="_blank">螃蟹网鸣潮账号页面</a></li>
+          <li>页面右上角会出现监控面板，点击"开始监控"即可自动运行</li>
+          <li>在监控面板的"通知设置"中配置你的通知渠道（如企业微信机器人 webhook）</li>
+          <li>在"估值设置"中调整估值规则，让估价更符合你的预期</li>
+        </ol>
+        <div class="mon-download-area">
+          <a class="mon-download-btn" href="/public/crab-monitor.user.js">安装监控脚本</a>
+          <div class="mon-note">点击后会自动通过 Tampermonkey 安装，如未弹出请确认已安装 Tampermonkey 扩展</div>
+        </div>
+      </div>
+      <div class="mon-card">
+        <h2>通知渠道配置</h2>
+        <ul class="mon-feature-list">
+          <li><strong>企业微信</strong>：创建企业微信群机器人，复制 webhook 地址填入设置</li>
+          <li><strong>Server酱</strong>：注册 sct.ftqq.com，获取 SendKey 填入设置</li>
+          <li><strong>Bark</strong>：iOS 下载 Bark App，复制推送地址填入设置</li>
+          <li><strong>钉钉</strong>：创建钉钉自定义机器人，复制 webhook 地址填入设置</li>
+          <li><strong>飞书</strong>：创建飞书自定义机器人，复制 webhook 地址填入设置</li>
+        </ul>
+      </div>
+    </div>
   </div>
 
 <script>
+  // ============================================================
+  // 通用变量
+  // ============================================================
   let allLogs = [];
   let filteredLogs = [];
-  let currentPage = 1;
-  const pageSize = 50;
+  let logCurrentPage = 1;
+  const logPageSize = 50;
 
-  // 自动登录（记住密码）
+  let dealsData = [];
+  let dealsFiltered = [];
+  let dealsPage = 1;
+  let dealsPageSize = 50;
+  let dealsHasMore = true;
+  let dealsLoading = false;
+  let dealsExpandedRow = null;
+  let dealsLoaded = false;
+
+  // ============================================================
+  // 登录
+  // ============================================================
   const savedPw = sessionStorage.getItem('admin_pw');
   if (savedPw) {
     document.getElementById('password').value = savedPw;
@@ -144,6 +342,22 @@ function getAdminPage() {
     location.reload();
   }
 
+  // ============================================================
+  // Tab切换
+  // ============================================================
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'deals' && !dealsLoaded && !dealsLoading) {
+      fetchDeals(true);
+    }
+  }
+
+  // ============================================================
+  // 日志Tab
+  // ============================================================
   async function refreshLogs() {
     const pw = sessionStorage.getItem('admin_pw');
     if (!pw) return;
@@ -173,7 +387,6 @@ function getAdminPage() {
   function renderTable() {
     const filterType = document.getElementById('filter-type').value;
     const searchTerm = document.getElementById('filter-search').value.trim().toLowerCase();
-
     filteredLogs = allLogs.filter(l => {
       if (filterType && l.type !== filterType) return false;
       if (searchTerm) {
@@ -182,16 +395,14 @@ function getAdminPage() {
       }
       return true;
     });
-
-    currentPage = 1;
+    logCurrentPage = 1;
     renderPage();
   }
 
   function renderPage() {
-    const start = (currentPage - 1) * pageSize;
-    const pageLogs = filteredLogs.slice(start, start + pageSize);
+    const start = (logCurrentPage - 1) * logPageSize;
+    const pageLogs = filteredLogs.slice(start, start + logPageSize);
     const tbody = document.getElementById('log-tbody');
-
     if (pageLogs.length === 0) {
       tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#666;padding:40px;">暂无数据</td></tr>';
     } else {
@@ -221,23 +432,247 @@ function getAdminPage() {
           '</tr>';
       }).join('');
     }
-
-    // 分页
-    const totalPages = Math.ceil(filteredLogs.length / pageSize);
-    const pagination = document.getElementById('pagination');
-    pagination.innerHTML =
-      '<button onclick="goPage(' + (currentPage - 1) + ')" ' + (currentPage <= 1 ? 'disabled' : '') + '>上一页</button>' +
-      '<span>第 ' + currentPage + ' / ' + totalPages + ' 页 (共 ' + filteredLogs.length + ' 条)</span>' +
-      '<button onclick="goPage(' + (currentPage + 1) + ')" ' + (currentPage >= totalPages ? 'disabled' : '') + '>下一页</button>';
+    const totalPages = Math.ceil(filteredLogs.length / logPageSize);
+    document.getElementById('pagination').innerHTML =
+      '<button onclick="goPage(' + (logCurrentPage - 1) + ')" ' + (logCurrentPage <= 1 ? 'disabled' : '') + '>上一页</button>' +
+      '<span>第 ' + logCurrentPage + ' / ' + totalPages + ' 页 (共 ' + filteredLogs.length + ' 条)</span>' +
+      '<button onclick="goPage(' + (logCurrentPage + 1) + ')" ' + (logCurrentPage >= totalPages ? 'disabled' : '') + '>下一页</button>';
   }
 
   function goPage(p) {
-    const totalPages = Math.ceil(filteredLogs.length / pageSize);
+    const totalPages = Math.ceil(filteredLogs.length / logPageSize);
     if (p < 1 || p > totalPages) return;
-    currentPage = p;
+    logCurrentPage = p;
     renderPage();
   }
 
+  // ============================================================
+  // 成交记录Tab
+  // ============================================================
+  async function fetchDeals(reset) {
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) { alert('请先登录'); return; }
+    if (dealsLoading) return;
+    dealsLoading = true;
+
+    if (reset) {
+      dealsPage = 1;
+      dealsData = [];
+      dealsHasMore = true;
+    } else {
+      dealsPage++;
+    }
+
+    const tbody = document.getElementById('d-tbody');
+    const moreBtn = document.getElementById('d-more-btn');
+    if (reset) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">正在获取成交数据并计算估值...</td></tr>';
+    } else {
+      moreBtn.textContent = '加载中...';
+      moreBtn.disabled = true;
+    }
+
+    try {
+      const resp = await fetch('/api/deals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize }),
+      });
+      const json = await resp.json();
+      if (!json.success) {
+        if (reset) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#f87171;">' + escapeHtml(json.error || '获取失败') + '</td></tr>';
+        else moreBtn.textContent = '加载更多';
+        dealsLoading = false;
+        return;
+      }
+
+      const newItems = json.data.list || [];
+      if (newItems.length < dealsPageSize) {
+        dealsHasMore = false;
+      }
+
+      if (reset) {
+        dealsData = newItems;
+      } else {
+        dealsData = dealsData.concat(newItems);
+      }
+
+      renderDealsSummary();
+      applyDealsFilter();
+      dealsLoaded = true;
+    } catch (err) {
+      if (reset) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#f87171;">网络错误: ' + escapeHtml(err.message) + '</td></tr>';
+    }
+
+    dealsLoading = false;
+    moreBtn.textContent = '加载更多';
+    moreBtn.disabled = !dealsHasMore;
+  }
+
+  function clearDeals() {
+    dealsData = [];
+    dealsFiltered = [];
+    dealsPage = 1;
+    dealsHasMore = true;
+    dealsLoaded = false;
+    dealsExpandedRow = null;
+    document.getElementById('d-tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>';
+    document.getElementById('d-total').textContent = '-';
+    document.getElementById('d-valued').textContent = '';
+    document.getElementById('d-avg-price').textContent = '-';
+    document.getElementById('d-avg-est').textContent = '-';
+    document.getElementById('d-avg-dev').textContent = '-';
+    document.getElementById('d-avg-dev-pct').textContent = '';
+    document.getElementById('d-undervalued').textContent = '-';
+    document.getElementById('d-overvalued').textContent = '-';
+    document.getElementById('d-info').textContent = '';
+    document.getElementById('d-more-btn').disabled = false;
+  }
+
+  function renderDealsSummary() {
+    const valid = dealsData.filter(d => d.estimatedValue > 0);
+    const total = dealsData.length;
+    const valued = valid.length;
+    const avgPrice = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.price, 0) / valued * 100) / 100 : 0;
+    const avgEst = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.estimatedValue, 0) / valued * 100) / 100 : 0;
+    const avgDev = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.deviation, 0) / valued * 100) / 100 : 0;
+    const avgDevPct = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.deviationPercent, 0) / valued * 100) / 100 : 0;
+    const overvalued = valid.filter(e => e.deviation < 0).length;
+    const undervalued = valid.filter(e => e.deviation > 0).length;
+
+    document.getElementById('d-total').textContent = total;
+    document.getElementById('d-valued').textContent = valued + ' 条成功估值';
+    document.getElementById('d-avg-price').textContent = '¥' + avgPrice;
+    document.getElementById('d-avg-est').textContent = '¥' + avgEst;
+    document.getElementById('d-avg-dev').textContent = (avgDev >= 0 ? '+' : '') + '¥' + avgDev;
+    document.getElementById('d-avg-dev-pct').textContent = (avgDevPct >= 0 ? '+' : '') + avgDevPct + '%';
+    document.getElementById('d-undervalued').textContent = undervalued;
+    document.getElementById('d-overvalued').textContent = overvalued;
+
+    const devCard = document.getElementById('d-dev-card');
+    devCard.className = 'd-stat-card ' + (avgDev >= 0 ? 'green' : 'red');
+  }
+
+  function applyDealsFilter() {
+    const filter = document.getElementById('d-filter').value;
+    dealsFiltered = dealsData.filter(d => {
+      if (filter === 'undervalued') return d.deviation > 0;
+      if (filter === 'overvalued') return d.deviation < 0;
+      if (filter === 'unvalued') return d.estimatedValue === 0;
+      return true;
+    });
+    applyDealsSort();
+  }
+
+  function applyDealsSort() {
+    const sort = document.getElementById('d-sort').value;
+    dealsFiltered.sort((a, b) => {
+      switch (sort) {
+        case 'deviation-desc': return b.deviationPercent - a.deviationPercent;
+        case 'deviation-asc': return a.deviationPercent - b.deviationPercent;
+        case 'price-desc': return b.price - a.price;
+        case 'price-asc': return a.price - b.price;
+        case 'est-desc': return b.estimatedValue - a.estimatedValue;
+        case 'est-asc': return a.estimatedValue - b.estimatedValue;
+        default: return 0;
+      }
+    });
+    renderDealsTable();
+  }
+
+  function renderDealsTable() {
+    const tbody = document.getElementById('d-tbody');
+    if (dealsFiltered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">暂无数据</td></tr>';
+      document.getElementById('d-info').textContent = '';
+      return;
+    }
+
+    tbody.innerHTML = dealsFiltered.map((d, i) => {
+      const devClass = d.deviation > 0 ? 'd-dev-pos' : (d.deviation < 0 ? 'd-dev-neg' : 'd-dev-zero');
+      const devSign = d.deviation > 0 ? '+' : '';
+      const devPctSign = d.deviationPercent > 0 ? '+' : '';
+      const hasDetails = d.details && d.estimatedValue > 0;
+      return '<tr class="d-deal-row" id="d-row-' + i + '">' +
+        '<td class="d-no"><a href="' + d.url + '" target="_blank">' + (d.productUniqueNo || '-') + '</a></td>' +
+        '<td>' + (d.payTime || '-') + '</td>' +
+        '<td><div class="d-desc" onclick="toggleDesc(this)"><div class="short">' + escapeHtml(d.shortDescription || d.showTitle || '-') + '</div><div class="full">' + escapeHtml(d.showTitle || '') + '</div></div></td>' +
+        '<td class="d-price d-price-actual">¥' + d.price + '</td>' +
+        '<td class="d-price d-price-est">' + (d.estimatedValue > 0 ? '¥' + d.estimatedValue : '-') + '</td>' +
+        '<td class="d-dev ' + devClass + '">' + (hasDetails ? devSign + '¥' + d.deviation : '-') + '</td>' +
+        '<td class="d-dev ' + devClass + '">' + (hasDetails ? devPctSign + d.deviationPercent + '%' : '-') + '</td>' +
+        '<td>' + (d.yellowCount > 0 ? d.yellowCount : '-') + '</td>' +
+        '<td style="text-align:center;">' + (hasDetails ? '<span style="cursor:pointer;color:#8ecdf5;font-size:16px;" onclick="toggleDetail(' + i + ')">▶</span>' : '') + '</td>' +
+        '</tr>' +
+        (hasDetails ? '<tr class="d-detail-row" id="d-detail-' + i + '" style="display:none;"><td colspan="9">' + renderDealDetail(d) + '</td></tr>' : '');
+    }).join('');
+
+    document.getElementById('d-info').textContent = '共 ' + dealsFiltered.length + ' 条' + (dealsHasMore ? ' (可加载更多)' : ' (已全部加载)');
+  }
+
+  function renderDealDetail(d) {
+    const det = d.details;
+    if (!det) return '';
+    const chars = (d.characters || []).sort((a, b) => b.value - a.value);
+    const charTags = chars.map(c => {
+      let cls = 'd-char-item';
+      if (c.const >= 6) cls += ' full-const';
+      if (c.hasSig) cls += ' has-sig';
+      const constStr = c.const >= 6 ? '满命' : c.const + '命';
+      return '<span class="' + cls + '">' + constStr + c.name + (c.hasSig ? '+专武' : '') + ' (¥' + Math.round(c.value) + ')</span>';
+    }).join('');
+
+    return '<div class="d-detail-content">' +
+      '<div class="d-detail-section">' +
+        '<h4>估值明细</h4>' +
+        '<table class="inner">' +
+          '<tr><td>角色价值</td><td>¥' + (det.characterValue || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>满命溢价</td><td>' + ((det.c6Premium || 0) >= 0 ? '+' : '') + '¥' + (det.c6Premium || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>配队溢价</td><td>' + ((det.teamPremium || 0) >= 0 ? '+' : '') + '¥' + (det.teamPremium || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>抽数价值</td><td>¥' + (det.pullValue || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>资源价值</td><td>¥' + (det.resourceValue || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>有效金系数</td><td>×' + (det.yellowMultiplier || 0).toFixed(2) + '</td></tr>' +
+          '<tr style="border-top:1px solid #2a2a4a;"><td style="color:#4ade80;font-weight:600;">估算总值</td><td style="color:#60a5fa;font-weight:700;">¥' + (det.finalValue || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>实际成交价</td><td style="color:#fbbf24;">¥' + d.price + '</td></tr>' +
+          '<tr><td>偏差值</td><td style="color:' + (d.deviation >= 0 ? '#4ade80' : '#f87171') + ';font-weight:600;">' + (d.deviation >= 0 ? '+' : '') + '¥' + d.deviation + '</td></tr>' +
+          '<tr><td>偏差率</td><td style="color:' + (d.deviation >= 0 ? '#4ade80' : '#f87171') + ';font-weight:600;">' + (d.deviationPercent >= 0 ? '+' : '') + d.deviationPercent + '%</td></tr>' +
+          '<tr><td>性价比</td><td>' + (d.costPerformance >= 0 ? '+' : '') + d.costPerformance + '%</td></tr>' +
+        '</table>' +
+        (d.attrNameList && d.attrNameList.length ? '<div class="d-tag-list">' + d.attrNameList.map(t => '<span class="d-tag">' + escapeHtml(t) + '</span>').join('') + '</div>' : '') +
+      '</div>' +
+      '<div class="d-detail-section">' +
+        '<h4>角色列表 (' + chars.length + '个)</h4>' +
+        '<div class="d-char-list">' + (charTags || '<span style="color:#666;">无角色数据</span>') + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function toggleDesc(el) { el.classList.toggle('expanded'); }
+
+  function toggleDetail(idx) {
+    const detailRow = document.getElementById('d-detail-' + idx);
+    const row = document.getElementById('d-row-' + idx);
+    if (!detailRow) return;
+    if (detailRow.style.display === 'none') {
+      if (dealsExpandedRow !== null && dealsExpandedRow !== idx) {
+        const prev = document.getElementById('d-detail-' + dealsExpandedRow);
+        const prevRow = document.getElementById('d-row-' + dealsExpandedRow);
+        if (prev) prev.style.display = 'none';
+        if (prevRow) prevRow.classList.remove('expanded');
+      }
+      detailRow.style.display = '';
+      row.classList.add('expanded');
+      dealsExpandedRow = idx;
+    } else {
+      detailRow.style.display = 'none';
+      row.classList.remove('expanded');
+      dealsExpandedRow = null;
+    }
+  }
+
+  // ============================================================
+  // 通用
+  // ============================================================
   function escapeHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
