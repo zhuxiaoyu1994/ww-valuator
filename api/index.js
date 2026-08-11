@@ -1,6 +1,6 @@
 /**
  * Vercel Serverless 入口
- * Vercel Serverless 入口，将 Express 应用导出为 Serverless Function
+ * 将 Express 应用导出为 Serverless Function
  * 本地开发仍使用 server.js 的 app.listen
  */
 
@@ -14,14 +14,21 @@ if (!process.env.TURSO_URL) {
 }
 
 // 复用 server.js 中的 Express app
-// server.js 中导出了 app（见底部 module.exports）
 const { app, initApp } = require('../server');
 
 // 初始化数据库（Vercel Serverless 每次冷启动时执行）
-let initialized = false;
-if (!initialized) {
+try {
   initApp();
-  initialized = true;
+} catch (e) {
+  console.error('[Vercel] initApp error:', e.message);
 }
+
+// Express 全局错误处理（防止未捕获错误导致 FUNCTION_INVOCATION_FAILED）
+app.use((err, req, res, next) => {
+  console.error('[Vercel] Express error:', err.message, err.stack);
+  if (!res.headersSent) {
+    res.status(500).type('text/plain').send('Internal Server Error: ' + err.message);
+  }
+});
 
 module.exports = app;
