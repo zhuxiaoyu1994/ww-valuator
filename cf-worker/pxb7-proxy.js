@@ -16,6 +16,7 @@
 const ALLOWED_PATHS = [
   '/api/product/web/product/detailPost',
   '/api/search/product/v2/selectSearchPageList',
+  '/api/search/product/selectSelledList',
 ];
 
 // 请求头模板

@@ -476,11 +476,11 @@ function fetchProductBySearch(keyword) {
 
 /**
  * 获取昨日成交商品列表（螃蟹网 selectSelledList API）
- * 优先走 Cloudflare Worker 代理，无配置时直连
+ * 优先走 Cloudflare Worker 代理，代理失败时自动回退直连
  * @returns {Promise<{products: Array, debug: Object}>}
  */
 function fetchSoldProducts(pageIndex, pageSize) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const postData = JSON.stringify({
       gameId: '10302',
       pageIndex: pageIndex || 1,
@@ -488,36 +488,87 @@ function fetchSoldProducts(pageIndex, pageSize) {
     });
     const apiPath = '/api/search/product/selectSelledList';
     const useProxy = !!PXB7_PROXY_URL;
-    const debug = { useProxy, apiPath, pageIndex, pageSize, statusCode: null, contentType: null, responsePreview: null, parseError: null, apiSuccess: null, dataLength: null };
+    const debug = { useProxy, apiPath, pageIndex, pageSize, proxyStatus: null, directStatus: null, responsePreview: null, parseError: null, apiSuccess: null, dataLength: null, fallbackUsed: false };
 
-    function handleResult(data, statusCode, contentType) {
-      debug.statusCode = statusCode;
-      debug.contentType = contentType;
+    function tryDirect() {
+      debug.fallbackUsed = true;
+      const options = {
+        hostname: 'api-pc.pxb7.com',
+        port: 443,
+        path: apiPath,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Origin': 'https://www.pxb7.com',
+          'Referer': 'https://www.pxb7.com/',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        res.setEncoding('utf8');
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type'], 'direct'));
+      });
+
+      req.on('error', (err) => {
+        debug.parseError = 'direct error: ' + err.message;
+        console.error('[fetchSoldProducts] Direct error:', err.message);
+        resolve({ products: [], debug });
+      });
+      req.setTimeout(15000, () => {
+        req.destroy(new Error('请求超时'));
+        debug.parseError = 'direct timeout';
+        resolve({ products: [], debug });
+      });
+      req.write(postData);
+      req.end();
+    }
+
+    function handleResult(data, statusCode, contentType, source) {
+      if (source === 'proxy') {
+        debug.proxyStatus = statusCode;
+      } else {
+        debug.directStatus = statusCode;
+      }
       debug.responsePreview = (typeof data === 'string') ? data.substring(0, 500) : String(data).substring(0, 500);
       try {
         // 检测 WAF / HTML 响应
         if (contentType && !contentType.includes('json') && data.trim().startsWith('<')) {
-          debug.parseError = 'WAF/HTML response detected (not JSON)';
-          console.error('[fetchSoldProducts] WAF/HTML response, status:', statusCode, 'preview:', debug.responsePreview);
+          debug.parseError = `WAF/HTML response from ${source}`;
+          console.error(`[fetchSoldProducts] WAF/HTML from ${source}, status:`, statusCode);
+          if (source === 'proxy') { tryDirect(); return; }
           return resolve({ products: [], debug });
         }
         const json = JSON.parse(data);
+        // 代理返回错误（如 Invalid path），回退直连
+        if (source === 'proxy' && (statusCode >= 400 || json.error)) {
+          console.error('[fetchSoldProducts] Proxy returned error:', json.error || statusCode, '- falling back to direct');
+          tryDirect();
+          return;
+        }
         debug.apiSuccess = json.success;
         debug.dataLength = Array.isArray(json.data) ? json.data.length : (json.data ? 'non-array' : 'null');
         if (json.success && json.data) {
           resolve({ products: json.data, debug });
         } else {
-          console.error('[fetchSoldProducts] API returned success=false or no data:', JSON.stringify(json).substring(0, 300));
+          console.error(`[fetchSoldProducts] API (${source}) returned success=false or no data:`, JSON.stringify(json).substring(0, 300));
+          if (source === 'proxy') { tryDirect(); return; }
           resolve({ products: [], debug });
         }
       } catch (e) {
-        debug.parseError = e.message;
-        console.error('[fetchSoldProducts] JSON parse failed:', e.message, 'preview:', debug.responsePreview);
+        debug.parseError = `${source} parse: ` + e.message;
+        console.error(`[fetchSoldProducts] ${source} JSON parse failed:`, e.message);
+        if (source === 'proxy') { tryDirect(); return; }
         resolve({ products: [], debug });
       }
     }
 
-    // 走 CF Worker 代理
+    // 走 CF Worker 代理，失败时自动回退直连
     if (useProxy) {
       const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
       const proxyReq = https.request(proxyUrl, {
@@ -530,59 +581,24 @@ function fetchSoldProducts(pageIndex, pageSize) {
         res.setEncoding('utf8');
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type']));
+        res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type'], 'proxy'));
       });
       proxyReq.on('error', (err) => {
-        debug.parseError = 'proxy error: ' + err.message;
-        console.error('[fetchSoldProducts] Proxy error:', err.message);
-        resolve({ products: [], debug });
+        console.error('[fetchSoldProducts] Proxy error, falling back to direct:', err.message);
+        tryDirect();
       });
       proxyReq.setTimeout(15000, () => {
         proxyReq.destroy(new Error('请求超时'));
-        debug.parseError = 'proxy timeout';
-        resolve({ products: [], debug });
+        console.error('[fetchSoldProducts] Proxy timeout, falling back to direct');
+        tryDirect();
       });
       proxyReq.write(postData);
       proxyReq.end();
       return;
     }
 
-    // 直连螃蟹网
-    const options = {
-      hostname: 'api-pc.pxb7.com',
-      port: 443,
-      path: apiPath,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Origin': 'https://www.pxb7.com',
-        'Referer': 'https://www.pxb7.com/',
-        'Content-Length': Buffer.byteLength(postData),
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      res.setEncoding('utf8');
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type']));
-    });
-
-    req.on('error', (err) => {
-      debug.parseError = 'direct error: ' + err.message;
-      console.error('[fetchSoldProducts] Direct error:', err.message);
-      resolve({ products: [], debug });
-    });
-    req.setTimeout(15000, () => {
-      req.destroy(new Error('请求超时'));
-      debug.parseError = 'direct timeout';
-      resolve({ products: [], debug });
-    });
-    req.write(postData);
-    req.end();
+    // 无代理配置，直接直连
+    tryDirect();
   });
 }
 
