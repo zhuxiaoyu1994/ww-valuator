@@ -5,22 +5,10 @@
       "maxDuration": 15
     }
   },
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Vercel-Json-Active", "value": "yes" }
-      ]
-    }
-  ],
   "rewrites": [
     {
       "source": "/public/(.*)",
       "destination": "/$1"
-    },
-    {
-      "source": "/",
-      "destination": "/api/home"
     },
     {
       "source": "/(.+)",
