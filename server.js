@@ -98,11 +98,21 @@ app.use((req, res, next) => {
 
 /**
  * 默认权重接口 - 返回估值引擎的默认权重配置（供前端设置面板初始化用）
+ * 优先返回数据库中存储的服务器端配置，无则返回源码内置默认值
  */
-app.get('/api/defaults', (req, res) => {
+app.get('/api/defaults', async (req, res) => {
   try {
-    const defaults = valueEngine.getDefaults();
-    res.json({ success: true, data: defaults });
+    // 优先从数据库获取服务器端配置
+    const serverConfig = await db.getConfig('default_weights');
+    if (serverConfig) {
+      const defaults = valueEngine.getDefaults();
+      // 服务器端配置覆盖源码默认值
+      const merged = Object.assign({}, defaults, serverConfig);
+      res.json({ success: true, data: merged });
+    } else {
+      const defaults = valueEngine.getDefaults();
+      res.json({ success: true, data: defaults });
+    }
   } catch (err) {
     console.error('[/api/defaults] Error:', err.message);
     res.status(500).json({ success: false, error: '获取默认权重失败' });
@@ -623,6 +633,15 @@ app.post('/api/deals', async (req, res) => {
       return res.json({ success: true, data: { list: [], summary: null, page: pageIndex, pageSize: ps, _debug: debug } });
     }
 
+    // 无自定义权重时，尝试从数据库加载服务器端默认配置
+    let effectiveWeights = customWeights;
+    if (!effectiveWeights) {
+      try {
+        const serverConfig = await db.getConfig('default_weights');
+        if (serverConfig) effectiveWeights = serverConfig;
+      } catch (e) { /* 忽略 */ }
+    }
+
     // 对每个商品运行估价引擎
     const enriched = products.map(item => {
       const showTitle = item.showTitle || '';
@@ -633,7 +652,7 @@ app.post('/api/deals', async (req, res) => {
       let shortDesc = '';
       if (showTitle) {
         try {
-          valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, customWeights);
+          valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
           shortDesc = valueEngine.generateShortDescription(valuation);
         } catch (e) {
           // 估价失败不阻断流程
@@ -842,6 +861,37 @@ app.post('/admin/api/cache-clear', (req, res) => {
 });
 
 // ============================================================
+// 估值配置管理 API
+// ============================================================
+
+// 获取默认估值配置（公开接口，网站页面加载时调用）
+app.get('/api/config/default', async (req, res) => {
+  try {
+    const config = await db.getConfig('default_weights');
+    res.json({ success: true, data: config });
+  } catch (e) {
+    res.json({ success: true, data: null });
+  }
+});
+
+// 更新默认估值配置（需管理密码）
+app.post('/api/config/update', async (req, res) => {
+  const { password, config } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  if (!config || typeof config !== 'object') {
+    return res.json({ success: false, error: '配置数据无效' });
+  }
+  const ok = await db.setConfig('default_weights', config);
+  if (ok) {
+    res.json({ success: true, message: '配置已更新' });
+  } else {
+    res.json({ success: false, error: '配置保存失败（数据库未配置或写入失败）' });
+  }
+});
+
+// ============================================================
 // 启动服务器
 // ============================================================
 
@@ -852,6 +902,7 @@ app.post('/admin/api/cache-clear', (req, res) => {
 function initApp() {
   db.initDb();
   db.ensureTable();
+  db.ensureConfigTable();
 }
 
 // 导出 app 和 initApp（供 Vercel 使用）

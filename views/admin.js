@@ -153,6 +153,7 @@ function getAdminPage() {
       <button class="tab-btn active" onclick="switchTab('logs', this)">查询日志</button>
       <button class="tab-btn" onclick="switchTab('deals', this)">成交记录</button>
       <button class="tab-btn" onclick="switchTab('monitor', this)">监控脚本</button>
+      <button class="tab-btn" onclick="switchTab('config', this)">配置管理</button>
     </div>
 
     <!-- Tab 1: 查询日志 -->
@@ -277,6 +278,34 @@ function getAdminPage() {
           <li><strong>钉钉</strong>：创建钉钉自定义机器人，复制 webhook 地址填入设置</li>
           <li><strong>飞书</strong>：创建飞书自定义机器人，复制 webhook 地址填入设置</li>
         </ul>
+      </div>
+    </div>
+
+    <!-- Tab 4: 配置管理 -->
+    <div id="tab-config" class="tab-content">
+      <div class="mon-card">
+        <h2>估值配置导入</h2>
+        <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
+          从油猴脚本「导出配置」获取 JSON 文件，上传后网站将使用该配置作为默认估值规则。<br>
+          上传后<strong style="color:#4ade80;">立即生效</strong>，无需修改代码或重新部署。所有用户在未自定义配置时均使用此默认配置。
+        </p>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;">
+          <input type="file" id="config-file-input" accept=".json" style="display:none;" onchange="handleConfigFile(event)">
+          <button onclick="document.getElementById('config-file-input').click()" style="padding:10px 24px;background:#4ade80;color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">选择配置文件</button>
+          <span id="config-file-name" style="color:#888;font-size:13px;">未选择文件</span>
+        </div>
+        <div id="config-preview" style="display:none;background:#0d0d22;border:1px solid #2a2a4a;border-radius:8px;padding:16px;margin-bottom:16px;">
+          <h4 style="color:#4ade80;font-size:13px;margin-bottom:8px;">配置预览</h4>
+          <div id="config-preview-content" style="font-size:12px;color:#ccc;max-height:300px;overflow-y:auto;"></div>
+        </div>
+        <button id="config-upload-btn" onclick="uploadConfig()" disabled style="padding:10px 24px;background:#60a5fa;color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;opacity:0.5;">上传配置</button>
+        <span id="config-upload-status" style="margin-left:12px;font-size:13px;"></span>
+      </div>
+      <div class="mon-card">
+        <h2>当前服务器配置</h2>
+        <p style="color:#aaa;font-size:13px;margin-bottom:12px;">点击刷新查看当前服务器存储的默认配置状态</p>
+        <button onclick="checkServerConfig()" style="padding:8px 20px;background:#1a1a3a;color:#4ade80;border:1px solid #2a2a4a;border-radius:6px;font-size:13px;cursor:pointer;">检查服务器配置</button>
+        <div id="server-config-status" style="margin-top:12px;font-size:13px;"></div>
       </div>
     </div>
   </div>
@@ -737,6 +766,112 @@ function getAdminPage() {
         '<div class="d-char-list">' + (charTags || '<span style="color:#666;">无角色数据</span>') + '</div>' +
       '</div>' +
     '</div>';
+  }
+
+  // ============================================================
+  // 配置管理
+  // ============================================================
+  let pendingConfig = null;
+
+  function handleConfigFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    document.getElementById('config-file-name').textContent = file.name;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const config = JSON.parse(e.target.result);
+        pendingConfig = config;
+        // 预览
+        const preview = document.getElementById('config-preview');
+        const content = document.getElementById('config-preview-content');
+        const keys = Object.keys(config);
+        let html = '<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">';
+        for (const key of keys) {
+          const val = config[key];
+          let valStr;
+          if (Array.isArray(val)) valStr = '[' + val.length + ' 项]';
+          else if (typeof val === 'object' && val !== null) valStr = '{' + Object.keys(val).length + ' 键}';
+          else valStr = String(val);
+          html += '<span style="color:#8ecdf5;">' + escapeHtml(key) + '</span><span style="color:#aaa;">' + escapeHtml(valStr) + '</span>';
+        }
+        html += '</div>';
+        content.innerHTML = html;
+        preview.style.display = '';
+        const btn = document.getElementById('config-upload-btn');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        document.getElementById('config-upload-status').textContent = '';
+      } catch (err) {
+        document.getElementById('config-upload-status').innerHTML = '<span style="color:#ef4444;">JSON 解析失败: ' + escapeHtml(err.message) + '</span>';
+        pendingConfig = null;
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function uploadConfig() {
+    if (!pendingConfig) return;
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) { alert('请先登录'); return; }
+
+    const btn = document.getElementById('config-upload-btn');
+    const status = document.getElementById('config-upload-status');
+    btn.disabled = true;
+    btn.textContent = '上传中...';
+    status.innerHTML = '<span style="color:#fbbf24;">正在上传...</span>';
+
+    try {
+      const resp = await fetch('/api/config/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw, config: pendingConfig }),
+      });
+      const json = await resp.json();
+      if (json.success) {
+        status.innerHTML = '<span style="color:#4ade80;">✓ ' + (json.message || '配置已更新') + '</span>';
+        btn.textContent = '已上传';
+        btn.style.background = '#4ade80';
+      } else {
+        status.innerHTML = '<span style="color:#ef4444;">✗ ' + escapeHtml(json.error || '上传失败') + '</span>';
+        btn.disabled = false;
+        btn.textContent = '上传配置';
+      }
+    } catch (err) {
+      status.innerHTML = '<span style="color:#ef4444;">网络错误: ' + escapeHtml(err.message) + '</span>';
+      btn.disabled = false;
+      btn.textContent = '上传配置';
+    }
+  }
+
+  async function checkServerConfig() {
+    const status = document.getElementById('server-config-status');
+    status.innerHTML = '<span style="color:#fbbf24;">检查中...</span>';
+    try {
+      const resp = await fetch('/api/config/default');
+      const json = await resp.json();
+      if (json.success && json.data) {
+        const config = json.data;
+        const keys = Object.keys(config);
+        let html = '<div style="color:#4ade80;margin-bottom:8px;">✓ 服务器已配置默认估值规则</div>';
+        html += '<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">';
+        for (const key of keys) {
+          const val = config[key];
+          let valStr;
+          if (Array.isArray(val)) valStr = '[' + val.length + ' 项]';
+          else if (typeof val === 'object' && val !== null) valStr = '{' + Object.keys(val).length + ' 键}';
+          else valStr = String(val);
+          html += '<span style="color:#8ecdf5;">' + escapeHtml(key) + '</span><span style="color:#aaa;">' + escapeHtml(valStr) + '</span>';
+        }
+        html += '</div>';
+        status.innerHTML = html;
+      } else {
+        status.innerHTML = '<span style="color:#fbbf24;">服务器未配置默认估值规则，使用源码内置默认值</span>';
+      }
+    } catch (err) {
+      status.innerHTML = '<span style="color:#ef4444;">检查失败: ' + escapeHtml(err.message) + '</span>';
+    }
   }
 
   // ============================================================

@@ -529,6 +529,17 @@ function getPageHTML() {
   <script src="/public/value-settings.js" onerror="window.__vsFailed=true"></script>
   <script>
     // ============================================================
+    // 服务器端默认配置（从数据库加载，优先于源码内置默认值）
+    // ============================================================
+    window._serverDefaultConfig = null;
+    fetch('/api/config/default').then(r => r.json()).then(json => {
+      if (json.success && json.data) {
+        window._serverDefaultConfig = json.data;
+        console.log('[config] 已加载服务器端默认估值配置');
+      }
+    }).catch(() => {});
+
+    // ============================================================
     // 估值规则设置按钮状态更新
     // ============================================================
     function updateSettingsBtnState() {
@@ -641,7 +652,7 @@ function getPageHTML() {
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在查询商品信息...</div>';
 
       try {
-        const customWeights = (typeof getSavedWeights === 'function') ? getSavedWeights() : null;
+        const customWeights = (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null);
         const resp = await fetch('/api/x9k2-find', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -685,7 +696,7 @@ function getPageHTML() {
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在计算估值...</div>';
 
       try {
-        const customWeights = (typeof getSavedWeights === 'function') ? getSavedWeights() : null;
+        const customWeights = (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null);
         const resp = await fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -220,11 +220,70 @@ async function searchLogs(keyword, limit = 100) {
   }
 }
 
+/**
+ * 确保配置表存在
+ */
+async function ensureConfigTable() {
+  if (!dbClient) return;
+  try {
+    await dbClient.execute(`
+      CREATE TABLE IF NOT EXISTS app_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+  } catch (e) {
+    console.error('[DB] 建配置表失败:', e.message);
+  }
+}
+
+/**
+ * 获取配置
+ */
+async function getConfig(key) {
+  if (!dbClient) return null;
+  try {
+    const result = await dbClient.execute({
+      sql: 'SELECT value FROM app_config WHERE key = ?',
+      args: [key],
+    });
+    if (result.rows.length > 0) {
+      return JSON.parse(result.rows[0].value);
+    }
+    return null;
+  } catch (e) {
+    console.error('[DB] 读配置失败:', e.message);
+    return null;
+  }
+}
+
+/**
+ * 设置配置
+ */
+async function setConfig(key, value) {
+  if (!dbClient) return false;
+  try {
+    await dbClient.execute({
+      sql: `INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      args: [key, JSON.stringify(value), new Date().toISOString()],
+    });
+    return true;
+  } catch (e) {
+    console.error('[DB] 写配置失败:', e.message);
+    return false;
+  }
+}
+
 module.exports = {
   initDb,
   ensureTable,
+  ensureConfigTable,
   insertLog,
   queryLogs,
   getStats,
   searchLogs,
+  getConfig,
+  setConfig,
 };
