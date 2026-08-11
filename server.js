@@ -477,6 +477,7 @@ function fetchProductBySearch(keyword) {
 /**
  * 获取昨日成交商品列表（螃蟹网 selectSelledList API）
  * 优先走 Cloudflare Worker 代理，无配置时直连
+ * @returns {Promise<{products: Array, debug: Object}>}
  */
 function fetchSoldProducts(pageIndex, pageSize) {
   return new Promise((resolve, reject) => {
@@ -486,22 +487,38 @@ function fetchSoldProducts(pageIndex, pageSize) {
       pageSize: pageSize || 20,
     });
     const apiPath = '/api/search/product/selectSelledList';
+    const useProxy = !!PXB7_PROXY_URL;
+    const debug = { useProxy, apiPath, pageIndex, pageSize, statusCode: null, contentType: null, responsePreview: null, parseError: null, apiSuccess: null, dataLength: null };
 
-    function handleResult(data) {
+    function handleResult(data, statusCode, contentType) {
+      debug.statusCode = statusCode;
+      debug.contentType = contentType;
+      debug.responsePreview = (typeof data === 'string') ? data.substring(0, 500) : String(data).substring(0, 500);
       try {
+        // 检测 WAF / HTML 响应
+        if (contentType && !contentType.includes('json') && data.trim().startsWith('<')) {
+          debug.parseError = 'WAF/HTML response detected (not JSON)';
+          console.error('[fetchSoldProducts] WAF/HTML response, status:', statusCode, 'preview:', debug.responsePreview);
+          return resolve({ products: [], debug });
+        }
         const json = JSON.parse(data);
+        debug.apiSuccess = json.success;
+        debug.dataLength = Array.isArray(json.data) ? json.data.length : (json.data ? 'non-array' : 'null');
         if (json.success && json.data) {
-          resolve(json.data);
+          resolve({ products: json.data, debug });
         } else {
-          resolve([]);
+          console.error('[fetchSoldProducts] API returned success=false or no data:', JSON.stringify(json).substring(0, 300));
+          resolve({ products: [], debug });
         }
       } catch (e) {
-        reject(new Error('解析成交数据失败'));
+        debug.parseError = e.message;
+        console.error('[fetchSoldProducts] JSON parse failed:', e.message, 'preview:', debug.responsePreview);
+        resolve({ products: [], debug });
       }
     }
 
     // 走 CF Worker 代理
-    if (PXB7_PROXY_URL) {
+    if (useProxy) {
       const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
       const proxyReq = https.request(proxyUrl, {
         method: 'POST',
@@ -513,11 +530,17 @@ function fetchSoldProducts(pageIndex, pageSize) {
         res.setEncoding('utf8');
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => handleResult(data));
+        res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type']));
       });
-      proxyReq.on('error', (err) => reject(err));
+      proxyReq.on('error', (err) => {
+        debug.parseError = 'proxy error: ' + err.message;
+        console.error('[fetchSoldProducts] Proxy error:', err.message);
+        resolve({ products: [], debug });
+      });
       proxyReq.setTimeout(15000, () => {
         proxyReq.destroy(new Error('请求超时'));
+        debug.parseError = 'proxy timeout';
+        resolve({ products: [], debug });
       });
       proxyReq.write(postData);
       proxyReq.end();
@@ -545,12 +568,18 @@ function fetchSoldProducts(pageIndex, pageSize) {
       res.setEncoding('utf8');
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => handleResult(data));
+      res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type']));
     });
 
-    req.on('error', (err) => reject(err));
+    req.on('error', (err) => {
+      debug.parseError = 'direct error: ' + err.message;
+      console.error('[fetchSoldProducts] Direct error:', err.message);
+      resolve({ products: [], debug });
+    });
     req.setTimeout(15000, () => {
       req.destroy(new Error('请求超时'));
+      debug.parseError = 'direct timeout';
+      resolve({ products: [], debug });
     });
     req.write(postData);
     req.end();
@@ -569,9 +598,9 @@ app.post('/api/deals', async (req, res) => {
   const ps = parseInt(pageSize) || 50;
 
   try {
-    const products = await fetchSoldProducts(pageIndex, ps);
+    const { products, debug } = await fetchSoldProducts(pageIndex, ps);
     if (!products || products.length === 0) {
-      return res.json({ success: true, data: { list: [], summary: null, page: pageIndex, pageSize: ps } });
+      return res.json({ success: true, data: { list: [], summary: null, page: pageIndex, pageSize: ps, _debug: debug } });
     }
 
     // 对每个商品运行估价引擎
