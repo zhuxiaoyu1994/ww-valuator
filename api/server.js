@@ -2,6 +2,10 @@
  * Vercel Serverless 入口
  * 将 Express 应用导出为 Serverless Function
  * 本地开发仍使用 server.js 的 app.listen
+ *
+ * 注意：文件名必须为 server.js 而非 index.js
+ * Vercel 会将 api/index.js 作为 / 路径的默认函数直接调用，
+ * 绕过 vercel.json 的 rewrite 规则，导致 FUNCTION_INVOCATION_FAILED
  */
 
 // 加载环境变量（Vercel 自动注入，这里只是兼容本地测试）

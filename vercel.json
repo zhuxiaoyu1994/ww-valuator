@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/index.js": {
+    "api/server.js": {
       "memory": 1024,
       "maxDuration": 15
     }
@@ -11,8 +11,8 @@
       "destination": "/$1"
     },
     {
-      "source": "/(.+)",
-      "destination": "/api/index.js"
+      "source": "/(.*)",
+      "destination": "/api/server"
     }
   ]
 }
