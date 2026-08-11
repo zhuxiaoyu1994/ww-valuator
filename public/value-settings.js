@@ -70,7 +70,6 @@
     var w = Object.assign({}, DEFAULT_WEIGHTS, s);
     w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, s.c6TierWeights || {});
     w.c6MultiBonus = (s.c6MultiBonus && s.c6MultiBonus.length) ? s.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
-    w.pullC6Bonus = (s.pullC6Bonus && s.pullC6Bonus.length) ? s.pullC6Bonus : DEFAULT_WEIGHTS.pullC6Bonus;
     w.teamMultiBonus = (s.teamMultiBonus && s.teamMultiBonus.length) ? s.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
     w.flatDiscountRules = (s.flatDiscountRules && s.flatDiscountRules.length) ? s.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.c6TeamDependency = s.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
@@ -589,119 +588,59 @@
 
     pullSection.appendChild(pullFormulaRow);
 
-    // 满命抽数加成档位
+    // 满命抽数加成（公式参数）
     var pullC6Divider = document.createElement('div');
     pullC6Divider.style.cssText = 'border-top:1px dashed #2a2a4a;margin:16px 0 12px 0;';
     pullSection.appendChild(pullC6Divider);
 
     var pullC6Title = document.createElement('div');
     pullC6Title.style.cssText = 'font-size:13px;font-weight:600;color:#fbbf24;margin-bottom:4px;';
-    pullC6Title.textContent = '满命抽数加成（加权满命数 → 抽数价值加成）';
+    pullC6Title.textContent = '满命抽数加成（公式：基准加成 + (加权满命 - 基准) / 每档 × 每档浮动）';
     pullSection.appendChild(pullC6Title);
 
     var pullC6Desc = document.createElement('p');
     pullC6Desc.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;';
-    pullC6Desc.innerHTML = '根据加权满命数（与满命溢价共用），对抽数价值额外加成。如加权满命1 → 抽数价值+30%，加权满命2 → +50%。';
+    pullC6Desc.innerHTML = '根据加权满命数（与满命溢价共用），对抽数价值额外加成。';
     pullSection.appendChild(pullC6Desc);
 
-    var pullC6List = document.createElement('div');
-    pullC6List.style.cssText = 'margin-bottom:10px;max-height:200px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
-    var pullC6Entries = (w.pullC6Bonus || DEFAULT_WEIGHTS.pullC6Bonus).map(function (e) { return { count: e.count, bonus: e.bonus }; });
+    var pullC6FormRow = document.createElement('div');
+    pullC6FormRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;font-size:11px;';
+    var pullC6BaseInput = document.createElement('input');
+    pullC6BaseInput.type = 'number'; pullC6BaseInput.value = w.pullC6Base != null ? w.pullC6Base : 5; pullC6BaseInput.step = 0.5;
+    pullC6BaseInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
+    pullC6BaseInput.title = '基准加权满命数';
+    var pullC6BaseLabel = document.createElement('span');
+    pullC6BaseLabel.textContent = '基准满命'; pullC6BaseLabel.style.cssText = 'color:#555;font-size:10px;';
+    pullC6FormRow.appendChild(pullC6BaseLabel);
+    pullC6FormRow.appendChild(pullC6BaseInput);
 
-    function renderPullC6List() {
-      pullC6List.innerHTML = '';
-      if (pullC6Entries.length === 0) { pullC6List.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无加成规则</div>'; return; }
-      pullC6Entries.sort(function (a, b) { return a.count - b.count; });
-      var bonuses = pullC6Entries.map(function(e) { return e.bonus; });
-      var minBonus = Math.min.apply(null, bonuses);
-      var maxBonus = Math.max.apply(null, bonuses);
-      for (var i = 0; i < pullC6Entries.length; i++) {
-        (function (idx) {
-          var e = pullC6Entries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
+    var pullC6BaseBonusInput = document.createElement('input');
+    pullC6BaseBonusInput.type = 'number'; pullC6BaseBonusInput.value = w.pullC6BaseBonus != null ? w.pullC6BaseBonus : 0.5; pullC6BaseBonusInput.step = 0.05;
+    pullC6BaseBonusInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+    pullC6BaseBonusInput.title = '基准加成（0.5=50%）';
+    var pullC6BaseBonusLabel = document.createElement('span');
+    pullC6BaseBonusLabel.textContent = '基准加成'; pullC6BaseBonusLabel.style.cssText = 'color:#555;font-size:10px;';
+    pullC6FormRow.appendChild(pullC6BaseBonusLabel);
+    pullC6FormRow.appendChild(pullC6BaseBonusInput);
 
-          var countInp = document.createElement('input');
-          countInp.type = 'number'; countInp.value = e.count; countInp.min = 1; countInp.step = 0.5;
-          countInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
-          countInp.title = '加权满命数';
-          countInp.onchange = function() { e.count = parseFloat(countInp.value) || 1; };
-          row.appendChild(countInp);
+    var pullC6StepInput = document.createElement('input');
+    pullC6StepInput.type = 'number'; pullC6StepInput.value = w.pullC6Step != null ? w.pullC6Step : 0.1; pullC6StepInput.step = 0.01;
+    pullC6StepInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
+    pullC6StepInput.title = '每档满命数';
+    var pullC6StepLabel = document.createElement('span');
+    pullC6StepLabel.textContent = '每档命数'; pullC6StepLabel.style.cssText = 'color:#555;font-size:10px;';
+    pullC6FormRow.appendChild(pullC6StepLabel);
+    pullC6FormRow.appendChild(pullC6StepInput);
 
-          var mingLab = document.createElement('span');
-          mingLab.textContent = '命'; mingLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(mingLab);
-
-          var plusLab = document.createElement('span');
-          plusLab.textContent = '+'; plusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
-          row.appendChild(plusLab);
-
-          var bonusInp = document.createElement('input');
-          bonusInp.type = 'number'; bonusInp.value = parseFloat((e.bonus * 100).toFixed(2)); bonusInp.min = 0; bonusInp.step = 5;
-          bonusInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-          bonusInp.title = '加成百分比（如15表示+15%）';
-          bonusInp.onchange = function() { e.bonus = parseFloat(bonusInp.value) / 100 || 0; };
-          row.appendChild(bonusInp);
-
-          var pctLab = document.createElement('span');
-          pctLab.textContent = '%'; pctLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(pctLab);
-
-          var barWrap = document.createElement('div');
-          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
-          var barFill = document.createElement('div');
-          var ratio = maxBonus > minBonus ? (e.bonus - minBonus) / (maxBonus - minBonus) : 0.5;
-          barFill.className = 'price-bar';
-          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#fbbf24,#4ade80);border-radius:3px;transition:width 0.2s;';
-          barWrap.appendChild(barFill);
-          row.appendChild(barWrap);
-
-          var delBtn = document.createElement('button');
-          delBtn.textContent = '×'; delBtn.title = '删除';
-          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
-          delBtn.onclick = function () { pullC6Entries.splice(idx, 1); renderPullC6List(); };
-          row.appendChild(delBtn);
-
-          pullC6List.appendChild(row);
-        })(i);
-      }
-    }
-    renderPullC6List();
-    pullSection.appendChild(pullC6List);
-
-    // 添加新抽数满命加成
-    var addPullC6Row = document.createElement('div');
-    addPullC6Row.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
-    var pc6CountInput = document.createElement('input');
-    pc6CountInput.type = 'number'; pc6CountInput.min = '1'; pc6CountInput.step = '0.5'; pc6CountInput.placeholder = '满命';
-    pc6CountInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
-    addPullC6Row.appendChild(pc6CountInput);
-    var pc6MingLab = document.createElement('span');
-    pc6MingLab.textContent = '命'; pc6MingLab.style.cssText = 'color:#555;font-size:10px;';
-    addPullC6Row.appendChild(pc6MingLab);
-    var pc6PlusLab = document.createElement('span');
-    pc6PlusLab.textContent = '+'; pc6PlusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
-    addPullC6Row.appendChild(pc6PlusLab);
-    var pc6BonusInput = document.createElement('input');
-    pc6BonusInput.type = 'number'; pc6BonusInput.min = '0'; pc6BonusInput.step = '5'; pc6BonusInput.placeholder = '加成%';
-    pc6BonusInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-    addPullC6Row.appendChild(pc6BonusInput);
-    var pc6Pct = document.createElement('span');
-    pc6Pct.textContent = '%'; pc6Pct.style.cssText = 'color:#555;font-size:10px;';
-    addPullC6Row.appendChild(pc6Pct);
-    var addPullC6Btn = document.createElement('button');
-    addPullC6Btn.textContent = '添加';
-    addPullC6Btn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#fbbf24;color:#0f0f23;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
-    addPullC6Btn.onclick = function () {
-      var cVal = parseFloat(pc6CountInput.value);
-      var bVal = parseFloat(pc6BonusInput.value) / 100;
-      if (isNaN(cVal) || cVal < 1) { alert('加权满命数至少为1'); return; }
-      if (isNaN(bVal) || bVal < 0) { alert('请输入加成百分比'); return; }
-      pullC6Entries.push({ count: cVal, bonus: bVal });
-      renderPullC6List(); pc6CountInput.value = ''; pc6BonusInput.value = '';
-    };
-    addPullC6Row.appendChild(addPullC6Btn);
-    pullSection.appendChild(addPullC6Row);
+    var pullC6StepBonusInput = document.createElement('input');
+    pullC6StepBonusInput.type = 'number'; pullC6StepBonusInput.value = w.pullC6StepBonus != null ? w.pullC6StepBonus : 0.005; pullC6StepBonusInput.step = 0.001;
+    pullC6StepBonusInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
+    pullC6StepBonusInput.title = '每档浮动（0.005=0.5%）';
+    var pullC6StepBonusLabel = document.createElement('span');
+    pullC6StepBonusLabel.textContent = '每档浮动'; pullC6StepBonusLabel.style.cssText = 'color:#555;font-size:10px;';
+    pullC6FormRow.appendChild(pullC6StepBonusLabel);
+    pullC6FormRow.appendChild(pullC6StepBonusInput);
+    pullSection.appendChild(pullC6FormRow);
     dialog.appendChild(pullSection);
 
     // ===== 4. 满命多角色溢价 =====
@@ -1693,12 +1632,11 @@
         c6Entries.push({ count: DEFAULT_WEIGHTS.c6MultiBonus[ci].count, bonus: DEFAULT_WEIGHTS.c6MultiBonus[ci].bonus });
       }
       renderC6List();
-      // 重置抽数满命加成
-      pullC6Entries.length = 0;
-      for (var pci2 = 0; pci2 < DEFAULT_WEIGHTS.pullC6Bonus.length; pci2++) {
-        pullC6Entries.push({ count: DEFAULT_WEIGHTS.pullC6Bonus[pci2].count, bonus: DEFAULT_WEIGHTS.pullC6Bonus[pci2].bonus });
-      }
-      renderPullC6List();
+      // 重置满命抽数加成公式参数
+      pullC6BaseInput.value = 5;
+      pullC6BaseBonusInput.value = 0.5;
+      pullC6StepInput.value = 0.1;
+      pullC6StepBonusInput.value = 0.005;
       // 重置满命权重
       for (var tw = 0; tw < c6TierList.length; tw++) {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
@@ -1850,12 +1788,11 @@
       newW.pullBasePrice = parseFloat(pullBasePriceInput.value) || 1.0;
       newW.pullStepPrice = parseFloat(pullStepPriceInput.value) || 0.002;
 
-      // 收集抽数满命加成档位
-      var newPullC6Bonus = [];
-      for (var pci = 0; pci < pullC6Entries.length; pci++) {
-        newPullC6Bonus.push({ count: pullC6Entries[pci].count, bonus: pullC6Entries[pci].bonus });
-      }
-      newW.pullC6Bonus = newPullC6Bonus;
+      // 收集满命抽数加成公式参数
+      newW.pullC6Base = parseFloat(pullC6BaseInput.value) || 5;
+      newW.pullC6BaseBonus = parseFloat(pullC6BaseBonusInput.value) || 0.5;
+      newW.pullC6Step = parseFloat(pullC6StepInput.value) || 0.1;
+      newW.pullC6StepBonus = parseFloat(pullC6StepBonusInput.value) || 0.005;
 
       // 收集满命溢价档位
       var newC6Bonus = [];
