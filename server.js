@@ -132,6 +132,8 @@ app.post('/api/x9k2-eval', (req, res) => {
     yellowCount: result.info.yellowCount,
     pulls: result.info.pulls,
     success: true,
+    details: result.details,
+    characters: result.details.characters || [],
   };
   queryLogs.unshift(logEntry);
   if (queryLogs.length > MAX_LOGS) queryLogs.pop();
@@ -228,6 +230,8 @@ app.post('/api/x9k2-find', async (req, res) => {
       yellowCount: result.info.yellowCount,
       pulls: result.info.pulls,
       success: true,
+      details: result.details,
+      characters: result.details.characters || [],
     };
     queryLogs.unshift(logEntry);
     if (queryLogs.length > MAX_LOGS) queryLogs.pop();

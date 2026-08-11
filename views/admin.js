@@ -178,7 +178,7 @@ function getAdminPage() {
         <table>
           <thead>
             <tr>
-              <th>时间</th><th>类型</th><th>IP</th><th>输入</th><th>标价</th><th>估值</th><th>性价比</th><th>黄数</th><th>抽数</th><th>状态</th>
+              <th>时间</th><th>类型</th><th>IP</th><th>输入</th><th>标价</th><th>估值</th><th>性价比</th><th>黄数</th><th>抽数</th><th>状态</th><th style="width:50px">详情</th>
             </tr>
           </thead>
           <tbody id="log-tbody"></tbody>
@@ -289,6 +289,7 @@ function getAdminPage() {
   let filteredLogs = [];
   let logCurrentPage = 1;
   const logPageSize = 50;
+  let logExpandedRow = null;
 
   let dealsData = [];
   let dealsFiltered = [];
@@ -404,9 +405,9 @@ function getAdminPage() {
     const pageLogs = filteredLogs.slice(start, start + logPageSize);
     const tbody = document.getElementById('log-tbody');
     if (pageLogs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#666;padding:40px;">暂无数据</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#666;padding:40px;">暂无数据</td></tr>';
     } else {
-      tbody.innerHTML = pageLogs.map(l => {
+      tbody.innerHTML = pageLogs.map((l, i) => {
         const time = new Date(l.time).toLocaleString('zh-CN');
         const typeTag = l.success
           ? (l.type === '编号查询' ? '<span class="tag tag-lookup">编号</span>' : '<span class="tag tag-eval">粘贴</span>')
@@ -418,7 +419,9 @@ function getAdminPage() {
         const estValue = l.estimatedValue != null ? '¥' + l.estimatedValue.toFixed(2) : '-';
         const yellow = l.yellowCount != null ? l.yellowCount : '-';
         const pulls = l.pulls != null ? l.pulls : '-';
-        return '<tr>' +
+        const hasDetails = l.success && l.details;
+        const globalIdx = start + i;
+        return '<tr class="d-deal-row" id="log-row-' + globalIdx + '">' +
           '<td style="white-space:nowrap;">' + time + '</td>' +
           '<td>' + typeTag + '</td>' +
           '<td>' + (l.ip || '-') + '</td>' +
@@ -429,7 +432,9 @@ function getAdminPage() {
           '<td>' + yellow + '</td>' +
           '<td>' + pulls + '</td>' +
           '<td>' + (l.success ? '成功' : '<span style="color:#ef4444;">' + escapeHtml(l.error || '失败') + '</span>') + '</td>' +
-          '</tr>';
+          '<td style="text-align:center;">' + (hasDetails ? '<span style="cursor:pointer;color:#8ecdf5;font-size:16px;" onclick="toggleLogDetail(' + globalIdx + ')">▶</span>' : '') + '</td>' +
+          '</tr>' +
+          (hasDetails ? '<tr class="d-detail-row" id="log-detail-' + globalIdx + '" style="display:none;"><td colspan="11">' + renderLogDetail(l) + '</td></tr>' : '');
       }).join('');
     }
     const totalPages = Math.ceil(filteredLogs.length / logPageSize);
@@ -473,10 +478,17 @@ function getAdminPage() {
     }
 
     try {
+      // 读取 localStorage 中的自定义估值权重（与 /wuwa 页面共享）
+      let customWeights = null;
+      try {
+        const saved = localStorage.getItem('mw_eval_weights');
+        if (saved) customWeights = JSON.parse(saved);
+      } catch (e) { /* 忽略 */ }
+
       const resp = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize }),
+        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize, customWeights }),
       });
       const json = await resp.json();
       if (!json.success) {
@@ -669,6 +681,62 @@ function getAdminPage() {
       row.classList.remove('expanded');
       dealsExpandedRow = null;
     }
+  }
+
+  function toggleLogDetail(idx) {
+    const detailRow = document.getElementById('log-detail-' + idx);
+    const row = document.getElementById('log-row-' + idx);
+    if (!detailRow) return;
+    if (detailRow.style.display === 'none') {
+      if (logExpandedRow !== null && logExpandedRow !== idx) {
+        const prev = document.getElementById('log-detail-' + logExpandedRow);
+        const prevRow = document.getElementById('log-row-' + logExpandedRow);
+        if (prev) prev.style.display = 'none';
+        if (prevRow) prevRow.classList.remove('expanded');
+      }
+      detailRow.style.display = '';
+      row.classList.add('expanded');
+      logExpandedRow = idx;
+    } else {
+      detailRow.style.display = 'none';
+      row.classList.remove('expanded');
+      logExpandedRow = null;
+    }
+  }
+
+  function renderLogDetail(l) {
+    const det = l.details;
+    if (!det) return '';
+    const chars = (l.characters || []).sort((a, b) => (b.value || 0) - (a.value || 0));
+    const charTags = chars.map(c => {
+      let cls = 'd-char-item';
+      if (c.const >= 6) cls += ' full-const';
+      if (c.hasSig) cls += ' has-sig';
+      const constStr = c.const >= 6 ? '满命' : c.const + '命';
+      const valStr = (c.value != null && !isNaN(c.value)) ? '¥' + Math.round(c.value) : '-';
+      return '<span class="' + cls + '">' + constStr + c.name + (c.hasSig ? '+专武' : '') + ' (' + valStr + ')</span>';
+    }).join('');
+
+    return '<div class="d-detail-content">' +
+      '<div class="d-detail-section">' +
+        '<h4>估值明细</h4>' +
+        '<table class="inner">' +
+          '<tr><td>角色价值</td><td>¥' + (det.characterValue || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>满命溢价</td><td>' + ((det.c6Premium || 0) >= 0 ? '+' : '') + '¥' + (det.c6Premium || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>配队溢价</td><td>' + ((det.teamPremium || 0) >= 0 ? '+' : '') + '¥' + (det.teamPremium || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>抽数价值</td><td>¥' + (det.pullValue || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>资源价值</td><td>¥' + (det.resourceValue || 0).toFixed(2) + '</td></tr>' +
+          '<tr><td>有效金系数</td><td>×' + (det.yellowMultiplier || 0).toFixed(2) + '</td></tr>' +
+          '<tr style="border-top:1px solid #2a2a4a;"><td style="color:#4ade80;font-weight:600;">估算总值</td><td style="color:#60a5fa;font-weight:700;">¥' + (det.finalValue || 0).toFixed(2) + '</td></tr>' +
+          (l.price != null ? '<tr><td>标价</td><td style="color:#fbbf24;">¥' + l.price + '</td></tr>' : '') +
+          (l.ratio != null ? '<tr><td>性价比</td><td>' + (l.ratio >= 0 ? '+' : '') + l.ratio.toFixed(1) + '%</td></tr>' : '') +
+        '</table>' +
+      '</div>' +
+      '<div class="d-detail-section">' +
+        '<h4>角色列表 (' + chars.length + '个)</h4>' +
+        '<div class="d-char-list">' + (charTags || '<span style="color:#666;">无角色数据</span>') + '</div>' +
+      '</div>' +
+    '</div>';
   }
 
   // ============================================================

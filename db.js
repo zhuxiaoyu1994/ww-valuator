@@ -56,9 +56,16 @@ async function ensureTable() {
         yellow_count INTEGER,
         pulls INTEGER,
         success INTEGER NOT NULL DEFAULT 1,
-        error TEXT
+        error TEXT,
+        details_json TEXT
       )
     `);
+    // 兼容旧表：添加 details_json 列（如果不存在）
+    try {
+      await dbClient.execute(`ALTER TABLE query_logs ADD COLUMN details_json TEXT`);
+    } catch (e) {
+      // 列已存在，忽略
+    }
     console.log('[DB] 日志表已就绪');
   } catch (e) {
     console.error('[DB] 建表失败:', e.message);
@@ -74,9 +81,17 @@ async function insertLog(log) {
 
   if (!dbClient) return;
   try {
+    // 序列化估值详情（details + characters）
+    let detailsJson = null;
+    if (log.details) {
+      detailsJson = JSON.stringify({
+        details: log.details,
+        characters: log.characters || [],
+      });
+    }
     await dbClient.execute({
-      sql: `INSERT INTO query_logs (time, type, ip, input, price, estimated_value, ratio, yellow_count, pulls, success, error)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO query_logs (time, type, ip, input, price, estimated_value, ratio, yellow_count, pulls, success, error, details_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         log.time,
         log.type,
@@ -89,6 +104,7 @@ async function insertLog(log) {
         log.pulls != null ? log.pulls : null,
         log.success ? 1 : 0,
         log.error || null,
+        detailsJson,
       ],
     });
   } catch (e) {
@@ -111,19 +127,30 @@ async function queryLogs(limit = 100, offset = 0, filterType = '') {
     sql += ' ORDER BY id DESC LIMIT ? OFFSET ?';
     args.push(limit, offset);
     const result = await dbClient.execute({ sql, args });
-    return result.rows.map(r => ({
-      time: r.time,
-      type: r.type,
-      ip: r.ip,
-      input: r.input,
-      price: r.price,
-      estimatedValue: r.estimated_value,
-      ratio: r.ratio,
-      yellowCount: r.yellow_count,
-      pulls: r.pulls,
-      success: r.success === 1,
-      error: r.error,
-    }));
+    return result.rows.map(r => {
+      const entry = {
+        time: r.time,
+        type: r.type,
+        ip: r.ip,
+        input: r.input,
+        price: r.price,
+        estimatedValue: r.estimated_value,
+        ratio: r.ratio,
+        yellowCount: r.yellow_count,
+        pulls: r.pulls,
+        success: r.success === 1,
+        error: r.error,
+      };
+      // 解析估值详情
+      if (r.details_json) {
+        try {
+          const parsed = JSON.parse(r.details_json);
+          entry.details = parsed.details || null;
+          entry.characters = parsed.characters || [];
+        } catch (e) { /* 忽略解析失败 */ }
+      }
+      return entry;
+    });
   } catch (e) {
     console.error('[DB] 查询失败:', e.message);
     return [];
@@ -164,19 +191,29 @@ async function searchLogs(keyword, limit = 100) {
             ORDER BY id DESC LIMIT ?`,
       args: [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, limit],
     });
-    return result.rows.map(r => ({
-      time: r.time,
-      type: r.type,
-      ip: r.ip,
-      input: r.input,
-      price: r.price,
-      estimatedValue: r.estimated_value,
-      ratio: r.ratio,
-      yellowCount: r.yellow_count,
-      pulls: r.pulls,
-      success: r.success === 1,
-      error: r.error,
-    }));
+    return result.rows.map(r => {
+      const entry = {
+        time: r.time,
+        type: r.type,
+        ip: r.ip,
+        input: r.input,
+        price: r.price,
+        estimatedValue: r.estimated_value,
+        ratio: r.ratio,
+        yellowCount: r.yellow_count,
+        pulls: r.pulls,
+        success: r.success === 1,
+        error: r.error,
+      };
+      if (r.details_json) {
+        try {
+          const parsed = JSON.parse(r.details_json);
+          entry.details = parsed.details || null;
+          entry.characters = parsed.characters || [];
+        } catch (e) { /* 忽略 */ }
+      }
+      return entry;
+    });
   } catch (e) {
     console.error('[DB] 搜索失败:', e.message);
     return [];
