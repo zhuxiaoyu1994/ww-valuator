@@ -1,19 +1,9 @@
 /**
  * 独立的首页 Serverless Function
- * 绕过 Express，直接返回平台页面 HTML
- * 用于解决 Vercel 上 / 路由 FUNCTION_INVOCATION_FAILED 问题
+ * 用于测试 Vercel / 路由是否正确重写到此函数
  */
 
-// 复用 server.js 中的 Express app（仅用于首页路由）
-const getPlatformPage = require('../views/platform');
-
 module.exports = (req, res) => {
-  try {
-    const html = getPlatformPage();
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.status(200).end(html);
-  } catch (e) {
-    console.error('[home] Error:', e.message);
-    res.status(500).end('Internal Server Error');
-  }
+  // 最简响应测试
+  res.status(200).setHeader('Content-Type', 'text/plain').end('HOME_FUNCTION_OK');
 };
