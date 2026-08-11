@@ -70,9 +70,35 @@ npm start                   # 本地启动（node server.js）
 
 ## 部署
 
-- **Vercel**：push 到 `main` 分支自动部署，入口 `api/index.js`（Serverless Function），静态资源走 `/public` 路由
+- **Vercel**：push 到 `main` 分支自动部署，入口 `api/index.js`（Serverless Function）
 - **域名**：`www.youxigujia.cn`（Vercel 自定义域名）
+- **GitHub 仓库**：`git@github.com:zhuxiaoyu1994/ww-valuator.git`
 - **油猴脚本**：需手动在 Greasy Fork / 分发渠道更新发布
+
+### Vercel 路由配置（vercel.json）
+
+```json
+{
+  "rewrites": [
+    { "source": "/public/(.*)", "destination": "/$1" },
+    { "source": "/(.*)", "destination": "/api/index.js" }
+  ]
+}
+```
+
+- `/public/xxx` → 重写为 `/xxx`，由 Vercel 从 `public/` 目录提供静态文件
+- 其余所有请求 → 转发到 `api/index.js`（Express Serverless Function）
+- **禁止在 `public/` 目录放置 `index.html`**：会导致 `/` 路由与 Serverless 函数冲突，返回 500 `FUNCTION_INVOCATION_FAILED`
+
+### 环境变量（Vercel 控制台配置）
+
+| 变量 | 用途 |
+|------|------|
+| `TURSO_URL` | Turso 数据库 URL（持久化查询日志） |
+| `TURSO_TOKEN` | Turso 访问令牌 |
+| `ADMIN_PASSWORD` | 管理后台密码 |
+| `PXB7_PROXY_URL` | Cloudflare Worker 代理 URL（可选，避免螃蟹网 IP 封禁） |
+| `BLOCKED_IPS` | IP 黑名单（逗号分隔） |
 
 ## 注意事项
 
@@ -81,3 +107,4 @@ npm start                   # 本地启动（node server.js）
 - `.env` 存放通知推送 token 等密钥，勿提交
 - 油猴脚本与网站项目物理分离，但估值逻辑必须保持完全一致
 - Vercel Serverless 环境下无持久化文件系统，`data/` 目录运行时数据仅在本地有效
+- Vercel Serverless 冷启动时 `initApp()` 初始化数据库连接，无数据库配置时降级为内存存储
