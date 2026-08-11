@@ -1,7 +1,7 @@
 /**
  * Vercel Serverless 入口
- * 将 Express 应用导出为 Vercel Serverless Function
- * 不影响 Railway 部署（Railway 仍使用 server.js 的 app.listen）
+ * Vercel Serverless 入口，将 Express 应用导出为 Serverless Function
+ * 本地开发仍使用 server.js 的 app.listen
  */
 
 // 加载环境变量（Vercel 自动注入，这里只是兼容本地测试）

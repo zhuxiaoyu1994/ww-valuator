@@ -8,7 +8,7 @@
  * 4. 点击 "Edit code"，将本文件内容粘贴进去
  * 5. 点击 "Save and deploy"
  * 6. 复制 Worker URL（如 https://pxb7-proxy.你的子域.workers.dev）
- * 7. 在 Railway 的环境变量中添加：
+ * 7. 在 Vercel 的环境变量中添加：
  *    PXB7_PROXY_URL = https://pxb7-proxy.你的子域.workers.dev
  */
 

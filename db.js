@@ -2,7 +2,7 @@
  * db.js - Turso (libSQL) 数据库连接
  * 用于持久化存储查询日志
  *
- * 配置方式（Railway 环境变量）：
+ * 配置方式（Vercel 环境变量）：
  *   TURSO_URL   - 数据库URL（如 libsql://xxx.turso.io）
  *   TURSO_TOKEN - 数据库访问令牌
  *

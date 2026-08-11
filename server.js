@@ -808,7 +808,7 @@ function initApp() {
 // 导出 app 和 initApp（供 Vercel 使用）
 module.exports = { app, initApp };
 
-// Railway / 本地环境：启动 HTTP 服务器
+// 本地环境：启动 HTTP 服务器（Vercel 环境下通过 api/index.js 运行）
 if (require.main === module) {
   initApp();
   app.listen(PORT, () => {
