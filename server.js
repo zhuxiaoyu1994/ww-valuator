@@ -106,7 +106,9 @@ app.get('/api/defaults', async (req, res) => {
     const serverConfig = await db.getConfig('default_weights');
     if (serverConfig) {
       const defaults = valueEngine.getDefaults();
-      // 服务器端配置覆盖源码默认值
+      // 将服务器端配置合并到 weights 子对象中，使前端 loadWeights 能正确使用
+      defaults.weights = Object.assign({}, defaults.weights, serverConfig);
+      // 同时合并到顶层，保持向后兼容
       const merged = Object.assign({}, defaults, serverConfig);
       res.json({ success: true, data: merged });
     } else {

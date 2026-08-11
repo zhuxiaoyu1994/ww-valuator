@@ -72,29 +72,29 @@
     w.c6MultiBonus = (s.c6MultiBonus && s.c6MultiBonus.length) ? s.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
     w.teamMultiBonus = (s.teamMultiBonus && s.teamMultiBonus.length) ? s.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
     w.flatDiscountRules = (s.flatDiscountRules && s.flatDiscountRules.length) ? s.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
-    w.c6TeamDependency = s.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
-    w.pullBase = (s.pullBase != null) ? s.pullBase : (defaults.pullFormula || {}).pullBase;
-    w.pullBasePrice = (s.pullBasePrice != null) ? s.pullBasePrice : (defaults.pullFormula || {}).pullBasePrice;
-    w.pullStepPrice = (s.pullStepPrice != null) ? s.pullStepPrice : (defaults.pullFormula || {}).pullStepPrice;
-    w.yellowBase = (s.yellowBase != null) ? s.yellowBase : 40;
-    w.yellowStep = (s.yellowStep != null) ? s.yellowStep : 1;
-    w.yellowBaseCoeff = (s.yellowBaseCoeff != null) ? s.yellowBaseCoeff : 1.0;
-    w.yellowStepCoeff = (s.yellowStepCoeff != null) ? s.yellowStepCoeff : 0.01;
-    w.yellowMaxCoeff = (s.yellowMaxCoeff != null) ? s.yellowMaxCoeff : 3.0;
-    w.needSigDiscount = (s.needSigDiscount != null) ? s.needSigDiscount : 0.3;
-    w.teamDepDiscount = (s.teamDepDiscount != null) ? s.teamDepDiscount : 0.7;
-    w.c6Base = (s.c6Base != null) ? s.c6Base : 3;
-    w.c6BaseBonus = (s.c6BaseBonus != null) ? s.c6BaseBonus : 1.0;
-    w.c6Step = (s.c6Step != null) ? s.c6Step : 0.1;
-    w.c6StepBonus = (s.c6StepBonus != null) ? s.c6StepBonus : 0.05;
-    w.pullC6Base = (s.pullC6Base != null) ? s.pullC6Base : 5;
-    w.pullC6BaseBonus = (s.pullC6BaseBonus != null) ? s.pullC6BaseBonus : 0.5;
-    w.pullC6Step = (s.pullC6Step != null) ? s.pullC6Step : 0.1;
-    w.pullC6StepBonus = (s.pullC6StepBonus != null) ? s.pullC6StepBonus : 0.005;
-    w.teamMates = s.teamMates || (defaults.teamMates || {});
-    w.charPrices = Object.assign({}, defaults.charPrices, s.charPrices || {});
-    w.constPremiums = Object.assign({}, defaults.constPremiums, s.constPremiums || {});
-    w.teamPremiums = s.teamPremiums || buildDefaultTeamPremiums(defaults.teams);
+    w.c6TeamDependency = (s.c6TeamDependency && Object.keys(s.c6TeamDependency).length > 0) ? s.c6TeamDependency : (DEFAULT_WEIGHTS.c6TeamDependency || {});
+    w.pullBase = (s.pullBase != null) ? s.pullBase : (DEFAULT_WEIGHTS.pullBase != null ? DEFAULT_WEIGHTS.pullBase : (defaults.pullFormula || {}).pullBase);
+    w.pullBasePrice = (s.pullBasePrice != null) ? s.pullBasePrice : (DEFAULT_WEIGHTS.pullBasePrice != null ? DEFAULT_WEIGHTS.pullBasePrice : (defaults.pullFormula || {}).pullBasePrice);
+    w.pullStepPrice = (s.pullStepPrice != null) ? s.pullStepPrice : (DEFAULT_WEIGHTS.pullStepPrice != null ? DEFAULT_WEIGHTS.pullStepPrice : (defaults.pullFormula || {}).pullStepPrice);
+    w.yellowBase = (s.yellowBase != null) ? s.yellowBase : (DEFAULT_WEIGHTS.yellowBase != null ? DEFAULT_WEIGHTS.yellowBase : 40);
+    w.yellowStep = (s.yellowStep != null) ? s.yellowStep : (DEFAULT_WEIGHTS.yellowStep != null ? DEFAULT_WEIGHTS.yellowStep : 1);
+    w.yellowBaseCoeff = (s.yellowBaseCoeff != null) ? s.yellowBaseCoeff : (DEFAULT_WEIGHTS.yellowBaseCoeff != null ? DEFAULT_WEIGHTS.yellowBaseCoeff : 1.0);
+    w.yellowStepCoeff = (s.yellowStepCoeff != null) ? s.yellowStepCoeff : (DEFAULT_WEIGHTS.yellowStepCoeff != null ? DEFAULT_WEIGHTS.yellowStepCoeff : 0.01);
+    w.yellowMaxCoeff = (s.yellowMaxCoeff != null) ? s.yellowMaxCoeff : (DEFAULT_WEIGHTS.yellowMaxCoeff != null ? DEFAULT_WEIGHTS.yellowMaxCoeff : 3.0);
+    w.needSigDiscount = (s.needSigDiscount != null) ? s.needSigDiscount : (DEFAULT_WEIGHTS.needSigDiscount != null ? DEFAULT_WEIGHTS.needSigDiscount : 0.3);
+    w.teamDepDiscount = (s.teamDepDiscount != null) ? s.teamDepDiscount : (DEFAULT_WEIGHTS.teamDepDiscount != null ? DEFAULT_WEIGHTS.teamDepDiscount : 0.7);
+    w.c6Base = (s.c6Base != null) ? s.c6Base : (DEFAULT_WEIGHTS.c6Base != null ? DEFAULT_WEIGHTS.c6Base : 3);
+    w.c6BaseBonus = (s.c6BaseBonus != null) ? s.c6BaseBonus : (DEFAULT_WEIGHTS.c6BaseBonus != null ? DEFAULT_WEIGHTS.c6BaseBonus : 1.0);
+    w.c6Step = (s.c6Step != null) ? s.c6Step : (DEFAULT_WEIGHTS.c6Step != null ? DEFAULT_WEIGHTS.c6Step : 0.1);
+    w.c6StepBonus = (s.c6StepBonus != null) ? s.c6StepBonus : (DEFAULT_WEIGHTS.c6StepBonus != null ? DEFAULT_WEIGHTS.c6StepBonus : 0.05);
+    w.pullC6Base = (s.pullC6Base != null) ? s.pullC6Base : (DEFAULT_WEIGHTS.pullC6Base != null ? DEFAULT_WEIGHTS.pullC6Base : 5);
+    w.pullC6BaseBonus = (s.pullC6BaseBonus != null) ? s.pullC6BaseBonus : (DEFAULT_WEIGHTS.pullC6BaseBonus != null ? DEFAULT_WEIGHTS.pullC6BaseBonus : 0.5);
+    w.pullC6Step = (s.pullC6Step != null) ? s.pullC6Step : (DEFAULT_WEIGHTS.pullC6Step != null ? DEFAULT_WEIGHTS.pullC6Step : 0.1);
+    w.pullC6StepBonus = (s.pullC6StepBonus != null) ? s.pullC6StepBonus : (DEFAULT_WEIGHTS.pullC6StepBonus != null ? DEFAULT_WEIGHTS.pullC6StepBonus : 0.005);
+    w.teamMates = (s.teamMates && Object.keys(s.teamMates).length > 0) ? s.teamMates : (DEFAULT_WEIGHTS.teamMates || defaults.teamMates || {});
+    w.charPrices = Object.assign({}, defaults.charPrices, DEFAULT_WEIGHTS.charPrices || {}, s.charPrices || {});
+    w.constPremiums = Object.assign({}, defaults.constPremiums, DEFAULT_WEIGHTS.constPremiums || {}, s.constPremiums || {});
+    w.teamPremiums = (s.teamPremiums && Object.keys(s.teamPremiums).length > 0) ? s.teamPremiums : (DEFAULT_WEIGHTS.teamPremiums || buildDefaultTeamPremiums(defaults.teams));
     w.teams = [];
     for (var teamName in w.teamPremiums) {
       if (!w.teamPremiums.hasOwnProperty(teamName)) continue;
@@ -103,7 +103,7 @@
         w.teams.push({ name: teamName, members: t.chars || [], multiplier: t.multiplier || 1.0 });
       }
     }
-    w.needSigWeapons = s.needSigWeapons || defaults.needSigWeapons;
+    w.needSigWeapons = (s.needSigWeapons && s.needSigWeapons.length > 0) ? s.needSigWeapons : (DEFAULT_WEIGHTS.needSigWeapons || defaults.needSigWeapons || []);
     w.deletedChars = s.deletedChars || [];
     w.charTierOverride = s.charTierOverride || {};
     return w;
@@ -1487,6 +1487,20 @@
         if (!DEFAULT_WEIGHTS.hasOwnProperty(key) || skipKeys[key] || !weightInputs[key]) continue;
         weightInputs[key].value = DEFAULT_WEIGHTS[key];
       }
+      // 构建重置用的 needSig 集合和 teamMates 映射（从 DEFAULT_WEIGHTS，包含服务器配置）
+      var _resetNeedSigSet = {};
+      var _resetNeedSigList = DEFAULT_WEIGHTS.needSigWeapons || defaults.needSigWeapons || [];
+      for (var rnsi = 0; rnsi < _resetNeedSigList.length; rnsi++) {
+        var rnsName = typeof _resetNeedSigList[rnsi] === 'string' ? _resetNeedSigList[rnsi] : _resetNeedSigList[rnsi].name;
+        _resetNeedSigSet[rnsName] = true;
+      }
+      var _resetTeamMatesMap = {};
+      var _resetRawTM = DEFAULT_WEIGHTS.teamMates || defaults.teamMates || {};
+      for (var rtmn in _resetRawTM) {
+        if (!_resetRawTM.hasOwnProperty(rtmn)) continue;
+        var rmates = _resetRawTM[rtmn];
+        if (Array.isArray(rmates) && rmates.length > 0) _resetTeamMatesMap[rtmn] = [].concat(rmates);
+      }
       // 重置角色价格
       charEntries.length = 0;
       deletedChars.length = 0;
@@ -1500,20 +1514,25 @@
         var rTier = CHAR_TIERS[rtk];
         for (var rc = 0; rc < rTier.chars.length; rc++) {
           var rName = rTier.chars[rc];
+          var rPrice = (DEFAULT_WEIGHTS.charPrices && DEFAULT_WEIGHTS.charPrices[rName] != null) ? DEFAULT_WEIGHTS.charPrices[rName] : (DEFAULT_CHAR_PRICES[rName] != null ? DEFAULT_CHAR_PRICES[rName] : rTier.price);
+          var rWeapon = (DEFAULT_WEIGHTS.sigWeaponsOverride && DEFAULT_WEIGHTS.sigWeaponsOverride[rName]) || SIG_WEAPONS[rName] || '';
+          var rPremiums = (DEFAULT_WEIGHTS.constPremiums && DEFAULT_WEIGHTS.constPremiums[rName]) ? Object.assign({}, DEFAULT_WEIGHTS.constPremiums[rName]) : (DEFAULT_CONST_PREMIUMS[rName] ? Object.assign({}, DEFAULT_CONST_PREMIUMS[rName]) : {});
           charEntries.push({
             name: rName,
-            weapon: SIG_WEAPONS[rName] || '',
-            price: DEFAULT_CHAR_PRICES[rName] != null ? DEFAULT_CHAR_PRICES[rName] : rTier.price,
+            weapon: rWeapon,
+            price: rPrice,
             tier: rtk,
-            premiums: DEFAULT_CONST_PREMIUMS[rName] ? Object.assign({}, DEFAULT_CONST_PREMIUMS[rName]) : {},
+            premiums: rPremiums,
+            needSig: !!_resetNeedSigSet[rName],
+            teamMates: _resetTeamMatesMap[rName] ? [].concat(_resetTeamMatesMap[rName]) : [],
           });
         }
       }
       renderCharList();
       // 重置抽数公式参数
-      pullBaseInput.value = 200;
-      pullBasePriceInput.value = 1.0;
-      pullStepPriceInput.value = 0.002;
+      pullBaseInput.value = (DEFAULT_WEIGHTS.pullBase != null) ? DEFAULT_WEIGHTS.pullBase : 200;
+      pullBasePriceInput.value = (DEFAULT_WEIGHTS.pullBasePrice != null) ? DEFAULT_WEIGHTS.pullBasePrice : 1.0;
+      pullStepPriceInput.value = (DEFAULT_WEIGHTS.pullStepPrice != null) ? DEFAULT_WEIGHTS.pullStepPrice : 0.002;
       // 重置满命溢价
       c6Entries.length = 0;
       for (var ci = 0; ci < DEFAULT_WEIGHTS.c6MultiBonus.length; ci++) {
@@ -1527,24 +1546,29 @@
       c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
       updateC6Preview();
       // 重置满命抽数加成公式参数
-      pullC6BaseInput.value = 5;
-      pullC6BaseBonusInput.value = 0.5;
-      pullC6StepInput.value = 0.1;
-      pullC6StepBonusInput.value = 0.005;
+      pullC6BaseInput.value = (DEFAULT_WEIGHTS.pullC6Base != null) ? DEFAULT_WEIGHTS.pullC6Base : 5;
+      pullC6BaseBonusInput.value = (DEFAULT_WEIGHTS.pullC6BaseBonus != null) ? DEFAULT_WEIGHTS.pullC6BaseBonus : 0.5;
+      pullC6StepInput.value = (DEFAULT_WEIGHTS.pullC6Step != null) ? DEFAULT_WEIGHTS.pullC6Step : 0.1;
+      pullC6StepBonusInput.value = (DEFAULT_WEIGHTS.pullC6StepBonus != null) ? DEFAULT_WEIGHTS.pullC6StepBonus : 0.005;
       // 重置满命权重
       for (var tw = 0; tw < c6TierList.length; tw++) {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
       }
       // 重置有效金公式参数
-      yellowBaseInput.value = 40;
-      yellowStepInput.value = 1;
-      yellowBaseCoeffInput.value = 1.0;
-      yellowStepCoeffInput.value = 0.01;
-      yellowMaxCoeffInput.value = 3.0;
-      // 重置配队
+      yellowBaseInput.value = (DEFAULT_WEIGHTS.yellowBase != null) ? DEFAULT_WEIGHTS.yellowBase : 40;
+      yellowStepInput.value = (DEFAULT_WEIGHTS.yellowStep != null) ? DEFAULT_WEIGHTS.yellowStep : 1;
+      yellowBaseCoeffInput.value = (DEFAULT_WEIGHTS.yellowBaseCoeff != null) ? DEFAULT_WEIGHTS.yellowBaseCoeff : 1.0;
+      yellowStepCoeffInput.value = (DEFAULT_WEIGHTS.yellowStepCoeff != null) ? DEFAULT_WEIGHTS.yellowStepCoeff : 0.01;
+      yellowMaxCoeffInput.value = (DEFAULT_WEIGHTS.yellowMaxCoeff != null) ? DEFAULT_WEIGHTS.yellowMaxCoeff : 3.0;
+      // 重置配队（使用 DEFAULT_WEIGHTS.teamPremiums，包含服务器配置）
       teamEntries.length = 0;
-      for (var td = 0; td < DEFAULT_TEAMS.length; td++) {
-        teamEntries.push({ name: DEFAULT_TEAMS[td].name, chars: [].concat(DEFAULT_TEAMS[td].members || []), multiplier: DEFAULT_TEAMS[td].multiplier, enabled: true });
+      var _resetTP = DEFAULT_WEIGHTS.teamPremiums || {};
+      for (var rtpn in _resetTP) {
+        if (!_resetTP.hasOwnProperty(rtpn)) continue;
+        var rtp = _resetTP[rtpn];
+        if (rtp && rtp.enabled !== false) {
+          teamEntries.push({ name: rtpn, chars: [].concat(rtp.chars || []), multiplier: rtp.multiplier || 1.0, enabled: true });
+        }
       }
       renderTeamList();
       // 重置多配队系数

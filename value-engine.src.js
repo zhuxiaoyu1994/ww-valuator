@@ -382,7 +382,7 @@ function buildDefaultWeights(customWeights) {
     w.charPrices['秧秧'] = 0;
   }
   w.constPremiums = Object.assign({}, DEFAULT_CONST_PREMIUMS, saved.constPremiums || {});
-  w.teamPremiums = saved.teamPremiums || buildDefaultTeamPremiums();
+  w.teamPremiums = (saved.teamPremiums && Object.keys(saved.teamPremiums).length > 0) ? saved.teamPremiums : buildDefaultTeamPremiums();
   w.teams = [];
   for (const teamName of Object.keys(w.teamPremiums)) {
     const t = w.teamPremiums[teamName];
@@ -391,12 +391,12 @@ function buildDefaultWeights(customWeights) {
     }
   }
   // 需要专武的角色列表（兼容旧格式，统一为名字数组）
-  var rawNeedSig = saved.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  var rawNeedSig = (saved.needSigWeapons && saved.needSigWeapons.length > 0) ? saved.needSigWeapons : DEFAULT_NEED_SIG_WEAPONS;
   w.needSigWeapons = rawNeedSig.map(function(n) { return typeof n === 'string' ? n : n.name; });
   // 无专武折扣（可配置）
   w.needSigDiscount = (saved.needSigDiscount != null) ? saved.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
   // 强绑队友配置
-  w.teamMates = saved.teamMates || DEFAULT_TEAM_MATES;
+  w.teamMates = (saved.teamMates && Object.keys(saved.teamMates).length > 0) ? saved.teamMates : DEFAULT_TEAM_MATES;
   // 强绑折扣（可配置）
   w.teamDepDiscount = (saved.teamDepDiscount != null) ? saved.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount;
   // 用户自定义专武映射覆盖
