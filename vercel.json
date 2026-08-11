@@ -1,18 +1,3 @@
 {
-  "functions": {
-    "api/server.js": {
-      "memory": 1024,
-      "maxDuration": 15
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/public/(.*)",
-      "destination": "/$1"
-    },
-    {
-      "source": "/(.+)",
-      "destination": "/api/server"
-    }
-  ]
+  "cleanUrls": true
 }
