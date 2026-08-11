@@ -70,7 +70,7 @@ npm start                   # 本地启动（node server.js）
 
 ## 部署
 
-- **Vercel**：push 到 `main` 分支自动部署，入口 `api/index.js`（Serverless Function）
+- **Vercel**：push 到 `main` 分支自动部署，入口 `api/server.js`（Serverless Function）
 - **域名**：`www.youxigujia.cn`（Vercel 自定义域名）
 - **GitHub 仓库**：`git@github.com:zhuxiaoyu1994/ww-valuator.git`
 - **油猴脚本**：需手动在 Greasy Fork / 分发渠道更新发布
@@ -79,16 +79,22 @@ npm start                   # 本地启动（node server.js）
 
 ```json
 {
+  "framework": null,
+  "functions": {
+    "api/server.js": { "memory": 1024, "maxDuration": 15 }
+  },
   "rewrites": [
     { "source": "/public/(.*)", "destination": "/$1" },
-    { "source": "/(.*)", "destination": "/api/index.js" }
+    { "source": "/(.*)", "destination": "/api/server" }
   ]
 }
 ```
 
 - `/public/xxx` → 重写为 `/xxx`，由 Vercel 从 `public/` 目录提供静态文件
-- 其余所有请求 → 转发到 `api/index.js`（Express Serverless Function）
+- 其余所有请求（含 `/`） → 转发到 `api/server.js`（Express Serverless Function）
+- `"framework": null` 禁用框架自动检测，避免 Vercel 误判 Express 路由
 - **禁止在 `public/` 目录放置 `index.html`**：会导致 `/` 路由与 Serverless 函数冲突，返回 500 `FUNCTION_INVOCATION_FAILED`
+- **注意**：Serverless 入口文件必须命名为 `api/server.js` 而非 `api/index.js`，否则 Vercel 会将其作为 `/` 的默认函数直接调用，绕过 rewrite 规则
 
 ### 环境变量（Vercel 控制台配置）
 
