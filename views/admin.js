@@ -195,6 +195,8 @@ function getAdminPage() {
         <div class="d-stat-card yellow"><div class="d-label">平均成交价</div><div class="d-val" id="d-avg-price">-</div></div>
         <div class="d-stat-card blue"><div class="d-label">平均估值</div><div class="d-val" id="d-avg-est">-</div></div>
         <div class="d-stat-card" id="d-dev-card"><div class="d-label">平均偏差</div><div class="d-val" id="d-avg-dev">-</div><div class="d-sub" id="d-avg-dev-pct"></div></div>
+        <div class="d-stat-card yellow"><div class="d-label">MAE(平均绝对误差)</div><div class="d-val" id="d-mae">-</div><div class="d-sub" id="d-mae-pct"></div></div>
+        <div class="d-stat-card green"><div class="d-label">准确率(±20%)</div><div class="d-val" id="d-accuracy">-</div><div class="d-sub" id="d-accuracy-detail"></div></div>
         <div class="d-stat-card green"><div class="d-label">估值偏高(买赚)</div><div class="d-val" id="d-undervalued">-</div></div>
         <div class="d-stat-card red"><div class="d-label">估值偏低(买贵)</div><div class="d-val" id="d-overvalued">-</div></div>
       </div>
@@ -216,6 +218,10 @@ function getAdminPage() {
         <select id="d-sort" onchange="applyDealsSort()">
           <option value="deviation-desc">偏差率 ↓</option>
           <option value="deviation-asc">偏差率 ↑</option>
+          <option value="devAmount-desc">偏差值 ↓</option>
+          <option value="devAmount-asc">偏差值 ↑</option>
+          <option value="yellow-desc">黄数 ↓</option>
+          <option value="yellow-asc">黄数 ↑</option>
           <option value="price-desc">成交价 ↓</option>
           <option value="price-asc">成交价 ↑</option>
           <option value="est-desc">估值 ↓</option>
@@ -236,6 +242,26 @@ function getAdminPage() {
             <tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>
           </tbody>
         </table>
+      </div>
+      <!-- 按角色维度偏差统计 -->
+      <div id="d-char-stats-section" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
+        <div onclick="var t=document.getElementById('d-char-stats-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
+          <span style="font-size:14px;font-weight:600;color:#fbbf24;">按角色偏差统计</span>
+          <span style="font-size:12px;color:#888;">（点击展开/收起，按出现次数排序）</span>
+          <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
+        </div>
+        <div id="d-char-stats-body" style="display:none;overflow-x:auto;">
+          <table class="d-table">
+            <thead>
+              <tr>
+                <th style="width:100px">角色名</th><th style="width:60px">出现次数</th>
+                <th style="width:80px">平均偏差率</th><th style="width:80px">平均偏差值</th>
+                <th style="width:80px">平均角色价值</th><th style="width:60px">建议调整</th>
+              </tr>
+            </thead>
+            <tbody id="d-char-stats-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -564,10 +590,15 @@ function getAdminPage() {
     document.getElementById('d-avg-est').textContent = '-';
     document.getElementById('d-avg-dev').textContent = '-';
     document.getElementById('d-avg-dev-pct').textContent = '';
+    document.getElementById('d-mae').textContent = '-';
+    document.getElementById('d-mae-pct').textContent = '';
+    document.getElementById('d-accuracy').textContent = '-';
+    document.getElementById('d-accuracy-detail').textContent = '';
     document.getElementById('d-undervalued').textContent = '-';
     document.getElementById('d-overvalued').textContent = '-';
     document.getElementById('d-info').textContent = '';
     document.getElementById('d-more-btn').disabled = false;
+    document.getElementById('d-char-stats-section').style.display = 'none';
   }
 
   function renderDealsSummary() {
@@ -581,17 +612,82 @@ function getAdminPage() {
     const overvalued = valid.filter(e => e.deviation < 0).length;
     const undervalued = valid.filter(e => e.deviation > 0).length;
 
+    // MAE（平均绝对误差）
+    const mae = valued > 0 ? Math.round(valid.reduce((s, e) => s + Math.abs(e.deviation), 0) / valued * 100) / 100 : 0;
+    const maePct = valued > 0 ? Math.round(valid.reduce((s, e) => s + Math.abs(e.deviationPercent), 0) / valued * 100) / 100 : 0;
+
+    // 准确率（±20% 命中率）
+    const hit10 = valid.filter(e => Math.abs(e.deviationPercent) <= 10).length;
+    const hit20 = valid.filter(e => Math.abs(e.deviationPercent) <= 20).length;
+    const hit30 = valid.filter(e => Math.abs(e.deviationPercent) <= 30).length;
+    const accPct = valued > 0 ? Math.round(hit20 / valued * 1000) / 10 : 0;
+
     document.getElementById('d-total').textContent = total;
     document.getElementById('d-valued').textContent = valued + ' 条成功估值';
     document.getElementById('d-avg-price').textContent = '¥' + avgPrice;
     document.getElementById('d-avg-est').textContent = '¥' + avgEst;
     document.getElementById('d-avg-dev').textContent = (avgDev >= 0 ? '+' : '') + '¥' + avgDev;
     document.getElementById('d-avg-dev-pct').textContent = (avgDevPct >= 0 ? '+' : '') + avgDevPct + '%';
+    document.getElementById('d-mae').textContent = '¥' + mae;
+    document.getElementById('d-mae-pct').textContent = '平均' + maePct + '%';
+    document.getElementById('d-accuracy').textContent = accPct + '%';
+    document.getElementById('d-accuracy-detail').textContent = '±10%: ' + hit10 + '条 / ±20%: ' + hit20 + '条 / ±30%: ' + hit30 + '条';
     document.getElementById('d-undervalued').textContent = undervalued;
     document.getElementById('d-overvalued').textContent = overvalued;
 
     const devCard = document.getElementById('d-dev-card');
     devCard.className = 'd-stat-card ' + (avgDev >= 0 ? 'green' : 'red');
+
+    // 按角色维度偏差统计
+    renderCharStats(valid);
+  }
+
+  function renderCharStats(valid) {
+    const charMap = {};
+    for (const d of valid) {
+      const chars = d.characters || [];
+      for (const c of chars) {
+        if (!c.name) continue;
+        if (!charMap[c.name]) {
+          charMap[c.name] = { name: c.name, count: 0, devSum: 0, devPctSum: 0, valueSum: 0 };
+        }
+        charMap[c.name].count++;
+        charMap[c.name].devSum += (d.deviation || 0);
+        charMap[c.name].devPctSum += (d.deviationPercent || 0);
+        charMap[c.name].valueSum += (c.value || 0);
+      }
+    }
+
+    const charList = Object.values(charMap).filter(e => e.count >= 2);
+    if (charList.length === 0) {
+      document.getElementById('d-char-stats-section').style.display = 'none';
+      return;
+    }
+
+    charList.sort((a, b) => b.count - a.count);
+
+    const tbody = document.getElementById('d-char-stats-tbody');
+    tbody.innerHTML = charList.map(e => {
+      const avgDevPct = Math.round(e.devPctSum / e.count * 100) / 100;
+      const avgDev = Math.round(e.devSum / e.count * 100) / 100;
+      const avgVal = Math.round(e.valueSum / e.count);
+      const devClass = avgDevPct > 5 ? 'd-dev-neg' : (avgDevPct < -5 ? 'd-dev-pos' : 'd-dev-zero');
+      const suggestion = avgDevPct > 10 ? '<span style="color:#f87171;">↓ 下调</span>'
+        : avgDevPct < -10 ? '<span style="color:#4ade80;">↑ 上调</span>'
+        : avgDevPct > 5 ? '<span style="color:#fbbf24;">↓ 微调</span>'
+        : avgDevPct < -5 ? '<span style="color:#fbbf24;">↑ 微调</span>'
+        : '<span style="color:#888;">- 合理</span>';
+      return '<tr>' +
+        '<td style="font-weight:600;">' + escapeHtml(e.name) + '</td>' +
+        '<td>' + e.count + '</td>' +
+        '<td class="' + devClass + '">' + (avgDevPct >= 0 ? '+' : '') + avgDevPct + '%</td>' +
+        '<td class="' + devClass + '">' + (avgDev >= 0 ? '+' : '') + '¥' + avgDev + '</td>' +
+        '<td>¥' + avgVal + '</td>' +
+        '<td>' + suggestion + '</td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('d-char-stats-section').style.display = 'block';
   }
 
   function applyDealsFilter() {
@@ -611,6 +707,10 @@ function getAdminPage() {
       switch (sort) {
         case 'deviation-desc': return b.deviationPercent - a.deviationPercent;
         case 'deviation-asc': return a.deviationPercent - b.deviationPercent;
+        case 'devAmount-desc': return (b.deviation || 0) - (a.deviation || 0);
+        case 'devAmount-asc': return (a.deviation || 0) - (b.deviation || 0);
+        case 'yellow-desc': return (b.yellowCount || 0) - (a.yellowCount || 0);
+        case 'yellow-asc': return (a.yellowCount || 0) - (b.yellowCount || 0);
         case 'price-desc': return b.price - a.price;
         case 'price-asc': return a.price - b.price;
         case 'est-desc': return b.estimatedValue - a.estimatedValue;
