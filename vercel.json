@@ -15,7 +15,7 @@
       "destination": "/api/home"
     },
     {
-      "source": "/(.*)",
+      "source": "/(.+)",
       "destination": "/api/index.js"
     }
   ]
