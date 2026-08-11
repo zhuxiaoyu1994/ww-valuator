@@ -11,7 +11,11 @@
       "destination": "/$1"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/",
+      "destination": "/api/home"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/api/index.js"
     }
   ]
