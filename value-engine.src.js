@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 14;
+const CONFIG_VERSION = 15;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -94,6 +94,9 @@ const DEFAULT_WEIGHTS = {
   teamDepDiscount: 0.7,
   // 有效金系数上限
   yellowMaxCoeff: 3.0,
+  // 有效金分段系数（null=使用单公式模式；数组=分段模式，每段独立配置基准/浮动）
+  // 格式: [{ minYellow: 0, baseYellow: 0, baseCoeff: 0.30, step: 1, stepCoeff: 0.015 }, ...]
+  yellowSegments: null,
 };
 
 // 默认抽数阶梯定价公式参数（对应油猴脚本 DEFAULT_PULL_FORMULA）
@@ -956,11 +959,46 @@ function calculatePullValue(pulls) {
  * 计算有效金系数（公式：baseCoeff + floor((yellowCount - base) / step) * stepCoeff）
  */
 function getYellowCoeff(yellowCount) {
+  var maxCoeff = (weights && weights.yellowMaxCoeff != null) ? weights.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
+
+  // ===== 分段模式 =====
+  var segments = (weights && weights.yellowSegments && weights.yellowSegments.length > 0) ? weights.yellowSegments : null;
+  if (segments && segments.length > 0) {
+    // 找到 yellowCount 所属的分段（segments 按 minYellow 升序排列）
+    var seg = segments[0];
+    for (var si = 0; si < segments.length; si++) {
+      if (yellowCount >= segments[si].minYellow) {
+        seg = segments[si];
+      } else {
+        break;
+      }
+    }
+    var segBase = (seg.baseYellow != null) ? seg.baseYellow : seg.minYellow;
+    var segStep = seg.step || 1;
+    var segBaseCoeff = (seg.baseCoeff != null) ? seg.baseCoeff : 1.0;
+    var segStepCoeff = seg.stepCoeff || 0.01;
+
+    var segTierIndex = Math.floor((yellowCount - segBase) / segStep);
+    var segCoeff = segBaseCoeff + segTierIndex * segStepCoeff;
+    if (segCoeff < 0.1) segCoeff = 0.1;
+    if (maxCoeff > 0 && segCoeff > maxCoeff) segCoeff = maxCoeff;
+
+    var segTierStart = segBase + segTierIndex * segStep;
+    var segTierEnd = segTierStart + segStep;
+    var segTierLabel = segTierStart + '~' + segTierEnd + '有效';
+
+    return {
+      yellowCount: yellowCount,
+      coefficient: Math.round(segCoeff * 1000) / 1000,
+      tierLabel: segTierLabel,
+    };
+  }
+
+  // ===== 单公式模式（向后兼容） =====
   var base = (weights && weights.yellowBase != null) ? weights.yellowBase : 40;
   var step = (weights && weights.yellowStep != null) ? weights.yellowStep : 1;
   var baseCoeff = (weights && weights.yellowBaseCoeff != null) ? weights.yellowBaseCoeff : 1.0;
   var stepCoeff = (weights && weights.yellowStepCoeff != null) ? weights.yellowStepCoeff : 0.01;
-  var maxCoeff = (weights && weights.yellowMaxCoeff != null) ? weights.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
 
   var tierIndex = Math.floor((yellowCount - base) / step);
   var coefficient = baseCoeff + tierIndex * stepCoeff;
