@@ -254,7 +254,7 @@ function getAdminPage() {
           <table class="d-table">
             <thead>
               <tr>
-                <th style="width:100px">角色名</th><th style="width:60px">出现次数</th>
+                <th style="width:120px">角色/命座</th><th style="width:60px">出现次数</th>
                 <th style="width:80px">平均偏差率</th><th style="width:80px">平均偏差值</th>
                 <th style="width:80px">平均角色价值</th><th style="width:60px">建议调整</th>
               </tr>
@@ -648,13 +648,17 @@ function getAdminPage() {
       const chars = d.characters || [];
       for (const c of chars) {
         if (!c.name) continue;
-        if (!charMap[c.name]) {
-          charMap[c.name] = { name: c.name, count: 0, devSum: 0, devPctSum: 0, valueSum: 0 };
+        // 跳过E级角色（无价值，不参与统计）
+        if (c.tier === 'E') continue;
+        // 按角色名+命座分组
+        const key = c.name + '_C' + (c.const || 0);
+        if (!charMap[key]) {
+          charMap[key] = { name: c.name, const: c.const || 0, count: 0, devSum: 0, devPctSum: 0, valueSum: 0 };
         }
-        charMap[c.name].count++;
-        charMap[c.name].devSum += (d.deviation || 0);
-        charMap[c.name].devPctSum += (d.deviationPercent || 0);
-        charMap[c.name].valueSum += (c.value || 0);
+        charMap[key].count++;
+        charMap[key].devSum += (d.deviation || 0);
+        charMap[key].devPctSum += (d.deviationPercent || 0);
+        charMap[key].valueSum += (c.value || 0);
       }
     }
 
@@ -677,8 +681,9 @@ function getAdminPage() {
         : avgDevPct > 5 ? '<span style="color:#fbbf24;">↓ 微调</span>'
         : avgDevPct < -5 ? '<span style="color:#fbbf24;">↑ 微调</span>'
         : '<span style="color:#888;">- 合理</span>';
+      var constLabel = e.const >= 6 ? '满命' : 'C' + e.const;
       return '<tr>' +
-        '<td style="font-weight:600;">' + escapeHtml(e.name) + '</td>' +
+        '<td style="font-weight:600;">' + escapeHtml(e.name) + ' <span style="color:#888;font-size:12px;">' + constLabel + '</span></td>' +
         '<td>' + e.count + '</td>' +
         '<td class="' + devClass + '">' + (avgDevPct >= 0 ? '+' : '') + avgDevPct + '%</td>' +
         '<td class="' + devClass + '">' + (avgDev >= 0 ? '+' : '') + '¥' + avgDev + '</td>' +
