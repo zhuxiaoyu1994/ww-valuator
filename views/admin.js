@@ -247,7 +247,7 @@ function getAdminPage() {
       <div id="d-char-stats-section" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
         <div onclick="var t=document.getElementById('d-char-stats-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
           <span style="font-size:14px;font-weight:600;color:#fbbf24;">按角色偏差统计</span>
-          <span style="font-size:12px;color:#888;">（点击展开/收起，按出现次数排序）</span>
+          <span style="font-size:12px;color:#888;">（点击展开/收起，按级别S→D、命座高→低排序）</span>
           <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
         </div>
         <div id="d-char-stats-body" style="display:none;overflow-x:auto;">
@@ -653,7 +653,7 @@ function getAdminPage() {
         // 按角色名+命座分组
         const key = c.name + '_C' + (c.const || 0);
         if (!charMap[key]) {
-          charMap[key] = { name: c.name, const: c.const || 0, count: 0, devSum: 0, devPctSum: 0, valueSum: 0 };
+          charMap[key] = { name: c.name, tier: c.tier, const: c.const || 0, count: 0, devSum: 0, devPctSum: 0, valueSum: 0 };
         }
         charMap[key].count++;
         charMap[key].devSum += (d.deviation || 0);
@@ -668,7 +668,14 @@ function getAdminPage() {
       return;
     }
 
-    charList.sort((a, b) => b.count - a.count);
+    // 按角色级别(S>A>B>C>D)再按命座(高>低)排序
+    var tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4 };
+    charList.sort((a, b) => {
+      var ta = tierOrder[a.tier] != null ? tierOrder[a.tier] : 99;
+      var tb = tierOrder[b.tier] != null ? tierOrder[b.tier] : 99;
+      if (ta !== tb) return ta - tb;
+      return b.const - a.const;
+    });
 
     const tbody = document.getElementById('d-char-stats-tbody');
     tbody.innerHTML = charList.map(e => {
@@ -682,8 +689,10 @@ function getAdminPage() {
         : avgDevPct < -5 ? '<span style="color:#fbbf24;">↑ 微调</span>'
         : '<span style="color:#888;">- 合理</span>';
       var constLabel = e.const >= 6 ? '满命' : 'C' + e.const;
+      var tierColors = { S: '#f87171', A: '#fbbf24', B: '#60a5fa', C: '#a78bfa', D: '#888' };
+      var tierColor = tierColors[e.tier] || '#888';
       return '<tr>' +
-        '<td style="font-weight:600;">' + escapeHtml(e.name) + ' <span style="color:#888;font-size:12px;">' + constLabel + '</span></td>' +
+        '<td style="font-weight:600;"><span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:4px;background:' + tierColor + '20;color:' + tierColor + ';font-size:11px;font-weight:700;margin-right:6px;">' + (e.tier || '?') + '</span>' + escapeHtml(e.name) + ' <span style="color:#888;font-size:12px;">' + constLabel + '</span></td>' +
         '<td>' + e.count + '</td>' +
         '<td class="' + devClass + '">' + (avgDevPct >= 0 ? '+' : '') + avgDevPct + '%</td>' +
         '<td class="' + devClass + '">' + (avgDev >= 0 ? '+' : '') + '¥' + avgDev + '</td>' +
