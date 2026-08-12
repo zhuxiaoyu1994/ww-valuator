@@ -110,8 +110,14 @@ function getAdminPage() {
   .d-detail-section table.inner td:last-child { color: #ccc; text-align: right; }
   .d-char-list { display: flex; flex-wrap: wrap; gap: 6px; }
   .d-char-item { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: #1a1a35; border: 1px solid #2a2a4a; }
-  .d-char-item.has-sig { border-color: rgba(251,191,36,0.3); color: #fbbf24; }
-  .d-char-item.full-const { border-color: rgba(74,222,128,0.3); color: #4ade80; }
+  .d-char-item.tier-s { color: #f87171; border-color: rgba(248,113,113,0.3); }
+  .d-char-item.tier-a { color: #fbbf24; border-color: rgba(251,191,36,0.3); }
+  .d-char-item.tier-b { color: #60a5fa; border-color: rgba(96,165,250,0.3); }
+  .d-char-item.tier-c { color: #a78bfa; border-color: rgba(167,139,250,0.3); }
+  .d-char-item.tier-d { color: #aaa; border-color: rgba(170,170,170,0.2); }
+  .d-char-item.tier-e { color: #666; border-color: rgba(102,102,102,0.2); }
+  .d-char-item.has-sig { background: rgba(251,191,36,0.08); }
+  .d-char-item.full-const { border-color: rgba(74,222,128,0.4); border-width: 2px; }
   .d-tag-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
   .d-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #1a1a35; color: #aaa; border: 1px solid #2a2a4a; }
 
@@ -1386,7 +1392,7 @@ function getAdminPage() {
     if (!det) return '';
     const chars = (d.characters || []).sort((a, b) => (b.value || 0) - (a.value || 0));
     const charTags = chars.map(c => {
-      let cls = 'd-char-item';
+      let cls = 'd-char-item tier-' + ((c.tier || 'd').toLowerCase());
       if (c.const >= 6) cls += ' full-const';
       if (c.hasSig) cls += ' has-sig';
       const constStr = c.const >= 6 ? '满命' : c.const + '命';
@@ -1468,7 +1474,7 @@ function getAdminPage() {
     if (!det) return '';
     const chars = (l.characters || []).sort((a, b) => (b.value || 0) - (a.value || 0));
     const charTags = chars.map(c => {
-      let cls = 'd-char-item';
+      let cls = 'd-char-item tier-' + ((c.tier || 'd').toLowerCase());
       if (c.const >= 6) cls += ' full-const';
       if (c.hasSig) cls += ' has-sig';
       const constStr = c.const >= 6 ? '满命' : c.const + '命';
