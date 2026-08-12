@@ -263,6 +263,28 @@ function getAdminPage() {
           </table>
         </div>
       </div>
+      <!-- 按抽数分档偏差统计 -->
+      <div id="d-pull-stats-section" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
+        <div onclick="var t=document.getElementById('d-pull-stats-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
+          <span style="font-size:14px;font-weight:600;color:#a78bfa;">按抽数分档偏差统计</span>
+          <span style="font-size:12px;color:#888;">（用于调整抽数定价公式参数）</span>
+          <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
+        </div>
+        <div id="d-pull-stats-body" style="display:none;overflow-x:auto;">
+          <table class="d-table">
+            <thead>
+              <tr>
+                <th style="width:90px">抽数区间</th><th style="width:50px">数量</th>
+                <th style="width:60px">平均抽数</th><th style="width:80px">平均抽数价值</th>
+                <th style="width:70px">平均成交价</th><th style="width:70px">平均估值</th>
+                <th style="width:70px">平均偏差率</th><th style="width:60px">MAE</th>
+                <th style="width:60px">准确率(±20%)</th><th style="width:70px">建议调整</th>
+              </tr>
+            </thead>
+            <tbody id="d-pull-stats-tbody"></tbody>
+          </table>
+        </div>
+      </div>
       <!-- 算法准确性分析 -->
       <div id="d-accuracy-analysis" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
         <div onclick="var t=document.getElementById('d-accuracy-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
@@ -645,6 +667,7 @@ function getAdminPage() {
     document.getElementById('d-info').textContent = '';
     document.getElementById('d-more-btn').disabled = false;
     document.getElementById('d-char-stats-section').style.display = 'none';
+    document.getElementById('d-pull-stats-section').style.display = 'none';
     document.getElementById('d-accuracy-analysis').style.display = 'none';
   }
 
@@ -687,6 +710,8 @@ function getAdminPage() {
 
     // 按角色维度偏差统计
     renderCharStats(valid);
+    // 按抽数分档偏差统计
+    renderPullStats(valid);
     // 算法准确性分析（R² + 价格分段）
     renderAccuracyAnalysis(valid);
   }
@@ -751,6 +776,70 @@ function getAdminPage() {
     }).join('');
 
     document.getElementById('d-char-stats-section').style.display = 'block';
+  }
+
+  function renderPullStats(valid) {
+    var pullRanges = [
+      { label: '0-100', min: 0, max: 100 },
+      { label: '100-200', min: 100, max: 200 },
+      { label: '200-400', min: 200, max: 400 },
+      { label: '400-600', min: 400, max: 600 },
+      { label: '600-800', min: 600, max: 800 },
+      { label: '800-1000', min: 800, max: 1000 },
+      { label: '1000+', min: 1000, max: Infinity },
+    ];
+
+    var hasData = false;
+    var rows = pullRanges.map(function(r) {
+      var items = valid.filter(function(d) {
+        var p = d.pulls || 0;
+        return p >= r.min && p < r.max;
+      });
+      if (items.length === 0) return null;
+      hasData = true;
+
+      var cnt = items.length;
+      var avgPulls = Math.round(items.reduce(function(s, d) { return s + (d.pulls || 0); }, 0) / cnt);
+      var avgPullVal = Math.round(items.reduce(function(s, d) {
+        return s + ((d.details && d.details.pullValue) || 0);
+      }, 0) / cnt);
+      var avgP = Math.round(items.reduce(function(s, d) { return s + d.price; }, 0) / cnt * 100) / 100;
+      var avgE = Math.round(items.reduce(function(s, d) { return s + d.estimatedValue; }, 0) / cnt * 100) / 100;
+      var avgDPct = Math.round(items.reduce(function(s, d) { return s + d.deviationPercent; }, 0) / cnt * 100) / 100;
+      var mae = Math.round(items.reduce(function(s, d) { return s + Math.abs(d.deviation); }, 0) / cnt * 100) / 100;
+      var hit20 = items.filter(function(d) { return Math.abs(d.deviationPercent) <= 20; }).length;
+      var acc = Math.round(hit20 / cnt * 1000) / 10;
+
+      var devCls = avgDPct > 5 ? 'd-dev-neg' : (avgDPct < -5 ? 'd-dev-pos' : 'd-dev-zero');
+      var accColor = acc >= 70 ? '#4ade80' : acc >= 50 ? '#fbbf24' : '#f87171';
+
+      var suggestion = avgDPct > 10 ? '<span style="color:#f87171;">↓ 下调每抽价</span>'
+        : avgDPct < -10 ? '<span style="color:#4ade80;">↑ 上调每抽价</span>'
+        : avgDPct > 5 ? '<span style="color:#fbbf24;">↓ 微调</span>'
+        : avgDPct < -5 ? '<span style="color:#fbbf24;">↑ 微调</span>'
+        : '<span style="color:#888;">- 合理</span>';
+
+      return '<tr>' +
+        '<td style="font-weight:600;color:#a78bfa;">' + r.label + '抽</td>' +
+        '<td>' + cnt + '</td>' +
+        '<td>' + avgPulls + '</td>' +
+        '<td style="color:#60a5fa;">¥' + avgPullVal + '</td>' +
+        '<td class="d-price d-price-actual">¥' + avgP + '</td>' +
+        '<td class="d-price d-price-est">¥' + avgE + '</td>' +
+        '<td class="' + devCls + '">' + (avgDPct >= 0 ? '+' : '') + avgDPct + '%</td>' +
+        '<td>¥' + mae + '</td>' +
+        '<td style="color:' + accColor + ';font-weight:600;">' + acc + '%</td>' +
+        '<td>' + suggestion + '</td>' +
+        '</tr>';
+    }).filter(function(r) { return r !== null; }).join('');
+
+    if (!hasData) {
+      document.getElementById('d-pull-stats-section').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('d-pull-stats-tbody').innerHTML = rows;
+    document.getElementById('d-pull-stats-section').style.display = 'block';
   }
 
   function renderAccuracyAnalysis(valid) {
