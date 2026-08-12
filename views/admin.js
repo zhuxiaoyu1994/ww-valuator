@@ -263,9 +263,48 @@ function getAdminPage() {
           </table>
         </div>
       </div>
+      <!-- 算法准确性分析 -->
+      <div id="d-accuracy-analysis" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
+        <div onclick="var t=document.getElementById('d-accuracy-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
+          <span style="font-size:14px;font-weight:600;color:#60a5fa;">算法准确性分析</span>
+          <span style="font-size:12px;color:#888;">（R²决定系数 + 价格区间分段统计）</span>
+          <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
+        </div>
+        <div id="d-accuracy-body" style="display:none;padding:16px 18px;">
+          <div style="display:flex;gap:16px;margin-bottom:20px;">
+            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
+              <div style="font-size:12px;color:#888;margin-bottom:6px;">R²(决定系数)</div>
+              <div id="d-r2" style="font-size:24px;font-weight:700;color:#60a5fa;">-</div>
+              <div id="d-r2-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
+            </div>
+            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
+              <div style="font-size:12px;color:#888;margin-bottom:6px;">相关系数(r)</div>
+              <div id="d-corr" style="font-size:24px;font-weight:700;color:#60a5fa;">-</div>
+              <div id="d-corr-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
+            </div>
+            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
+              <div style="font-size:12px;color:#888;margin-bottom:6px;">中位数偏差率</div>
+              <div id="d-med-dev" style="font-size:24px;font-weight:700;color:#fbbf24;">-</div>
+              <div id="d-med-dev-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
+            </div>
+          </div>
+          <div style="font-size:13px;color:#aaa;margin-bottom:10px;">价格区间分段统计</div>
+          <div style="overflow-x:auto;">
+            <table class="d-table">
+              <thead>
+                <tr>
+                  <th style="width:100px">价格区间</th><th style="width:50px">数量</th>
+                  <th style="width:80px">平均成交价</th><th style="width:80px">平均估值</th>
+                  <th style="width:70px">平均偏差</th><th style="width:70px">平均偏差率</th>
+                  <th style="width:60px">MAE</th><th style="width:70px">准确率(±20%)</th>
+                </tr>
+              </thead>
+              <tbody id="d-price-range-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
-
-    <!-- Tab 3: 监控脚本 -->
     <div id="tab-monitor" class="tab-content">
       <div class="mon-card">
         <h2>功能特性</h2>
@@ -599,6 +638,7 @@ function getAdminPage() {
     document.getElementById('d-info').textContent = '';
     document.getElementById('d-more-btn').disabled = false;
     document.getElementById('d-char-stats-section').style.display = 'none';
+    document.getElementById('d-accuracy-analysis').style.display = 'none';
   }
 
   function renderDealsSummary() {
@@ -640,6 +680,8 @@ function getAdminPage() {
 
     // 按角色维度偏差统计
     renderCharStats(valid);
+    // 算法准确性分析（R² + 价格分段）
+    renderAccuracyAnalysis(valid);
   }
 
   function renderCharStats(valid) {
@@ -702,6 +744,104 @@ function getAdminPage() {
     }).join('');
 
     document.getElementById('d-char-stats-section').style.display = 'block';
+  }
+
+  function renderAccuracyAnalysis(valid) {
+    if (valid.length < 2) {
+      document.getElementById('d-accuracy-analysis').style.display = 'none';
+      return;
+    }
+
+    // ===== R²(决定系数) =====
+    // R² = 1 - SS_res / SS_tot
+    // SS_res = Σ(实际价 - 估值)²   SS_tot = Σ(实际价 - 均价)²
+    var n = valid.length;
+    var meanPrice = valid.reduce(function(s, d) { return s + d.price; }, 0) / n;
+    var ssRes = 0, ssTot = 0;
+    for (var i = 0; i < valid.length; i++) {
+      ssRes += Math.pow(valid[i].price - valid[i].estimatedValue, 2);
+      ssTot += Math.pow(valid[i].price - meanPrice, 2);
+    }
+    var r2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+    r2 = Math.round(r2 * 1000) / 1000;
+
+    // ===== Pearson 相关系数 =====
+    var meanEst = valid.reduce(function(s, d) { return s + d.estimatedValue; }, 0) / n;
+    var num = 0, denEst = 0, denPrice = 0;
+    for (var j = 0; j < valid.length; j++) {
+      var dEst = valid[j].estimatedValue - meanEst;
+      var dPrice = valid[j].price - meanPrice;
+      num += dEst * dPrice;
+      denEst += dEst * dEst;
+      denPrice += dPrice * dPrice;
+    }
+    var corr = (denEst > 0 && denPrice > 0) ? num / Math.sqrt(denEst * denPrice) : 0;
+    corr = Math.round(corr * 1000) / 1000;
+
+    // ===== 中位数偏差率 =====
+    var sortedDevPct = valid.map(function(d) { return d.deviationPercent; }).sort(function(a, b) { return a - b; });
+    var medIdx = Math.floor(sortedDevPct.length / 2);
+    var medDevPct = sortedDevPct.length % 2 === 0
+      ? Math.round((sortedDevPct[medIdx - 1] + sortedDevPct[medIdx]) / 2 * 100) / 100
+      : Math.round(sortedDevPct[medIdx] * 100) / 100;
+
+    // 渲染 R²
+    document.getElementById('d-r2').textContent = r2.toFixed(3);
+    var r2Desc = r2 >= 0.8 ? '优秀，模型解释力强' : r2 >= 0.6 ? '良好，有一定解释力' : r2 >= 0.4 ? '一般，存在较大偏差' : '较差，模型需调整';
+    document.getElementById('d-r2-desc').textContent = r2Desc;
+
+    // 渲染相关系数
+    document.getElementById('d-corr').textContent = corr.toFixed(3);
+    var corrDesc = corr >= 0.9 ? '高度正相关' : corr >= 0.7 ? '强相关' : corr >= 0.5 ? '中等相关' : corr >= 0.3 ? '弱相关' : '几乎无相关';
+    document.getElementById('d-corr-desc').textContent = corrDesc;
+
+    // 渲染中位数偏差率
+    var medEl = document.getElementById('d-med-dev');
+    medEl.textContent = (medDevPct >= 0 ? '+' : '') + medDevPct + '%';
+    medEl.style.color = medDevPct > 5 ? '#f87171' : medDevPct < -5 ? '#4ade80' : '#fbbf24';
+    document.getElementById('d-med-dev-desc').textContent = '抗极端值，反映系统偏置';
+
+    // ===== 价格区间分段统计 =====
+    var priceRanges = [
+      { label: '<300', min: 0, max: 300 },
+      { label: '300-500', min: 300, max: 500 },
+      { label: '500-1000', min: 500, max: 1000 },
+      { label: '1000-2000', min: 1000, max: 2000 },
+      { label: '2000-3000', min: 2000, max: 3000 },
+      { label: '3000-5000', min: 3000, max: 5000 },
+      { label: '>5000', min: 5000, max: Infinity },
+    ];
+
+    var rangeRows = priceRanges.map(function(r) {
+      var items = valid.filter(function(d) { return d.price >= r.min && d.price < r.max; });
+      if (items.length === 0) return null;
+
+      var cnt = items.length;
+      var avgP = Math.round(items.reduce(function(s, d) { return s + d.price; }, 0) / cnt * 100) / 100;
+      var avgE = Math.round(items.reduce(function(s, d) { return s + d.estimatedValue; }, 0) / cnt * 100) / 100;
+      var avgD = Math.round(items.reduce(function(s, d) { return s + d.deviation; }, 0) / cnt * 100) / 100;
+      var avgDPct = Math.round(items.reduce(function(s, d) { return s + d.deviationPercent; }, 0) / cnt * 100) / 100;
+      var mae = Math.round(items.reduce(function(s, d) { return s + Math.abs(d.deviation); }, 0) / cnt * 100) / 100;
+      var hit20 = items.filter(function(d) { return Math.abs(d.deviationPercent) <= 20; }).length;
+      var acc = Math.round(hit20 / cnt * 1000) / 10;
+
+      var devCls = avgDPct > 5 ? 'd-dev-neg' : (avgDPct < -5 ? 'd-dev-pos' : 'd-dev-zero');
+      var accColor = acc >= 70 ? '#4ade80' : acc >= 50 ? '#fbbf24' : '#f87171';
+
+      return '<tr>' +
+        '<td style="font-weight:600;">¥' + r.label + '</td>' +
+        '<td>' + cnt + '</td>' +
+        '<td class="d-price d-price-actual">¥' + avgP + '</td>' +
+        '<td class="d-price d-price-est">¥' + avgE + '</td>' +
+        '<td class="' + devCls + '">' + (avgD >= 0 ? '+' : '') + '¥' + avgD + '</td>' +
+        '<td class="' + devCls + '">' + (avgDPct >= 0 ? '+' : '') + avgDPct + '%</td>' +
+        '<td>¥' + mae + '</td>' +
+        '<td style="color:' + accColor + ';font-weight:600;">' + acc + '%</td>' +
+        '</tr>';
+    }).filter(function(r) { return r !== null; }).join('');
+
+    document.getElementById('d-price-range-tbody').innerHTML = rangeRows || '<tr><td colspan="8" style="text-align:center;padding:20px;color:#666;">暂无数据</td></tr>';
+    document.getElementById('d-accuracy-analysis').style.display = 'block';
   }
 
   function applyDealsFilter() {
