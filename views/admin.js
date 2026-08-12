@@ -285,6 +285,30 @@ function getAdminPage() {
           </table>
         </div>
       </div>
+      <!-- 角色定价建议（多元回归） -->
+      <div id="d-pricing-suggest-section" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
+        <div onclick="var t=document.getElementById('d-pricing-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
+          <span style="font-size:14px;font-weight:600;color:#4ade80;">角色定价建议（多元岭回归）</span>
+          <span id="d-pricing-r2" style="font-size:12px;color:#888;"></span>
+          <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
+        </div>
+        <div id="d-pricing-body" style="display:none;padding:16px 18px;">
+          <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6;">基于多元线性回归，控制抽数和黄数后的角色公允价值。绿色=需上调，红色=需下调，灰色=样本不足。仅显示出现≥3次的角色。</div>
+          <div style="overflow-x:auto;">
+            <table class="d-table">
+              <thead>
+                <tr>
+                  <th style="width:120px">角色</th><th style="width:70px">当前价格</th>
+                  <th style="width:70px">建议价格</th><th style="width:60px">调整额</th>
+                  <th style="width:60px">调整率</th><th style="width:50px">样本数</th>
+                  <th style="width:40px">可靠度</th>
+                </tr>
+              </thead>
+              <tbody id="d-pricing-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
       <!-- 算法准确性分析 -->
       <div id="d-accuracy-analysis" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
         <div onclick="var t=document.getElementById('d-accuracy-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
@@ -669,6 +693,7 @@ function getAdminPage() {
     document.getElementById('d-char-stats-section').style.display = 'none';
     document.getElementById('d-pull-stats-section').style.display = 'none';
     document.getElementById('d-accuracy-analysis').style.display = 'none';
+    document.getElementById('d-pricing-suggest-section').style.display = 'none';
   }
 
   function renderDealsSummary() {
@@ -714,6 +739,8 @@ function getAdminPage() {
     renderPullStats(valid);
     // 算法准确性分析（R² + 价格分段）
     renderAccuracyAnalysis(valid);
+    // 角色定价建议（多元岭回归）
+    renderPricingSuggestions(valid);
   }
 
   function renderCharStats(valid) {
@@ -840,6 +867,218 @@ function getAdminPage() {
 
     document.getElementById('d-pull-stats-tbody').innerHTML = rows;
     document.getElementById('d-pull-stats-section').style.display = 'block';
+  }
+
+  // ============================================================
+  // 矩阵运算工具（用于多元岭回归）
+  // ============================================================
+  function _matT(A) {
+    var m = A.length, n = A[0].length;
+    var T = [];
+    for (var j = 0; j < n; j++) {
+      var row = [];
+      for (var i = 0; i < m; i++) row.push(A[i][j]);
+      T.push(row);
+    }
+    return T;
+  }
+  function _matMul(A, B) {
+    var m = A.length, n = B[0].length, k = B.length;
+    var C = [];
+    for (var i = 0; i < m; i++) {
+      var row = [];
+      for (var j = 0; j < n; j++) {
+        var sum = 0;
+        for (var l = 0; l < k; l++) sum += A[i][l] * B[l][j];
+        row.push(sum);
+      }
+      C.push(row);
+    }
+    return C;
+  }
+  function _matVec(A, v) {
+    var m = A.length, n = v.length;
+    var r = [];
+    for (var i = 0; i < m; i++) {
+      var sum = 0;
+      for (var j = 0; j < n; j++) sum += A[i][j] * v[j];
+      r.push(sum);
+    }
+    return r;
+  }
+  function _gaussSolve(A, b) {
+    var n = A.length;
+    var aug = [];
+    for (var i = 0; i < n; i++) {
+      var row = A[i].slice();
+      row.push(b[i]);
+      aug.push(row);
+    }
+    for (var i = 0; i < n; i++) {
+      var maxRow = i;
+      for (var k = i + 1; k < n; k++) {
+        if (Math.abs(aug[k][i]) > Math.abs(aug[maxRow][i])) maxRow = k;
+      }
+      var tmp = aug[i]; aug[i] = aug[maxRow]; aug[maxRow] = tmp;
+      if (Math.abs(aug[i][i]) < 1e-12) return null;
+      for (var k2 = i + 1; k2 < n; k2++) {
+        var factor = aug[k2][i] / aug[i][i];
+        for (var j = i; j <= n; j++) aug[k2][j] -= factor * aug[i][j];
+      }
+    }
+    var x = [];
+    for (var i2 = 0; i2 < n; i2++) x.push(0);
+    for (var i3 = n - 1; i3 >= 0; i3--) {
+      var s = aug[i3][n];
+      for (var j2 = i3 + 1; j2 < n; j2++) s -= aug[i3][j2] * x[j2];
+      x[i3] = s / aug[i3][i3];
+    }
+    return x;
+  }
+
+  // ============================================================
+  // 角色定价建议（多元岭回归）
+  // ============================================================
+  function renderPricingSuggestions(valid) {
+    if (valid.length < 10) {
+      document.getElementById('d-pricing-suggest-section').style.display = 'none';
+      return;
+    }
+
+    // 1. 收集角色信息
+    var charSet = {}, charTier = {}, charCount = {}, charC0Vals = {};
+    for (var di = 0; di < valid.length; di++) {
+      var chars = valid[di].characters || [];
+      for (var ci = 0; ci < chars.length; ci++) {
+        var c = chars[ci];
+        if (!c.name || c.tier === 'E') continue;
+        charSet[c.name] = true;
+        charTier[c.name] = c.tier;
+        charCount[c.name] = (charCount[c.name] || 0) + 1;
+        if (c.const === 0 && !c.hasSig && c.value != null && !isNaN(c.value)) {
+          if (!charC0Vals[c.name]) charC0Vals[c.name] = [];
+          charC0Vals[c.name].push(c.value);
+        }
+      }
+    }
+
+    var tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4 };
+    var charNames = Object.keys(charSet).sort(function(a, b) {
+      var ta = tierOrder[charTier[a]] != null ? tierOrder[charTier[a]] : 9;
+      var tb = tierOrder[charTier[b]] != null ? tierOrder[charTier[b]] : 9;
+      return ta - tb;
+    });
+
+    var numChars = charNames.length;
+    var numFeatures = numChars + 3; // intercept + chars + pulls + yellowCount
+
+    // 2. 构建设计矩阵
+    var X = [], y = [];
+    for (var di2 = 0; di2 < valid.length; di2++) {
+      var d2 = valid[di2];
+      var row = [];
+      for (var fi = 0; fi < numFeatures; fi++) row.push(0);
+      row[0] = 1;
+      var chars2 = d2.characters || [];
+      for (var ci2 = 0; ci2 < chars2.length; ci2++) {
+        var c2 = chars2[ci2];
+        if (!c2.name || c2.tier === 'E') continue;
+        var idx = charNames.indexOf(c2.name);
+        if (idx >= 0) row[idx + 1] = 1;
+      }
+      row[numChars + 1] = d2.pulls || 0;
+      row[numChars + 2] = d2.yellowCount || 0;
+      X.push(row);
+      y.push(d2.price);
+    }
+
+    // 3. 岭回归: β = (XᵀX + λI)⁻¹ Xᵀy
+    var lambda = 10.0;
+    var Xt = _matT(X);
+    var XtX = _matMul(Xt, X);
+    var Xty = _matVec(Xt, y);
+    for (var fi2 = 1; fi2 < numFeatures; fi2++) XtX[fi2][fi2] += lambda;
+
+    var beta = _gaussSolve(XtX, Xty);
+    if (!beta) {
+      document.getElementById('d-pricing-suggest-section').style.display = 'none';
+      return;
+    }
+
+    // 4. 计算模型 R²
+    var yMean = 0;
+    for (var di3 = 0; di3 < y.length; di3++) yMean += y[di3];
+    yMean /= y.length;
+    var ssRes = 0, ssTot = 0;
+    for (var di4 = 0; di4 < valid.length; di4++) {
+      var pred = 0;
+      for (var fi3 = 0; fi3 < numFeatures; fi3++) pred += X[di4][fi3] * beta[fi3];
+      ssRes += Math.pow(y[di4] - pred, 2);
+      ssTot += Math.pow(y[di4] - yMean, 2);
+    }
+    var modelR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+    modelR2 = Math.round(modelR2 * 1000) / 1000;
+
+    // 5. 生成建议
+    var suggestions = [];
+    for (var si = 0; si < numChars; si++) {
+      var name = charNames[si];
+      var coef = beta[si + 1];
+      if (coef < 0) coef = 0;
+      coef = Math.round(coef);
+
+      var c0Vals = charC0Vals[name] || [];
+      var currentPrice = c0Vals.length > 0
+        ? Math.round(c0Vals.reduce(function(s, v) { return s + v; }, 0) / c0Vals.length)
+        : null;
+
+      var count = charCount[name];
+      if (currentPrice != null && currentPrice > 0 && count >= 3) {
+        var adjust = coef - currentPrice;
+        var adjustPct = Math.round(adjust / currentPrice * 1000) / 10;
+        suggestions.push({
+          name: name, tier: charTier[name],
+          current: currentPrice, suggested: coef,
+          adjust: adjust, adjustPct: adjustPct,
+          count: count, c0Samples: c0Vals.length,
+          reliability: count >= 10 ? 'high' : count >= 5 ? 'medium' : 'low'
+        });
+      }
+    }
+
+    suggestions.sort(function(a, b) {
+      var ta = tierOrder[a.tier] != null ? tierOrder[a.tier] : 9;
+      var tb = tierOrder[b.tier] != null ? tierOrder[b.tier] : 9;
+      if (ta !== tb) return ta - tb;
+      return Math.abs(b.adjustPct) - Math.abs(a.adjustPct);
+    });
+
+    if (suggestions.length === 0) {
+      document.getElementById('d-pricing-suggest-section').style.display = 'none';
+      return;
+    }
+
+    // 6. 渲染
+    var tierColors = { S: '#f87171', A: '#fbbf24', B: '#60a5fa', C: '#a78bfa', D: '#888' };
+    var rows = suggestions.map(function(s) {
+      var tc = tierColors[s.tier] || '#888';
+      var ac = s.adjustPct > 10 ? '#f87171' : s.adjustPct < -10 ? '#4ade80' : '#fbbf24';
+      var rc = s.reliability === 'high' ? '#4ade80' : s.reliability === 'medium' ? '#fbbf24' : '#666';
+      var rt = s.reliability === 'high' ? '高' : s.reliability === 'medium' ? '中' : '低';
+      return '<tr>' +
+        '<td style="font-weight:600;"><span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:4px;background:' + tc + '20;color:' + tc + ';font-size:11px;font-weight:700;margin-right:6px;">' + s.tier + '</span>' + escapeHtml(s.name) + '</td>' +
+        '<td class="d-price d-price-actual">¥' + s.current + '</td>' +
+        '<td class="d-price d-price-est">¥' + s.suggested + '</td>' +
+        '<td style="color:' + ac + ';font-weight:600;">' + (s.adjust >= 0 ? '+' : '') + '¥' + s.adjust + '</td>' +
+        '<td style="color:' + ac + ';">' + (s.adjustPct >= 0 ? '+' : '') + s.adjustPct + '%</td>' +
+        '<td>' + s.count + '次</td>' +
+        '<td style="color:' + rc + ';">' + rt + '</td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('d-pricing-tbody').innerHTML = rows;
+    document.getElementById('d-pricing-r2').textContent = '模型R²=' + modelR2.toFixed(3) + ' | 样本=' + valid.length + ' | 变量=' + numChars;
+    document.getElementById('d-pricing-suggest-section').style.display = 'block';
   }
 
   function renderAccuracyAnalysis(valid) {
