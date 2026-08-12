@@ -206,7 +206,7 @@ function getAdminPage() {
           <option value="100">每页100条</option>
           <option value="200">每页200条</option>
         </select>
-        <button class="fetch-btn" onclick="fetchDeals(true)">获取数据</button>
+        <button class="fetch-btn" onclick="fetchDealsInitial()">获取数据</button>
         <button class="more-btn" id="d-more-btn" onclick="fetchDeals(false)">加载更多</button>
         <button class="clear-btn" onclick="clearDeals()">清空</button>
         <select id="d-filter" onchange="applyDealsFilter()">
@@ -229,19 +229,29 @@ function getAdminPage() {
         </select>
         <span class="d-info" id="d-info"></span>
       </div>
-      <div class="d-table-wrap">
-        <table class="d-table">
-          <thead>
-            <tr>
-              <th style="width:90px">编号</th><th style="width:80px">成交日</th><th>商品描述</th>
-              <th style="width:80px">成交价</th><th style="width:80px">估值</th><th style="width:80px">偏差值</th>
-              <th style="width:70px">偏差率</th><th style="width:50px">黄数</th><th style="width:50px">详情</th>
-            </tr>
-          </thead>
-          <tbody id="d-tbody">
-            <tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>
-          </tbody>
-        </table>
+      <!-- 成交记录列表（可折叠） -->
+      <div id="d-deals-list-section" style="margin-top:12px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
+        <div onclick="var t=document.getElementById('d-deals-list-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
+          <span style="font-size:14px;font-weight:600;color:#60a5fa;">成交记录列表</span>
+          <span style="font-size:12px;color:#888;" id="d-deals-list-info">（点击展开/收起）</span>
+          <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▼</span>
+        </div>
+        <div id="d-deals-list-body" style="display:block;padding:0;">
+          <div class="d-table-wrap">
+            <table class="d-table">
+              <thead>
+                <tr>
+                  <th style="width:90px">编号</th><th style="width:80px">成交日</th><th>商品描述</th>
+                  <th style="width:80px">成交价</th><th style="width:80px">估值</th><th style="width:80px">偏差值</th>
+                  <th style="width:70px">偏差率</th><th style="width:50px">黄数</th><th style="width:50px">详情</th>
+                </tr>
+              </thead>
+              <tbody id="d-tbody">
+                <tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <!-- 按角色维度偏差统计 -->
       <div id="d-char-stats-section" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
@@ -293,15 +303,15 @@ function getAdminPage() {
           <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
         </div>
         <div id="d-pricing-body" style="display:none;padding:16px 18px;">
-          <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6;">基于多元线性回归，控制抽数和黄数后的角色公允价值。绿色=需上调，红色=需下调，灰色=样本不足。仅显示出现≥3次的角色。</div>
+          <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6;">基于多元线性回归，控制抽数和黄数后各角色各命座的公允价值。绿色=需上调，红色=需下调，灰色=样本不足。仅显示出现≥3次的角色命座组合。</div>
           <div style="overflow-x:auto;">
             <table class="d-table">
               <thead>
                 <tr>
-                  <th style="width:120px">角色</th><th style="width:70px">当前价格</th>
-                  <th style="width:70px">建议价格</th><th style="width:60px">调整额</th>
-                  <th style="width:60px">调整率</th><th style="width:50px">样本数</th>
-                  <th style="width:40px">可靠度</th>
+                  <th style="width:120px">角色</th><th style="width:50px">命座</th>
+                  <th style="width:70px">当前价格</th><th style="width:70px">建议价格</th>
+                  <th style="width:60px">调整额</th><th style="width:60px">调整率</th>
+                  <th style="width:50px">样本数</th><th style="width:40px">可靠度</th>
                 </tr>
               </thead>
               <tbody id="d-pricing-tbody"></tbody>
@@ -601,6 +611,17 @@ function getAdminPage() {
   // ============================================================
   // 成交记录Tab
   // ============================================================
+
+  // 初始加载：自动获取前4页数据
+  async function fetchDealsInitial() {
+    var targetPages = 4;
+    await fetchDeals(true);
+    for (var p = 1; p < targetPages; p++) {
+      if (!dealsHasMore || dealsLoading) break;
+      await fetchDeals(false);
+    }
+  }
+
   async function fetchDeals(reset) {
     const pw = sessionStorage.getItem('admin_pw');
     if (!pw) { alert('请先登录'); return; }
@@ -937,7 +958,7 @@ function getAdminPage() {
   }
 
   // ============================================================
-  // 角色定价建议（多元岭回归）
+  // 角色定价建议（多元岭回归 - 按命座区分）
   // ============================================================
   function renderPricingSuggestions(valid) {
     if (valid.length < 10) {
@@ -945,32 +966,43 @@ function getAdminPage() {
       return;
     }
 
-    // 1. 收集角色信息
-    var charSet = {}, charTier = {}, charCount = {}, charC0Vals = {};
+    // 1. 收集角色×命座组合信息
+    var pairSet = {}, pairTier = {}, pairCount = {}, pairVals = {};
     for (var di = 0; di < valid.length; di++) {
       var chars = valid[di].characters || [];
       for (var ci = 0; ci < chars.length; ci++) {
         var c = chars[ci];
         if (!c.name || c.tier === 'E') continue;
-        charSet[c.name] = true;
-        charTier[c.name] = c.tier;
-        charCount[c.name] = (charCount[c.name] || 0) + 1;
-        if (c.const === 0 && !c.hasSig && c.value != null && !isNaN(c.value)) {
-          if (!charC0Vals[c.name]) charC0Vals[c.name] = [];
-          charC0Vals[c.name].push(c.value);
+        var key = c.name + '_C' + (c.const || 0);
+        pairSet[key] = true;
+        pairTier[key] = c.tier;
+        pairCount[key] = (pairCount[key] || 0) + 1;
+        if (c.value != null && !isNaN(c.value)) {
+          if (!pairVals[key]) pairVals[key] = [];
+          pairVals[key].push(c.value);
         }
       }
     }
 
     var tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4 };
-    var charNames = Object.keys(charSet).sort(function(a, b) {
-      var ta = tierOrder[charTier[a]] != null ? tierOrder[charTier[a]] : 9;
-      var tb = tierOrder[charTier[b]] != null ? tierOrder[charTier[b]] : 9;
-      return ta - tb;
+    // 只保留出现≥3次的组合，按级别和命座排序
+    var pairKeys = Object.keys(pairSet).filter(function(k) { return pairCount[k] >= 3; }).sort(function(a, b) {
+      var ta = tierOrder[pairTier[a]] != null ? tierOrder[pairTier[a]] : 9;
+      var tb = tierOrder[pairTier[b]] != null ? tierOrder[pairTier[b]] : 9;
+      if (ta !== tb) return ta - tb;
+      // 同级别内按角色名再按命座排序
+      var na = a.replace(/_C\d+$/, ''), nb = b.replace(/_C\d+$/, '');
+      if (na !== nb) return na < nb ? -1 : 1;
+      var ca = parseInt(a.replace(/.*_C/, '')), cb = parseInt(b.replace(/.*_C/, ''));
+      return ca - cb;
     });
 
-    var numChars = charNames.length;
-    var numFeatures = numChars + 3; // intercept + chars + pulls + yellowCount
+    var numPairs = pairKeys.length;
+    if (numPairs === 0) {
+      document.getElementById('d-pricing-suggest-section').style.display = 'none';
+      return;
+    }
+    var numFeatures = numPairs + 3; // intercept + pairs + pulls + yellowCount
 
     // 2. 构建设计矩阵
     var X = [], y = [];
@@ -978,16 +1010,17 @@ function getAdminPage() {
       var d2 = valid[di2];
       var row = [];
       for (var fi = 0; fi < numFeatures; fi++) row.push(0);
-      row[0] = 1;
+      row[0] = 1; // 截距项
       var chars2 = d2.characters || [];
       for (var ci2 = 0; ci2 < chars2.length; ci2++) {
         var c2 = chars2[ci2];
         if (!c2.name || c2.tier === 'E') continue;
-        var idx = charNames.indexOf(c2.name);
+        var key2 = c2.name + '_C' + (c2.const || 0);
+        var idx = pairKeys.indexOf(key2);
         if (idx >= 0) row[idx + 1] = 1;
       }
-      row[numChars + 1] = d2.pulls || 0;
-      row[numChars + 2] = d2.yellowCount || 0;
+      row[numPairs + 1] = d2.pulls || 0;
+      row[numPairs + 2] = d2.yellowCount || 0;
       X.push(row);
       y.push(d2.price);
     }
@@ -1019,28 +1052,31 @@ function getAdminPage() {
     var modelR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
     modelR2 = Math.round(modelR2 * 1000) / 1000;
 
-    // 5. 生成建议
+    // 5. 生成建议（按角色×命座组合）
     var suggestions = [];
-    for (var si = 0; si < numChars; si++) {
-      var name = charNames[si];
+    for (var si = 0; si < numPairs; si++) {
+      var key = pairKeys[si];
       var coef = beta[si + 1];
       if (coef < 0) coef = 0;
       coef = Math.round(coef);
 
-      var c0Vals = charC0Vals[name] || [];
-      var currentPrice = c0Vals.length > 0
-        ? Math.round(c0Vals.reduce(function(s, v) { return s + v; }, 0) / c0Vals.length)
+      var vals = pairVals[key] || [];
+      var currentPrice = vals.length > 0
+        ? Math.round(vals.reduce(function(s, v) { return s + v; }, 0) / vals.length)
         : null;
 
-      var count = charCount[name];
-      if (currentPrice != null && currentPrice > 0 && count >= 3) {
+      var count = pairCount[key];
+      var name = key.replace(/_C\d+$/, '');
+      var constLevel = parseInt(key.replace(/.*_C/, ''));
+
+      if (currentPrice != null && currentPrice > 0) {
         var adjust = coef - currentPrice;
         var adjustPct = Math.round(adjust / currentPrice * 1000) / 10;
         suggestions.push({
-          name: name, tier: charTier[name],
+          name: name, tier: pairTier[key], constLevel: constLevel,
           current: currentPrice, suggested: coef,
           adjust: adjust, adjustPct: adjustPct,
-          count: count, c0Samples: c0Vals.length,
+          count: count, valSamples: vals.length,
           reliability: count >= 10 ? 'high' : count >= 5 ? 'medium' : 'low'
         });
       }
@@ -1050,7 +1086,8 @@ function getAdminPage() {
       var ta = tierOrder[a.tier] != null ? tierOrder[a.tier] : 9;
       var tb = tierOrder[b.tier] != null ? tierOrder[b.tier] : 9;
       if (ta !== tb) return ta - tb;
-      return Math.abs(b.adjustPct) - Math.abs(a.adjustPct);
+      if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+      return a.constLevel - b.constLevel;
     });
 
     if (suggestions.length === 0) {
@@ -1060,13 +1097,17 @@ function getAdminPage() {
 
     // 6. 渲染
     var tierColors = { S: '#f87171', A: '#fbbf24', B: '#60a5fa', C: '#a78bfa', D: '#888' };
+    var constLabels = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', '满命'];
     var rows = suggestions.map(function(s) {
       var tc = tierColors[s.tier] || '#888';
       var ac = s.adjustPct > 10 ? '#f87171' : s.adjustPct < -10 ? '#4ade80' : '#fbbf24';
       var rc = s.reliability === 'high' ? '#4ade80' : s.reliability === 'medium' ? '#fbbf24' : '#666';
       var rt = s.reliability === 'high' ? '高' : s.reliability === 'medium' ? '中' : '低';
+      var cl = s.constLevel >= 6 ? '满命' : 'C' + s.constLevel;
+      var constColor = s.constLevel >= 6 ? '#f87171' : s.constLevel >= 3 ? '#fbbf24' : '#888';
       return '<tr>' +
         '<td style="font-weight:600;"><span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:4px;background:' + tc + '20;color:' + tc + ';font-size:11px;font-weight:700;margin-right:6px;">' + s.tier + '</span>' + escapeHtml(s.name) + '</td>' +
+        '<td style="color:' + constColor + ';font-weight:600;">' + cl + '</td>' +
         '<td class="d-price d-price-actual">¥' + s.current + '</td>' +
         '<td class="d-price d-price-est">¥' + s.suggested + '</td>' +
         '<td style="color:' + ac + ';font-weight:600;">' + (s.adjust >= 0 ? '+' : '') + '¥' + s.adjust + '</td>' +
@@ -1077,7 +1118,7 @@ function getAdminPage() {
     }).join('');
 
     document.getElementById('d-pricing-tbody').innerHTML = rows;
-    document.getElementById('d-pricing-r2').textContent = '模型R²=' + modelR2.toFixed(3) + ' | 样本=' + valid.length + ' | 变量=' + numChars;
+    document.getElementById('d-pricing-r2').textContent = '模型R²=' + modelR2.toFixed(3) + ' | 样本=' + valid.length + ' | 变量=' + numPairs;
     document.getElementById('d-pricing-suggest-section').style.display = 'block';
   }
 
