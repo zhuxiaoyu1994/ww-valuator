@@ -303,7 +303,7 @@ function getAdminPage() {
           <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
         </div>
         <div id="d-pricing-body" style="display:none;padding:16px 18px;">
-          <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6;">基于多元线性回归，控制抽数和黄数后各角色各命座的公允价值。绿色=需上调，红色=需下调，灰色=样本不足。仅显示出现≥3次的角色命座组合。</div>
+          <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6;">基于多元岭回归，用引擎估值作为特征值控制抽数和黄数后，计算各角色各命座的缩放系数（系数≈1.0为合理）。建议价=当前价×系数。绿色=需上调，红色=需下调。仅显示出现≥3次的角色命座组合。</div>
           <div style="overflow-x:auto;">
             <table class="d-table">
               <thead>
@@ -509,7 +509,7 @@ function getAdminPage() {
     btn.classList.add('active');
     document.getElementById('tab-' + name).classList.add('active');
     if (name === 'deals' && !dealsLoaded && !dealsLoading) {
-      fetchDeals(true);
+      fetchDealsInitial();
     }
   }
 
@@ -1004,7 +1004,7 @@ function getAdminPage() {
     }
     var numFeatures = numPairs + 3; // intercept + pairs + pulls + yellowCount
 
-    // 2. 构建设计矩阵
+    // 2. 构建设计矩阵（用引擎估值作为特征值，系数=缩放因子）
     var X = [], y = [];
     for (var di2 = 0; di2 < valid.length; di2++) {
       var d2 = valid[di2];
@@ -1017,7 +1017,7 @@ function getAdminPage() {
         if (!c2.name || c2.tier === 'E') continue;
         var key2 = c2.name + '_C' + (c2.const || 0);
         var idx = pairKeys.indexOf(key2);
-        if (idx >= 0) row[idx + 1] = 1;
+        if (idx >= 0) row[idx + 1] = c2.value || 0; // 用引擎估值而非1
       }
       row[numPairs + 1] = d2.pulls || 0;
       row[numPairs + 2] = d2.yellowCount || 0;
@@ -1026,7 +1026,8 @@ function getAdminPage() {
     }
 
     // 3. 岭回归: β = (XᵀX + λI)⁻¹ Xᵀy
-    var lambda = 10.0;
+    // 用估值作特征值后系数≈1.0为合理，λ降低避免过度收缩
+    var lambda = 1.0;
     var Xt = _matT(X);
     var XtX = _matMul(Xt, X);
     var Xty = _matVec(Xt, y);
@@ -1052,13 +1053,14 @@ function getAdminPage() {
     var modelR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
     modelR2 = Math.round(modelR2 * 1000) / 1000;
 
-    // 5. 生成建议（按角色×命座组合）
+    // 5. 生成建议（系数=缩放因子，建议价=当前价×系数）
     var suggestions = [];
     for (var si = 0; si < numPairs; si++) {
       var key = pairKeys[si];
-      var coef = beta[si + 1];
-      if (coef < 0) coef = 0;
-      coef = Math.round(coef);
+      var coef = beta[si + 1]; // 缩放因子，≈1.0为合理
+      // 限制在合理范围
+      if (coef < 0.1) coef = 0.1;
+      if (coef > 3.0) coef = 3.0;
 
       var vals = pairVals[key] || [];
       var currentPrice = vals.length > 0
@@ -1070,11 +1072,12 @@ function getAdminPage() {
       var constLevel = parseInt(key.replace(/.*_C/, ''));
 
       if (currentPrice != null && currentPrice > 0) {
-        var adjust = coef - currentPrice;
-        var adjustPct = Math.round(adjust / currentPrice * 1000) / 10;
+        var suggestedPrice = Math.round(currentPrice * coef);
+        var adjust = suggestedPrice - currentPrice;
+        var adjustPct = Math.round((coef - 1) * 1000) / 10;
         suggestions.push({
           name: name, tier: pairTier[key], constLevel: constLevel,
-          current: currentPrice, suggested: coef,
+          current: currentPrice, suggested: suggestedPrice,
           adjust: adjust, adjustPct: adjustPct,
           count: count, valSamples: vals.length,
           reliability: count >= 10 ? 'high' : count >= 5 ? 'medium' : 'low'
