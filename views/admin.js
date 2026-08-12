@@ -267,7 +267,7 @@ function getAdminPage() {
       <div id="d-accuracy-analysis" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
         <div onclick="var t=document.getElementById('d-accuracy-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
           <span style="font-size:14px;font-weight:600;color:#60a5fa;">算法准确性分析</span>
-          <span style="font-size:12px;color:#888;">（R²决定系数 + 价格区间分段统计）</span>
+          <span style="font-size:12px;color:#888;">（R² + P90 + 价格分段 + 散点图）</span>
           <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
         </div>
         <div id="d-accuracy-body" style="display:none;padding:16px 18px;">
@@ -287,6 +287,11 @@ function getAdminPage() {
               <div id="d-med-dev" style="font-size:24px;font-weight:700;color:#fbbf24;">-</div>
               <div id="d-med-dev-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
             </div>
+            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
+              <div style="font-size:12px;color:#888;margin-bottom:6px;">P90偏差率</div>
+              <div id="d-p90-dev" style="font-size:24px;font-weight:700;color:#fbbf24;">-</div>
+              <div id="d-p90-dev-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
+            </div>
           </div>
           <div style="font-size:13px;color:#aaa;margin-bottom:10px;">价格区间分段统计</div>
           <div style="overflow-x:auto;">
@@ -302,6 +307,8 @@ function getAdminPage() {
               <tbody id="d-price-range-tbody"></tbody>
             </table>
           </div>
+          <div style="font-size:13px;color:#aaa;margin:20px 0 10px;">估值 vs 成交价 散点图</div>
+          <div id="d-scatter-plot" style="background:#0d0d22;border-radius:8px;padding:16px;"></div>
         </div>
       </div>
     </div>
@@ -801,6 +808,17 @@ function getAdminPage() {
     medEl.style.color = medDevPct > 5 ? '#f87171' : medDevPct < -5 ? '#4ade80' : '#fbbf24';
     document.getElementById('d-med-dev-desc').textContent = '抗极端值，反映系统偏置';
 
+    // ===== P90 偏差率（90%的账号偏差不超过此值）=====
+    var sortedAbsDevPct = valid.map(function(d) { return Math.abs(d.deviationPercent); }).sort(function(a, b) { return a - b; });
+    var p90Idx = Math.min(Math.floor(sortedAbsDevPct.length * 0.9), sortedAbsDevPct.length - 1);
+    var p90DevPct = Math.round(sortedAbsDevPct[p90Idx] * 100) / 100;
+
+    // 渲染 P90 偏差率
+    var p90El = document.getElementById('d-p90-dev');
+    p90El.textContent = '±' + p90DevPct + '%';
+    p90El.style.color = p90DevPct <= 10 ? '#4ade80' : p90DevPct <= 20 ? '#fbbf24' : '#f87171';
+    document.getElementById('d-p90-dev-desc').textContent = '90%账号偏差不超过此值';
+
     // ===== 价格区间分段统计 =====
     var priceRanges = [
       { label: '<300', min: 0, max: 300 },
@@ -841,6 +859,62 @@ function getAdminPage() {
     }).filter(function(r) { return r !== null; }).join('');
 
     document.getElementById('d-price-range-tbody').innerHTML = rangeRows || '<tr><td colspan="8" style="text-align:center;padding:20px;color:#666;">暂无数据</td></tr>';
+
+    // ===== 散点图(估值 vs 成交价) =====
+    var maxVal = Math.max(
+      Math.max.apply(null, valid.map(function(d) { return d.estimatedValue; })),
+      Math.max.apply(null, valid.map(function(d) { return d.price; }))
+    );
+    maxVal = Math.ceil(maxVal / 100) * 100;
+    if (maxVal < 100) maxVal = 100;
+
+    var svgW = 500, svgH = 480;
+    var padL = 55, padR = 15, padT = 20, padB = 45;
+    var plotW = svgW - padL - padR;
+    var plotH = svgH - padT - padB;
+
+    function sX(v) { return padL + (v / maxVal) * plotW; }
+    function sY(v) { return padT + plotH - (v / maxVal) * plotH; }
+
+    var sp = [];
+    sp.push('<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:500px;height:auto;display:block;margin:0 auto;" xmlns="http://www.w3.org/2000/svg">');
+
+    // 网格线 + 刻度
+    for (var g = 0; g <= 4; g++) {
+      var gv = (maxVal / 4) * g;
+      var gx = sX(gv), gy = sY(gv);
+      sp.push('<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (svgW - padR) + '" y2="' + gy.toFixed(1) + '" stroke="#1f1f3a" stroke-width="1"/>');
+      sp.push('<line x1="' + gx.toFixed(1) + '" y1="' + padT + '" x2="' + gx.toFixed(1) + '" y2="' + (svgH - padB) + '" stroke="#1f1f3a" stroke-width="1"/>');
+      sp.push('<text x="' + (padL - 8) + '" y="' + (gy + 4).toFixed(1) + '" fill="#666" font-size="10" text-anchor="end">' + Math.round(gv) + '</text>');
+      sp.push('<text x="' + gx.toFixed(1) + '" y="' + (svgH - padB + 15) + '" fill="#666" font-size="10" text-anchor="middle">' + Math.round(gv) + '</text>');
+    }
+
+    // y=x 参考线（完美预测）
+    sp.push('<line x1="' + sX(0).toFixed(1) + '" y1="' + sY(0).toFixed(1) + '" x2="' + sX(maxVal).toFixed(1) + '" y2="' + sY(maxVal).toFixed(1) + '" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.5"/>');
+    sp.push('<text x="' + (sX(maxVal) - 5).toFixed(1) + '" y="' + (sY(maxVal) - 6).toFixed(1) + '" fill="#4ade80" font-size="10" text-anchor="end">y=x 完美预测线</text>');
+
+    // 数据点
+    for (var p = 0; p < valid.length; p++) {
+      var px = sX(valid[p].estimatedValue);
+      var py = sY(valid[p].price);
+      var pc = valid[p].deviation > 0 ? '#4ade80' : (valid[p].deviation < 0 ? '#f87171' : '#888');
+      sp.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="3" fill="' + pc + '" opacity="0.65"><title>估值¥' + valid[p].estimatedValue + ' 成交¥' + valid[p].price + ' 偏差' + valid[p].deviationPercent + '%</title></circle>');
+    }
+
+    // 轴标签
+    sp.push('<text x="' + (padL + plotW / 2) + '" y="' + (svgH - 5) + '" fill="#aaa" font-size="11" text-anchor="middle">估值 (元)</text>');
+    sp.push('<text x="15" y="' + (padT + plotH / 2) + '" fill="#aaa" font-size="11" text-anchor="middle" transform="rotate(-90 15 ' + (padT + plotH / 2) + ')">成交价 (元)</text>');
+
+    // 图例
+    sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0d0d22" stroke="#2a2a4a" rx="4"/>');
+    sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="3" fill="#4ade80" opacity="0.65"/>');
+    sp.push('<text x="' + (svgW - 125) + '" y="24" fill="#888" font-size="10">估值偏高(买赚)</text>');
+    sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="3" fill="#f87171" opacity="0.65"/>');
+    sp.push('<text x="' + (svgW - 125) + '" y="39" fill="#888" font-size="10">估值偏低(买贵)</text>');
+
+    sp.push('</svg>');
+    document.getElementById('d-scatter-plot').innerHTML = sp.join('');
+
     document.getElementById('d-accuracy-analysis').style.display = 'block';
   }
 
