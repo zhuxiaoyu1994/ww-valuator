@@ -199,6 +199,10 @@ function getAdminPage() {
         <div class="d-stat-card green"><div class="d-label">准确率(±20%)</div><div class="d-val" id="d-accuracy">-</div><div class="d-sub" id="d-accuracy-detail"></div></div>
         <div class="d-stat-card green"><div class="d-label">估值偏高(买赚)</div><div class="d-val" id="d-undervalued">-</div></div>
         <div class="d-stat-card red"><div class="d-label">估值偏低(买贵)</div><div class="d-val" id="d-overvalued">-</div></div>
+        <div class="d-stat-card blue"><div class="d-label">R²(决定系数)</div><div class="d-val" id="d-r2">-</div><div class="d-sub" id="d-r2-desc"></div></div>
+        <div class="d-stat-card blue"><div class="d-label">相关系数(r)</div><div class="d-val" id="d-corr">-</div><div class="d-sub" id="d-corr-desc"></div></div>
+        <div class="d-stat-card yellow"><div class="d-label">中位数偏差率</div><div class="d-val" id="d-med-dev">-</div><div class="d-sub" id="d-med-dev-desc"></div></div>
+        <div class="d-stat-card yellow"><div class="d-label">P90偏差率</div><div class="d-val" id="d-p90-dev">-</div><div class="d-sub" id="d-p90-dev-desc"></div></div>
       </div>
       <div class="d-controls">
         <select id="d-pagesize" onchange="dealsPageSize=parseInt(this.value)">
@@ -323,32 +327,10 @@ function getAdminPage() {
       <div id="d-accuracy-analysis" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
         <div onclick="var t=document.getElementById('d-accuracy-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
           <span style="font-size:14px;font-weight:600;color:#60a5fa;">算法准确性分析</span>
-          <span style="font-size:12px;color:#888;">（R² + P90 + 价格分段 + 散点图）</span>
+          <span style="font-size:12px;color:#888;">（价格分段 + 散点图）</span>
           <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
         </div>
         <div id="d-accuracy-body" style="display:none;padding:16px 18px;">
-          <div style="display:flex;gap:16px;margin-bottom:20px;">
-            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
-              <div style="font-size:12px;color:#888;margin-bottom:6px;">R²(决定系数)</div>
-              <div id="d-r2" style="font-size:24px;font-weight:700;color:#60a5fa;">-</div>
-              <div id="d-r2-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
-            </div>
-            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
-              <div style="font-size:12px;color:#888;margin-bottom:6px;">相关系数(r)</div>
-              <div id="d-corr" style="font-size:24px;font-weight:700;color:#60a5fa;">-</div>
-              <div id="d-corr-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
-            </div>
-            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
-              <div style="font-size:12px;color:#888;margin-bottom:6px;">中位数偏差率</div>
-              <div id="d-med-dev" style="font-size:24px;font-weight:700;color:#fbbf24;">-</div>
-              <div id="d-med-dev-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
-            </div>
-            <div style="flex:1;background:#0d0d22;border-radius:8px;padding:14px;text-align:center;">
-              <div style="font-size:12px;color:#888;margin-bottom:6px;">P90偏差率</div>
-              <div id="d-p90-dev" style="font-size:24px;font-weight:700;color:#fbbf24;">-</div>
-              <div id="d-p90-dev-desc" style="font-size:11px;color:#666;margin-top:4px;"></div>
-            </div>
-          </div>
           <div style="font-size:13px;color:#aaa;margin-bottom:10px;">价格区间分段统计</div>
           <div style="overflow-x:auto;">
             <table class="d-table">
@@ -709,6 +691,14 @@ function getAdminPage() {
     document.getElementById('d-accuracy-detail').textContent = '';
     document.getElementById('d-undervalued').textContent = '-';
     document.getElementById('d-overvalued').textContent = '-';
+    document.getElementById('d-r2').textContent = '-';
+    document.getElementById('d-r2-desc').textContent = '';
+    document.getElementById('d-corr').textContent = '-';
+    document.getElementById('d-corr-desc').textContent = '';
+    document.getElementById('d-med-dev').textContent = '-';
+    document.getElementById('d-med-dev-desc').textContent = '';
+    document.getElementById('d-p90-dev').textContent = '-';
+    document.getElementById('d-p90-dev-desc').textContent = '';
     document.getElementById('d-info').textContent = '';
     document.getElementById('d-more-btn').disabled = false;
     document.getElementById('d-char-stats-section').style.display = 'none';
@@ -1160,6 +1150,14 @@ function getAdminPage() {
   function renderAccuracyAnalysis(valid) {
     if (valid.length < 2) {
       document.getElementById('d-accuracy-analysis').style.display = 'none';
+      document.getElementById('d-r2').textContent = '-';
+      document.getElementById('d-r2-desc').textContent = '';
+      document.getElementById('d-corr').textContent = '-';
+      document.getElementById('d-corr-desc').textContent = '';
+      document.getElementById('d-med-dev').textContent = '-';
+      document.getElementById('d-med-dev-desc').textContent = '';
+      document.getElementById('d-p90-dev').textContent = '-';
+      document.getElementById('d-p90-dev-desc').textContent = '';
       return;
     }
 
