@@ -298,12 +298,12 @@ function getAdminPage() {
       <!-- 角色定价建议（多元回归） -->
       <div id="d-pricing-suggest-section" style="display:none;margin-top:20px;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;">
         <div onclick="var t=document.getElementById('d-pricing-body');var a=this.querySelector('.d-collapse-arrow');if(t.style.display==='none'){t.style.display='block';a.textContent='▼';}else{t.style.display='none';a.textContent='▶';}" style="padding:14px 18px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;">
-          <span style="font-size:14px;font-weight:600;color:#4ade80;">角色定价建议（多元岭回归）</span>
+          <span style="font-size:14px;font-weight:600;color:#4ade80;">角色定价建议（比例调整法）</span>
           <span id="d-pricing-r2" style="font-size:12px;color:#888;"></span>
           <span class="d-collapse-arrow" style="margin-left:auto;font-size:12px;color:#888;">▶</span>
         </div>
         <div id="d-pricing-body" style="display:none;padding:16px 18px;">
-          <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6;">基于多元岭回归，用引擎估值作为特征值控制抽数和黄数后，计算各角色各命座的缩放系数（系数≈1.0为合理）。建议价=当前价×系数。绿色=需上调，红色=需下调。仅显示出现≥3次的角色命座组合。</div>
+          <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6;">基于比例调整法，对每个账号计算角色部分缩放比率（排除抽数/黄数影响），再按角色×命座取平均。建议价=该组合在各账号中调整后的均值。绿色=需上调，红色=需下调。仅显示出现≥3次的角色命座组合。</div>
           <div style="overflow-x:auto;">
             <table class="d-table">
               <thead>
@@ -958,7 +958,8 @@ function getAdminPage() {
   }
 
   // ============================================================
-  // 角色定价建议（多元岭回归 - 按命座区分）
+  // 角色定价建议（比例调整法 - 按命座区分）
+  // 对每个账号计算角色部分缩放比率，避免回归共线性问题
   // ============================================================
   function renderPricingSuggestions(valid) {
     if (valid.length < 10) {
@@ -966,10 +967,31 @@ function getAdminPage() {
       return;
     }
 
-    // 1. 收集角色×命座组合信息
-    var pairSet = {}, pairTier = {}, pairCount = {}, pairVals = {};
+    // 1. 收集角色×命座组合信息 + 计算每个账号的角色缩放比率
+    var pairSet = {}, pairTier = {}, pairCount = {}, pairVals = {}, pairAdjustedVals = {};
+    var allRatios = []; // 用于计算全局平均比率
+    var accountPredictions = []; // 用于计算R²
+
     for (var di = 0; di < valid.length; di++) {
-      var chars = valid[di].characters || [];
+      var d = valid[di];
+      var chars = d.characters || [];
+
+      // 计算该账号的角色总价值和非角色总价值
+      var engineCharTotal = 0;
+      for (var ci0 = 0; ci0 < chars.length; ci0++) {
+        if (chars[ci0].tier !== 'E' && chars[ci0].value != null) {
+          engineCharTotal += chars[ci0].value;
+        }
+      }
+      var engineOtherTotal = d.estimatedValue - engineCharTotal; // 抽数/黄数/资源等
+      // 假设非角色部分定价正确，市场角色总价 = 成交价 - 非角色部分
+      var marketCharTotal = d.price - engineOtherTotal;
+      var charRatio = engineCharTotal > 0 ? marketCharTotal / engineCharTotal : 1.0;
+      // 限制在合理范围，避免极端值干扰
+      if (charRatio < 0.1) charRatio = 0.1;
+      if (charRatio > 3.0) charRatio = 3.0;
+      allRatios.push(charRatio);
+
       for (var ci = 0; ci < chars.length; ci++) {
         var c = chars[ci];
         if (!c.name || c.tier === 'E') continue;
@@ -980,6 +1002,8 @@ function getAdminPage() {
         if (c.value != null && !isNaN(c.value)) {
           if (!pairVals[key]) pairVals[key] = [];
           pairVals[key].push(c.value);
+          if (!pairAdjustedVals[key]) pairAdjustedVals[key] = [];
+          pairAdjustedVals[key].push(c.value * charRatio);
         }
       }
     }
@@ -990,91 +1014,62 @@ function getAdminPage() {
       var ta = tierOrder[pairTier[a]] != null ? tierOrder[pairTier[a]] : 9;
       var tb = tierOrder[pairTier[b]] != null ? tierOrder[pairTier[b]] : 9;
       if (ta !== tb) return ta - tb;
-      // 同级别内按角色名再按命座排序
       var na = a.replace(/_C\d+$/, ''), nb = b.replace(/_C\d+$/, '');
       if (na !== nb) return na < nb ? -1 : 1;
       var ca = parseInt(a.replace(/.*_C/, '')), cb = parseInt(b.replace(/.*_C/, ''));
       return ca - cb;
     });
 
-    var numPairs = pairKeys.length;
-    if (numPairs === 0) {
-      document.getElementById('d-pricing-suggest-section').style.display = 'none';
-      return;
-    }
-    var numFeatures = numPairs + 3; // intercept + pairs + pulls + yellowCount
-
-    // 2. 构建设计矩阵（用引擎估值作为特征值，系数=缩放因子）
-    var X = [], y = [];
-    for (var di2 = 0; di2 < valid.length; di2++) {
-      var d2 = valid[di2];
-      var row = [];
-      for (var fi = 0; fi < numFeatures; fi++) row.push(0);
-      row[0] = 1; // 截距项
-      var chars2 = d2.characters || [];
-      for (var ci2 = 0; ci2 < chars2.length; ci2++) {
-        var c2 = chars2[ci2];
-        if (!c2.name || c2.tier === 'E') continue;
-        var key2 = c2.name + '_C' + (c2.const || 0);
-        var idx = pairKeys.indexOf(key2);
-        if (idx >= 0) row[idx + 1] = c2.value || 0; // 用引擎估值而非1
-      }
-      row[numPairs + 1] = d2.pulls || 0;
-      row[numPairs + 2] = d2.yellowCount || 0;
-      X.push(row);
-      y.push(d2.price);
-    }
-
-    // 3. 岭回归: β = (XᵀX + λI)⁻¹ Xᵀy
-    // 用估值作特征值后系数≈1.0为合理，λ降低避免过度收缩
-    var lambda = 1.0;
-    var Xt = _matT(X);
-    var XtX = _matMul(Xt, X);
-    var Xty = _matVec(Xt, y);
-    for (var fi2 = 1; fi2 < numFeatures; fi2++) XtX[fi2][fi2] += lambda;
-
-    var beta = _gaussSolve(XtX, Xty);
-    if (!beta) {
+    if (pairKeys.length === 0) {
       document.getElementById('d-pricing-suggest-section').style.display = 'none';
       return;
     }
 
-    // 4. 计算模型 R²
+    // 2. 计算全局平均比率用于R²
+    var overallRatio = 0;
+    for (var ri = 0; ri < allRatios.length; ri++) overallRatio += allRatios[ri];
+    overallRatio /= allRatios.length;
+
+    // 计算R²: predicted = engineOther + engineChar × overallRatio
     var yMean = 0;
-    for (var di3 = 0; di3 < y.length; di3++) yMean += y[di3];
-    yMean /= y.length;
+    for (var di3 = 0; di3 < valid.length; di3++) yMean += valid[di3].price;
+    yMean /= valid.length;
     var ssRes = 0, ssTot = 0;
     for (var di4 = 0; di4 < valid.length; di4++) {
-      var pred = 0;
-      for (var fi3 = 0; fi3 < numFeatures; fi3++) pred += X[di4][fi3] * beta[fi3];
-      ssRes += Math.pow(y[di4] - pred, 2);
-      ssTot += Math.pow(y[di4] - yMean, 2);
+      var d4 = valid[di4];
+      var charT = 0;
+      var chars4 = d4.characters || [];
+      for (var ci4 = 0; ci4 < chars4.length; ci4++) {
+        if (chars4[ci4].tier !== 'E' && chars4[ci4].value != null) charT += chars4[ci4].value;
+      }
+      var otherT = d4.estimatedValue - charT;
+      var pred = otherT + charT * overallRatio;
+      ssRes += Math.pow(d4.price - pred, 2);
+      ssTot += Math.pow(d4.price - yMean, 2);
     }
     var modelR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
     modelR2 = Math.round(modelR2 * 1000) / 1000;
 
-    // 5. 生成建议（系数=缩放因子，建议价=当前价×系数）
+    // 3. 生成建议（建议价=该组合在各账号中的调整后均值）
     var suggestions = [];
-    for (var si = 0; si < numPairs; si++) {
+    for (var si = 0; si < pairKeys.length; si++) {
       var key = pairKeys[si];
-      var coef = beta[si + 1]; // 缩放因子，≈1.0为合理
-      // 限制在合理范围
-      if (coef < 0.1) coef = 0.1;
-      if (coef > 3.0) coef = 3.0;
-
       var vals = pairVals[key] || [];
+      var adjVals = pairAdjustedVals[key] || [];
       var currentPrice = vals.length > 0
         ? Math.round(vals.reduce(function(s, v) { return s + v; }, 0) / vals.length)
+        : null;
+      var suggestedPrice = adjVals.length > 0
+        ? Math.round(adjVals.reduce(function(s, v) { return s + v; }, 0) / adjVals.length)
         : null;
 
       var count = pairCount[key];
       var name = key.replace(/_C\d+$/, '');
       var constLevel = parseInt(key.replace(/.*_C/, ''));
 
-      if (currentPrice != null && currentPrice > 0) {
-        var suggestedPrice = Math.round(currentPrice * coef);
+      if (currentPrice != null && currentPrice > 0 && suggestedPrice != null) {
         var adjust = suggestedPrice - currentPrice;
-        var adjustPct = Math.round((coef - 1) * 1000) / 10;
+        var adjustPct = Math.round(adjust / currentPrice * 1000) / 10;
         suggestions.push({
           name: name, tier: pairTier[key], constLevel: constLevel,
           current: currentPrice, suggested: suggestedPrice,
@@ -1121,7 +1116,7 @@ function getAdminPage() {
     }).join('');
 
     document.getElementById('d-pricing-tbody').innerHTML = rows;
-    document.getElementById('d-pricing-r2').textContent = '模型R²=' + modelR2.toFixed(3) + ' | 样本=' + valid.length + ' | 变量=' + numPairs;
+    document.getElementById('d-pricing-r2').textContent = '模型R²=' + modelR2.toFixed(3) + ' | 样本=' + valid.length + ' | 全局比率=' + overallRatio.toFixed(2);
     document.getElementById('d-pricing-suggest-section').style.display = 'block';
   }
 
