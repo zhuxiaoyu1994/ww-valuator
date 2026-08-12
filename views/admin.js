@@ -1050,22 +1050,58 @@ function getAdminPage() {
     var modelR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
     modelR2 = Math.round(modelR2 * 1000) / 1000;
 
-    // 3. 生成建议（建议价=该组合在各账号中的调整后均值）
+    // 3. 从 localStorage 加载当前估值权重，用于读取角色当前配置价格
+    var savedWeights = null;
+    try {
+      var _saved = localStorage.getItem('mw_eval_weights');
+      if (_saved) savedWeights = JSON.parse(_saved);
+    } catch (e) { /* ignore */ }
+
+    // 根据角色名和命座查找当前配置价格（与估值引擎 calcConstPremium 逻辑一致）
+    function getCurrentCharPrice(charName, constLevel) {
+      if (!savedWeights) return null;
+      var charPrices = savedWeights.charPrices || {};
+      var base = charPrices[charName] != null ? charPrices[charName] : null;
+      if (base === null) return null;
+      if (constLevel <= 0) return base;
+      var constPrices = savedWeights.constPrices || {};
+      var charCP = constPrices[charName];
+      if (charCP) {
+        var maxLevel = 0;
+        for (var bp in charCP) {
+          if (!charCP.hasOwnProperty(bp)) continue;
+          var level = parseInt(bp);
+          if (!isNaN(level) && level <= constLevel && level > maxLevel) {
+            maxLevel = level;
+          }
+        }
+        if (maxLevel > 0 && charCP[maxLevel] != null) {
+          return charCP[maxLevel];
+        }
+      }
+      return base;
+    }
+
+    // 4. 生成建议（建议价=该组合在各账号中的调整后均值）
     var suggestions = [];
     for (var si = 0; si < pairKeys.length; si++) {
       var key = pairKeys[si];
       var vals = pairVals[key] || [];
       var adjVals = pairAdjustedVals[key] || [];
-      var currentPrice = vals.length > 0
-        ? Math.round(vals.reduce(function(s, v) { return s + v; }, 0) / vals.length)
-        : null;
-      var suggestedPrice = adjVals.length > 0
-        ? Math.round(adjVals.reduce(function(s, v) { return s + v; }, 0) / adjVals.length)
-        : null;
-
       var count = pairCount[key];
       var name = key.replace(/_C\d+$/, '');
       var constLevel = parseInt(key.replace(/.*_C/, ''));
+
+      // 当前价格：优先从 localStorage 保存的估值规则中读取，无则回退到历史均值
+      var currentPrice = getCurrentCharPrice(name, constLevel);
+      if (currentPrice == null) {
+        currentPrice = vals.length > 0
+          ? Math.round(vals.reduce(function(s, v) { return s + v; }, 0) / vals.length)
+          : null;
+      }
+      var suggestedPrice = adjVals.length > 0
+        ? Math.round(adjVals.reduce(function(s, v) { return s + v; }, 0) / adjVals.length)
+        : null;
 
       if (currentPrice != null && currentPrice > 0 && suggestedPrice != null) {
         var adjust = suggestedPrice - currentPrice;
