@@ -253,11 +253,11 @@ function getAdminPage() {
                 <tr>
                   <th style="width:90px">编号</th><th style="width:80px">成交日</th><th>商品描述</th>
                   <th style="width:80px">成交价</th><th style="width:80px">估值</th><th style="width:80px">偏差值</th>
-                  <th style="width:70px">偏差率</th><th style="width:50px">黄数</th><th style="width:50px">详情</th>
+                  <th style="width:70px">偏差率</th><th style="width:50px">黄数</th><th style="width:50px">详情</th><th style="width:40px">删除</th>
                 </tr>
               </thead>
               <tbody id="d-tbody">
-                <tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>
+                <tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>
               </tbody>
             </table>
           </div>
@@ -627,7 +627,7 @@ function getAdminPage() {
     const tbody = document.getElementById('d-tbody');
     const moreBtn = document.getElementById('d-more-btn');
     if (reset) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">正在获取成交数据并计算估值...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">正在获取成交数据并计算估值...</td></tr>';
     } else {
       moreBtn.textContent = '加载中...';
       moreBtn.disabled = true;
@@ -648,7 +648,7 @@ function getAdminPage() {
       });
       const json = await resp.json();
       if (!json.success) {
-        if (reset) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#f87171;">' + escapeHtml(json.error || '获取失败') + '</td></tr>';
+        if (reset) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#f87171;">' + escapeHtml(json.error || '获取失败') + '</td></tr>';
         else moreBtn.textContent = '加载更多';
         dealsLoading = false;
         return;
@@ -669,7 +669,7 @@ function getAdminPage() {
       applyDealsFilter();
       dealsLoaded = true;
     } catch (err) {
-      if (reset) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#f87171;">网络错误: ' + escapeHtml(err.message) + '</td></tr>';
+      if (reset) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#f87171;">网络错误: ' + escapeHtml(err.message) + '</td></tr>';
     }
 
     dealsLoading = false;
@@ -684,7 +684,7 @@ function getAdminPage() {
     dealsHasMore = true;
     dealsLoaded = false;
     dealsExpandedRow = null;
-    document.getElementById('d-tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>';
+    document.getElementById('d-tbody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>';
     document.getElementById('d-total').textContent = '-';
     document.getElementById('d-valued').textContent = '';
     document.getElementById('d-avg-price').textContent = '-';
@@ -1360,7 +1360,7 @@ function getAdminPage() {
   function renderDealsTable() {
     const tbody = document.getElementById('d-tbody');
     if (dealsFiltered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#666;">暂无数据</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">暂无数据</td></tr>';
       document.getElementById('d-info').textContent = '';
       return;
     }
@@ -1380,8 +1380,9 @@ function getAdminPage() {
         '<td class="d-dev ' + devClass + '">' + (hasDetails ? devPctSign + d.deviationPercent + '%' : '-') + '</td>' +
         '<td>' + (d.yellowCount > 0 ? d.yellowCount : '-') + '</td>' +
         '<td style="text-align:center;">' + (hasDetails ? '<span style="cursor:pointer;color:#8ecdf5;font-size:16px;" onclick="toggleDetail(' + i + ')">▶</span>' : '') + '</td>' +
+        '<td style="text-align:center;"><span style="cursor:pointer;color:#f87171;font-size:15px;font-weight:700;" onclick="deleteDeal(' + i + ')" title="删除此条记录">×</span></td>' +
         '</tr>' +
-        (hasDetails ? '<tr class="d-detail-row" id="d-detail-' + i + '" style="display:none;"><td colspan="9">' + renderDealDetail(d) + '</td></tr>' : '');
+        (hasDetails ? '<tr class="d-detail-row" id="d-detail-' + i + '" style="display:none;"><td colspan="10">' + renderDealDetail(d) + '</td></tr>' : '');
     }).join('');
 
     document.getElementById('d-info').textContent = '共 ' + dealsFiltered.length + ' 条' + (dealsHasMore ? ' (可加载更多)' : ' (已全部加载)');
@@ -1426,6 +1427,17 @@ function getAdminPage() {
   }
 
   function toggleDesc(el) { el.classList.toggle('expanded'); }
+
+  function deleteDeal(filteredIndex) {
+    var item = dealsFiltered[filteredIndex];
+    if (!item) return;
+    var dataIdx = dealsData.indexOf(item);
+    if (dataIdx < 0) return;
+    dealsData.splice(dataIdx, 1);
+    dealsExpandedRow = null;
+    renderDealsSummary();
+    applyDealsFilter();
+  }
 
   function toggleDetail(idx) {
     const detailRow = document.getElementById('d-detail-' + idx);
