@@ -1764,9 +1764,29 @@
       }
     };
 
+    // 导出配置按钮
+    var exportBtn = document.createElement('button');
+    exportBtn.textContent = '导出配置';
+    exportBtn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;background:#0f3460;color:#8ecdf5;font-size:14px;font-weight:600;cursor:pointer;';
+    exportBtn.onclick = function () {
+      var config = localStorage.getItem(STORAGE_KEY);
+      if (!config) {
+        alert('当前没有已保存的自定义配置，请先点击「保存」后再导出。');
+        return;
+      }
+      var blob = new Blob([config], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'mw_value_config_' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
     btnArea.appendChild(resetBtn);
     btnArea.appendChild(cancelBtn);
     btnArea.appendChild(saveBtn);
+    btnArea.appendChild(exportBtn);
     dialog.appendChild(btnArea);
 
     overlay.appendChild(dialog);

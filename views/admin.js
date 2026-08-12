@@ -56,7 +56,7 @@ function getAdminPage() {
   .pagination span { color: #888; font-size: 13px; }
 
   /* Deals Tab */
-  .d-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .d-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
   .d-stat-card { background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px 18px; text-align: center; }
   .d-stat-card .d-label { font-size: 12px; color: #888; margin-bottom: 6px; }
   .d-stat-card .d-val { font-size: 22px; font-weight: 700; }
