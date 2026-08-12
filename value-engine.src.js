@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 13;
+const CONFIG_VERSION = 14;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -334,6 +334,52 @@ function buildDefaultCharPrices() {
   return prices;
 }
 
+// 生成默认命座绝对定价表（从 DEFAULT_CONST_PREMIUMS + DEFAULT_CHAR_PRICES 转换）
+// 格式: { 角色名: { '1': c1绝对价, '2': c2绝对价, ..., '6': c6绝对价 } }
+// C0价格 = charPrices[角色名]，不在constPrices中存储
+function buildDefaultConstPrices() {
+  var result = {};
+  var basePrices = buildDefaultCharPrices();
+  for (var charName in DEFAULT_CONST_PREMIUMS) {
+    if (!DEFAULT_CONST_PREMIUMS.hasOwnProperty(charName)) continue;
+    var base = basePrices[charName] != null ? basePrices[charName] : 0;
+    var premiums = DEFAULT_CONST_PREMIUMS[charName];
+    var prices = {};
+    for (var c = 1; c <= 6; c++) {
+      var maxPrem = 0;
+      for (var bp in premiums) {
+        if (!premiums.hasOwnProperty(bp)) continue;
+        var breakpoint = parseInt(bp);
+        if (!isNaN(breakpoint) && breakpoint <= c) {
+          var prem = premiums[bp] || 0;
+          if (prem > maxPrem) maxPrem = prem;
+        }
+      }
+      prices[c] = base + maxPrem;
+    }
+    result[charName] = prices;
+  }
+  return result;
+}
+
+// 从旧的constPremiums格式转换为constPrices格式
+function convertPremiumsToConstPrices(charName, basePrice, premiums) {
+  var prices = {};
+  for (var c = 1; c <= 6; c++) {
+    var maxPrem = 0;
+    for (var bp in premiums) {
+      if (!premiums.hasOwnProperty(bp)) continue;
+      var breakpoint = parseInt(bp);
+      if (!isNaN(breakpoint) && breakpoint <= c) {
+        var prem = premiums[bp] || 0;
+        if (prem > maxPrem) maxPrem = prem;
+      }
+    }
+    prices[c] = basePrice + maxPrem;
+  }
+  return prices;
+}
+
 // 生成默认配队溢价表（对象格式，从 DEFAULT_TEAMS 转换）
 function buildDefaultTeamPremiums() {
   const result = {};
@@ -382,6 +428,20 @@ function buildDefaultWeights(customWeights) {
     w.charPrices['秧秧'] = 0;
   }
   w.constPremiums = Object.assign({}, DEFAULT_CONST_PREMIUMS, saved.constPremiums || {});
+  // 命座绝对定价表：优先使用用户保存的constPrices，否则从constPremiums转换
+  var _defaultConstPrices = buildDefaultConstPrices();
+  if (saved.constPrices) {
+    w.constPrices = Object.assign({}, _defaultConstPrices, saved.constPrices);
+  } else {
+    // 从旧constPremiums格式转换
+    w.constPrices = Object.assign({}, _defaultConstPrices);
+    var _oldPremiums = Object.assign({}, DEFAULT_CONST_PREMIUMS, saved.constPremiums || {});
+    for (var _cpName in _oldPremiums) {
+      if (!_oldPremiums.hasOwnProperty(_cpName)) continue;
+      var _cpBase = w.charPrices[_cpName] != null ? w.charPrices[_cpName] : (DEFAULT_CHAR_PRICES[_cpName] || 0);
+      w.constPrices[_cpName] = convertPremiumsToConstPrices(_cpName, _cpBase, _oldPremiums[_cpName]);
+    }
+  }
   w.teamPremiums = (saved.teamPremiums && Object.keys(saved.teamPremiums).length > 0) ? saved.teamPremiums : buildDefaultTeamPremiums();
   w.teams = [];
   for (const teamName of Object.keys(w.teamPremiums)) {
@@ -436,6 +496,7 @@ function getDefaults() {
     charTiers: CHAR_TIERS,
     sigWeapons: SIG_WEAPONS,
     constPremiums: DEFAULT_CONST_PREMIUMS,
+    constPrices: buildDefaultConstPrices(),
     teams: DEFAULT_TEAMS,
     pullFormula: DEFAULT_PULL_FORMULA,
     teamMates: DEFAULT_TEAM_MATES,
@@ -798,18 +859,43 @@ function checkHasSigWeapon(charName, weaponNames, weaponSectionText) {
 }
 
 /**
- * 计算角色命座溢价（达到指定命座数时额外加价，只取最高溢价不叠加）
+ * 计算角色命座溢价（绝对定价模式：从constPrices查找对应命座的绝对价格，减去基础价得到溢价）
+ * 优先使用constPrices（绝对定价），无则回退到旧constPremiums格式
  */
 function calcConstPremium(charName, constCount, w) {
   w = w || weights || DEFAULT_WEIGHTS;
-  const premiums = w.constPremiums || {};
-  const charPrem = premiums[charName];
+  
+  // 新模式：使用constPrices（绝对定价）
+  var constPrices = w.constPrices;
+  if (constPrices && constPrices[charName] && constCount > 0) {
+    var charPrices = w.charPrices || {};
+    var base = charPrices[charName] != null ? charPrices[charName] : 0;
+    var charCP = constPrices[charName];
+    var maxLevel = 0;
+    for (var bp in charCP) {
+      if (!charCP.hasOwnProperty(bp)) continue;
+      var level = parseInt(bp);
+      if (!isNaN(level) && level <= constCount && level > maxLevel) {
+        maxLevel = level;
+      }
+    }
+    if (maxLevel > 0) {
+      var constPrice = charCP[maxLevel] != null ? charCP[maxLevel] : base;
+      return constPrice - base;
+    }
+    return 0;
+  }
+  
+  // 兼容旧模式：constPremiums
+  var premiums = w.constPremiums || {};
+  var charPrem = premiums[charName];
   if (!charPrem || constCount <= 0) return 0;
-  let maxPrem = 0;
-  for (const bp of Object.keys(charPrem)) {
-    const breakpoint = parseInt(bp);
-    if (!isNaN(breakpoint) && constCount >= breakpoint) {
-      const prem = charPrem[bp] || 0;
+  var maxPrem = 0;
+  for (var bp2 in charPrem) {
+    if (!charPrem.hasOwnProperty(bp2)) continue;
+    var breakpoint2 = parseInt(bp2);
+    if (!isNaN(breakpoint2) && constCount >= breakpoint2) {
+      var prem = charPrem[bp2] || 0;
       if (prem > maxPrem) maxPrem = prem;
     }
   }
@@ -1302,6 +1388,8 @@ module.exports = {
   DEFAULT_NEED_SIG_WEAPONS,
   // 构建函数
   buildDefaultCharPrices,
+  buildDefaultConstPrices,
+  convertPremiumsToConstPrices,
   buildDefaultTeamPremiums,
   buildDefaultWeights,
   getDefaults,

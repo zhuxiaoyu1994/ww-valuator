@@ -94,6 +94,33 @@
     w.teamMates = (s.teamMates && Object.keys(s.teamMates).length > 0) ? s.teamMates : (DEFAULT_WEIGHTS.teamMates || defaults.teamMates || {});
     w.charPrices = Object.assign({}, defaults.charPrices, DEFAULT_WEIGHTS.charPrices || {}, s.charPrices || {});
     w.constPremiums = Object.assign({}, defaults.constPremiums, DEFAULT_WEIGHTS.constPremiums || {}, s.constPremiums || {});
+    // 命座绝对定价表：优先使用用户保存的constPrices，否则从constPremiums转换
+    var _defConstPrices = defaults.constPrices || {};
+    if (s.constPrices) {
+      w.constPrices = Object.assign({}, _defConstPrices, s.constPrices);
+    } else {
+      w.constPrices = Object.assign({}, _defConstPrices);
+      var _oldPrems = Object.assign({}, defaults.constPremiums || {}, DEFAULT_WEIGHTS.constPremiums || {}, s.constPremiums || {});
+      for (var _cpName in _oldPrems) {
+        if (!_oldPrems.hasOwnProperty(_cpName)) continue;
+        var _cpBase = w.charPrices[_cpName] != null ? w.charPrices[_cpName] : ((defaults.charPrices || {})[_cpName] || 0);
+        var _cpPrem = _oldPrems[_cpName];
+        var _cpPrices = {};
+        for (var _c = 1; _c <= 6; _c++) {
+          var _maxPrem = 0;
+          for (var _bp in _cpPrem) {
+            if (!_cpPrem.hasOwnProperty(_bp)) continue;
+            var _bk = parseInt(_bp);
+            if (!isNaN(_bk) && _bk <= _c) {
+              var _pm = _cpPrem[_bp] || 0;
+              if (_pm > _maxPrem) _maxPrem = _pm;
+            }
+          }
+          _cpPrices[_c] = _cpBase + _maxPrem;
+        }
+        w.constPrices[_cpName] = _cpPrices;
+      }
+    }
     w.teamPremiums = (s.teamPremiums && Object.keys(s.teamPremiums).length > 0) ? s.teamPremiums : (DEFAULT_WEIGHTS.teamPremiums || buildDefaultTeamPremiums(defaults.teams));
     w.teams = [];
     for (var teamName in w.teamPremiums) {
@@ -198,6 +225,7 @@
     // var DEFAULT_PULL_TIERS = defaults.pullTiers;   // 已迁移为公式参数
     // var DEFAULT_YELLOW_TIERS = defaults.yellowTiers; // 已迁移为公式参数
     var DEFAULT_CONST_PREMIUMS = defaults.constPremiums;
+    var DEFAULT_CONST_PRICES = defaults.constPrices || {};
     var DEFAULT_NEED_SIG_WEAPONS = defaults.needSigWeapons;
     var DEFAULT_CHAR_PRICES = defaults.charPrices;
     var WEIGHT_LABELS = defaults.weightLabels;
@@ -312,7 +340,7 @@
         var defaultPrice = DEFAULT_CHAR_PRICES[cname] != null ? DEFAULT_CHAR_PRICES[cname] : tier.price;
         var userPrice = w.charPrices[cname] != null ? w.charPrices[cname] : defaultPrice;
         var weapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[cname]) || SIG_WEAPONS[cname] || '';
-        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk, premiums: w.constPremiums && w.constPremiums[cname] ? Object.assign({}, w.constPremiums[cname]) : {}, needSig: isNeedSig(cname), teamMates: getTeamMates(cname) });
+        charEntries.push({ name: cname, weapon: weapon, price: userPrice, tier: tk, constPrices: w.constPrices && w.constPrices[cname] ? Object.assign({}, w.constPrices[cname]) : {}, needSig: isNeedSig(cname), teamMates: getTeamMates(cname) });
         _addedNames[cname] = true;
       }
     }
@@ -327,7 +355,7 @@
         var ovrDefaultPrice = DEFAULT_CHAR_PRICES[ovrName] != null ? DEFAULT_CHAR_PRICES[ovrName] : (ovrTierInfo ? ovrTierInfo.price : 0);
         var ovrUserPrice = w.charPrices[ovrName] != null ? w.charPrices[ovrName] : ovrDefaultPrice;
         var ovrWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[ovrName]) || SIG_WEAPONS[ovrName] || '';
-        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier, premiums: w.constPremiums && w.constPremiums[ovrName] ? Object.assign({}, w.constPremiums[ovrName]) : {}, needSig: isNeedSig(ovrName), teamMates: getTeamMates(ovrName) });
+        charEntries.push({ name: ovrName, weapon: ovrWeapon, price: ovrUserPrice, tier: ovrTier, constPrices: w.constPrices && w.constPrices[ovrName] ? Object.assign({}, w.constPrices[ovrName]) : {}, needSig: isNeedSig(ovrName), teamMates: getTeamMates(ovrName) });
         _addedNames[ovrName] = true;
       }
     }
@@ -339,7 +367,7 @@
         if (deletedChars.indexOf(customName) >= 0) continue;
         var customTier = (w.charTierOverride && w.charTierOverride[customName]) || 'C';
         var customWeapon = (w.sigWeaponsOverride && w.sigWeaponsOverride[customName]) || SIG_WEAPONS[customName] || '';
-        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier, premiums: w.constPremiums && w.constPremiums[customName] ? Object.assign({}, w.constPremiums[customName]) : {}, needSig: isNeedSig(customName), teamMates: getTeamMates(customName) });
+        charEntries.push({ name: customName, weapon: customWeapon, price: w.charPrices[customName], tier: customTier, constPrices: w.constPrices && w.constPrices[customName] ? Object.assign({}, w.constPrices[customName]) : {}, needSig: isNeedSig(customName), teamMates: getTeamMates(customName) });
       }
     }
 
@@ -427,25 +455,33 @@
             sigLabel.onclick = function() { sigCheck.checked = !sigCheck.checked; entry.needSig = sigCheck.checked; sigLabel.style.color = entry.needSig ? '#f87171' : '#555'; };
             row.appendChild(sigLabel);
 
-            // 命座溢价按钮
+            // 命座定价按钮
             var premBtn = document.createElement('button');
-            var premCount = entry.premiums ? Object.keys(entry.premiums).length : 0;
-            premBtn.textContent = '溢价' + (premCount > 0 ? '(' + premCount + ')' : '');
-            premBtn.title = '编辑命座溢价';
+            var premCount = entry.constPrices ? Object.keys(entry.constPrices).length : 0;
+            premBtn.textContent = '定价' + (premCount > 0 ? '(' + premCount + ')' : '');
+            premBtn.title = '编辑命座定价（C0-C6绝对价格）';
             premBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:' + (premCount > 0 ? '#4ade80' : '#555') + ';font-size:11px;cursor:pointer;line-height:1.4;';
             premBtn.onclick = function() {
               var premOverlay = document.createElement('div');
               premOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100003;display:flex;align-items:center;justify-content:center;';
               var premBox = document.createElement('div');
-              premBox.style.cssText = 'background:#0f0f23;border-radius:12px;padding:20px;width:300px;color:#e0e0e0;';
-              var premHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#4ade80;">编辑命座溢价 - ' + entry.name + '</div>';
-              premHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">达到指定命座时额外加价（只取最高溢价，不叠加）。留空或0表示无溢价。</div>';
+              premBox.style.cssText = 'background:#0f0f23;border-radius:12px;padding:20px;width:320px;color:#e0e0e0;';
+              var premHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#4ade80;">编辑命座定价 - ' + entry.name + '</div>';
+              premHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">设置每个命座的绝对价格。角色几命就取对应命座的价格，未设置的命座取低于它的最近价格。</div>';
+              // C0 定价（与基础价同步）
+              premHTML += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+                '<span style="font-size:12px;color:#60a5fa;font-weight:600;min-width:30px;">C0</span>' +
+                '<span style="color:#555;font-size:11px;">→</span>' +
+                '<input type="number" class="prem-c0" value="' + entry.price + '" placeholder="0" min="0" style="width:80px;padding:4px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;" />' +
+                '<span style="color:#555;font-size:11px;">元</span>' +
+                '<span style="color:#555;font-size:10px;">（基础价）</span>' +
+                '</div>';
               for (var pci = 1; pci <= 6; pci++) {
-                var curPremVal = entry.premiums && entry.premiums[pci] != null ? entry.premiums[pci] : '';
+                var curPremVal = entry.constPrices && entry.constPrices[pci] != null ? entry.constPrices[pci] : '';
                 premHTML += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
                   '<span style="font-size:12px;color:#e94560;font-weight:600;min-width:30px;">C' + pci + '</span>' +
-                  '<span style="color:#555;font-size:11px;">→ +</span>' +
-                  '<input type="number" class="prem-c' + pci + '" value="' + curPremVal + '" placeholder="0" min="0" style="width:80px;padding:4px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;" />' +
+                  '<span style="color:#555;font-size:11px;">→</span>' +
+                  '<input type="number" class="prem-c' + pci + '" value="' + curPremVal + '" placeholder="" min="0" style="width:80px;padding:4px 8px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e0e0e0;font-size:12px;text-align:right;" />' +
                   '<span style="color:#555;font-size:11px;">元</span>' +
                   '</div>';
               }
@@ -455,11 +491,17 @@
               premBox.innerHTML = premHTML;
               premBox.querySelector('.cancel-btn').onclick = function() { premOverlay.remove(); };
               premBox.querySelector('.save-btn').onclick = function() {
-                entry.premiums = {};
+                // C0 价格同步到基础价
+                var c0Val = parseFloat(premBox.querySelector('.prem-c0').value);
+                if (!isNaN(c0Val) && c0Val >= 0) {
+                  entry.price = c0Val;
+                }
+                // C1-C6 绝对定价
+                entry.constPrices = {};
                 for (var sci = 1; sci <= 6; sci++) {
                   var pv = parseFloat(premBox.querySelector('.prem-c' + sci).value);
-                  if (!isNaN(pv) && pv > 0) {
-                    entry.premiums[sci] = pv;
+                  if (!isNaN(pv) && pv >= 0) {
+                    entry.constPrices[sci] = pv;
                   }
                 }
                 premOverlay.remove();
@@ -580,7 +622,7 @@
       if (!wpn && SIG_WEAPONS[nm]) wpn = SIG_WEAPONS[nm]; // 自动匹配
       var pr = parseFloat(addPriceInput.value);
       if (isNaN(pr)) pr = 15;
-      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value, premiums: {}, needSig: false, teamMates: [] });
+      charEntries.push({ name: nm, weapon: wpn, price: pr, tier: addTierSelect.value, constPrices: {}, needSig: false, teamMates: [] });
       // 如果角色之前被删除过，从 deletedChars 中移除
       var dcIdx = deletedChars.indexOf(nm);
       if (dcIdx >= 0) deletedChars.splice(dcIdx, 1);
@@ -1516,13 +1558,13 @@
           var rName = rTier.chars[rc];
           var rPrice = (DEFAULT_WEIGHTS.charPrices && DEFAULT_WEIGHTS.charPrices[rName] != null) ? DEFAULT_WEIGHTS.charPrices[rName] : (DEFAULT_CHAR_PRICES[rName] != null ? DEFAULT_CHAR_PRICES[rName] : rTier.price);
           var rWeapon = (DEFAULT_WEIGHTS.sigWeaponsOverride && DEFAULT_WEIGHTS.sigWeaponsOverride[rName]) || SIG_WEAPONS[rName] || '';
-          var rPremiums = (DEFAULT_WEIGHTS.constPremiums && DEFAULT_WEIGHTS.constPremiums[rName]) ? Object.assign({}, DEFAULT_WEIGHTS.constPremiums[rName]) : (DEFAULT_CONST_PREMIUMS[rName] ? Object.assign({}, DEFAULT_CONST_PREMIUMS[rName]) : {});
+          var rConstPrices = (DEFAULT_WEIGHTS.constPrices && DEFAULT_WEIGHTS.constPrices[rName]) ? Object.assign({}, DEFAULT_WEIGHTS.constPrices[rName]) : (DEFAULT_CONST_PRICES[rName] ? Object.assign({}, DEFAULT_CONST_PRICES[rName]) : {});
           charEntries.push({
             name: rName,
             weapon: rWeapon,
             price: rPrice,
             tier: rtk,
-            premiums: rPremiums,
+            constPrices: rConstPrices,
             needSig: !!_resetNeedSigSet[rName],
             teamMates: _resetTeamMatesMap[rName] ? [].concat(_resetTeamMatesMap[rName]) : [],
           });
@@ -1642,28 +1684,46 @@
       }
       newW.charTierOverride = newCharTierOverride;
 
-      // 收集命座溢价（从角色定价条目中提取）
+      // 收集命座定价（绝对价格）和向后兼容的命座溢价
+      var newConstPrices = {};
       var newConstPremiums = {};
       for (var ei = 0; ei < charEntries.length; ei++) {
-        if (charEntries[ei].premiums && Object.keys(charEntries[ei].premiums).length > 0) {
-          newConstPremiums[charEntries[ei].name] = {};
-          for (var pbp in charEntries[ei].premiums) {
-            if (charEntries[ei].premiums.hasOwnProperty(pbp)) {
-              newConstPremiums[charEntries[ei].name][pbp] = charEntries[ei].premiums[pbp];
+        if (charEntries[ei].constPrices && Object.keys(charEntries[ei].constPrices).length > 0) {
+          var _cpName = charEntries[ei].name;
+          var _cpBase = charEntries[ei].price;
+          newConstPrices[_cpName] = {};
+          newConstPremiums[_cpName] = {};
+          for (var cpl in charEntries[ei].constPrices) {
+            if (!charEntries[ei].constPrices.hasOwnProperty(cpl)) continue;
+            var cpVal = charEntries[ei].constPrices[cpl];
+            newConstPrices[_cpName][cpl] = cpVal;
+            // 转换为旧格式溢价（绝对价 - 基础价）
+            var cpPrem = cpVal - _cpBase;
+            if (cpPrem > 0) {
+              newConstPremiums[_cpName][cpl] = cpPrem;
             }
           }
         }
       }
-      // 保留不在charEntries中的角色命座溢价（如已删除角色），避免数据丢失
-      var _existingPrems = w.constPremiums || {};
+      // 保留不在charEntries中的角色命座定价（如已删除角色），避免数据丢失
+      var _existingCP = w.constPrices || {};
       var _charEntryNames = {};
       for (var _cei3 = 0; _cei3 < charEntries.length; _cei3++) _charEntryNames[charEntries[_cei3].name] = true;
-      for (var _epName in _existingPrems) {
-        if (!_existingPrems.hasOwnProperty(_epName)) continue;
+      for (var _epName in _existingCP) {
+        if (!_existingCP.hasOwnProperty(_epName)) continue;
         if (!_charEntryNames[_epName]) {
-          newConstPremiums[_epName] = _existingPrems[_epName];
+          newConstPrices[_epName] = _existingCP[_epName];
         }
       }
+      // 保留旧格式溢价中不在charEntries中的角色
+      var _existingPrems = w.constPremiums || {};
+      for (var _epName2 in _existingPrems) {
+        if (!_existingPrems.hasOwnProperty(_epName2)) continue;
+        if (!_charEntryNames[_epName2]) {
+          newConstPremiums[_epName2] = _existingPrems[_epName2];
+        }
+      }
+      newW.constPrices = newConstPrices;
       newW.constPremiums = newConstPremiums;
 
       // 收集配队溢价
