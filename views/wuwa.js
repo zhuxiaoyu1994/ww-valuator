@@ -954,23 +954,39 @@ function getPageHTML() {
     function renderStatsModal(data) {
       var s = data.summary;
       var scatter = data.scatter || [];
-      var charStats = data.charStats || [];
       var html = '';
 
-      // ===== 12个关键指标卡片 (4列×3行) =====
+      // ===== 12个关键指标卡片 (4列×3行，与管理后台一致) =====
       html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">';
-      html += statsCard('总记录数', s.total + ' 条', '历史成交记录总量', 'blue');
-      html += statsCard('成功估值', s.valued + ' 条', '产生有效估值结果', 'blue');
-      html += statsCard('平均成交价', '¥' + s.avgPrice, '所有有效样本均值', 'blue');
-      html += statsCard('平均估值', '¥' + s.avgEst, '引擎预估均值', 'blue');
-      html += statsCard('平均偏差', (s.avgDev >= 0 ? '+' : '') + '¥' + s.avgDev, '估值 - 成交价', s.avgDev >= 0 ? 'green' : 'red');
-      html += statsCard('平均偏差率', (s.avgDevPct >= 0 ? '+' : '') + s.avgDevPct + '%', '相对成交价的偏差', s.avgDevPct >= 0 ? 'green' : 'red');
-      html += statsCard('平均绝对误差', '¥' + s.mae, 'MAE 绝对值均值', 'purple');
-      html += statsCard('MAE百分比', s.maePct + '%', '相对成交价的MAE', 'purple');
-      html += statsCard('准确率', s.accPct + '%', '±20%命中率', s.accPct >= 70 ? 'green' : 'red');
-      html += statsCard('命中率明细', s.hit10 + '/' + s.hit20 + '/' + s.hit30, '±10% / ±20% / ±30%', 'blue');
-      html += statsCard('估值偏低', s.undervalued + ' 条', '成交价 > 估值(买赚)', 'green');
-      html += statsCard('估值偏高', s.overvalued + ' 条', '成交价 < 估值(买贵)', 'red');
+      // 第一行：成交概览
+      html += statsCard('成交商品', s.valued + '', s.valued + '条成功估值', 'blue');
+      html += statsCard('平均成交价', '¥' + s.avgPrice, '', 'yellow');
+      html += statsCard('平均估值', '¥' + s.avgEst, '', 'blue');
+      html += statsCard('平均偏差', (s.avgDev >= 0 ? '+' : '') + '¥' + s.avgDev, (s.avgDevPct >= 0 ? '+' : '') + s.avgDevPct + '%', s.avgDev >= 0 ? 'green' : 'red');
+      // 第二行：误差与准确率
+      html += statsCard('MAE(平均绝对误差)', '¥' + s.mae, '平均' + s.maePct + '%', 'yellow');
+      html += statsCard('准确率(±20%)', s.accPct + '%', '±10%: ' + s.hit10 + '条 / ±20%: ' + s.hit20 + '条 / ±30%: ' + s.hit30 + '条', s.accPct >= 70 ? 'green' : 'red');
+      html += statsCard('估值偏高(买赚)', s.overvalued + '', '成交价 < 估值', 'green');
+      html += statsCard('估值偏低(买贵)', s.undervalued + '', '成交价 > 估值', 'red');
+      // 第三行：统计学指标
+      var r2Desc = s.r2 >= 0.8 ? '优秀，模型解释力强' : s.r2 >= 0.6 ? '良好，有一定解释力' : s.r2 >= 0.4 ? '一般，存在较大偏差' : '较差，模型需调整';
+      var corrDesc = s.corr >= 0.9 ? '高度正相关' : s.corr >= 0.7 ? '强相关' : s.corr >= 0.5 ? '中等相关' : '弱相关';
+      html += statsCard('R²(决定系数)', s.r2.toFixed(3), r2Desc, 'blue');
+      html += statsCard('相关系数(r)', s.corr.toFixed(3), corrDesc, 'blue');
+      html += statsCard('中位数偏差率', (s.medDevPct >= 0 ? '+' : '') + s.medDevPct + '%', '抗极端值，反映系统偏置', 'yellow');
+      html += statsCard('P90偏差率', '±' + s.p90DevPct + '%', '90%账号偏差不超过此值', s.p90DevPct <= 20 ? 'green' : s.p90DevPct <= 40 ? 'yellow' : 'red');
+      html += '</div>';
+
+      // ===== 误差说明 =====
+      html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
+      html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">为什么会有误差？</div>';
+      html += '<div style="font-size:13px;color:#999;line-height:1.8;">';
+      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">市场供需波动：</span>账号价格受市场供需关系影响，热门角色在特定时期可能溢价，冷门角色则可能折价，估价引擎基于历史均价计算，无法实时反映短期市场波动。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">账号组合差异：</span>每个账号的角色组合、命座、武器配置各不相同，部分稀有组合在市场上缺乏足够的成交样本，导致估值偏差较大。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">主观价值因素：</span>账号的视觉效果（皮肤、服饰）、ID稀有度、服务器热度等主观因素难以量化，这些因素可能导致实际成交价偏离估值。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">定价模型迭代：</span>估值引擎基于可配置的角色定价和系数公式，随着市场数据积累和参数调优，准确率会持续提升。当前R²=' + s.r2.toFixed(3) + '表明模型' + (s.r2 >= 0.8 ? '已具有较强解释力' : '仍有优化空间') + '。</div>';
+      html += '<div><span style="color:#8ecdf5;font-weight:600;">如何理解这些指标：</span>R²越接近1表示估值越准确；相关系数(r)反映估值与成交价的线性相关程度；中位数偏差率排除极端值后反映系统性偏置；P90表示90%的账号偏差都在此范围内。</div>';
+      html += '</div>';
       html += '</div>';
 
       // ===== 准确率分布条 =====
@@ -998,43 +1014,9 @@ function getPageHTML() {
 
       // ===== 散点图 =====
       if (scatter.length > 0) {
-        html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
+        html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;">';
         html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">估值 vs 成交价 散点图（' + scatter.length + ' 个数据点）</div>';
         html += '<div style="display:flex;justify-content:center;">' + renderStatsScatter(scatter) + '</div>';
-        html += '</div>';
-      }
-
-      // ===== 角色偏差统计表 =====
-      if (charStats.length > 0) {
-        html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;">';
-        html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">角色估值偏差统计（出现≥2次）</div>';
-        html += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>';
-        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">角色</th>';
-        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">出现次数</th>';
-        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">平均偏差率</th>';
-        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">平均估值</th>';
-        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">评估</th>';
-        html += '</tr></thead><tbody>';
-        var tierColors = { S: '#f87171', A: '#fbbf24', B: '#60a5fa', C: '#a78bfa', D: '#888' };
-        for (var i = 0; i < charStats.length; i++) {
-          var c = charStats[i];
-          var devColor = c.avgDevPct > 5 ? '#f87171' : (c.avgDevPct < -5 ? '#4ade80' : '#888');
-          var assess = c.avgDevPct > 10 ? '<span style="color:#f87171;">偏高，建议下调</span>'
-            : c.avgDevPct < -10 ? '<span style="color:#4ade80;">偏低，建议上调</span>'
-            : c.avgDevPct > 5 ? '<span style="color:#fbbf24;">略偏高</span>'
-            : c.avgDevPct < -5 ? '<span style="color:#fbbf24;">略偏低</span>'
-            : '<span style="color:#888;">合理</span>';
-          var constLabel = c.const >= 6 ? '满命' : 'C' + c.const;
-          var tc = tierColors[c.tier] || '#888';
-          html += '<tr>';
-          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:#ccc;"><span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:4px;background:' + tc + '20;color:' + tc + ';font-size:11px;font-weight:700;margin-right:6px;">' + c.tier + '</span>' + escStatsHtml(c.name) + ' <span style="color:#888;font-size:12px;">' + constLabel + '</span></td>';
-          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:#ccc;">' + c.count + '</td>';
-          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:' + devColor + ';">' + (c.avgDevPct >= 0 ? '+' : '') + c.avgDevPct + '%</td>';
-          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:#ccc;">¥' + c.avgValue + '</td>';
-          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;">' + assess + '</td>';
-          html += '</tr>';
-        }
-        html += '</tbody></table>';
         html += '</div>';
       }
 
@@ -1042,8 +1024,8 @@ function getPageHTML() {
     }
 
     function statsCard(label, value, sub, color) {
-      var borderColor = { green: '#1a3a1a', red: '#3a1a1a', blue: '#1a2a3a', purple: '#2a1a3a' }[color] || '#2a2a4a';
-      var valueColor = { green: '#4ade80', red: '#f87171', blue: '#60a5fa', purple: '#c084fc' }[color] || '#fff';
+      var borderColor = { green: '#1a3a1a', red: '#3a1a1a', blue: '#1a2a3a', purple: '#2a1a3a', yellow: '#3a3a1a' }[color] || '#2a2a4a';
+      var valueColor = { green: '#4ade80', red: '#f87171', blue: '#60a5fa', purple: '#c084fc', yellow: '#fbbf24' }[color] || '#fff';
       return '<div style="background:#12122a;border:1px solid ' + borderColor + ';border-radius:10px;padding:14px 12px;text-align:center;">' +
         '<div style="font-size:12px;color:#888;margin-bottom:4px;">' + label + '</div>' +
         '<div style="font-size:20px;font-weight:700;color:' + valueColor + ';">' + value + '</div>' +

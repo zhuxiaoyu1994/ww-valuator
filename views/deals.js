@@ -369,7 +369,6 @@ function getDealsPage() {
       <a class="nav-link" href="/">首页</a>
       <a class="nav-link" href="/wuwa">鸣潮估价</a>
       <a class="nav-link active" href="/deals">成交记录</a>
-      <a class="nav-link" href="/monitor">监控助手</a>
     </div>
 
     <!-- Summary -->

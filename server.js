@@ -15,10 +15,8 @@ const db = require('./db');
 // HTML页面模板（从views/目录加载）
 const getPlatformPage = require('./views/platform');
 const getPageHTML = require('./views/wuwa');
-const getMonitorPage = require('./views/monitor');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
-const getStatsPage = require('./views/stats');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -808,13 +806,6 @@ app.get('/wuwa', (req, res) => {
 // 平台首页 - 多游戏估价平台选择页
 // ============================================================
 // ============================================================
-// 监控助手页面
-// ============================================================
-app.get('/monitor', (req, res) => {
-  res.send(getMonitorPage());
-});
-
-// ============================================================
 // IP封禁管理
 // ============================================================
 
@@ -980,13 +971,6 @@ app.post('/api/config/update', async (req, res) => {
   }
 });
 
-// ============================================================
-// 公开统计页面（算法准确性展示）
-// ============================================================
-app.get('/stats', (req, res) => {
-  res.send(getStatsPage());
-});
-
 app.get('/api/public-stats', async (req, res) => {
   try {
     const { list, total } = await db.queryAllDealsForStats();
@@ -1009,6 +993,37 @@ app.get('/api/public-stats', async (req, res) => {
     const overvalued = valid.filter(e => e.deviation < 0).length;
     const undervalued = valid.filter(e => e.deviation > 0).length;
 
+    // R²(决定系数)
+    let r2 = 0, corr = 0, medDevPct = 0, p90DevPct = 0;
+    if (valued >= 2) {
+      const meanPrice = valid.reduce((s, d) => s + d.price, 0) / valued;
+      const meanEst = valid.reduce((s, d) => s + d.estimatedValue, 0) / valued;
+      let ssRes = 0, ssTot = 0, num = 0, denEst = 0, denPrice = 0;
+      for (const d of valid) {
+        ssRes += Math.pow(d.price - d.estimatedValue, 2);
+        ssTot += Math.pow(d.price - meanPrice, 2);
+        const dEst = d.estimatedValue - meanEst;
+        const dPrice = d.price - meanPrice;
+        num += dEst * dPrice;
+        denEst += dEst * dEst;
+        denPrice += dPrice * dPrice;
+      }
+      r2 = ssTot > 0 ? Math.round((1 - ssRes / ssTot) * 1000) / 1000 : 0;
+      corr = (denEst > 0 && denPrice > 0) ? Math.round((num / Math.sqrt(denEst * denPrice)) * 1000) / 1000 : 0;
+
+      // 中位数偏差率
+      const sortedDevPct = valid.map(d => d.deviationPercent).sort((a, b) => a - b);
+      const medIdx = Math.floor(sortedDevPct.length / 2);
+      medDevPct = sortedDevPct.length % 2 === 0
+        ? Math.round((sortedDevPct[medIdx - 1] + sortedDevPct[medIdx]) / 2 * 100) / 100
+        : Math.round(sortedDevPct[medIdx] * 100) / 100;
+
+      // P90偏差率
+      const sortedAbsDevPct = valid.map(d => Math.abs(d.deviationPercent)).sort((a, b) => a - b);
+      const p90Idx = Math.min(Math.floor(sortedAbsDevPct.length * 0.9), sortedAbsDevPct.length - 1);
+      p90DevPct = Math.round(sortedAbsDevPct[p90Idx] * 100) / 100;
+    }
+
     // 散点数据（精简字段）
     const scatter = valid.map(d => ({
       x: d.estimatedValue,
@@ -1017,40 +1032,6 @@ app.get('/api/public-stats', async (req, res) => {
       p: d.deviationPercent,
     }));
 
-    // 角色维度偏差统计
-    const charMap = {};
-    for (const d of valid) {
-      const chars = d.characters || [];
-      for (const c of chars) {
-        if (!c.name || c.tier === 'E') continue;
-        const key = c.name + '_C' + (c.const || 0);
-        if (!charMap[key]) {
-          charMap[key] = { name: c.name, tier: c.tier, const: c.const || 0, count: 0, devPctSum: 0, valueSum: 0 };
-        }
-        charMap[key].count++;
-        charMap[key].devPctSum += (d.deviationPercent || 0);
-        charMap[key].valueSum += (c.value || 0);
-      }
-    }
-    const tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4 };
-    const charStats = Object.values(charMap)
-      .filter(e => e.count >= 2)
-      .map(e => ({
-        name: e.name,
-        tier: e.tier,
-        const: e.const,
-        count: e.count,
-        avgDevPct: Math.round(e.devPctSum / e.count * 100) / 100,
-        avgValue: Math.round(e.valueSum / e.count),
-      }))
-      .sort((a, b) => {
-        const ta = tierOrder[a.tier] != null ? tierOrder[a.tier] : 99;
-        const tb = tierOrder[b.tier] != null ? tierOrder[b.tier] : 99;
-        if (ta !== tb) return ta - tb;
-        if (a.name !== b.name) return a.name < b.name ? -1 : 1;
-        return b.const - a.const;
-      });
-
     res.json({
       success: true,
       data: {
@@ -1058,9 +1039,9 @@ app.get('/api/public-stats', async (req, res) => {
           total, valued, avgPrice, avgEst, avgDev, avgDevPct,
           mae, maePct, accPct, hit10, hit20, hit30,
           overvalued, undervalued,
+          r2, corr, medDevPct, p90DevPct,
         },
         scatter,
-        charStats,
       },
     });
   } catch (err) {
