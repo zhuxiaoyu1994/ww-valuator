@@ -1033,6 +1033,9 @@ function calculateValue(parsed, price) {
   const charBreakdown = [];
   const charDetails = [];
   const hasSignatureWeapons = [];
+  const sigDiscountNotes = [];
+  var _needSigList = w.needSigWeapons || DEFAULT_NEED_SIG_WEAPONS;
+  var _nsDiscount = w.needSigDiscount != null ? w.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
 
   for (const char of parsed.characters) {
     const hasSig = checkHasSigWeapon(char.name, weaponNames, weaponSectionText);
@@ -1040,6 +1043,20 @@ function calculateValue(parsed, price) {
     const premium = calcConstPremium(char.name, char.const, w);
     charValue += val + premium;
     if (hasSig && !hasSignatureWeapons.includes(char.name)) hasSignatureWeapons.push(char.name);
+
+    // 检查是否触发了无专武折扣
+    if (!hasSig) {
+      var _isNeedSig = false;
+      for (var nsi = 0; nsi < _needSigList.length; nsi++) {
+        var _nsName = typeof _needSigList[nsi] === 'string' ? _needSigList[nsi] : _needSigList[nsi].name;
+        if (_nsName === char.name) { _isNeedSig = true; break; }
+      }
+      if (_isNeedSig) {
+        var _origVal = Math.round((val + premium) / _nsDiscount);
+        var _discountAmount = _origVal - Math.round(val + premium);
+        sigDiscountNotes.push(char.name + '无专武(×' + _nsDiscount + ', -' + _discountAmount + '元)');
+      }
+    }
 
     let fullConstWeightVal = 0;
     if (char.const >= 6) {
@@ -1285,6 +1302,7 @@ function calculateValue(parsed, price) {
     weaponDetails: weaponDetails,
     matchedTeams: satisfiedTeams,
     c6DepNotes: teamDepNotes,
+    sigDiscountNotes: sigDiscountNotes,
     c6Bonus: { value: Math.round(fullConstPremium), notes: c6BonusNotes },
     teamBonus: { value: Math.round(teamPremium), notes: teamBonusNotes },
     flatDiscount: { value: flatDiscount, notes: flatDiscountNotes },

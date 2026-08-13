@@ -811,13 +811,18 @@ function getPageHTML() {
       if (det.c6DepNotes && det.c6DepNotes.length > 0) {
         detailHtml += resultRow('强绑折扣', det.c6DepNotes.join('；'), '#f472b6');
       }
+      // 无专武折扣
+      if (det.sigDiscountNotes && det.sigDiscountNotes.length > 0) {
+        detailHtml += resultRow('无专武折扣', det.sigDiscountNotes.join('；'), '#fbbf24');
+      }
       // 抽数价值
       const pi = det.pullInfo || {};
       if (det.pullValue > 0 || pi.pulls > 0) {
         let pullLabel = det.pullValue + ' 元';
         if (pi.pulls > 0) {
           pullLabel += '（' + pi.pulls + '抽';
-          if (pi.tierLabel) pullLabel += '·' + pi.tierLabel;
+          if (pi.perPull != null) pullLabel += '·每抽' + pi.perPull + '元';
+          if (pi.baseTotal > 0) pullLabel += '·基础' + pi.baseTotal + '元';
           if (pi.c6Bonus > 0) pullLabel += '·满命加成+' + pi.c6Bonus + '元';
           pullLabel += '）';
         }
@@ -883,8 +888,14 @@ function getPageHTML() {
       resHtml += resultRow('余波珊瑚', info.coral || 0, '#e0e0e0');
       resHtml += resultRow('浮金波纹', info.goldenRipples || 0, '#e0e0e0');
       resHtml += resultRow('铸潮波纹', info.tideRipples || 0, '#e0e0e0');
-      if (info.outfits > 0) resHtml += resultRow('服饰', info.outfits + ' 件', '#fbbf24');
-      if (info.motorcycles > 0) resHtml += resultRow('车架模组', info.motorcycles + ' 个', '#fbbf24');
+      const outfitList = det.outfits || [];
+      if (outfitList.length > 0) {
+        resHtml += resultRow('服饰', outfitList.length + '件: ' + outfitList.join('、'), '#fbbf24');
+      }
+      const motoList = det.motoFrames || [];
+      if (motoList.length > 0) {
+        resHtml += resultRow('车架模组', motoList.length + '个: ' + motoList.join('、'), '#fbbf24');
+      }
       if (info.pulls > 0) resHtml += resultRow('抽数', info.pulls + ' 抽', '#2dd4bf');
       resHtml += resultRow('有效黄数', info.yellowCount || 0, '#f59e0b');
       document.getElementById('result-resources').innerHTML = resHtml;
