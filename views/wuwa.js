@@ -459,6 +459,7 @@ function getPageHTML() {
     <!-- 估值规则设置入口 -->
     <div class="settings-bar">
       <button class="settings-btn" id="settings-btn" onclick="safeOpenValueSettings()">估值规则设置</button>
+      <button class="settings-btn" id="stats-btn" onclick="openStatsModal()" style="margin-left:8px;">算法准确性报告</button>
     </div>
 
     <!-- 按编号查询 -->
@@ -522,6 +523,20 @@ function getPageHTML() {
         <p>《鸣潮》官方禁止账号交易，所有账号交易产生封禁、被骗等损失由用户自行承担。</p>
         <p>本站不收集任何游戏账号密码、实名隐私信息，数据仅本地临时解析。</p>
       </div>
+    </div>
+  </div>
+
+  <!-- 算法准确性报告弹窗 -->
+  <div id="stats-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeStatsModal()">
+    <div style="max-width:1080px;margin:20px auto;background:#0f0f2a;border:1px solid #2a2a4a;border-radius:12px;padding:24px;min-height:400px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#fff;">算法准确性报告</div>
+          <div style="font-size:13px;color:#888;margin-top:2px;">基于真实成交记录的估值模型质量分析</div>
+        </div>
+        <button onclick="closeStatsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:4px 8px;">×</button>
+      </div>
+      <div id="stats-modal-content"></div>
     </div>
   </div>
 
@@ -908,6 +923,178 @@ function getPageHTML() {
 
     function resultRow(key, val, color) {
       return '<div class="result-row"><span class="key">' + key + '</span><span class="val" style="color:' + (color || '#e0e0e0') + ';">' + val + '</span></div>';
+    }
+
+    // ============================================================
+    // 算法准确性报告弹窗
+    // ============================================================
+    function openStatsModal() {
+      var modal = document.getElementById('stats-modal');
+      var content = document.getElementById('stats-modal-content');
+      modal.style.display = 'block';
+      content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#888;"><div style="display:inline-block;width:32px;height:32px;border:3px solid #1a1a3e;border-top-color:#8ecdf5;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;"></div><div>正在加载统计数据...</div></div>';
+      document.body.style.overflow = 'hidden';
+
+      fetch('/api/public-stats').then(function(r) { return r.json(); }).then(function(result) {
+        if (!result.success || !result.data.summary) {
+          content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#666;">暂无统计数据，请稍后再来查看</div>';
+          return;
+        }
+        renderStatsModal(result.data);
+      }).catch(function() {
+        content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#666;">数据加载失败，请关闭重试</div>';
+      });
+    }
+
+    function closeStatsModal() {
+      document.getElementById('stats-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+
+    function renderStatsModal(data) {
+      var s = data.summary;
+      var scatter = data.scatter || [];
+      var charStats = data.charStats || [];
+      var html = '';
+
+      // ===== 12个关键指标卡片 (4列×3行) =====
+      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">';
+      html += statsCard('总记录数', s.total + ' 条', '历史成交记录总量', 'blue');
+      html += statsCard('成功估值', s.valued + ' 条', '产生有效估值结果', 'blue');
+      html += statsCard('平均成交价', '¥' + s.avgPrice, '所有有效样本均值', 'blue');
+      html += statsCard('平均估值', '¥' + s.avgEst, '引擎预估均值', 'blue');
+      html += statsCard('平均偏差', (s.avgDev >= 0 ? '+' : '') + '¥' + s.avgDev, '估值 - 成交价', s.avgDev >= 0 ? 'green' : 'red');
+      html += statsCard('平均偏差率', (s.avgDevPct >= 0 ? '+' : '') + s.avgDevPct + '%', '相对成交价的偏差', s.avgDevPct >= 0 ? 'green' : 'red');
+      html += statsCard('平均绝对误差', '¥' + s.mae, 'MAE 绝对值均值', 'purple');
+      html += statsCard('MAE百分比', s.maePct + '%', '相对成交价的MAE', 'purple');
+      html += statsCard('准确率', s.accPct + '%', '±20%命中率', s.accPct >= 70 ? 'green' : 'red');
+      html += statsCard('命中率明细', s.hit10 + '/' + s.hit20 + '/' + s.hit30, '±10% / ±20% / ±30%', 'blue');
+      html += statsCard('估值偏低', s.undervalued + ' 条', '成交价 > 估值(买赚)', 'green');
+      html += statsCard('估值偏高', s.overvalued + ' 条', '成交价 < 估值(买贵)', 'red');
+      html += '</div>';
+
+      // ===== 准确率分布条 =====
+      html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
+      html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">准确率分布</div>';
+      var total = s.valued;
+      var c10 = s.hit10, c20 = s.hit20 - s.hit10, c30 = s.hit30 - s.hit20, cOut = total - s.hit30;
+      var p10 = total > 0 ? (c10 / total * 100) : 0;
+      var p20 = total > 0 ? (c20 / total * 100) : 0;
+      var p30 = total > 0 ? (c30 / total * 100) : 0;
+      var pOut = total > 0 ? (cOut / total * 100) : 0;
+      html += '<div style="display:flex;height:28px;border-radius:6px;overflow:hidden;background:#1a1a2e;">';
+      if (p10 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p10 + '%;background:#4ade80;color:#0a0a1a;font-size:11px;font-weight:600;">±10% ' + c10 + '</div>';
+      if (p20 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p20 + '%;background:#fbbf24;color:#0a0a1a;font-size:11px;font-weight:600;">±20% ' + c20 + '</div>';
+      if (p30 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p30 + '%;background:#fb923c;color:#0a0a1a;font-size:11px;font-weight:600;">±30% ' + c30 + '</div>';
+      if (pOut > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + pOut + '%;background:#f87171;color:#0a0a1a;font-size:11px;font-weight:600;">>30% ' + cOut + '</div>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#888;">';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4ade80;margin-right:4px;"></span>±10%: ' + c10 + '条 (' + p10.toFixed(1) + '%)</span>';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fbbf24;margin-right:4px;"></span>±10~20%: ' + c20 + '条 (' + p20.toFixed(1) + '%)</span>';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fb923c;margin-right:4px;"></span>±20~30%: ' + c30 + '条 (' + p30.toFixed(1) + '%)</span>';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f87171;margin-right:4px;"></span>>30%: ' + cOut + '条 (' + pOut.toFixed(1) + '%)</span>';
+      html += '</div>';
+      html += '</div>';
+
+      // ===== 散点图 =====
+      if (scatter.length > 0) {
+        html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
+        html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">估值 vs 成交价 散点图（' + scatter.length + ' 个数据点）</div>';
+        html += '<div style="display:flex;justify-content:center;">' + renderStatsScatter(scatter) + '</div>';
+        html += '</div>';
+      }
+
+      // ===== 角色偏差统计表 =====
+      if (charStats.length > 0) {
+        html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;">';
+        html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">角色估值偏差统计（出现≥2次）</div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>';
+        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">角色</th>';
+        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">出现次数</th>';
+        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">平均偏差率</th>';
+        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">平均估值</th>';
+        html += '<th style="padding:8px 10px;text-align:left;color:#888;border-bottom:1px solid #2a2a4a;font-size:12px;">评估</th>';
+        html += '</tr></thead><tbody>';
+        var tierColors = { S: '#f87171', A: '#fbbf24', B: '#60a5fa', C: '#a78bfa', D: '#888' };
+        for (var i = 0; i < charStats.length; i++) {
+          var c = charStats[i];
+          var devColor = c.avgDevPct > 5 ? '#f87171' : (c.avgDevPct < -5 ? '#4ade80' : '#888');
+          var assess = c.avgDevPct > 10 ? '<span style="color:#f87171;">偏高，建议下调</span>'
+            : c.avgDevPct < -10 ? '<span style="color:#4ade80;">偏低，建议上调</span>'
+            : c.avgDevPct > 5 ? '<span style="color:#fbbf24;">略偏高</span>'
+            : c.avgDevPct < -5 ? '<span style="color:#fbbf24;">略偏低</span>'
+            : '<span style="color:#888;">合理</span>';
+          var constLabel = c.const >= 6 ? '满命' : 'C' + c.const;
+          var tc = tierColors[c.tier] || '#888';
+          html += '<tr>';
+          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:#ccc;"><span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:4px;background:' + tc + '20;color:' + tc + ';font-size:11px;font-weight:700;margin-right:6px;">' + c.tier + '</span>' + escStatsHtml(c.name) + ' <span style="color:#888;font-size:12px;">' + constLabel + '</span></td>';
+          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:#ccc;">' + c.count + '</td>';
+          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:' + devColor + ';">' + (c.avgDevPct >= 0 ? '+' : '') + c.avgDevPct + '%</td>';
+          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;color:#ccc;">¥' + c.avgValue + '</td>';
+          html += '<td style="padding:7px 10px;border-bottom:1px solid #1a1a2e;">' + assess + '</td>';
+          html += '</tr>';
+        }
+        html += '</tbody></table>';
+        html += '</div>';
+      }
+
+      document.getElementById('stats-modal-content').innerHTML = html;
+    }
+
+    function statsCard(label, value, sub, color) {
+      var borderColor = { green: '#1a3a1a', red: '#3a1a1a', blue: '#1a2a3a', purple: '#2a1a3a' }[color] || '#2a2a4a';
+      var valueColor = { green: '#4ade80', red: '#f87171', blue: '#60a5fa', purple: '#c084fc' }[color] || '#fff';
+      return '<div style="background:#12122a;border:1px solid ' + borderColor + ';border-radius:10px;padding:14px 12px;text-align:center;">' +
+        '<div style="font-size:12px;color:#888;margin-bottom:4px;">' + label + '</div>' +
+        '<div style="font-size:20px;font-weight:700;color:' + valueColor + ';">' + value + '</div>' +
+        '<div style="font-size:11px;color:#666;margin-top:3px;">' + sub + '</div></div>';
+    }
+
+    function renderStatsScatter(data) {
+      var allVals = data.map(function(d) { return d.x; }).concat(data.map(function(d) { return d.y; }));
+      allVals.sort(function(a, b) { return a - b; });
+      var p95Index = Math.floor(allVals.length * 0.95);
+      var maxVal = allVals[p95Index] || allVals[allVals.length - 1] || 100;
+      if (maxVal <= 500) maxVal = Math.ceil(maxVal / 50) * 50;
+      else if (maxVal <= 2000) maxVal = Math.ceil(maxVal / 100) * 100;
+      else if (maxVal <= 10000) maxVal = Math.ceil(maxVal / 500) * 500;
+      else maxVal = Math.ceil(maxVal / 1000) * 1000;
+      if (maxVal < 100) maxVal = 100;
+      var outlierCount = data.filter(function(d) { return d.x > maxVal || d.y > maxVal; }).length;
+      var svgW = 560, svgH = 420, padL = 55, padR = 15, padT = 20, padB = 45;
+      var plotW = svgW - padL - padR, plotH = svgH - padT - padB;
+      function sX(v) { return padL + (Math.min(v, maxVal) / maxVal) * plotW; }
+      function sY(v) { return padT + plotH - (Math.min(v, maxVal) / maxVal) * plotH; }
+      var sp = [];
+      sp.push('<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:560px;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">');
+      for (var g = 0; g <= 4; g++) {
+        var gv = (maxVal / 4) * g, gx = sX(gv), gy = sY(gv);
+        sp.push('<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (svgW - padR) + '" y2="' + gy.toFixed(1) + '" stroke="#1f1f3a" stroke-width="1"/>');
+        sp.push('<line x1="' + gx.toFixed(1) + '" y1="' + padT + '" x2="' + gx.toFixed(1) + '" y2="' + (svgH - padB) + '" stroke="#1f1f3a" stroke-width="1"/>');
+        sp.push('<text x="' + (padL - 8) + '" y="' + (gy + 4).toFixed(1) + '" fill="#666" font-size="10" text-anchor="end">' + Math.round(gv) + '</text>');
+        sp.push('<text x="' + gx.toFixed(1) + '" y="' + (svgH - padB + 15) + '" fill="#666" font-size="10" text-anchor="middle">' + Math.round(gv) + '</text>');
+      }
+      sp.push('<line x1="' + sX(0).toFixed(1) + '" y1="' + sY(0).toFixed(1) + '" x2="' + sX(maxVal).toFixed(1) + '" y2="' + sY(maxVal).toFixed(1) + '" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.5"/>');
+      sp.push('<text x="' + (sX(maxVal) - 5).toFixed(1) + '" y="' + (sY(maxVal) - 6).toFixed(1) + '" fill="#4ade80" font-size="10" text-anchor="end">y=x 完美预测线</text>');
+      for (var p = 0; p < data.length; p++) {
+        var px = sX(data[p].x), py = sY(data[p].y);
+        var pc = data[p].d > 0 ? '#4ade80' : (data[p].d < 0 ? '#f87171' : '#888');
+        sp.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2.5" fill="' + pc + '" opacity="0.55"><title>估值¥' + data[p].x + ' 成交¥' + data[p].y + ' 偏差' + data[p].p + '%</title></circle>');
+      }
+      sp.push('<text x="' + (padL + plotW / 2) + '" y="' + (svgH - 5) + '" fill="#aaa" font-size="11" text-anchor="middle">估值 (元)</text>');
+      sp.push('<text x="15" y="' + (padT + plotH / 2) + '" fill="#aaa" font-size="11" text-anchor="middle" transform="rotate(-90 15 ' + (padT + plotH / 2) + ')">成交价 (元)</text>');
+      sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0d0d22" stroke="#2a2a4a" rx="4"/>');
+      sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="2.5" fill="#4ade80" opacity="0.55"/>');
+      sp.push('<text x="' + (svgW - 125) + '" y="24" fill="#888" font-size="10">估值偏低(买赚)</text>');
+      sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="2.5" fill="#f87171" opacity="0.55"/>');
+      sp.push('<text x="' + (svgW - 125) + '" y="39" fill="#888" font-size="10">估值偏高(买贵)</text>');
+      if (outlierCount > 0) sp.push('<text x="' + (padL + 4) + '" y="' + (padT + 12) + '" fill="#fbbf24" font-size="10">' + outlierCount + '个异常值已截断至边缘</text>');
+      sp.push('</svg>');
+      return sp.join('');
+    }
+
+    function escStatsHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     // ============================================================

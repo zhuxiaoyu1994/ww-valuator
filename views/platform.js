@@ -322,13 +322,6 @@ function getPlatformPage() {
       </div>
     </div>
 
-    <!-- 算法准确性报告入口 -->
-    <div style="text-align:center;margin:20px 0;">
-      <a href="/stats" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#0f3460,#1a1a3e);border:1px solid #8ecdf555;border-radius:10px;color:#8ecdf5;text-decoration:none;font-size:14px;font-weight:600;transition:all 0.3s;" onmouseover="this.style.borderColor='#8ecdf5';this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='#8ecdf555';this.style.transform='translateY(0)';">
-        📊 算法准确性报告
-      </a>
-    </div>
-
     <!-- Footer -->
     <div class="footer">
       <div class="copyright">© 2024 游戏账号估价平台 · 仅供行情参考，不参与任何账号交易</div>
