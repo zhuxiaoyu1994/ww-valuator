@@ -630,14 +630,47 @@ app.post('/api/deals', async (req, res) => {
   const pageIndex = parseInt(page) || 1;
   const ps = parseInt(pageSize) || 50;
 
-  // ====== 数据库模式：从历史记录读取 ======
+  // ====== 数据库模式：从历史记录读取，用当前权重重算估值 ======
   if (source === 'database') {
     try {
       const offset = (pageIndex - 1) * ps;
       const { list, total } = await db.queryDeals(ps, offset);
-      const validItems = list.filter(e => e.estimatedValue > 0);
+
+      // 获取有效权重（与实时模式相同逻辑）
+      let effectiveWeights = customWeights;
+      if (!effectiveWeights) {
+        try {
+          const serverConfig = await db.getConfig('default_weights');
+          if (serverConfig) effectiveWeights = serverConfig;
+        } catch (e) { /* 忽略 */ }
+      }
+
+      // 用当前权重重新计算估值
+      const reevaluated = list.map(item => {
+        const showTitle = item.showTitle || '';
+        const priceInCents = Math.round((item.price || 0) * 100);
+        if (showTitle) {
+          try {
+            const valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
+            item.estimatedValue = Math.round((valuation.details ? valuation.details.finalValue : 0) * 100) / 100;
+            item.deviation = Math.round((item.estimatedValue - item.price) * 100) / 100;
+            item.deviationPercent = item.price > 0 ? Math.round((item.deviation / item.price * 100) * 100) / 100 : 0;
+            item.shortDescription = valueEngine.generateShortDescription(valuation);
+            item.yellowCount = valuation.info ? valuation.info.yellowCount : 0;
+            item.pulls = valuation.info ? valuation.info.pulls : 0;
+            item.characters = valuation.details ? valuation.details.characters : [];
+            item.details = valuation.details || null;
+            item.costPerformance = valuation.costPerformance || 0;
+          } catch (e) {
+            // 重算失败保留数据库中的旧值
+          }
+        }
+        return item;
+      });
+
+      const validItems = reevaluated.filter(e => e.estimatedValue > 0);
       const summary = {
-        total: list.length,
+        total: reevaluated.length,
         valued: validItems.length,
         avgPrice: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.price, 0) / validItems.length * 100) / 100 : 0,
         avgEstimated: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.estimatedValue, 0) / validItems.length * 100) / 100 : 0,
@@ -646,7 +679,7 @@ app.post('/api/deals', async (req, res) => {
         overvalued: validItems.filter(e => e.deviation < 0).length,
         undervalued: validItems.filter(e => e.deviation > 0).length,
       };
-      return res.json({ success: true, data: { list, summary, page: pageIndex, pageSize: ps, totalRecords: total, source: 'database' } });
+      return res.json({ success: true, data: { list: reevaluated, summary, page: pageIndex, pageSize: ps, totalRecords: total, source: 'database' } });
     } catch (err) {
       console.error('[/api/deals:database] Error:', err.message);
       return res.json({ success: false, error: '读取数据库失败: ' + err.message });
