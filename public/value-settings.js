@@ -1160,9 +1160,9 @@
           if (y >= segs[sj].minYellow) seg = segs[sj]; else break;
         }
         var segBase = seg.baseYellow != null ? seg.baseYellow : seg.minYellow;
-        var segStep = seg.step || 1;
+        var segStep = (seg.step != null) ? seg.step : 1;
         var segBaseCoeff = seg.baseCoeff != null ? seg.baseCoeff : 1.0;
-        var segStepCoeff = seg.stepCoeff || 0.01;
+        var segStepCoeff = (seg.stepCoeff != null) ? seg.stepCoeff : 0.01;
         var coeff = segBaseCoeff + Math.floor((y - segBase) / segStep) * segStepCoeff;
         if (coeff < 0.1) coeff = 0.1;
         if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;

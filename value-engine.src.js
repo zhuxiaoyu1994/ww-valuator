@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 15;
+const CONFIG_VERSION = 16;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -974,9 +974,9 @@ function getYellowCoeff(yellowCount) {
       }
     }
     var segBase = (seg.baseYellow != null) ? seg.baseYellow : seg.minYellow;
-    var segStep = seg.step || 1;
+    var segStep = (seg.step != null) ? seg.step : 1;
     var segBaseCoeff = (seg.baseCoeff != null) ? seg.baseCoeff : 1.0;
-    var segStepCoeff = seg.stepCoeff || 0.01;
+    var segStepCoeff = (seg.stepCoeff != null) ? seg.stepCoeff : 0.01;
 
     var segTierIndex = Math.floor((yellowCount - segBase) / segStep);
     var segCoeff = segBaseCoeff + segTierIndex * segStepCoeff;
