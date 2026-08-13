@@ -180,12 +180,14 @@ function getPageHTML() {
     .result-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 2px 8px;
       padding: 6px 0;
       font-size: 14px;
     }
-    .result-row .key { color: #888; }
-    .result-row .val { font-weight: 600; }
+    .result-row .key { color: #888; flex-shrink: 0; }
+    .result-row .val { font-weight: 600; text-align: right; word-break: break-word; }
     .result-divider {
       border-top: 1px solid #2a2a4a;
       margin: 10px 0;
@@ -367,9 +369,34 @@ function getPageHTML() {
     .disclaimer p + p { margin-top: 4px; }
 
     @media (max-width: 600px) {
+      body { padding: 10px; }
+      .container { max-width: 100%; }
       .input-row { flex-direction: column; }
       .price-input { width: 100% !important; }
       .qq-group-card { flex-direction: column; text-align: center; }
+      /* 头部：防止返回按钮与标题重叠 */
+      .header { padding: 8px 0 12px; margin-bottom: 16px; }
+      .header h1 { font-size: 20px; }
+      .header .subtitle { font-size: 12px; }
+      .back-home { font-size: 12px; padding: 4px 10px; top: 8px; }
+      /* 导航和标签 */
+      .top-nav { padding: 6px 8px; }
+      .nav-link { padding: 6px 14px; font-size: 13px; }
+      .tab-btn { padding: 10px 8px; font-size: 13px; }
+      /* 卡片内边距 */
+      .input-card, .result-card { padding: 14px; }
+      /* 估价结果行：允许换行 */
+      .result-row { flex-wrap: wrap; gap: 2px 8px; font-size: 13px; }
+      .result-row .key { min-width: 60px; }
+      .result-row .val { flex: 1; text-align: right; word-break: break-word; }
+      /* 最终估值 */
+      .result-summary .big-value { font-size: 28px; }
+      /* 角色标签 */
+      .char-tags { gap: 4px; }
+      .char-tag { font-size: 11px; padding: 2px 6px; }
+      /* 弹窗 */
+      #stats-modal > div { max-width: 95% !important; margin: 10px auto !important; padding: 14px !important; }
+      #stats-modal-content > div[style*="grid"] { grid-template-columns: repeat(2, 1fr) !important; }
     }
     /* 估值规则设置入口 */
     .settings-bar {
@@ -776,7 +803,7 @@ function getPageHTML() {
       }
       // 配队
       if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
-        hlHtml += '<span style="background:#1a1a2e;border:1px solid #818cf8;border-radius:4px;padding:2px 8px;font-size:11px;color:#818cf8;">配队 ' + det.satisfiedTeams.length + ' 组(' + det.satisfiedTeams.join('/') + ')</span>';
+        hlHtml += '<span style="background:#1a1a2e;border:1px solid #818cf8;border-radius:4px;padding:2px 8px;font-size:11px;color:#818cf8;max-width:100%;word-break:break-word;">配队 ' + det.satisfiedTeams.length + ' 组(' + det.satisfiedTeams.join('/') + ')</span>';
       }
       // 专武
       const sigCount = (det.characters || []).filter(c => c.hasSig).length;
