@@ -428,6 +428,43 @@ async function queryDeals(limit = 100, offset = 0) {
 }
 
 /**
+ * 查询所有成交记录的统计数据（精简字段，用于公开统计页面）
+ */
+async function queryAllDealsForStats() {
+  if (!dbClient) return { list: [], total: 0 };
+  try {
+    const countResult = await dbClient.execute('SELECT COUNT(*) as cnt FROM deals');
+    const total = countResult.rows[0].cnt;
+
+    const result = await dbClient.execute(
+      'SELECT estimated_value, price, deviation, deviation_percent, yellow_count, pulls, characters_json FROM deals WHERE estimated_value > 0 ORDER BY pay_time DESC'
+    );
+
+    const list = result.rows.map(r => {
+      const item = {
+        estimatedValue: r.estimated_value,
+        price: r.price,
+        deviation: r.deviation,
+        deviationPercent: r.deviation_percent,
+        yellowCount: r.yellow_count,
+        pulls: r.pulls,
+      };
+      if (r.characters_json) {
+        try { item.characters = JSON.parse(r.characters_json); } catch (e) { item.characters = []; }
+      } else {
+        item.characters = [];
+      }
+      return item;
+    });
+
+    return { list, total };
+  } catch (e) {
+    console.error('[DB] 查询统计数据失败:', e.message);
+    return { list: [], total: 0 };
+  }
+}
+
+/**
  * 删除成交记录
  */
 async function deleteDealByProductId(productId) {
@@ -457,5 +494,6 @@ module.exports = {
   setConfig,
   insertDealsBatch,
   queryDeals,
+  queryAllDealsForStats,
   deleteDealByProductId,
 };

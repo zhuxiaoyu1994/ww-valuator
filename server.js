@@ -18,6 +18,7 @@ const getPageHTML = require('./views/wuwa');
 const getMonitorPage = require('./views/monitor');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
+const getStatsPage = require('./views/stats');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -976,6 +977,95 @@ app.post('/api/config/update', async (req, res) => {
     res.json({ success: true, message: '配置已更新' });
   } else {
     res.json({ success: false, error: '配置保存失败（数据库未配置或写入失败）' });
+  }
+});
+
+// ============================================================
+// 公开统计页面（算法准确性展示）
+// ============================================================
+app.get('/stats', (req, res) => {
+  res.send(getStatsPage());
+});
+
+app.get('/api/public-stats', async (req, res) => {
+  try {
+    const { list, total } = await db.queryAllDealsForStats();
+    if (list.length === 0) {
+      return res.json({ success: true, data: { summary: null, scatter: [], charStats: [], total: 0 } });
+    }
+
+    const valid = list.filter(d => d.estimatedValue > 0);
+    const valued = valid.length;
+    const avgPrice = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.price, 0) / valued * 100) / 100 : 0;
+    const avgEst = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.estimatedValue, 0) / valued * 100) / 100 : 0;
+    const avgDev = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.deviation, 0) / valued * 100) / 100 : 0;
+    const avgDevPct = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.deviationPercent, 0) / valued * 100) / 100 : 0;
+    const mae = valued > 0 ? Math.round(valid.reduce((s, e) => s + Math.abs(e.deviation), 0) / valued * 100) / 100 : 0;
+    const maePct = valued > 0 ? Math.round(valid.reduce((s, e) => s + Math.abs(e.deviationPercent), 0) / valued * 100) / 100 : 0;
+    const hit10 = valid.filter(e => Math.abs(e.deviationPercent) <= 10).length;
+    const hit20 = valid.filter(e => Math.abs(e.deviationPercent) <= 20).length;
+    const hit30 = valid.filter(e => Math.abs(e.deviationPercent) <= 30).length;
+    const accPct = valued > 0 ? Math.round(hit20 / valued * 1000) / 10 : 0;
+    const overvalued = valid.filter(e => e.deviation < 0).length;
+    const undervalued = valid.filter(e => e.deviation > 0).length;
+
+    // 散点数据（精简字段）
+    const scatter = valid.map(d => ({
+      x: d.estimatedValue,
+      y: d.price,
+      d: d.deviation,
+      p: d.deviationPercent,
+    }));
+
+    // 角色维度偏差统计
+    const charMap = {};
+    for (const d of valid) {
+      const chars = d.characters || [];
+      for (const c of chars) {
+        if (!c.name || c.tier === 'E') continue;
+        const key = c.name + '_C' + (c.const || 0);
+        if (!charMap[key]) {
+          charMap[key] = { name: c.name, tier: c.tier, const: c.const || 0, count: 0, devPctSum: 0, valueSum: 0 };
+        }
+        charMap[key].count++;
+        charMap[key].devPctSum += (d.deviationPercent || 0);
+        charMap[key].valueSum += (c.value || 0);
+      }
+    }
+    const tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4 };
+    const charStats = Object.values(charMap)
+      .filter(e => e.count >= 2)
+      .map(e => ({
+        name: e.name,
+        tier: e.tier,
+        const: e.const,
+        count: e.count,
+        avgDevPct: Math.round(e.devPctSum / e.count * 100) / 100,
+        avgValue: Math.round(e.valueSum / e.count),
+      }))
+      .sort((a, b) => {
+        const ta = tierOrder[a.tier] != null ? tierOrder[a.tier] : 99;
+        const tb = tierOrder[b.tier] != null ? tierOrder[b.tier] : 99;
+        if (ta !== tb) return ta - tb;
+        if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+        return b.const - a.const;
+      });
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          total, valued, avgPrice, avgEst, avgDev, avgDevPct,
+          mae, maePct, accPct, hit10, hit20, hit30,
+          overvalued, undervalued,
+        },
+        scatter,
+        charStats,
+      },
+    });
+  } catch (err) {
+    console.error('[/api/public-stats] Error:', err.message);
+    res.json({ success: false, error: '统计数据获取失败' });
   }
 });
 
