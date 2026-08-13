@@ -1299,20 +1299,28 @@ function getAdminPage() {
     document.getElementById('d-price-range-tbody').innerHTML = rangeRows || '<tr><td colspan="8" style="text-align:center;padding:20px;color:#666;">暂无数据</td></tr>';
 
     // ===== 散点图(估值 vs 成交价) =====
-    var maxVal = Math.max(
-      Math.max.apply(null, valid.map(function(d) { return d.estimatedValue; })),
-      Math.max.apply(null, valid.map(function(d) { return d.price; }))
-    );
-    maxVal = Math.ceil(maxVal / 100) * 100;
+    // 使用95百分位数作为坐标轴上限，避免异常值撑大比例
+    var allVals = valid.map(function(d) { return d.estimatedValue; }).concat(valid.map(function(d) { return d.price; }));
+    allVals.sort(function(a, b) { return a - b; });
+    var p95Index = Math.floor(allVals.length * 0.95);
+    var maxVal = allVals[p95Index] || allVals[allVals.length - 1] || 100;
+    // 向上取整到合适的刻度
+    if (maxVal <= 500) maxVal = Math.ceil(maxVal / 50) * 50;
+    else if (maxVal <= 2000) maxVal = Math.ceil(maxVal / 100) * 100;
+    else if (maxVal <= 10000) maxVal = Math.ceil(maxVal / 500) * 500;
+    else maxVal = Math.ceil(maxVal / 1000) * 1000;
     if (maxVal < 100) maxVal = 100;
+
+    // 统计被截断的异常值数量
+    var outlierCount = valid.filter(function(d) { return d.estimatedValue > maxVal || d.price > maxVal; }).length;
 
     var svgW = 560, svgH = 420;
     var padL = 55, padR = 15, padT = 20, padB = 45;
     var plotW = svgW - padL - padR;
     var plotH = svgH - padT - padB;
 
-    function sX(v) { return padL + (v / maxVal) * plotW; }
-    function sY(v) { return padT + plotH - (v / maxVal) * plotH; }
+    function sX(v) { return padL + (Math.min(v, maxVal) / maxVal) * plotW; }
+    function sY(v) { return padT + plotH - (Math.min(v, maxVal) / maxVal) * plotH; }
 
     var sp = [];
     sp.push('<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:560px;height:auto;display:block;margin:0 auto;" xmlns="http://www.w3.org/2000/svg">');
@@ -1331,12 +1339,12 @@ function getAdminPage() {
     sp.push('<line x1="' + sX(0).toFixed(1) + '" y1="' + sY(0).toFixed(1) + '" x2="' + sX(maxVal).toFixed(1) + '" y2="' + sY(maxVal).toFixed(1) + '" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.5"/>');
     sp.push('<text x="' + (sX(maxVal) - 5).toFixed(1) + '" y="' + (sY(maxVal) - 6).toFixed(1) + '" fill="#4ade80" font-size="10" text-anchor="end">y=x 完美预测线</text>');
 
-    // 数据点
+    // 数据点（超出轴范围的截断到边缘）
     for (var p = 0; p < valid.length; p++) {
       var px = sX(valid[p].estimatedValue);
       var py = sY(valid[p].price);
       var pc = valid[p].deviation > 0 ? '#4ade80' : (valid[p].deviation < 0 ? '#f87171' : '#888');
-      sp.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="1.8" fill="' + pc + '" opacity="0.45"><title>估值¥' + valid[p].estimatedValue + ' 成交¥' + valid[p].price + ' 偏差' + valid[p].deviationPercent + '%</title></circle>');
+      sp.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2.5" fill="' + pc + '" opacity="0.55"><title>估值¥' + valid[p].estimatedValue + ' 成交¥' + valid[p].price + ' 偏差' + valid[p].deviationPercent + '%</title></circle>');
     }
 
     // 轴标签
@@ -1345,10 +1353,15 @@ function getAdminPage() {
 
     // 图例
     sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0d0d22" stroke="#2a2a4a" rx="4"/>');
-    sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="2" fill="#4ade80" opacity="0.45"/>');
+    sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="2.5" fill="#4ade80" opacity="0.55"/>');
     sp.push('<text x="' + (svgW - 125) + '" y="24" fill="#888" font-size="10">估值偏高(买赚)</text>');
-    sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="2" fill="#f87171" opacity="0.45"/>');
+    sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="2.5" fill="#f87171" opacity="0.55"/>');
     sp.push('<text x="' + (svgW - 125) + '" y="39" fill="#888" font-size="10">估值偏低(买贵)</text>');
+
+    // 异常值提示
+    if (outlierCount > 0) {
+      sp.push('<text x="' + (padL + 4) + '" y="' + (padT + 12) + '" fill="#fbbf24" font-size="10">' + outlierCount + '个异常值已截断至边缘</text>');
+    }
 
     sp.push('</svg>');
     document.getElementById('d-scatter-plot').innerHTML = sp.join('');
