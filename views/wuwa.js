@@ -484,9 +484,13 @@ function getPageHTML() {
     <div class="result-card" id="result">
       <div class="result-summary" id="result-summary"></div>
       <div class="result-divider"></div>
+      <div id="result-highlights"></div>
+      <div class="result-divider"></div>
       <div id="result-details"></div>
       <div class="result-divider"></div>
       <div id="result-chars"></div>
+      <div class="result-divider"></div>
+      <div id="result-weapons"></div>
       <div class="result-divider"></div>
       <div id="result-resources"></div>
     </div>
@@ -730,53 +734,159 @@ function getPageHTML() {
       summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
       summaryHtml += '<div class="label">预估价值</div>';
       if (d.price && d.price > 0) {
-        summaryHtml += '<div class="ratio ' + ratioClass + '">性价比 ' + ratioText + ' (标价' + d.price + '元)</div>';
+        const diff = (d.estimatedValue - d.price).toFixed(2);
+        const diffText = diff >= 0 ? '+' + diff : diff;
+        summaryHtml += '<div class="ratio ' + ratioClass + '">性价比 ' + ratioText + ' (标价' + d.price + '元 · 差价' + diffText + '元)</div>';
       }
       document.getElementById('result-summary').innerHTML = summaryHtml;
 
-      // 明细
       const det = d.details;
-      let detailHtml = '';
-      detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#aaa');
-      detailHtml += resultRow('满命溢价', det.c6Premium + ' 元', '#aaa');
-      detailHtml += resultRow('配队溢价', det.teamPremium + ' 元', '#aaa');
-      detailHtml += resultRow('抽数价值', (det.pullValue || 0) + ' 元' + (d.info && d.info.pulls ? '（' + d.info.pulls + '抽）' : ''), '#aaa');
-      detailHtml += resultRow('资源价值', det.resourceValue + ' 元', '#aaa');
-      // 生效系数：低命折扣与黄数系数取较低值，只显示生效的那个
+      const info = d.info || {};
+
+      // ===== 核心亮点 =====
+      let hlHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">核心亮点</div>';
+      hlHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+      // 角色数
+      const charCount = (det.characters && det.characters.length) || 0;
+      const c6Count = (det.characters || []).filter(c => c.const >= 6).length;
+      const sTierCount = (det.characters || []).filter(c => c.tier === 'S').length;
+      if (charCount > 0) {
+        hlHtml += '<span style="background:#1a1a3e;border:1px solid #444;border-radius:4px;padding:2px 8px;font-size:11px;color:#ccc;">五星角色 ' + charCount + ' 个</span>';
+      }
+      if (c6Count > 0) {
+        hlHtml += '<span style="background:#1a2e1a;border:1px solid #4ade80;border-radius:4px;padding:2px 8px;font-size:11px;color:#4ade80;">满命角色 ' + c6Count + ' 个</span>';
+      }
+      if (sTierCount > 0) {
+        hlHtml += '<span style="background:#2e1a1a;border:1px solid #f87171;border-radius:4px;padding:2px 8px;font-size:11px;color:#f87171;">S级角色 ' + sTierCount + ' 个</span>';
+      }
+      // 配队
+      if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
+        hlHtml += '<span style="background:#1a1a2e;border:1px solid #818cf8;border-radius:4px;padding:2px 8px;font-size:11px;color:#818cf8;">配队 ' + det.satisfiedTeams.length + ' 组(' + det.satisfiedTeams.join('/') + ')</span>';
+      }
+      // 专武
+      const sigCount = (det.characters || []).filter(c => c.hasSig).length;
+      if (sigCount > 0) {
+        hlHtml += '<span style="background:#2e2a1a;border:1px solid #fbbf24;border-radius:4px;padding:2px 8px;font-size:11px;color:#fbbf24;">专武 ' + sigCount + ' 把</span>';
+      }
+      // 黄数
       const yi = det.yellowInfo || {};
+      if (yi.yellowCount > 0) {
+        hlHtml += '<span style="background:#2e241a;border:1px solid #f59e0b;border-radius:4px;padding:2px 8px;font-size:11px;color:#f59e0b;">' + yi.yellowCount + '黄 [' + (yi.tierLabel || '') + ']</span>';
+      }
+      // 抽数
+      if (info.pulls > 0) {
+        hlHtml += '<span style="background:#1a2a2e;border:1px solid #2dd4bf;border-radius:4px;padding:2px 8px;font-size:11px;color:#2dd4bf;">' + info.pulls + '抽</span>';
+      }
+      // 满命加权
+      if (det.weightedFullConst > 0) {
+        hlHtml += '<span style="background:#2a1a2e;border:1px solid #c084fc;border-radius:4px;padding:2px 8px;font-size:11px;color:#c084fc;">加权满命 ' + det.weightedFullConst.toFixed(1) + '</span>';
+      }
+      // 低命折扣
       const fd = det.flatDiscount || { value: 1, notes: [] };
+      if (fd.value < 1) {
+        hlHtml += '<span style="background:#2e1a2a;border:1px solid #f472b6;border-radius:4px;padding:2px 8px;font-size:11px;color:#f472b6;">低命折扣 ×' + fd.value + '</span>';
+      }
+      hlHtml += '</div>';
+      document.getElementById('result-highlights').innerHTML = hlHtml;
+
+      // ===== 估价计算 =====
+      let detailHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">估价计算</div>';
+      // 基础价值
+      detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#e0e0e0');
+      // 满命溢价
+      const c6Bonus = det.c6Bonus || {};
+      if (det.c6Premium > 0) {
+        let c6Label = det.c6Premium + ' 元';
+        if (c6Bonus.notes && c6Bonus.notes.length > 0) c6Label += '（' + c6Bonus.notes.join('，') + '）';
+        detailHtml += resultRow('满命溢价', c6Label, '#4ade80');
+      }
+      // 配队溢价
+      const teamBonus = det.teamBonus || {};
+      if (det.teamPremium > 0) {
+        let teamLabel = det.teamPremium + ' 元';
+        if (teamBonus.notes && teamBonus.notes.length > 0) teamLabel += '（' + teamBonus.notes.join('，') + '）';
+        detailHtml += resultRow('配队溢价', teamLabel, '#818cf8');
+      }
+      // 强绑折扣
+      if (det.c6DepNotes && det.c6DepNotes.length > 0) {
+        detailHtml += resultRow('强绑折扣', det.c6DepNotes.join('；'), '#f472b6');
+      }
+      // 抽数价值
+      const pi = det.pullInfo || {};
+      if (det.pullValue > 0 || pi.pulls > 0) {
+        let pullLabel = det.pullValue + ' 元';
+        if (pi.pulls > 0) {
+          pullLabel += '（' + pi.pulls + '抽';
+          if (pi.tierLabel) pullLabel += '·' + pi.tierLabel;
+          if (pi.c6Bonus > 0) pullLabel += '·满命加成+' + pi.c6Bonus + '元';
+          pullLabel += '）';
+        }
+        detailHtml += resultRow('抽数价值', pullLabel, '#2dd4bf');
+      }
+      // 资源价值
+      if (det.resourceValue > 0) {
+        detailHtml += resultRow('资源价值', det.resourceValue + ' 元', '#fbbf24');
+      }
+      // 小计
+      const totalBeforeCoeff = det.characterValue + det.c6Premium + det.teamPremium + det.pullValue + det.resourceValue;
+      detailHtml += resultRow('基础小计', totalBeforeCoeff.toFixed(2) + ' 元', '#aaa');
+      // 生效系数
       const flatActive = (fd.value < 1 && fd.notes && fd.notes.length > 0 && fd.value < (yi.coefficient || 1));
       if (flatActive) {
-        detailHtml += resultRow('低命折扣系数', '× ' + fd.value + '（' + fd.notes.join('，') + '）', '#a78bfa');
+        detailHtml += resultRow('低命折扣', '× ' + fd.value + '（' + fd.notes.join('，') + '）', '#a78bfa');
       } else if (yi.yellowCount > 0) {
         detailHtml += resultRow('黄数系数', yi.yellowCount + '黄 [' + (yi.tierLabel || '') + '] × ' + yi.coefficient, '#f59e0b');
       }
+      // 最终价值
+      detailHtml += '<div class="result-row" style="border-top:1px solid #333;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
       document.getElementById('result-details').innerHTML = detailHtml;
 
-      // 角色标签
-      let charHtml = '<div style="color:#888;font-size:12px;margin-bottom:4px;">角色明细</div><div class="char-tags">';
+      // ===== 角色明细（按估值从大到小排序） =====
+      let charHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">角色明细（按价值排序）</div>';
       if (det.characters && det.characters.length > 0) {
-        det.characters.forEach(c => {
+        const sortedChars = [...det.characters].sort((a, b) => b.value - a.value);
+        charHtml += '<div class="char-tags">';
+        sortedChars.forEach(c => {
           const constStr = c.const === 6 ? '满命' : c.const + '命';
           const sigStr = c.hasSig ? ' <span class="sig">+专武</span>' : '';
           charHtml += '<span class="char-tag ' + c.tier + '">' + constStr + ' ' + c.name + sigStr + ' (' + c.value + '元)</span>';
         });
+        charHtml += '</div>';
+        // 角色价值汇总
+        const totalCharValue = sortedChars.reduce((s, c) => s + c.value, 0);
+        charHtml += '<div style="color:#666;font-size:11px;margin-top:6px;">角色总价值: ' + totalCharValue + ' 元 · 平均: ' + Math.round(totalCharValue / sortedChars.length) + ' 元/个</div>';
       } else {
         charHtml += '<span style="color:#666;font-size:12px;">未识别到角色</span>';
       }
-      charHtml += '</div>';
       document.getElementById('result-chars').innerHTML = charHtml;
 
-      // 资源
-      const info = d.info || {};
-      let resHtml = '';
-      resHtml += resultRow('星声', info.starSounds || 0, '#666');
-      resHtml += resultRow('月相', info.moonPhases || 0, '#666');
-      resHtml += resultRow('余波珊瑚', info.coral || 0, '#666');
-      resHtml += resultRow('浮金波纹', info.goldenRipples || 0, '#666');
-      resHtml += resultRow('铸潮波纹', info.tideRipples || 0, '#666');
-      resHtml += resultRow('服饰', (info.outfits || 0) + ' 件', '#666');
-      resHtml += resultRow('黄数', info.yellowCount || 0, '#666');
+      // ===== 武器明细 =====
+      let wpnHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">武器明细</div>';
+      const weapons = det.weaponDetails || info.weapons || [];
+      if (weapons.length > 0) {
+        wpnHtml += '<div class="char-tags">';
+        weapons.forEach(w => {
+          const refineStr = w.refine > 0 ? '精' + w.refine + ' ' : '';
+          const sigBadge = w.isSig ? ' <span class="sig">专武</span>' : '';
+          wpnHtml += '<span class="char-tag" style="border-color:#666;color:#ccc;">' + refineStr + w.name + sigBadge + '</span>';
+        });
+        wpnHtml += '</div>';
+      } else {
+        wpnHtml += '<span style="color:#666;font-size:12px;">未识别到武器</span>';
+      }
+      document.getElementById('result-weapons').innerHTML = wpnHtml;
+
+      // ===== 资源明细 =====
+      let resHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">资源明细</div>';
+      resHtml += resultRow('星声', info.starSounds || 0, '#e0e0e0');
+      resHtml += resultRow('月相', info.moonPhases || 0, '#e0e0e0');
+      resHtml += resultRow('余波珊瑚', info.coral || 0, '#e0e0e0');
+      resHtml += resultRow('浮金波纹', info.goldenRipples || 0, '#e0e0e0');
+      resHtml += resultRow('铸潮波纹', info.tideRipples || 0, '#e0e0e0');
+      if (info.outfits > 0) resHtml += resultRow('服饰', info.outfits + ' 件', '#fbbf24');
+      if (info.motorcycles > 0) resHtml += resultRow('车架模组', info.motorcycles + ' 个', '#fbbf24');
+      if (info.pulls > 0) resHtml += resultRow('抽数', info.pulls + ' 抽', '#2dd4bf');
+      resHtml += resultRow('有效黄数', info.yellowCount || 0, '#f59e0b');
       document.getElementById('result-resources').innerHTML = resHtml;
 
       document.getElementById('result').classList.add('show');
