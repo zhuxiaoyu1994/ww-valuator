@@ -211,6 +211,7 @@ function getAdminPage() {
         <div class="d-stat-card yellow"><div class="d-label">P90偏差率</div><div class="d-val" id="d-p90-dev">-</div><div class="d-sub" id="d-p90-dev-desc"></div></div>
       </div>
       <div class="d-controls">
+        <button class="fetch-btn" id="d-source-toggle" onclick="toggleDealsSource()" style="min-width:90px;">实时获取</button>
         <select id="d-pagesize" onchange="dealsPageSize=parseInt(this.value)">
           <option value="50">每页50条</option>
           <option value="100">每页100条</option>
@@ -219,6 +220,7 @@ function getAdminPage() {
         <button class="fetch-btn" onclick="fetchDealsInitial()">获取数据</button>
         <button class="more-btn" id="d-more-btn" onclick="fetchDeals(false)">加载更多</button>
         <button class="clear-btn" onclick="clearDeals()">清空</button>
+        <span id="d-total-info" style="font-size:12px;color:#8ecdf5;display:none;"></span>
         <select id="d-filter" onchange="applyDealsFilter()">
           <option value="all">全部</option>
           <option value="undervalued">估值偏高(买赚)</option>
@@ -444,6 +446,8 @@ function getAdminPage() {
   let dealsLoading = false;
   let dealsExpandedRow = null;
   let dealsLoaded = false;
+  let dealsSource = 'live'; // 'live' 或 'database'
+  let dealsTotalRecords = 0; // 数据库模式下的总记录数
 
   // ============================================================
   // 登录
@@ -602,12 +606,24 @@ function getAdminPage() {
 
   // 初始加载：自动获取前4页数据
   async function fetchDealsInitial() {
-    var targetPages = 4;
+    var targetPages = dealsSource === 'database' ? 1 : 4;
     await fetchDeals(true);
     for (var p = 1; p < targetPages; p++) {
       if (!dealsHasMore || dealsLoading) break;
       await fetchDeals(false);
     }
+  }
+
+  function toggleDealsSource() {
+    dealsSource = dealsSource === 'live' ? 'database' : 'live';
+    var btn = document.getElementById('d-source-toggle');
+    btn.textContent = dealsSource === 'live' ? '实时获取' : '历史记录';
+    btn.style.background = dealsSource === 'live' ? '' : '#1a3a1a';
+    btn.style.borderColor = dealsSource === 'live' ? '' : '#4ade80';
+    btn.style.color = dealsSource === 'live' ? '' : '#4ade80';
+    var info = document.getElementById('d-total-info');
+    info.style.display = 'none';
+    clearDeals();
   }
 
   async function fetchDeals(reset) {
@@ -627,7 +643,7 @@ function getAdminPage() {
     const tbody = document.getElementById('d-tbody');
     const moreBtn = document.getElementById('d-more-btn');
     if (reset) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">正在获取成交数据并计算估值...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">正在' + (dealsSource === 'database' ? '读取数据库' : '获取成交数据并计算估值') + '...</td></tr>';
     } else {
       moreBtn.textContent = '加载中...';
       moreBtn.disabled = true;
@@ -644,7 +660,7 @@ function getAdminPage() {
       const resp = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize, customWeights }),
+        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize, customWeights, source: dealsSource }),
       });
       const json = await resp.json();
       if (!json.success) {
@@ -655,6 +671,14 @@ function getAdminPage() {
       }
 
       const newItems = json.data.list || [];
+      if (json.data.totalRecords != null) {
+        dealsTotalRecords = json.data.totalRecords;
+        var info = document.getElementById('d-total-info');
+        info.style.display = 'inline';
+        info.textContent = '数据库共 ' + dealsTotalRecords + ' 条记录';
+      } else {
+        document.getElementById('d-total-info').style.display = 'none';
+      }
       if (newItems.length < dealsPageSize) {
         dealsHasMore = false;
       }
@@ -685,6 +709,7 @@ function getAdminPage() {
     dealsLoaded = false;
     dealsExpandedRow = null;
     document.getElementById('d-tbody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">点击"获取数据"按钮加载成交记录</td></tr>';
+    document.getElementById('d-total-info').style.display = 'none';
     document.getElementById('d-total').textContent = '-';
     document.getElementById('d-valued').textContent = '';
     document.getElementById('d-avg-price').textContent = '-';
@@ -1428,11 +1453,39 @@ function getAdminPage() {
 
   function toggleDesc(el) { el.classList.toggle('expanded'); }
 
-  function deleteDeal(filteredIndex) {
+  async function deleteDeal(filteredIndex) {
     var item = dealsFiltered[filteredIndex];
     if (!item) return;
     var dataIdx = dealsData.indexOf(item);
     if (dataIdx < 0) return;
+
+    // 数据库模式：调用 API 从数据库删除
+    if (dealsSource === 'database' && item.productId) {
+      try {
+        const pw = sessionStorage.getItem('admin_pw');
+        const resp = await fetch('/api/deals/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw, productId: item.productId }),
+        });
+        const json = await resp.json();
+        if (!json.success) {
+          alert('删除失败: ' + (json.error || '未知错误'));
+          return;
+        }
+        dealsTotalRecords = Math.max(0, dealsTotalRecords - 1);
+        var info = document.getElementById('d-total-info');
+        if (dealsTotalRecords > 0) {
+          info.textContent = '数据库共 ' + dealsTotalRecords + ' 条记录';
+        } else {
+          info.style.display = 'none';
+        }
+      } catch (err) {
+        alert('网络错误: ' + err.message);
+        return;
+      }
+    }
+
     dealsData.splice(dataIdx, 1);
     dealsExpandedRow = null;
     renderDealsSummary();

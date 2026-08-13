@@ -276,14 +276,186 @@ async function setConfig(key, value) {
   }
 }
 
+// ============================================================
+// 成交记录持久化
+// ============================================================
+
+/**
+ * 创建成交记录表
+ */
+async function ensureDealsTable() {
+  if (!dbClient) return;
+  try {
+    await dbClient.execute(`
+      CREATE TABLE IF NOT EXISTS deals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT UNIQUE NOT NULL,
+        product_unique_no TEXT,
+        price REAL,
+        estimated_value REAL,
+        deviation REAL,
+        deviation_percent REAL,
+        pay_time TEXT,
+        show_title TEXT,
+        short_description TEXT,
+        yellow_count INTEGER,
+        pulls INTEGER,
+        characters_json TEXT,
+        attr_name_list_json TEXT,
+        main_image_url TEXT,
+        url TEXT,
+        details_json TEXT,
+        cost_performance REAL,
+        fetched_at TEXT NOT NULL
+      )
+    `);
+    console.log('[DB] 成交记录表已就绪');
+  } catch (e) {
+    console.error('[DB] 建成交记录表失败:', e.message);
+  }
+}
+
+/**
+ * 批量插入成交记录（自动去重，已存在的 productId 跳过）
+ */
+async function insertDealsBatch(deals) {
+  if (!dbClient || !deals || deals.length === 0) return { inserted: 0, skipped: 0 };
+  let inserted = 0, skipped = 0;
+  const now = new Date().toISOString();
+  const stmts = [];
+  for (const deal of deals) {
+    stmts.push({
+      sql: `INSERT INTO deals (product_id, product_unique_no, price, estimated_value, deviation, deviation_percent,
+            pay_time, show_title, short_description, yellow_count, pulls, characters_json, attr_name_list_json,
+            main_image_url, url, details_json, cost_performance, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(product_id) DO NOTHING`,
+      args: [
+        deal.productId || '',
+        deal.productUniqueNo || '',
+        deal.price != null ? deal.price : null,
+        deal.estimatedValue != null ? deal.estimatedValue : null,
+        deal.deviation != null ? deal.deviation : null,
+        deal.deviationPercent != null ? deal.deviationPercent : null,
+        deal.payTime || '',
+        deal.showTitle || '',
+        deal.shortDescription || '',
+        deal.yellowCount != null ? deal.yellowCount : 0,
+        deal.pulls != null ? deal.pulls : 0,
+        deal.characters ? JSON.stringify(deal.characters) : null,
+        deal.attrNameList ? JSON.stringify(deal.attrNameList) : null,
+        deal.mainImageUrl || '',
+        deal.url || '',
+        deal.details ? JSON.stringify(deal.details) : null,
+        deal.costPerformance != null ? deal.costPerformance : null,
+        now,
+      ],
+    });
+  }
+  try {
+    const results = await dbClient.batch(stmts);
+    for (const r of results) {
+      if (r.rowsAffected > 0) inserted++; else skipped++;
+    }
+    console.log(`[DB] 成交记录批量插入: ${inserted} 新增, ${skipped} 跳过`);
+  } catch (e) {
+    console.error('[DB] 批量插入失败，尝试逐条插入:', e.message);
+    // 回退到逐条插入
+    for (const stmt of stmts) {
+      try {
+        const r = await dbClient.execute(stmt);
+        if (r.rowsAffected > 0) inserted++; else skipped++;
+      } catch (e2) {
+        skipped++;
+      }
+    }
+    console.log(`[DB] 成交记录逐条插入: ${inserted} 新增, ${skipped} 跳过`);
+  }
+  return { inserted, skipped };
+}
+
+/**
+ * 查询成交记录（分页）
+ */
+async function queryDeals(limit = 100, offset = 0) {
+  if (!dbClient) return { list: [], total: 0 };
+  try {
+    const countResult = await dbClient.execute('SELECT COUNT(*) as cnt FROM deals');
+    const total = countResult.rows[0].cnt;
+
+    const result = await dbClient.execute({
+      sql: 'SELECT * FROM deals ORDER BY pay_time DESC, id DESC LIMIT ? OFFSET ?',
+      args: [limit, offset],
+    });
+
+    const list = result.rows.map(r => {
+      const item = {
+        productId: r.product_id,
+        productUniqueNo: r.product_unique_no,
+        price: r.price,
+        estimatedValue: r.estimated_value,
+        deviation: r.deviation,
+        deviationPercent: r.deviation_percent,
+        payTime: r.pay_time,
+        showTitle: r.show_title,
+        shortDescription: r.short_description,
+        yellowCount: r.yellow_count,
+        pulls: r.pulls,
+        attrNameList: r.attr_name_list_json ? JSON.parse(r.attr_name_list_json) : [],
+        mainImageUrl: r.main_image_url,
+        url: r.url,
+        costPerformance: r.cost_performance,
+        _fromDb: true,
+      };
+      if (r.characters_json) {
+        try { item.characters = JSON.parse(r.characters_json); } catch (e) { item.characters = []; }
+      } else {
+        item.characters = [];
+      }
+      if (r.details_json) {
+        try { item.details = JSON.parse(r.details_json); } catch (e) { item.details = null; }
+      } else {
+        item.details = null;
+      }
+      return item;
+    });
+
+    return { list, total };
+  } catch (e) {
+    console.error('[DB] 查询成交记录失败:', e.message);
+    return { list: [], total: 0 };
+  }
+}
+
+/**
+ * 删除成交记录
+ */
+async function deleteDealByProductId(productId) {
+  if (!dbClient) return false;
+  try {
+    const result = await dbClient.execute({
+      sql: 'DELETE FROM deals WHERE product_id = ?',
+      args: [productId],
+    });
+    return result.rowsAffected > 0;
+  } catch (e) {
+    console.error('[DB] 删除成交记录失败:', e.message);
+    return false;
+  }
+}
+
 module.exports = {
   initDb,
   ensureTable,
   ensureConfigTable,
+  ensureDealsTable,
   insertLog,
   queryLogs,
   getStats,
   searchLogs,
   getConfig,
   setConfig,
+  insertDealsBatch,
+  queryDeals,
+  deleteDealByProductId,
 };

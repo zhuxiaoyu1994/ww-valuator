@@ -620,15 +620,40 @@ function fetchSoldProducts(pageIndex, pageSize) {
 
 /**
  * 成交记录接口 - 获取昨日成交商品并计算估值偏差（需管理密码）
+ * source: 'live'（默认）从API实时获取并存入数据库；'database' 从数据库读取历史记录
  */
 app.post('/api/deals', async (req, res) => {
-  const { password, page, pageSize, customWeights } = req.body;
+  const { password, page, pageSize, customWeights, source } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
   const pageIndex = parseInt(page) || 1;
   const ps = parseInt(pageSize) || 50;
 
+  // ====== 数据库模式：从历史记录读取 ======
+  if (source === 'database') {
+    try {
+      const offset = (pageIndex - 1) * ps;
+      const { list, total } = await db.queryDeals(ps, offset);
+      const validItems = list.filter(e => e.estimatedValue > 0);
+      const summary = {
+        total: list.length,
+        valued: validItems.length,
+        avgPrice: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.price, 0) / validItems.length * 100) / 100 : 0,
+        avgEstimated: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.estimatedValue, 0) / validItems.length * 100) / 100 : 0,
+        avgDeviation: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.deviation, 0) / validItems.length * 100) / 100 : 0,
+        avgDeviationPercent: validItems.length > 0 ? Math.round(validItems.reduce((s, e) => s + e.deviationPercent, 0) / validItems.length * 100) / 100 : 0,
+        overvalued: validItems.filter(e => e.deviation < 0).length,
+        undervalued: validItems.filter(e => e.deviation > 0).length,
+      };
+      return res.json({ success: true, data: { list, summary, page: pageIndex, pageSize: ps, totalRecords: total, source: 'database' } });
+    } catch (err) {
+      console.error('[/api/deals:database] Error:', err.message);
+      return res.json({ success: false, error: '读取数据库失败: ' + err.message });
+    }
+  }
+
+  // ====== 实时模式：从API获取并存入数据库 ======
   try {
     const { products, debug } = await fetchSoldProducts(pageIndex, ps);
     if (!products || products.length === 0) {
@@ -686,6 +711,14 @@ app.post('/api/deals', async (req, res) => {
       };
     });
 
+    // 存入数据库（await 确保 Vercel 函数终止前完成写入）
+    try {
+      const saveResult = await db.insertDealsBatch(enriched);
+      console.log('[/api/deals] 存入数据库完成:', saveResult.inserted, '新增,', saveResult.skipped, '跳过');
+    } catch (e) {
+      console.error('[/api/deals] 存入数据库失败:', e.message);
+    }
+
     // 汇总统计
     const validItems = enriched.filter(e => e.estimatedValue > 0);
     const summary = {
@@ -699,10 +732,30 @@ app.post('/api/deals', async (req, res) => {
       undervalued: validItems.filter(e => e.deviation > 0).length,  // 估值 > 成交价（买赚了）
     };
 
-    res.json({ success: true, data: { list: enriched, summary, page: pageIndex, pageSize: ps } });
+    res.json({ success: true, data: { list: enriched, summary, page: pageIndex, pageSize: ps, source: 'live' } });
   } catch (err) {
     console.error('[/api/deals] Error:', err.message);
     res.json({ success: false, error: '获取成交数据失败: ' + err.message });
+  }
+});
+
+/**
+ * 删除成交记录（从数据库删除）
+ */
+app.post('/api/deals/delete', async (req, res) => {
+  const { password, productId } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  if (!productId) {
+    return res.json({ success: false, error: '缺少 productId' });
+  }
+  try {
+    const deleted = await db.deleteDealByProductId(productId);
+    res.json({ success: deleted });
+  } catch (err) {
+    console.error('[/api/deals/delete] Error:', err.message);
+    res.json({ success: false, error: err.message });
   }
 });
 
@@ -905,6 +958,7 @@ function initApp() {
   db.initDb();
   db.ensureTable();
   db.ensureConfigTable();
+  db.ensureDealsTable();
 }
 
 // 导出 app 和 initApp（供 Vercel 使用）
