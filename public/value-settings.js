@@ -976,7 +976,7 @@
     var yellowSegEntries;
     if (w.yellowSegments && w.yellowSegments.length > 0) {
       yellowSegEntries = w.yellowSegments.map(function(s) {
-        return { minYellow: s.minYellow || 0, baseYellow: s.baseYellow != null ? s.baseYellow : (s.minYellow || 0), baseCoeff: s.baseCoeff != null ? s.baseCoeff : 1.0, step: s.step || 1, stepCoeff: s.stepCoeff || 0.01 };
+        return { minYellow: s.minYellow != null ? s.minYellow : 0, baseYellow: s.baseYellow != null ? s.baseYellow : (s.minYellow != null ? s.minYellow : 0), baseCoeff: s.baseCoeff != null ? s.baseCoeff : 1.0, step: (s.step != null) ? s.step : 1, stepCoeff: (s.stepCoeff != null) ? s.stepCoeff : 0.01 };
       });
     } else {
       // 从单公式参数转换为单个分段
