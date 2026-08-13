@@ -7,72 +7,135 @@ function getPageHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>鸣潮账号估价 - 游戏账号估价平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg-deep: #0E1018;
+      --bg-base: #131620;
+      --bg-mid: #1A1E2C;
+      --surface: rgba(28, 34, 50, 0.6);
+      --surface-solid: #1C2232;
+      --surface-hover: #232938;
+      --border: rgba(94, 234, 212, 0.10);
+      --border-default: #262B3C;
+      --border-hover: rgba(94, 234, 212, 0.35);
+      --accent: #5EEAD4;
+      --accent-dim: rgba(94, 234, 212, 0.08);
+      --accent-glow: rgba(94, 234, 212, 0.20);
+      --indigo: #818CF8;
+      --amber: #FBBF24;
+      --text-primary: #E2E8F0;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --success: #4ADE80;
+      --danger: #F87171;
+      --radius: 14px;
+      --radius-sm: 10px;
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0a1a;
-      color: #e0e0e0;
-      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(94, 234, 212, 0.05) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 50% 110%, rgba(129, 140, 248, 0.04) 0%, transparent 60%),
+        linear-gradient(165deg, var(--bg-deep) 0%, var(--bg-mid) 50%, var(--bg-base) 100%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      font-family: 'Chakra Petch', 'PingFang SC', 'Microsoft YaHei', sans-serif;
       min-height: 100vh;
       padding: 20px;
+      -webkit-font-smoothing: antialiased;
     }
-    .container { max-width: 800px; margin: 0 auto; }
+    .container { max-width: 820px; margin: 0 auto; }
 
     /* Top Nav */
     .top-nav {
       display: flex; justify-content: center; gap: 0;
-      margin-bottom: 8px; padding: 10px 16px;
-      background: #12122a; border-radius: 12px; border: 1px solid #1f1f3a;
+      margin-bottom: 12px; padding: 8px;
+      background: var(--surface);
+      backdrop-filter: blur(12px);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-default);
+      box-shadow: 0 2px 16px rgba(0,0,0,0.2);
     }
     .nav-link {
-      padding: 8px 24px; font-size: 14px; color: #888;
-      text-decoration: none; border-radius: 8px; transition: all 0.2s;
-      border: 1px solid transparent;
+      padding: 8px 24px; font-size: 14px; color: var(--text-secondary);
+      text-decoration: none; border-radius: var(--radius-sm); transition: var(--transition);
+      border: 1px solid transparent; font-weight: 500;
     }
-    .nav-link:hover { color: #ccc; background: rgba(255,255,255,0.04); }
-    .nav-link.active { color: #4ade80; border-color: #2a4a2a; background: rgba(74,222,128,0.06); font-weight: 600; }
+    .nav-link:hover { color: var(--text-primary); background: var(--accent-dim); }
+    .nav-link.active {
+      color: var(--accent);
+      border-color: var(--border-hover);
+      background: var(--accent-dim);
+      font-weight: 600;
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
 
     /* Header */
     .header {
       text-align: center;
-      margin-bottom: 24px;
-      padding: 20px 24px 16px;
+      margin-bottom: 28px;
+      padding: 28px 24px 12px;
       position: relative;
     }
     .back-home {
       position: absolute;
-      top: 16px;
+      top: 20px;
       left: 0;
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 6px 14px;
-      border: 1px solid #2a2a4a;
+      padding: 6px 16px;
+      border: 1px solid var(--border-default);
       border-radius: 20px;
-      color: #aaa;
+      color: var(--text-secondary);
       font-size: 13px;
       text-decoration: none;
-      transition: all 0.2s;
+      transition: var(--transition);
     }
-    .back-home:hover { color: #e94560; border-color: rgba(233,69,96,0.5); background: rgba(233,69,96,0.06); }
+    .back-home:hover {
+      color: var(--accent);
+      border-color: var(--border-hover);
+      background: var(--accent-dim);
+    }
     .header h1 {
-      font-size: 28px;
-      color: #e94560;
+      font-size: 30px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--indigo) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       margin-bottom: 8px;
+      letter-spacing: 1px;
     }
     .header .subtitle {
-      color: #888;
+      color: var(--text-muted);
       font-size: 14px;
+    }
+    .header::after {
+      content: '';
+      display: block;
+      width: 60px;
+      height: 2px;
+      margin: 16px auto 0;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0.6;
     }
 
     /* 教学视频 */
     .tutorial-section {
-      background: rgba(15, 52, 96, 0.3);
-      border: 1px solid rgba(142, 205, 245, 0.15);
-      border-radius: 10px;
+      background: var(--surface);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius);
       padding: 14px 18px;
       margin-bottom: 20px;
+      transition: var(--transition);
     }
+    .tutorial-section:hover { border-color: var(--border-hover); }
     .tutorial-header {
       display: flex;
       align-items: center;
@@ -81,13 +144,13 @@ function getPageHTML() {
       user-select: none;
     }
     .tutorial-icon {
-      color: #e94560;
+      color: var(--accent);
       font-size: 14px;
     }
     .tutorial-title {
       font-size: 14px;
       font-weight: 600;
-      color: #e0e0e0;
+      color: var(--text-primary);
     }
 
     /* Tabs */
@@ -95,33 +158,46 @@ function getPageHTML() {
       display: flex;
       gap: 8px;
       margin-bottom: 20px;
+      padding: 4px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-default);
     }
     .tab-btn {
       flex: 1;
-      padding: 12px 16px;
-      border: 1px solid #2a2a4a;
-      border-radius: 8px;
-      background: #12122a;
-      color: #888;
+      padding: 11px 16px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
       font-size: 14px;
+      font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: var(--transition);
       text-align: center;
+      font-family: inherit;
     }
+    .tab-btn:hover { color: var(--text-primary); background: var(--accent-dim); }
     .tab-btn.active {
-      background: #e94560;
-      color: #fff;
-      border-color: #e94560;
+      background: linear-gradient(135deg, var(--accent) 0%, #3DD6BE 100%);
+      color: var(--bg-deep);
+      border-color: var(--accent);
+      font-weight: 600;
+      box-shadow: 0 2px 12px var(--accent-glow);
     }
 
     /* Input area */
     .input-card {
-      background: #12122a;
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
+      background: var(--surface);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius);
       padding: 24px;
       margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      transition: var(--transition);
     }
+    .input-card:hover { border-color: rgba(94, 234, 212, 0.18); }
     .input-row {
       display: flex;
       gap: 12px;
@@ -131,37 +207,47 @@ function getPageHTML() {
     .input-row textarea {
       flex: 1;
       padding: 12px 16px;
-      border: 1px solid #2a2a4a;
-      border-radius: 8px;
-      background: #0a0a1a;
-      color: #e0e0e0;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      background: rgba(10, 12, 20, 0.6);
+      color: var(--text-primary);
       font-size: 14px;
       font-family: inherit;
       outline: none;
-      transition: border-color 0.2s;
+      transition: var(--transition);
     }
+    .input-row input::placeholder,
+    .input-row textarea::placeholder { color: var(--text-muted); }
     .input-row input:focus,
     .input-row textarea:focus {
-      border-color: #e94560;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+      background: rgba(10, 12, 20, 0.8);
     }
     .input-row textarea {
       resize: vertical;
       min-height: 120px;
     }
     .eval-btn {
-      padding: 12px 28px;
+      padding: 12px 32px;
       border: none;
-      border-radius: 8px;
-      background: #e94560;
-      color: #fff;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--accent) 0%, #3DD6BE 100%);
+      color: var(--bg-deep);
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
-      transition: background 0.2s;
+      transition: var(--transition);
+      font-family: inherit;
+      letter-spacing: 0.5px;
     }
-    .eval-btn:hover { background: #ff5577; }
-    .eval-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .eval-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .eval-btn:active { transform: translateY(0); }
+    .eval-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
     .price-input {
       width: 120px !important;
@@ -170,13 +256,20 @@ function getPageHTML() {
 
     /* Result */
     .result-card {
-      background: #12122a;
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
+      background: var(--surface);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-default);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
       padding: 24px;
       display: none;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2);
     }
-    .result-card.show { display: block; }
+    .result-card.show { display: block; animation: fadeSlideIn 0.4s ease; }
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     .result-row {
       display: flex;
       justify-content: space-between;
@@ -184,10 +277,10 @@ function getPageHTML() {
       padding: 6px 0;
       font-size: 14px;
     }
-    .result-row .key { color: #888; }
+    .result-row .key { color: var(--text-secondary); }
     .result-row .val { font-weight: 600; }
     .result-divider {
-      border-top: 1px solid #2a2a4a;
+      border-top: 1px solid var(--border-default);
       margin: 10px 0;
     }
     .result-summary {
@@ -196,26 +289,29 @@ function getPageHTML() {
       position: relative;
     }
     .result-summary .big-value {
-      font-size: 36px;
-      font-weight: bold;
-      color: #4ade80;
+      font-size: 38px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--success) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .result-summary .label {
-      color: #888;
+      color: var(--text-muted);
       font-size: 13px;
       margin-top: 4px;
     }
     .result-summary .ratio {
       display: inline-block;
-      padding: 4px 12px;
+      padding: 4px 14px;
       border-radius: 20px;
       font-size: 14px;
       font-weight: 600;
       margin-top: 8px;
     }
-    .ratio.good { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-    .ratio.ok { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-    .ratio.bad { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    .ratio.good { background: rgba(74, 222, 128, 0.12); color: var(--success); }
+    .ratio.ok { background: rgba(251, 191, 36, 0.12); color: var(--amber); }
+    .ratio.bad { background: rgba(248, 113, 113, 0.12); color: var(--danger); }
 
     .char-tags {
       display: flex;
@@ -225,25 +321,28 @@ function getPageHTML() {
     }
     .char-tag {
       display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
+      padding: 3px 10px;
+      border-radius: 6px;
       font-size: 12px;
+      font-weight: 500;
+      transition: var(--transition);
     }
-    .char-tag.S { background: rgba(233, 69, 96, 0.2); color: #e94560; }
-    .char-tag.A { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-    .char-tag.B { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
-    .char-tag.C { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-    .char-tag.D { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
-    .char-tag.E { background: rgba(156, 163, 175, 0.1); color: #666; }
-    .char-tag .const { color: #aaa; margin-left: 2px; }
-    .char-tag .sig { color: #4ade80; }
+    .char-tag:hover { transform: translateY(-1px); }
+    .char-tag.S { background: rgba(248, 113, 113, 0.12); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
+    .char-tag.A { background: rgba(251, 191, 36, 0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
+    .char-tag.B { background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.25); }
+    .char-tag.C { background: rgba(74, 222, 128, 0.10); color: var(--success); border: 1px solid rgba(74,222,128,0.2); }
+    .char-tag.D { background: rgba(148, 163, 184, 0.10); color: #94a3b8; border: 1px solid rgba(148,163,184,0.15); }
+    .char-tag.E { background: rgba(100, 116, 139, 0.08); color: var(--text-muted); border: 1px solid rgba(100,116,139,0.12); }
+    .char-tag .const { color: var(--text-secondary); margin-left: 2px; }
+    .char-tag .sig { color: var(--success); }
 
     /* History */
     .history {
       margin-top: 20px;
     }
     .history-title {
-      color: #666;
+      color: var(--text-muted);
       font-size: 12px;
       margin-bottom: 8px;
     }
@@ -254,26 +353,30 @@ function getPageHTML() {
     }
     .history-tag {
       display: inline-block;
-      padding: 4px 10px;
+      padding: 4px 12px;
       border-radius: 16px;
-      background: #12122a;
-      border: 1px solid #2a2a4a;
-      color: #888;
+      background: var(--surface);
+      border: 1px solid var(--border-default);
+      color: var(--text-secondary);
       font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: var(--transition);
     }
-    .history-tag:hover { border-color: #e94560; color: #e0e0e0; }
+    .history-tag:hover {
+      border-color: var(--border-hover);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
 
     .loading {
       text-align: center;
       padding: 20px;
-      color: #888;
+      color: var(--text-muted);
     }
     .error-msg {
       text-align: center;
       padding: 16px;
-      color: #f87171;
+      color: var(--danger);
       font-size: 14px;
     }
 
@@ -282,27 +385,32 @@ function getPageHTML() {
       margin-top: 40px;
     }
     .qq-group-card {
-      background: linear-gradient(135deg, #12122a 0%, #1a1a3a 100%);
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
+      background: linear-gradient(135deg, var(--surface) 0%, rgba(28, 34, 50, 0.8) 100%);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius);
       padding: 24px;
       display: flex;
       align-items: center;
       gap: 24px;
       margin-bottom: 16px;
+      transition: var(--transition);
     }
+    .qq-group-card:hover { border-color: rgba(94, 234, 212, 0.2); }
     .qq-group-card .qr-wrapper {
       flex-shrink: 0;
       width: 140px;
       height: 140px;
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       overflow: hidden;
-      border: 2px solid #2a2a4a;
+      border: 2px solid var(--border-default);
       cursor: pointer;
-      transition: transform 0.2s;
+      transition: var(--transition);
     }
     .qq-group-card .qr-wrapper:hover {
       transform: scale(1.05);
+      border-color: var(--border-hover);
+      box-shadow: 0 0 16px var(--accent-glow);
     }
     .qq-group-card .qr-wrapper img {
       width: 100%;
@@ -315,6 +423,7 @@ function getPageHTML() {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(4px);
       z-index: 9999;
       justify-content: center;
       align-items: center;
@@ -324,41 +433,41 @@ function getPageHTML() {
     .img-overlay img {
       max-width: 90vw;
       max-height: 90vh;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
     }
     .qq-group-card .info h3 {
       font-size: 18px;
-      color: #4ade80;
+      color: var(--accent);
       margin-bottom: 8px;
     }
     .qq-group-card .info .group-id {
       font-size: 16px;
-      color: #e0e0e0;
+      color: var(--text-primary);
       margin-bottom: 6px;
     }
     .qq-group-card .info .group-id .num {
       font-weight: bold;
-      color: #60a5fa;
+      color: var(--indigo);
       font-size: 18px;
       letter-spacing: 1px;
     }
     .qq-group-card .info .desc {
       font-size: 13px;
-      color: #888;
+      color: var(--text-muted);
       line-height: 1.6;
     }
     .disclaimer {
-      background: rgba(233, 69, 96, 0.05);
-      border: 1px solid rgba(233, 69, 96, 0.2);
-      border-radius: 10px;
+      background: rgba(248, 113, 113, 0.04);
+      border: 1px solid rgba(248, 113, 113, 0.15);
+      border-radius: var(--radius-sm);
       padding: 16px 20px;
       font-size: 12px;
-      color: #999;
+      color: var(--text-muted);
       line-height: 1.8;
     }
     .disclaimer .title {
-      color: #e94560;
+      color: var(--danger);
       font-weight: bold;
       font-size: 13px;
       margin-bottom: 6px;
@@ -377,27 +486,27 @@ function getPageHTML() {
     }
     .settings-btn {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 14px; border: 1px solid #2a2a4a; border-radius: 8px;
-      background: transparent; color: #fbbf24; font-size: 13px; cursor: pointer;
-      transition: all 0.2s; font-family: inherit;
+      padding: 6px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+      background: transparent; color: var(--amber); font-size: 13px; cursor: pointer;
+      transition: var(--transition); font-family: inherit; font-weight: 500;
     }
-    .settings-btn:hover { border-color: #fbbf24; background: rgba(251,191,36,0.08); }
-    .settings-btn.customized { color: #4ade80; border-color: #4ade80; }
-    .settings-btn.customized:hover { background: rgba(74,222,128,0.08); }
-    /* "估值不准"按钮 - 固定在预估价值容器右上角 */
+    .settings-btn:hover { border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.06); }
+    .settings-btn.customized { color: var(--success); border-color: rgba(74,222,128,0.3); }
+    .settings-btn.customized:hover { background: rgba(74,222,128,0.06); }
+    /* "估值不准"按钮 */
     .adjust-link {
       display: none;
       position: absolute; top: 0; right: 0; z-index: 10;
-      padding: 6px 14px; border: 1px solid #fbbf24; border-radius: 8px;
-      background: rgba(15,15,35,0.9); color: #fbbf24; font-size: 12px;
-      cursor: pointer; transition: all 0.2s; font-family: inherit;
+      padding: 6px 14px; border: 1px solid var(--amber); border-radius: var(--radius-sm);
+      background: rgba(15,18,28,0.9); color: var(--amber); font-size: 12px;
+      cursor: pointer; transition: var(--transition); font-family: inherit;
     }
-    .adjust-link:hover { background: rgba(251,191,36,0.15); }
+    .adjust-link:hover { background: rgba(251,191,36,0.12); border-color: var(--amber); }
     /* 新规则通知横幅 */
     .rules-banner {
-      background: rgba(251,191,36,0.1);
-      border: 1px solid rgba(251,191,36,0.3);
-      border-radius: 10px;
+      background: var(--accent-dim);
+      border: 1px solid var(--border-hover);
+      border-radius: var(--radius-sm);
       padding: 12px 16px;
       margin-bottom: 10px;
       display: flex;
@@ -410,7 +519,7 @@ function getPageHTML() {
       to { opacity: 1; transform: translateY(0); }
     }
     .rules-banner-text {
-      color: #fbbf24; font-size: 13px; flex: 1;
+      color: var(--accent); font-size: 13px; flex: 1;
     }
     .rules-banner-btns { display: flex; gap: 8px; }
     .rules-banner-btn {
@@ -419,8 +528,8 @@ function getPageHTML() {
       transition: opacity 0.2s; font-family: inherit;
     }
     .rules-banner-btn:hover { opacity: 0.85; }
-    .rules-banner-btn.load { background: #fbbf24; color: #0f0f23; }
-    .rules-banner-btn.dismiss { background: #2a2a4a; color: #888; }
+    .rules-banner-btn.load { background: var(--accent); color: var(--bg-deep); }
+    .rules-banner-btn.dismiss { background: var(--border-default); color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -437,15 +546,15 @@ function getPageHTML() {
       <div class="tutorial-header" onclick="var f=document.getElementById('tutorial-frame');var a=this.querySelector('.tutorial-arrow');if(f.style.display==='none'){f.style.display='block';a.textContent='▲';this.querySelector('.tutorial-label').textContent='收起教程';}else{f.style.display='none';a.textContent='▼';this.querySelector('.tutorial-label').textContent='展开教程';}">
         <span class="tutorial-icon">▶</span>
         <span class="tutorial-title">新手必看：鸣潮估价工具使用教程</span>
-        <span class="tutorial-label" style="margin-left:auto;font-size:12px;color:#8ecdf5;cursor:pointer;">展开教程</span>
-        <span class="tutorial-arrow" style="font-size:10px;color:#8ecdf5;">▼</span>
+        <span class="tutorial-label" style="margin-left:auto;font-size:12px;color:#5EEAD4;cursor:pointer;">展开教程</span>
+        <span class="tutorial-arrow" style="font-size:10px;color:#5EEAD4;">▼</span>
       </div>
       <div id="tutorial-frame" style="display:none;margin-top:12px;">
         <div style="position:relative;padding:56.25% 0 0 0;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
           <iframe src="//player.bilibili.com/player.html?bvid=BV1ueKq6TEgV&autoplay=0&high_quality=1&danmaku=1" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>
         </div>
-        <div style="margin-top:8px;font-size:12px;color:#666;text-align:center;">
-          <a href="https://www.bilibili.com/video/BV1ueKq6TEgV/" target="_blank" style="color:#8ecdf5;text-decoration:none;">在B站观看完整视频 →</a>
+        <div style="margin-top:8px;font-size:12px;color:#64748B;text-align:center;">
+          <a href="https://www.bilibili.com/video/BV1ueKq6TEgV/" target="_blank" style="color:#5EEAD4;text-decoration:none;">在B站观看完整视频 →</a>
         </div>
       </div>
     </div>
@@ -527,14 +636,14 @@ function getPageHTML() {
   </div>
 
   <!-- 算法准确性报告弹窗 -->
-  <div id="stats-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeStatsModal()">
-    <div style="max-width:1080px;margin:20px auto;background:#0f0f2a;border:1px solid #2a2a4a;border-radius:12px;padding:24px;min-height:400px;">
+  <div id="stats-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(8,10,16,0.85);backdrop-filter:blur(6px);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeStatsModal()">
+    <div style="max-width:1080px;margin:20px auto;background:linear-gradient(165deg,#131620 0%,#1A1E2C 100%);border:1px solid rgba(94,234,212,0.15);border-radius:14px;padding:24px;min-height:400px;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div>
-          <div style="font-size:20px;font-weight:700;color:#fff;">算法准确性报告</div>
-          <div style="font-size:13px;color:#888;margin-top:2px;">基于真实成交记录的估值模型质量分析</div>
+          <div style="font-size:20px;font-weight:700;color:#E2E8F0;">算法准确性报告</div>
+          <div style="font-size:13px;color:#64748B;margin-top:2px;">基于真实成交记录的估值模型质量分析</div>
         </div>
-        <button onclick="closeStatsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:4px 8px;">×</button>
+        <button onclick="closeStatsModal()" style="background:none;border:none;color:#64748B;font-size:24px;cursor:pointer;padding:4px 8px;transition:all 0.25s ease;" onmouseover="this.style.color='#5EEAD4'" onmouseout="this.style.color='#64748B'">×</button>
       </div>
       <div id="stats-modal-content"></div>
     </div>
@@ -759,55 +868,55 @@ function getPageHTML() {
       const info = d.info || {};
 
       // ===== 核心亮点 =====
-      let hlHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">核心亮点</div>';
+      let hlHtml = '<div style="color:#94A3B8;font-size:12px;margin-bottom:6px;">核心亮点</div>';
       hlHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
       // 角色数
       const charCount = (det.characters && det.characters.length) || 0;
       const c6Count = (det.characters || []).filter(c => c.const >= 6).length;
       const sTierCount = (det.characters || []).filter(c => c.tier === 'S').length;
       if (charCount > 0) {
-        hlHtml += '<span style="background:#1a1a3e;border:1px solid #444;border-radius:4px;padding:2px 8px;font-size:11px;color:#ccc;">五星角色 ' + charCount + ' 个</span>';
+        hlHtml += '<span style="background:rgba(94,234,212,0.08);border:1px solid rgba(94,234,212,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#5EEAD4;">五星角色 ' + charCount + ' 个</span>';
       }
       if (c6Count > 0) {
-        hlHtml += '<span style="background:#1a2e1a;border:1px solid #4ade80;border-radius:4px;padding:2px 8px;font-size:11px;color:#4ade80;">满命角色 ' + c6Count + ' 个</span>';
+        hlHtml += '<span style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#4ADE80;">满命角色 ' + c6Count + ' 个</span>';
       }
       if (sTierCount > 0) {
-        hlHtml += '<span style="background:#2e1a1a;border:1px solid #f87171;border-radius:4px;padding:2px 8px;font-size:11px;color:#f87171;">S级角色 ' + sTierCount + ' 个</span>';
+        hlHtml += '<span style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#F87171;">S级角色 ' + sTierCount + ' 个</span>';
       }
       // 配队
       if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
-        hlHtml += '<span style="background:#1a1a2e;border:1px solid #818cf8;border-radius:4px;padding:2px 8px;font-size:11px;color:#818cf8;">配队 ' + det.satisfiedTeams.length + ' 组(' + det.satisfiedTeams.join('/') + ')</span>';
+        hlHtml += '<span style="background:rgba(129,140,248,0.08);border:1px solid rgba(129,140,248,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#818CF8;">配队 ' + det.satisfiedTeams.length + ' 组(' + det.satisfiedTeams.join('/') + ')</span>';
       }
       // 专武
       const sigCount = (det.characters || []).filter(c => c.hasSig).length;
       if (sigCount > 0) {
-        hlHtml += '<span style="background:#2e2a1a;border:1px solid #fbbf24;border-radius:4px;padding:2px 8px;font-size:11px;color:#fbbf24;">专武 ' + sigCount + ' 把</span>';
+        hlHtml += '<span style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#FBBF24;">专武 ' + sigCount + ' 把</span>';
       }
       // 黄数
       const yi = det.yellowInfo || {};
       if (yi.yellowCount > 0) {
-        hlHtml += '<span style="background:#2e241a;border:1px solid #f59e0b;border-radius:4px;padding:2px 8px;font-size:11px;color:#f59e0b;">' + yi.yellowCount + '黄 [' + (yi.tierLabel || '') + ']</span>';
+        hlHtml += '<span style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#F59E0B;">' + yi.yellowCount + '黄 [' + (yi.tierLabel || '') + ']</span>';
       }
       // 抽数
       if (info.pulls > 0) {
-        hlHtml += '<span style="background:#1a2a2e;border:1px solid #2dd4bf;border-radius:4px;padding:2px 8px;font-size:11px;color:#2dd4bf;">' + info.pulls + '抽</span>';
+        hlHtml += '<span style="background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#2DD4BF;">' + info.pulls + '抽</span>';
       }
       // 满命加权
       if (det.weightedFullConst > 0) {
-        hlHtml += '<span style="background:#2a1a2e;border:1px solid #c084fc;border-radius:4px;padding:2px 8px;font-size:11px;color:#c084fc;">加权满命 ' + det.weightedFullConst.toFixed(1) + '</span>';
+        hlHtml += '<span style="background:rgba(192,132,252,0.08);border:1px solid rgba(192,132,252,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#C084FC;">加权满命 ' + det.weightedFullConst.toFixed(1) + '</span>';
       }
       // 低命折扣
       const fd = det.flatDiscount || { value: 1, notes: [] };
       if (fd.value < 1) {
-        hlHtml += '<span style="background:#2e1a2a;border:1px solid #f472b6;border-radius:4px;padding:2px 8px;font-size:11px;color:#f472b6;">低命折扣 ×' + fd.value + '</span>';
+        hlHtml += '<span style="background:rgba(244,114,182,0.08);border:1px solid rgba(244,114,182,0.25);border-radius:6px;padding:3px 10px;font-size:11px;color:#F472B6;">低命折扣 ×' + fd.value + '</span>';
       }
       hlHtml += '</div>';
       document.getElementById('result-highlights').innerHTML = hlHtml;
 
       // ===== 估价计算 =====
-      let detailHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">估价计算</div>';
+      let detailHtml = '<div style="color:#94A3B8;font-size:12px;margin-bottom:6px;">估价计算</div>';
       // 基础价值
-      detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#e0e0e0');
+      detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#E2E8F0');
       // 满命溢价
       const c6Bonus = det.c6Bonus || {};
       if (det.c6Premium > 0) {
@@ -849,7 +958,7 @@ function getPageHTML() {
       }
       // 小计
       const totalBeforeCoeff = det.characterValue + det.c6Premium + det.teamPremium + det.pullValue + det.resourceValue;
-      detailHtml += resultRow('基础小计', totalBeforeCoeff.toFixed(2) + ' 元', '#aaa');
+      detailHtml += resultRow('基础小计', totalBeforeCoeff.toFixed(2) + ' 元', '#94A3B8');
       // 生效系数
       const flatActive = (fd.value < 1 && fd.notes && fd.notes.length > 0 && fd.value < (yi.coefficient || 1));
       if (flatActive) {
@@ -858,11 +967,11 @@ function getPageHTML() {
         detailHtml += resultRow('黄数系数', yi.yellowCount + '黄 [' + (yi.tierLabel || '') + '] × ' + yi.coefficient, '#f59e0b');
       }
       // 最终价值
-      detailHtml += '<div class="result-row" style="border-top:1px solid #333;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
+      detailHtml += '<div class="result-row" style="border-top:1px solid #262B3C;padding-top:6px;margin-top:4px;"><span class="key" style="color:#E2E8F0;font-weight:bold;">最终估值</span><span class="val" style="color:#4ADE80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
       document.getElementById('result-details').innerHTML = detailHtml;
 
       // ===== 角色明细（按估值从大到小排序） =====
-      let charHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">角色明细（按价值排序）</div>';
+      let charHtml = '<div style="color:#94A3B8;font-size:12px;margin-bottom:6px;">角色明细（按价值排序）</div>';
       if (det.characters && det.characters.length > 0) {
         const sortedChars = [...det.characters].sort((a, b) => b.value - a.value);
         charHtml += '<div class="char-tags">';
@@ -874,35 +983,35 @@ function getPageHTML() {
         charHtml += '</div>';
         // 角色价值汇总
         const totalCharValue = sortedChars.reduce((s, c) => s + c.value, 0);
-        charHtml += '<div style="color:#666;font-size:11px;margin-top:6px;">角色总价值: ' + totalCharValue + ' 元 · 平均: ' + Math.round(totalCharValue / sortedChars.length) + ' 元/个</div>';
+        charHtml += '<div style="color:#64748B;font-size:11px;margin-top:6px;">角色总价值: ' + totalCharValue + ' 元 · 平均: ' + Math.round(totalCharValue / sortedChars.length) + ' 元/个</div>';
       } else {
-        charHtml += '<span style="color:#666;font-size:12px;">未识别到角色</span>';
+        charHtml += '<span style="color:#64748B;font-size:12px;">未识别到角色</span>';
       }
       document.getElementById('result-chars').innerHTML = charHtml;
 
       // ===== 武器明细 =====
-      let wpnHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">武器明细</div>';
+      let wpnHtml = '<div style="color:#94A3B8;font-size:12px;margin-bottom:6px;">武器明细</div>';
       const weapons = det.weaponDetails || info.weapons || [];
       if (weapons.length > 0) {
         wpnHtml += '<div class="char-tags">';
         weapons.forEach(w => {
           const refineStr = w.refine > 0 ? '精' + w.refine + ' ' : '';
           const sigBadge = w.isSig ? ' <span class="sig">专武</span>' : '';
-          wpnHtml += '<span class="char-tag" style="border-color:#666;color:#ccc;">' + refineStr + w.name + sigBadge + '</span>';
+          wpnHtml += '<span class="char-tag" style="border-color:#64748B;color:#94A3B8;">' + refineStr + w.name + sigBadge + '</span>';
         });
         wpnHtml += '</div>';
       } else {
-        wpnHtml += '<span style="color:#666;font-size:12px;">未识别到武器</span>';
+        wpnHtml += '<span style="color:#64748B;font-size:12px;">未识别到武器</span>';
       }
       document.getElementById('result-weapons').innerHTML = wpnHtml;
 
       // ===== 资源明细 =====
-      let resHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">资源明细</div>';
-      resHtml += resultRow('星声', info.starSounds || 0, '#e0e0e0');
-      resHtml += resultRow('月相', info.moonPhases || 0, '#e0e0e0');
-      resHtml += resultRow('余波珊瑚', info.coral || 0, '#e0e0e0');
-      resHtml += resultRow('浮金波纹', info.goldenRipples || 0, '#e0e0e0');
-      resHtml += resultRow('铸潮波纹', info.tideRipples || 0, '#e0e0e0');
+      let resHtml = '<div style="color:#94A3B8;font-size:12px;margin-bottom:6px;">资源明细</div>';
+      resHtml += resultRow('星声', info.starSounds || 0, '#E2E8F0');
+      resHtml += resultRow('月相', info.moonPhases || 0, '#E2E8F0');
+      resHtml += resultRow('余波珊瑚', info.coral || 0, '#E2E8F0');
+      resHtml += resultRow('浮金波纹', info.goldenRipples || 0, '#E2E8F0');
+      resHtml += resultRow('铸潮波纹', info.tideRipples || 0, '#E2E8F0');
       const outfitList = det.outfits || [];
       if (outfitList.length > 0) {
         resHtml += resultRow('服饰', outfitList.length + '件: ' + outfitList.join('、'), '#fbbf24');
@@ -932,17 +1041,17 @@ function getPageHTML() {
       var modal = document.getElementById('stats-modal');
       var content = document.getElementById('stats-modal-content');
       modal.style.display = 'block';
-      content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#888;"><div style="display:inline-block;width:32px;height:32px;border:3px solid #1a1a3e;border-top-color:#8ecdf5;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;"></div><div>正在加载统计数据...</div></div>';
+      content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#64748B;"><div style="display:inline-block;width:32px;height:32px;border:3px solid #262B3C;border-top-color:#5EEAD4;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;"></div><div>正在加载统计数据...</div></div>';
       document.body.style.overflow = 'hidden';
 
       fetch('/api/public-stats').then(function(r) { return r.json(); }).then(function(result) {
         if (!result.success || !result.data.summary) {
-          content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#666;">暂无统计数据，请稍后再来查看</div>';
+          content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#64748B;">暂无统计数据，请稍后再来查看</div>';
           return;
         }
         renderStatsModal(result.data);
       }).catch(function() {
-        content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#666;">数据加载失败，请关闭重试</div>';
+        content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#64748B;">数据加载失败，请关闭重试</div>';
       });
     }
 
@@ -978,33 +1087,33 @@ function getPageHTML() {
       html += '</div>';
 
       // ===== 误差说明 =====
-      html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
-      html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">为什么会有误差？</div>';
-      html += '<div style="font-size:13px;color:#999;line-height:1.8;">';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">市场供需波动：</span>账号价格受市场供需关系影响，热门角色在特定时期可能溢价，冷门角色则可能折价，估价引擎基于历史均价计算，无法实时反映短期市场波动。</div>';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">账号组合差异：</span>每个账号的角色组合、命座、武器配置各不相同，部分稀有组合在市场上缺乏足够的成交样本，导致估值偏差较大。</div>';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">主观价值因素：</span>账号的视觉效果（皮肤、服饰）、ID稀有度、服务器热度等主观因素难以量化，这些因素可能导致实际成交价偏离估值。</div>';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">定价模型迭代：</span>估值引擎基于可配置的角色定价和系数公式，随着市场数据积累和参数调优，准确率会持续提升。当前R²=' + s.r2.toFixed(3) + '表明模型' + (s.r2 >= 0.8 ? '已具有较强解释力' : '仍有优化空间') + '。</div>';
-      html += '<div><span style="color:#8ecdf5;font-weight:600;">如何理解这些指标：</span>R²越接近1表示估值越准确；相关系数(r)反映估值与成交价的线性相关程度；中位数偏差率排除极端值后反映系统性偏置；P90表示90%的账号偏差都在此范围内。</div>';
+      html += '<div style="background:rgba(28,34,50,0.6);border:1px solid #262B3C;border-radius:10px;padding:16px;margin-bottom:16px;">';
+      html += '<div style="font-size:14px;font-weight:600;color:#E2E8F0;margin-bottom:12px;">为什么会有误差？</div>';
+      html += '<div style="font-size:13px;color:#94A3B8;line-height:1.8;">';
+      html += '<div style="margin-bottom:8px;"><span style="color:#5EEAD4;font-weight:600;">市场供需波动：</span>账号价格受市场供需关系影响，热门角色在特定时期可能溢价，冷门角色则可能折价，估价引擎基于历史均价计算，无法实时反映短期市场波动。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#5EEAD4;font-weight:600;">账号组合差异：</span>每个账号的角色组合、命座、武器配置各不相同，部分稀有组合在市场上缺乏足够的成交样本，导致估值偏差较大。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#5EEAD4;font-weight:600;">主观价值因素：</span>账号的视觉效果（皮肤、服饰）、ID稀有度、服务器热度等主观因素难以量化，这些因素可能导致实际成交价偏离估值。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#5EEAD4;font-weight:600;">定价模型迭代：</span>估值引擎基于可配置的角色定价和系数公式，随着市场数据积累和参数调优，准确率会持续提升。当前R²=' + s.r2.toFixed(3) + '表明模型' + (s.r2 >= 0.8 ? '已具有较强解释力' : '仍有优化空间') + '。</div>';
+      html += '<div><span style="color:#5EEAD4;font-weight:600;">如何理解这些指标：</span>R²越接近1表示估值越准确；相关系数(r)反映估值与成交价的线性相关程度；中位数偏差率排除极端值后反映系统性偏置；P90表示90%的账号偏差都在此范围内。</div>';
       html += '</div>';
       html += '</div>';
 
       // ===== 准确率分布条 =====
-      html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
-      html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">准确率分布</div>';
+      html += '<div style="background:rgba(28,34,50,0.6);border:1px solid #262B3C;border-radius:10px;padding:16px;margin-bottom:16px;">';
+      html += '<div style="font-size:14px;font-weight:600;color:#E2E8F0;margin-bottom:12px;">准确率分布</div>';
       var total = s.valued;
       var c10 = s.hit10, c20 = s.hit20 - s.hit10, c30 = s.hit30 - s.hit20, cOut = total - s.hit30;
       var p10 = total > 0 ? (c10 / total * 100) : 0;
       var p20 = total > 0 ? (c20 / total * 100) : 0;
       var p30 = total > 0 ? (c30 / total * 100) : 0;
       var pOut = total > 0 ? (cOut / total * 100) : 0;
-      html += '<div style="display:flex;height:28px;border-radius:6px;overflow:hidden;background:#1a1a2e;">';
-      if (p10 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p10 + '%;background:#4ade80;color:#0a0a1a;font-size:11px;font-weight:600;">±10% ' + c10 + '</div>';
-      if (p20 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p20 + '%;background:#fbbf24;color:#0a0a1a;font-size:11px;font-weight:600;">±20% ' + c20 + '</div>';
-      if (p30 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p30 + '%;background:#fb923c;color:#0a0a1a;font-size:11px;font-weight:600;">±30% ' + c30 + '</div>';
-      if (pOut > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + pOut + '%;background:#f87171;color:#0a0a1a;font-size:11px;font-weight:600;">>30% ' + cOut + '</div>';
+      html += '<div style="display:flex;height:28px;border-radius:6px;overflow:hidden;background:#0E1018;">';
+      if (p10 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p10 + '%;background:#4ade80;color:#0E1018;font-size:11px;font-weight:600;">±10% ' + c10 + '</div>';
+      if (p20 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p20 + '%;background:#fbbf24;color:#0E1018;font-size:11px;font-weight:600;">±20% ' + c20 + '</div>';
+      if (p30 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p30 + '%;background:#fb923c;color:#0E1018;font-size:11px;font-weight:600;">±30% ' + c30 + '</div>';
+      if (pOut > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + pOut + '%;background:#f87171;color:#0E1018;font-size:11px;font-weight:600;">>30% ' + cOut + '</div>';
       html += '</div>';
-      html += '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#888;">';
+      html += '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#64748B;">';
       html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4ade80;margin-right:4px;"></span>±10%: ' + c10 + '条 (' + p10.toFixed(1) + '%)</span>';
       html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fbbf24;margin-right:4px;"></span>±10~20%: ' + c20 + '条 (' + p20.toFixed(1) + '%)</span>';
       html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fb923c;margin-right:4px;"></span>±20~30%: ' + c30 + '条 (' + p30.toFixed(1) + '%)</span>';
@@ -1014,8 +1123,8 @@ function getPageHTML() {
 
       // ===== 散点图 =====
       if (scatter.length > 0) {
-        html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;">';
-        html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">估值 vs 成交价 散点图（' + scatter.length + ' 个数据点）</div>';
+        html += '<div style="background:rgba(28,34,50,0.6);border:1px solid #262B3C;border-radius:10px;padding:16px;">';
+        html += '<div style="font-size:14px;font-weight:600;color:#E2E8F0;margin-bottom:12px;">估值 vs 成交价 散点图（' + scatter.length + ' 个数据点）</div>';
         html += '<div style="display:flex;justify-content:center;">' + renderStatsScatter(scatter) + '</div>';
         html += '</div>';
       }
@@ -1024,12 +1133,12 @@ function getPageHTML() {
     }
 
     function statsCard(label, value, sub, color) {
-      var borderColor = { green: '#1a3a1a', red: '#3a1a1a', blue: '#1a2a3a', purple: '#2a1a3a', yellow: '#3a3a1a' }[color] || '#2a2a4a';
-      var valueColor = { green: '#4ade80', red: '#f87171', blue: '#60a5fa', purple: '#c084fc', yellow: '#fbbf24' }[color] || '#fff';
-      return '<div style="background:#12122a;border:1px solid ' + borderColor + ';border-radius:10px;padding:14px 12px;text-align:center;">' +
-        '<div style="font-size:12px;color:#888;margin-bottom:4px;">' + label + '</div>' +
+      var borderColor = { green: 'rgba(74,222,128,0.25)', red: 'rgba(248,113,113,0.25)', blue: 'rgba(94,234,212,0.20)', purple: 'rgba(129,140,248,0.25)', yellow: 'rgba(251,191,36,0.25)' }[color] || '#262B3C';
+      var valueColor = { green: '#4ADE80', red: '#F87171', blue: '#5EEAD4', purple: '#818CF8', yellow: '#FBBF24' }[color] || '#E2E8F0';
+      return '<div style="background:rgba(28,34,50,0.6);border:1px solid ' + borderColor + ';border-radius:10px;padding:14px 12px;text-align:center;transition:all 0.25s ease;">' +
+        '<div style="font-size:12px;color:#64748B;margin-bottom:4px;">' + label + '</div>' +
         '<div style="font-size:20px;font-weight:700;color:' + valueColor + ';">' + value + '</div>' +
-        '<div style="font-size:11px;color:#666;margin-top:3px;">' + sub + '</div></div>';
+        '<div style="font-size:11px;color:#64748B;margin-top:3px;">' + sub + '</div></div>';
     }
 
     function renderStatsScatter(data) {
@@ -1051,10 +1160,10 @@ function getPageHTML() {
       sp.push('<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:560px;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">');
       for (var g = 0; g <= 4; g++) {
         var gv = (maxVal / 4) * g, gx = sX(gv), gy = sY(gv);
-        sp.push('<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (svgW - padR) + '" y2="' + gy.toFixed(1) + '" stroke="#1f1f3a" stroke-width="1"/>');
-        sp.push('<line x1="' + gx.toFixed(1) + '" y1="' + padT + '" x2="' + gx.toFixed(1) + '" y2="' + (svgH - padB) + '" stroke="#1f1f3a" stroke-width="1"/>');
-        sp.push('<text x="' + (padL - 8) + '" y="' + (gy + 4).toFixed(1) + '" fill="#666" font-size="10" text-anchor="end">' + Math.round(gv) + '</text>');
-        sp.push('<text x="' + gx.toFixed(1) + '" y="' + (svgH - padB + 15) + '" fill="#666" font-size="10" text-anchor="middle">' + Math.round(gv) + '</text>');
+        sp.push('<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (svgW - padR) + '" y2="' + gy.toFixed(1) + '" stroke="#262B3C" stroke-width="1"/>');
+        sp.push('<line x1="' + gx.toFixed(1) + '" y1="' + padT + '" x2="' + gx.toFixed(1) + '" y2="' + (svgH - padB) + '" stroke="#262B3C" stroke-width="1"/>');
+        sp.push('<text x="' + (padL - 8) + '" y="' + (gy + 4).toFixed(1) + '" fill="#64748B" font-size="10" text-anchor="end">' + Math.round(gv) + '</text>');
+        sp.push('<text x="' + gx.toFixed(1) + '" y="' + (svgH - padB + 15) + '" fill="#64748B" font-size="10" text-anchor="middle">' + Math.round(gv) + '</text>');
       }
       sp.push('<line x1="' + sX(0).toFixed(1) + '" y1="' + sY(0).toFixed(1) + '" x2="' + sX(maxVal).toFixed(1) + '" y2="' + sY(maxVal).toFixed(1) + '" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.5"/>');
       sp.push('<text x="' + (sX(maxVal) - 5).toFixed(1) + '" y="' + (sY(maxVal) - 6).toFixed(1) + '" fill="#4ade80" font-size="10" text-anchor="end">y=x 完美预测线</text>');
@@ -1063,13 +1172,14 @@ function getPageHTML() {
         var pc = data[p].d > 0 ? '#4ade80' : (data[p].d < 0 ? '#f87171' : '#888');
         sp.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2.5" fill="' + pc + '" opacity="0.55"><title>估值¥' + data[p].x + ' 成交¥' + data[p].y + ' 偏差' + data[p].p + '%</title></circle>');
       }
-      sp.push('<text x="' + (padL + plotW / 2) + '" y="' + (svgH - 5) + '" fill="#aaa" font-size="11" text-anchor="middle">估值 (元)</text>');
-      sp.push('<text x="15" y="' + (padT + plotH / 2) + '" fill="#aaa" font-size="11" text-anchor="middle" transform="rotate(-90 15 ' + (padT + plotH / 2) + ')">成交价 (元)</text>');
-      sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0d0d22" stroke="#2a2a4a" rx="4"/>');
+      sp.push('<text x="' + (padL + plotW / 2) + '" y="' + (svgH - 5) + '" fill="#94A3B8" font-size="11" text-anchor="middle">估值 (元)</text>');
+      sp.push('<text x="15" y="' + (padT + plotH / 2) + '" fill="#94A3B8" font-size="11" text-anchor="middle" transform="rotate(-90 15 ' + (padT + plotH / 2) + ')">成交价 (元)</text>');
+
+      sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0E1018" stroke="#262B3C" rx="4"/>');
       sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="2.5" fill="#4ade80" opacity="0.55"/>');
-      sp.push('<text x="' + (svgW - 125) + '" y="24" fill="#888" font-size="10">估值偏低(买赚)</text>');
+      sp.push('<text x="' + (svgW - 125) + '" y="24" fill="#64748B" font-size="10">估值偏低(买赚)</text>');
       sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="2.5" fill="#f87171" opacity="0.55"/>');
-      sp.push('<text x="' + (svgW - 125) + '" y="39" fill="#888" font-size="10">估值偏高(买贵)</text>');
+      sp.push('<text x="' + (svgW - 125) + '" y="39" fill="#64748B" font-size="10">估值偏高(买贵)</text>');
       if (outlierCount > 0) sp.push('<text x="' + (padL + 4) + '" y="' + (padT + 12) + '" fill="#fbbf24" font-size="10">' + outlierCount + '个异常值已截断至边缘</text>');
       sp.push('</svg>');
       return sp.join('');
