@@ -686,7 +686,12 @@ function getAdminPage() {
       if (reset) {
         dealsData = newItems;
       } else {
-        dealsData = dealsData.concat(newItems);
+        // 按 productId 去重，避免 API 分页返回重复数据
+        var existingIds = {};
+        dealsData.forEach(function(d) { existingIds[d.productId] = true; });
+        var dedupedNew = newItems.filter(function(d) { return !existingIds[d.productId]; });
+        dealsData = dealsData.concat(dedupedNew);
+        if (dedupedNew.length === 0) dealsHasMore = false;
       }
 
       renderDealsSummary();
@@ -1301,7 +1306,7 @@ function getAdminPage() {
     maxVal = Math.ceil(maxVal / 100) * 100;
     if (maxVal < 100) maxVal = 100;
 
-    var svgW = 500, svgH = 480;
+    var svgW = 560, svgH = 420;
     var padL = 55, padR = 15, padT = 20, padB = 45;
     var plotW = svgW - padL - padR;
     var plotH = svgH - padT - padB;
@@ -1310,7 +1315,7 @@ function getAdminPage() {
     function sY(v) { return padT + plotH - (v / maxVal) * plotH; }
 
     var sp = [];
-    sp.push('<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:500px;height:auto;display:block;margin:0 auto;" xmlns="http://www.w3.org/2000/svg">');
+    sp.push('<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:560px;height:auto;display:block;margin:0 auto;" xmlns="http://www.w3.org/2000/svg">');
 
     // 网格线 + 刻度
     for (var g = 0; g <= 4; g++) {
@@ -1331,7 +1336,7 @@ function getAdminPage() {
       var px = sX(valid[p].estimatedValue);
       var py = sY(valid[p].price);
       var pc = valid[p].deviation > 0 ? '#4ade80' : (valid[p].deviation < 0 ? '#f87171' : '#888');
-      sp.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="3" fill="' + pc + '" opacity="0.65"><title>估值¥' + valid[p].estimatedValue + ' 成交¥' + valid[p].price + ' 偏差' + valid[p].deviationPercent + '%</title></circle>');
+      sp.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="1.8" fill="' + pc + '" opacity="0.45"><title>估值¥' + valid[p].estimatedValue + ' 成交¥' + valid[p].price + ' 偏差' + valid[p].deviationPercent + '%</title></circle>');
     }
 
     // 轴标签
@@ -1340,9 +1345,9 @@ function getAdminPage() {
 
     // 图例
     sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0d0d22" stroke="#2a2a4a" rx="4"/>');
-    sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="3" fill="#4ade80" opacity="0.65"/>');
+    sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="2" fill="#4ade80" opacity="0.45"/>');
     sp.push('<text x="' + (svgW - 125) + '" y="24" fill="#888" font-size="10">估值偏高(买赚)</text>');
-    sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="3" fill="#f87171" opacity="0.65"/>');
+    sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="2" fill="#f87171" opacity="0.45"/>');
     sp.push('<text x="' + (svgW - 125) + '" y="39" fill="#888" font-size="10">估值偏低(买贵)</text>');
 
     sp.push('</svg>');
