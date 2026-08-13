@@ -712,6 +712,45 @@
 
     pullSection.appendChild(pullFormulaRow);
 
+    // 预览
+    var pullPreview = document.createElement('div');
+    pullPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(96,165,250,0.05);border-radius:6px;border:1px solid rgba(96,165,250,0.15);';
+    function updatePullPreview() {
+      var base = parseFloat(pullBaseInput.value) || 0;
+      var basePrice = parseFloat(pullBasePriceInput.value) || 0;
+      var stepPrice = parseFloat(pullStepPriceInput.value) || 0;
+      var samples = [0, 50, 100, 150, base, base + 50, base + 100, base + 200, base + 400, base + 800];
+      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+      var html = '';
+      for (var si = 0; si < samples.length; si++) {
+        var p = samples[si];
+        var perPull = basePrice + (p - base) * stepPrice;
+        if (perPull < 0) perPull = 0;
+        html += p + '抽 → ' + (Math.round(perPull * 1000) / 1000) + '元/抽　';
+      }
+      pullPreview.innerHTML = html;
+    }
+    [pullBaseInput, pullBasePriceInput, pullStepPriceInput].forEach(function(inp) {
+      inp.oninput = updatePullPreview;
+    });
+    updatePullPreview();
+    pullSection.appendChild(pullPreview);
+
+    // 载入默认按钮
+    var pullDefaultRow = document.createElement('div');
+    pullDefaultRow.style.cssText = 'margin-top:8px;';
+    var loadPullDefaultBtn = document.createElement('button');
+    loadPullDefaultBtn.textContent = '载入默认（200抽基准1.0元，每抽浮动0.002元）';
+    loadPullDefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#1a1a3a;color:#60a5fa;font-size:11px;cursor:pointer;';
+    loadPullDefaultBtn.onclick = function () {
+      pullBaseInput.value = (DEFAULT_WEIGHTS.pullBase != null) ? DEFAULT_WEIGHTS.pullBase : 200;
+      pullBasePriceInput.value = (DEFAULT_WEIGHTS.pullBasePrice != null) ? DEFAULT_WEIGHTS.pullBasePrice : 1.0;
+      pullStepPriceInput.value = (DEFAULT_WEIGHTS.pullStepPrice != null) ? DEFAULT_WEIGHTS.pullStepPrice : 0.002;
+      updatePullPreview();
+    };
+    pullDefaultRow.appendChild(loadPullDefaultBtn);
+    pullSection.appendChild(pullDefaultRow);
+
     // 满命抽数加成（公式参数）
     var pullC6Divider = document.createElement('div');
     pullC6Divider.style.cssText = 'border-top:1px dashed #2a2a4a;margin:16px 0 12px 0;';
@@ -728,43 +767,77 @@
     pullSection.appendChild(pullC6Desc);
 
     var pullC6FormRow = document.createElement('div');
-    pullC6FormRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;font-size:11px;';
-    var pullC6BaseInput = document.createElement('input');
-    pullC6BaseInput.type = 'number'; pullC6BaseInput.value = w.pullC6Base != null ? w.pullC6Base : 5; pullC6BaseInput.step = 0.5;
-    pullC6BaseInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
-    pullC6BaseInput.title = '基准加权满命数';
-    var pullC6BaseLabel = document.createElement('span');
-    pullC6BaseLabel.textContent = '基准满命'; pullC6BaseLabel.style.cssText = 'color:#555;font-size:10px;';
-    pullC6FormRow.appendChild(pullC6BaseLabel);
+    pullC6FormRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
+
+    function pc6Label(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      return s;
+    }
+    function pc6Input(val, step, color, title) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      return i;
+    }
+
+    pullC6FormRow.appendChild(pc6Label('基准满命'));
+    var pullC6BaseInput = pc6Input(w.pullC6Base != null ? w.pullC6Base : DEFAULT_WEIGHTS.pullC6Base, '0.5', '#fbbf24', '此加权满命数对应的加成为基准加成');
     pullC6FormRow.appendChild(pullC6BaseInput);
-
-    var pullC6BaseBonusInput = document.createElement('input');
-    pullC6BaseBonusInput.type = 'number'; pullC6BaseBonusInput.value = w.pullC6BaseBonus != null ? w.pullC6BaseBonus : 0.5; pullC6BaseBonusInput.step = 0.05;
-    pullC6BaseBonusInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-    pullC6BaseBonusInput.title = '基准加成（0.5=50%）';
-    var pullC6BaseBonusLabel = document.createElement('span');
-    pullC6BaseBonusLabel.textContent = '基准加成'; pullC6BaseBonusLabel.style.cssText = 'color:#555;font-size:10px;';
-    pullC6FormRow.appendChild(pullC6BaseBonusLabel);
+    pullC6FormRow.appendChild(pc6Label('基准加成'));
+    var pullC6BaseBonusInput = pc6Input((w.pullC6BaseBonus != null ? w.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus) * 100, '1', '#4ade80', '基准满命数对应的加成百分比');
     pullC6FormRow.appendChild(pullC6BaseBonusInput);
-
-    var pullC6StepInput = document.createElement('input');
-    pullC6StepInput.type = 'number'; pullC6StepInput.value = w.pullC6Step != null ? w.pullC6Step : 0.1; pullC6StepInput.step = 0.01;
-    pullC6StepInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
-    pullC6StepInput.title = '每档满命数';
-    var pullC6StepLabel = document.createElement('span');
-    pullC6StepLabel.textContent = '每档命数'; pullC6StepLabel.style.cssText = 'color:#555;font-size:10px;';
-    pullC6FormRow.appendChild(pullC6StepLabel);
+    pullC6FormRow.appendChild(pc6Label('%，每'));
+    var pullC6StepInput = pc6Input(w.pullC6Step != null ? w.pullC6Step : DEFAULT_WEIGHTS.pullC6Step, '0.1', '#fbbf24', '每N命浮动一档');
     pullC6FormRow.appendChild(pullC6StepInput);
-
-    var pullC6StepBonusInput = document.createElement('input');
-    pullC6StepBonusInput.type = 'number'; pullC6StepBonusInput.value = w.pullC6StepBonus != null ? w.pullC6StepBonus : 0.005; pullC6StepBonusInput.step = 0.001;
-    pullC6StepBonusInput.style.cssText = 'width:70px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-    pullC6StepBonusInput.title = '每档浮动（0.005=0.5%）';
-    var pullC6StepBonusLabel = document.createElement('span');
-    pullC6StepBonusLabel.textContent = '每档浮动'; pullC6StepBonusLabel.style.cssText = 'color:#555;font-size:10px;';
-    pullC6FormRow.appendChild(pullC6StepBonusLabel);
+    pullC6FormRow.appendChild(pc6Label('命浮动'));
+    var pullC6StepBonusInput = pc6Input((w.pullC6StepBonus != null ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus) * 100, '0.1', '#4ade80', '每档浮动百分比');
     pullC6FormRow.appendChild(pullC6StepBonusInput);
+    pullC6FormRow.appendChild(pc6Label('%'));
     pullSection.appendChild(pullC6FormRow);
+
+    // 预览
+    var pullC6Preview = document.createElement('div');
+    pullC6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(251,191,36,0.05);border-radius:6px;border:1px solid rgba(251,191,36,0.15);';
+    function updatePullC6Preview() {
+      var base = parseFloat(pullC6BaseInput.value) || 0;
+      var baseBonus = (parseFloat(pullC6BaseBonusInput.value) || 0) / 100;
+      var step = parseFloat(pullC6StepInput.value) || 1;
+      var stepBonus = (parseFloat(pullC6StepBonusInput.value) || 0) / 100;
+      var samples = [0, 1, 2, 3, 4, base, base + step, base + step * 2, base + step * 5, base + step * 10, base + step * 20];
+      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+      var html = '';
+      for (var si = 0; si < samples.length; si++) {
+        var c = samples[si];
+        var bonus = baseBonus + (c - base) / step * stepBonus;
+        if (bonus < 0) bonus = 0;
+        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
+      }
+      pullC6Preview.innerHTML = html;
+    }
+    [pullC6BaseInput, pullC6BaseBonusInput, pullC6StepInput, pullC6StepBonusInput].forEach(function(inp) {
+      inp.oninput = updatePullC6Preview;
+    });
+    updatePullC6Preview();
+    pullSection.appendChild(pullC6Preview);
+
+    // 载入默认按钮
+    var pullC6DefaultRow = document.createElement('div');
+    pullC6DefaultRow.style.cssText = 'margin-top:8px;';
+    var loadPullC6DefaultBtn = document.createElement('button');
+    loadPullC6DefaultBtn.textContent = '载入默认（5命基准50%，每0.1命浮动0.5%）';
+    loadPullC6DefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;';
+    loadPullC6DefaultBtn.onclick = function () {
+      pullC6BaseInput.value = DEFAULT_WEIGHTS.pullC6Base;
+      pullC6BaseBonusInput.value = DEFAULT_WEIGHTS.pullC6BaseBonus * 100;
+      pullC6StepInput.value = DEFAULT_WEIGHTS.pullC6Step;
+      pullC6StepBonusInput.value = DEFAULT_WEIGHTS.pullC6StepBonus * 100;
+      updatePullC6Preview();
+    };
+    pullC6DefaultRow.appendChild(loadPullC6DefaultBtn);
+    pullSection.appendChild(pullC6DefaultRow);
+
     dialog.appendChild(pullSection);
 
     // ===== 4. 满命多角色溢价 =====
@@ -865,121 +938,21 @@
     updateC6Preview();
     c6Section.appendChild(c6Preview);
 
-    // 满命溢价档位列表
-    var c6List = document.createElement('div');
-    c6List.style.cssText = 'margin-bottom:12px;max-height:200px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
-    var c6Entries = (w.c6MultiBonus || DEFAULT_WEIGHTS.c6MultiBonus).map(function (e) { return { count: e.count, bonus: e.bonus }; });
-
-    function renderC6List() {
-      c6List.innerHTML = '';
-      if (c6Entries.length === 0) { c6List.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无溢价档位，可点击下方"载入默认"快速添加</div>'; return; }
-      c6Entries.sort(function (a, b) { return a.count - b.count; });
-      var bonuses = c6Entries.map(function(e) { return e.bonus; });
-      var minBonus = Math.min.apply(null, bonuses);
-      var maxBonus = Math.max.apply(null, bonuses);
-      for (var i = 0; i < c6Entries.length; i++) {
-        (function (idx) {
-          var e = c6Entries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:3px;padding:3px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;';
-
-          var countInp = document.createElement('input');
-          countInp.type = 'number'; countInp.value = e.count; countInp.min = 1; countInp.max = 20; countInp.step = 0.5;
-          countInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#e94560;font-size:11px;text-align:center;font-weight:600;';
-          countInp.title = '等效满命数量';
-          countInp.onchange = function() { e.count = parseFloat(countInp.value) || 1; };
-          row.appendChild(countInp);
-
-          var mingLab = document.createElement('span');
-          mingLab.textContent = '命'; mingLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(mingLab);
-
-          var plusLab = document.createElement('span');
-          plusLab.textContent = '+'; plusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
-          row.appendChild(plusLab);
-
-          var bonusInp = document.createElement('input');
-          bonusInp.type = 'number'; bonusInp.value = parseFloat((e.bonus * 100).toFixed(2)); bonusInp.min = 0; bonusInp.step = 5;
-          bonusInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-          bonusInp.title = '加成百分比（如50表示+50%，200表示+200%）';
-          bonusInp.onchange = function() { e.bonus = parseFloat(bonusInp.value) / 100 || 0; };
-          row.appendChild(bonusInp);
-
-          var pctLab = document.createElement('span');
-          pctLab.textContent = '%'; pctLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(pctLab);
-
-          var barWrap = document.createElement('div');
-          barWrap.style.cssText = 'flex:1;min-width:20px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-left:2px;';
-          var barFill = document.createElement('div');
-          var ratio = maxBonus > minBonus ? (e.bonus - minBonus) / (maxBonus - minBonus) : 0.5;
-          barFill.className = 'price-bar';
-          barFill.style.cssText = 'height:100%;width:' + (15 + ratio * 85) + '%;background:linear-gradient(90deg,#e94560,#4ade80);border-radius:3px;transition:width 0.2s;';
-          barWrap.appendChild(barFill);
-          row.appendChild(barWrap);
-
-          var delBtn = document.createElement('button');
-          delBtn.textContent = '×'; delBtn.title = '删除';
-          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;';
-          delBtn.onclick = function () { var di = c6Entries.indexOf(e); if (di >= 0) c6Entries.splice(di, 1); renderC6List(); };
-          row.appendChild(delBtn);
-
-          c6List.appendChild(row);
-        })(i);
-      }
-    }
-    renderC6List();
-    c6Section.appendChild(c6List);
-
-    // 载入默认按钮 + 添加新档位
-    var c6AddRow = document.createElement('div');
-    c6AddRow.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:4px;';
-
+    // 载入默认按钮
+    var c6DefaultRow = document.createElement('div');
+    c6DefaultRow.style.cssText = 'margin-top:8px;';
     var loadC6DefaultBtn = document.createElement('button');
-    loadC6DefaultBtn.textContent = '载入默认';
-    loadC6DefaultBtn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;margin-right:6px;';
+    loadC6DefaultBtn.textContent = '载入默认（3命基准100%，每0.1命浮动5%）';
+    loadC6DefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;';
     loadC6DefaultBtn.onclick = function () {
-      c6Entries.length = 0;
-      c6Entries.push({ count: 2, bonus: 0.50 });
-      c6Entries.push({ count: 3, bonus: 1.00 });
-      c6Entries.push({ count: 4, bonus: 1.50 });
-      c6Entries.push({ count: 5, bonus: 2.00 });
-      renderC6List();
+      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
+      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
+      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
+      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
+      updateC6Preview();
     };
-    c6AddRow.appendChild(loadC6DefaultBtn);
-
-    var c6CountInput = document.createElement('input');
-    c6CountInput.type = 'number'; c6CountInput.min = '1'; c6CountInput.max = '20'; c6CountInput.step = '0.5'; c6CountInput.placeholder = '满命';
-    c6CountInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#e94560;font-size:11px;text-align:center;font-weight:600;';
-    c6AddRow.appendChild(c6CountInput);
-    var c6MingLab = document.createElement('span');
-    c6MingLab.textContent = '命'; c6MingLab.style.cssText = 'color:#555;font-size:10px;';
-    c6AddRow.appendChild(c6MingLab);
-    var c6PlusLab = document.createElement('span');
-    c6PlusLab.textContent = '+'; c6PlusLab.style.cssText = 'color:#555;font-size:10px;margin-left:2px;';
-    c6AddRow.appendChild(c6PlusLab);
-    var c6BonusInput = document.createElement('input');
-    c6BonusInput.type = 'number'; c6BonusInput.min = '0'; c6BonusInput.step = '5'; c6BonusInput.placeholder = '加成%';
-    c6BonusInput.style.cssText = 'width:52px;padding:3px 4px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-    c6AddRow.appendChild(c6BonusInput);
-    var c6PctLab = document.createElement('span');
-    c6PctLab.textContent = '%'; c6PctLab.style.cssText = 'color:#555;font-size:10px;';
-    c6AddRow.appendChild(c6PctLab);
-    var addC6Btn = document.createElement('button');
-    addC6Btn.textContent = '添加';
-    addC6Btn.style.cssText = 'padding:3px 10px;border:none;border-radius:3px;background:#e94560;color:#fff;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;';
-    addC6Btn.onclick = function () {
-      var count = parseFloat(c6CountInput.value);
-      var bonus = parseFloat(c6BonusInput.value) / 100;
-      if (isNaN(count) || count < 1) { alert('数量至少为1'); return; }
-      if (isNaN(bonus) || bonus < 0) { alert('请输入加成百分比'); return; }
-      var existingE = c6Entries.find(function (e) { return e.count === count; });
-      if (existingE) { existingE.bonus = bonus; renderC6List(); }
-      else { c6Entries.push({ count: count, bonus: bonus }); renderC6List(); }
-      c6CountInput.value = ''; c6BonusInput.value = '';
-    };
-    c6AddRow.appendChild(addC6Btn);
-    c6Section.appendChild(c6AddRow);
+    c6DefaultRow.appendChild(loadC6DefaultBtn);
+    c6Section.appendChild(c6DefaultRow);
     dialog.appendChild(c6Section);
 
     // ===== 5. 有效金阶梯系数（分段模式） =====
@@ -1701,12 +1674,7 @@
       pullBaseInput.value = (DEFAULT_WEIGHTS.pullBase != null) ? DEFAULT_WEIGHTS.pullBase : 200;
       pullBasePriceInput.value = (DEFAULT_WEIGHTS.pullBasePrice != null) ? DEFAULT_WEIGHTS.pullBasePrice : 1.0;
       pullStepPriceInput.value = (DEFAULT_WEIGHTS.pullStepPrice != null) ? DEFAULT_WEIGHTS.pullStepPrice : 0.002;
-      // 重置满命溢价
-      c6Entries.length = 0;
-      for (var ci = 0; ci < DEFAULT_WEIGHTS.c6MultiBonus.length; ci++) {
-        c6Entries.push({ count: DEFAULT_WEIGHTS.c6MultiBonus[ci].count, bonus: DEFAULT_WEIGHTS.c6MultiBonus[ci].bonus });
-      }
-      renderC6List();
+      updatePullPreview();
       // 重置满命溢价公式参数
       c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
       c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
@@ -1715,9 +1683,10 @@
       updateC6Preview();
       // 重置满命抽数加成公式参数
       pullC6BaseInput.value = (DEFAULT_WEIGHTS.pullC6Base != null) ? DEFAULT_WEIGHTS.pullC6Base : 5;
-      pullC6BaseBonusInput.value = (DEFAULT_WEIGHTS.pullC6BaseBonus != null) ? DEFAULT_WEIGHTS.pullC6BaseBonus : 0.5;
+      pullC6BaseBonusInput.value = (DEFAULT_WEIGHTS.pullC6BaseBonus != null) ? DEFAULT_WEIGHTS.pullC6BaseBonus * 100 : 50;
       pullC6StepInput.value = (DEFAULT_WEIGHTS.pullC6Step != null) ? DEFAULT_WEIGHTS.pullC6Step : 0.1;
-      pullC6StepBonusInput.value = (DEFAULT_WEIGHTS.pullC6StepBonus != null) ? DEFAULT_WEIGHTS.pullC6StepBonus : 0.005;
+      pullC6StepBonusInput.value = (DEFAULT_WEIGHTS.pullC6StepBonus != null) ? DEFAULT_WEIGHTS.pullC6StepBonus * 100 : 0.5;
+      updatePullC6Preview();
       // 重置满命权重
       for (var tw = 0; tw < c6TierList.length; tw++) {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
@@ -1874,10 +1843,10 @@
       newW.pullStepPrice = parseFloat(pullStepPriceInput.value) || 0.002;
 
       // 收集满命抽数加成公式参数
-      newW.pullC6Base = parseFloat(pullC6BaseInput.value) || 5;
-      newW.pullC6BaseBonus = parseFloat(pullC6BaseBonusInput.value) || 0.5;
-      newW.pullC6Step = parseFloat(pullC6StepInput.value) || 0.1;
-      newW.pullC6StepBonus = parseFloat(pullC6StepBonusInput.value) || 0.005;
+      newW.pullC6Base = parseFloat(pullC6BaseInput.value) || DEFAULT_WEIGHTS.pullC6Base;
+      newW.pullC6BaseBonus = (parseFloat(pullC6BaseBonusInput.value) || 0) / 100;
+      newW.pullC6Step = parseFloat(pullC6StepInput.value) || DEFAULT_WEIGHTS.pullC6Step;
+      newW.pullC6StepBonus = (parseFloat(pullC6StepBonusInput.value) || 0) / 100;
 
       // 收集满命溢价公式参数
       newW.c6Base = parseFloat(c6BaseInp.value) || DEFAULT_WEIGHTS.c6Base;
@@ -1885,13 +1854,8 @@
       newW.c6Step = parseFloat(c6StepInp.value) || DEFAULT_WEIGHTS.c6Step;
       newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
 
-      // 收集满命溢价档位
-      var newC6Bonus = [];
-      for (var ci2 = 0; ci2 < c6Entries.length; ci2++) {
-        newC6Bonus.push({ count: c6Entries[ci2].count, bonus: c6Entries[ci2].bonus });
-      }
-      newC6Bonus.sort(function (a, b) { return a.count - b.count; });
-      newW.c6MultiBonus = newC6Bonus;
+      // 保留默认满命溢价档位（引擎使用，UI 不编辑）
+      newW.c6MultiBonus = DEFAULT_WEIGHTS.c6MultiBonus;
 
       // 收集满命权重
       var newC6Weights = {};
