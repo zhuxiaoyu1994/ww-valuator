@@ -259,6 +259,30 @@ async function getConfig(key) {
 }
 
 /**
+ * 获取配置（含元数据：updated_at 时间戳）
+ * 用于客户端检测服务器端配置是否已更新
+ */
+async function getConfigWithMeta(key) {
+  if (!dbClient) return { value: null, updatedAt: null };
+  try {
+    const result = await dbClient.execute({
+      sql: 'SELECT value, updated_at FROM app_config WHERE key = ?',
+      args: [key],
+    });
+    if (result.rows.length > 0) {
+      return {
+        value: JSON.parse(result.rows[0].value),
+        updatedAt: result.rows[0].updated_at,
+      };
+    }
+    return { value: null, updatedAt: null };
+  } catch (e) {
+    console.error('[DB] 读配置(含元数据)失败:', e.message);
+    return { value: null, updatedAt: null };
+  }
+}
+
+/**
  * 设置配置
  */
 async function setConfig(key, value) {
@@ -492,6 +516,7 @@ module.exports = {
   getStats,
   searchLogs,
   getConfig,
+  getConfigWithMeta,
   setConfig,
   insertDealsBatch,
   queryDeals,

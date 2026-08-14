@@ -576,12 +576,24 @@ function getPageHTML() {
   <script>
     // ============================================================
     // 服务器端默认配置（从数据库加载，优先于源码内置默认值）
+    // 检测配置更新时间戳，自动清除用户旧的自定义配置
     // ============================================================
     window._serverDefaultConfig = null;
     fetch('/api/config/default').then(r => r.json()).then(json => {
       if (json.success && json.data) {
         window._serverDefaultConfig = json.data;
         console.log('[config] 已加载服务器端默认估值配置');
+        // 检测服务器端配置是否已更新（基于数据库 updated_at 时间戳）
+        var serverUpdatedAt = json.configUpdatedAt;
+        var storedUpdatedAt = localStorage.getItem('mw_config_updated_at');
+        if (serverUpdatedAt && serverUpdatedAt !== storedUpdatedAt) {
+          // 服务器配置已更新，清除用户旧的自定义配置
+          if (localStorage.getItem('mw_eval_weights')) {
+            localStorage.removeItem('mw_eval_weights');
+            console.log('[config] 检测到服务器配置更新(' + storedUpdatedAt + '→' + serverUpdatedAt + ')，已自动清除旧配置');
+          }
+          localStorage.setItem('mw_config_updated_at', serverUpdatedAt);
+        }
       }
     }).catch(() => {});
 
@@ -614,43 +626,22 @@ function getPageHTML() {
     (function(){ updateSettingsBtnState(); })();
 
     // ============================================================
-    // 新规则检测：页面加载后异步检查是否有新版本规则
+    // 新规则检测：页面加载后自动应用最新规则（无需用户确认）
     // ============================================================
     (function checkNewRules() {
       if (typeof checkNewRulesAvailable !== 'function') return;
       checkNewRulesAvailable().then(function(hasNew) {
         if (!hasNew) return;
-        // 创建通知横幅
-        var banner = document.createElement('div');
-        banner.className = 'rules-banner';
-        banner.innerHTML =
-          '<span class="rules-banner-text">估价规则已更新，是否加载最新规则？</span>' +
-          '<div class="rules-banner-btns">' +
-          '<button class="rules-banner-btn load">加载最新规则</button>' +
-          '<button class="rules-banner-btn dismiss">保持当前配置</button>' +
-          '</div>';
-        // 插入到设置按钮区域之前
-        var settingsBar = document.querySelector('.settings-bar');
-        if (settingsBar && settingsBar.parentNode) {
-          settingsBar.parentNode.insertBefore(banner, settingsBar);
+        // 自动加载最新规则，不显示横幅
+        if (typeof loadLatestRules === 'function') loadLatestRules();
+        updateSettingsBtnState();
+        console.log('[config] 检测到新规则版本，已自动加载最新规则');
+        // 如果之前有估价结果，重新估价以应用新规则
+        if (currentTab === 'paste') {
+          doEvaluate();
+        } else if (lastLookupId) {
+          doLookup();
         }
-        // 加载最新规则
-        banner.querySelector('.load').onclick = function() {
-          if (typeof loadLatestRules === 'function') loadLatestRules();
-          updateSettingsBtnState();
-          banner.remove();
-          // 如果之前有估价结果，重新估价以应用新规则
-          if (currentTab === 'paste') {
-            doEvaluate();
-          } else if (lastLookupId) {
-            doLookup();
-          }
-        };
-        // 保持当前配置
-        banner.querySelector('.dismiss').onclick = function() {
-          if (typeof dismissNewRules === 'function') dismissNewRules();
-          banner.remove();
-        };
       });
     })();
 

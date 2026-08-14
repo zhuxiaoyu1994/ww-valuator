@@ -947,10 +947,10 @@ app.post('/admin/api/cache-clear', (req, res) => {
 // 获取默认估值配置（公开接口，网站页面加载时调用）
 app.get('/api/config/default', async (req, res) => {
   try {
-    const config = await db.getConfig('default_weights');
-    res.json({ success: true, data: config });
+    const { value: config, updatedAt } = await db.getConfigWithMeta('default_weights');
+    res.json({ success: true, data: config, configUpdatedAt: updatedAt });
   } catch (e) {
-    res.json({ success: true, data: null });
+    res.json({ success: true, data: null, configUpdatedAt: null });
   }
 });
 

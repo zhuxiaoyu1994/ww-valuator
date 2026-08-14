@@ -152,7 +152,7 @@
 
   /**
    * 从 localStorage 读取保存的权重，没有则返回 null
-   * 配置版本不匹配时自动清除旧配置
+   * 配置版本不匹配时自动清除旧配置，使用最新服务器规则
    */
   function getSavedWeights() {
     try {
@@ -162,9 +162,11 @@
       if (savedVersion < currentVersion) {
         var existing = localStorage.getItem(STORAGE_KEY);
         if (existing) {
-          console.log('[value-settings] 检测到新规则版本，用户有自定义配置');
-          window._hasNewRulesAvailable = true;
+          // 检测到新规则版本，自动清除旧的自定义配置，使用最新服务器默认值
+          console.log('[value-settings] 检测到新规则版本(' + savedVersion + '→' + currentVersion + ')，自动清除旧配置');
+          localStorage.removeItem(STORAGE_KEY);
           localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+          return null;
         } else {
           localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
           return null;
