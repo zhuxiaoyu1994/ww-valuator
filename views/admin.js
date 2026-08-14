@@ -425,9 +425,18 @@ function getAdminPage() {
         <button onclick="checkServerConfig()" style="padding:8px 20px;background:#1a1a3a;color:#4ade80;border:1px solid #2a2a4a;border-radius:6px;font-size:13px;cursor:pointer;">检查服务器配置</button>
         <div id="server-config-status" style="margin-top:12px;font-size:13px;"></div>
       </div>
+      <div class="mon-card">
+        <h2>估值规则设置</h2>
+        <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
+          修改本地估值规则（角色定价、命座溢价、配队系数等），保存后<strong style="color:#4ade80;">立即生效</strong>。<br>
+          配置存储在浏览器本地，不影响其他用户。如需全站默认配置，请使用上方的「估值配置导入」。
+        </p>
+        <button onclick="safeOpenValueSettings()" style="padding:10px 24px;background:#fbbf24;color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">打开估值规则设置</button>
+      </div>
     </div>
   </div>
 
+<script src="/public/value-settings.js" onerror="window.__vsFailed=true"></script>
 <script>
   // ============================================================
   // 通用变量
@@ -502,6 +511,24 @@ function getAdminPage() {
     document.getElementById('tab-' + name).classList.add('active');
     if (name === 'deals' && !dealsLoaded && !dealsLoading) {
       fetchDealsInitial();
+    }
+  }
+
+  // ============================================================
+  // 估值规则设置
+  // ============================================================
+  function safeOpenValueSettings() {
+    if (typeof openValueSettings === 'function') {
+      openValueSettings(function() {
+        // 保存后如果成交记录已加载，重新获取以刷新估值
+        if (dealsLoaded) {
+          fetchDeals(true);
+        }
+      });
+    } else if (window.__vsFailed) {
+      alert('估值设置面板加载失败，请刷新页面重试。');
+    } else {
+      alert('估值设置面板尚未加载完成，请稍后重试。');
     }
   }
 
