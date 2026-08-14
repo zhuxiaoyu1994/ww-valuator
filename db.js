@@ -437,7 +437,7 @@ async function queryAllDealsForStats() {
     const total = countResult.rows[0].cnt;
 
     const result = await dbClient.execute(
-      'SELECT estimated_value, price, deviation, deviation_percent, yellow_count, pulls, characters_json FROM deals WHERE estimated_value > 0 ORDER BY pay_time DESC'
+      'SELECT estimated_value, price, deviation, deviation_percent, yellow_count, pulls, characters_json, show_title FROM deals WHERE estimated_value > 0 ORDER BY pay_time DESC'
     );
 
     const list = result.rows.map(r => {
@@ -448,6 +448,7 @@ async function queryAllDealsForStats() {
         deviationPercent: r.deviation_percent,
         yellowCount: r.yellow_count,
         pulls: r.pulls,
+        showTitle: r.show_title,
       };
       if (r.characters_json) {
         try { item.characters = JSON.parse(r.characters_json); } catch (e) { item.characters = []; }

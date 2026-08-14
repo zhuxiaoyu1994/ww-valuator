@@ -962,7 +962,18 @@ function getPageHTML() {
       content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#888;"><div style="display:inline-block;width:32px;height:32px;border:3px solid #1a1a3e;border-top-color:#8ecdf5;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;"></div><div>正在加载统计数据...</div></div>';
       document.body.style.overflow = 'hidden';
 
-      fetch('/api/public-stats').then(function(r) { return r.json(); }).then(function(result) {
+      // 读取本地自定义估值权重（与成交记录后台一致）
+      var customWeights = null;
+      try {
+        var saved = localStorage.getItem('mw_eval_weights');
+        if (saved) customWeights = JSON.parse(saved);
+      } catch (e) { /* 忽略 */ }
+
+      fetch('/api/public-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customWeights: customWeights }),
+      }).then(function(r) { return r.json(); }).then(function(result) {
         if (!result.success || !result.data.summary) {
           content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#666;">暂无统计数据，请稍后再来查看</div>';
           return;

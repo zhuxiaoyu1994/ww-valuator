@@ -971,11 +971,38 @@ app.post('/api/config/update', async (req, res) => {
   }
 });
 
-app.get('/api/public-stats', async (req, res) => {
+async function handlePublicStats(req, res) {
   try {
+    const customWeights = req.body && req.body.customWeights ? req.body.customWeights : null;
     const { list, total } = await db.queryAllDealsForStats();
     if (list.length === 0) {
       return res.json({ success: true, data: { summary: null, scatter: [], charStats: [], total: 0 } });
+    }
+
+    // 如果提供了 customWeights，用当前权重重新计算估值（与后台成交记录逻辑一致）
+    let effectiveWeights = customWeights;
+    if (!effectiveWeights) {
+      try {
+        const serverConfig = await db.getConfig('default_weights');
+        if (serverConfig) effectiveWeights = serverConfig;
+      } catch (e) { /* 忽略，使用数据库存储值 */ }
+    }
+
+    if (effectiveWeights) {
+      for (const item of list) {
+        const showTitle = item.showTitle || '';
+        const priceInCents = Math.round((item.price || 0) * 100);
+        if (showTitle) {
+          try {
+            const valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
+            item.estimatedValue = Math.round((valuation.details ? valuation.details.finalValue : 0) * 100) / 100;
+            item.deviation = Math.round((item.estimatedValue - item.price) * 100) / 100;
+            item.deviationPercent = item.price > 0 ? Math.round((item.deviation / item.price * 100) * 100) / 100 : 0;
+          } catch (e) {
+            // 重算失败保留数据库中的旧值
+          }
+        }
+      }
     }
 
     const valid = list.filter(d => d.estimatedValue > 0);
@@ -1048,7 +1075,10 @@ app.get('/api/public-stats', async (req, res) => {
     console.error('[/api/public-stats] Error:', err.message);
     res.json({ success: false, error: '统计数据获取失败' });
   }
-});
+}
+
+app.get('/api/public-stats', (req, res) => handlePublicStats(req, res));
+app.post('/api/public-stats', (req, res) => handlePublicStats(req, res));
 
 // ============================================================
 // 启动服务器
