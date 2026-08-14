@@ -974,7 +974,7 @@
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武 + 满命角色(含命座) + 其专武。按系数前总价分段使用不同参数：低于阈值用低价参数，高于阈值用高价参数。';
+    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按系数前总价分段使用不同参数：低于阈值用低价参数，高于阈值用高价参数。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {
