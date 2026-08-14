@@ -220,6 +220,7 @@ function getAdminPage() {
         <button class="fetch-btn" onclick="fetchDealsInitial()">获取数据</button>
         <button class="more-btn" id="d-more-btn" onclick="fetchDeals(false)">加载更多</button>
         <button class="clear-btn" onclick="clearDeals()">清空</button>
+        <button class="fetch-btn" style="background:#1a3a1a;color:#4ade80;border-color:#2a4a2a;" onclick="uploadStatsData(this)">上传统计数据</button>
         <span id="d-total-info" style="font-size:12px;color:#8ecdf5;display:none;"></span>
         <select id="d-filter" onchange="applyDealsFilter()">
           <option value="all">全部</option>
@@ -630,6 +631,46 @@ function getAdminPage() {
   // ============================================================
   // 成交记录Tab
   // ============================================================
+
+  // 上传统计数据（仪表盘+散点图）到服务器缓存，供算法准确性报告使用
+  async function uploadStatsData(btn) {
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) { alert('请先登录'); return; }
+
+    // 读取本地自定义估值权重
+    var customWeights = null;
+    try {
+      var saved = localStorage.getItem('mw_eval_weights');
+      if (saved) customWeights = JSON.parse(saved);
+    } catch (e) { /* 忽略 */ }
+
+    if (!confirm(customWeights
+      ? '将使用当前本地估值规则重算全部成交记录的统计数据，并上传到服务器缓存。算法准确性报告将使用此缓存数据。是否继续？'
+      : '未检测到本地估值规则，将使用服务器默认配置重算。是否继续？')) return;
+
+    var origText = btn.textContent;
+    btn.textContent = '上传中...';
+    btn.disabled = true;
+
+    try {
+      const resp = await fetch('/api/admin/refresh-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw, customWeights: customWeights }),
+      });
+      const json = await resp.json();
+      if (json.success) {
+        alert(json.message || '统计数据上传成功');
+      } else {
+        alert('上传失败: ' + (json.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('上传失败: ' + e.message);
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+  }
 
   // 初始加载：自动获取前4页数据
   async function fetchDealsInitial() {

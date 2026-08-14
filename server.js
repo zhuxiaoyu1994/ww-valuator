@@ -971,40 +971,10 @@ app.post('/api/config/update', async (req, res) => {
   }
 });
 
-async function handlePublicStats(req, res) {
-  try {
-    const customWeights = req.body && req.body.customWeights ? req.body.customWeights : null;
-    const { list, total } = await db.queryAllDealsForStats();
-    if (list.length === 0) {
-      return res.json({ success: true, data: { summary: null, scatter: [], charStats: [], total: 0 } });
-    }
-
-    // 如果提供了 customWeights，用当前权重重新计算估值（与后台成交记录逻辑一致）
-    let effectiveWeights = customWeights;
-    if (!effectiveWeights) {
-      try {
-        const serverConfig = await db.getConfig('default_weights');
-        if (serverConfig) effectiveWeights = serverConfig;
-      } catch (e) { /* 忽略，使用数据库存储值 */ }
-    }
-
-    if (effectiveWeights) {
-      for (const item of list) {
-        const showTitle = item.showTitle || '';
-        const priceInCents = Math.round((item.price || 0) * 100);
-        if (showTitle) {
-          try {
-            const valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
-            item.estimatedValue = Math.round((valuation.details ? valuation.details.finalValue : 0) * 100) / 100;
-            item.deviation = Math.round((item.estimatedValue - item.price) * 100) / 100;
-            item.deviationPercent = item.price > 0 ? Math.round((item.deviation / item.price * 100) * 100) / 100 : 0;
-          } catch (e) {
-            // 重算失败保留数据库中的旧值
-          }
-        }
-      }
-    }
-
+// ============================================================
+// 统计数据计算（共享函数）
+// ============================================================
+function computeStatsFromList(list, total) {
     const valid = list.filter(d => d.estimatedValue > 0);
     const valued = valid.length;
     const avgPrice = valued > 0 ? Math.round(valid.reduce((s, e) => s + e.price, 0) / valued * 100) / 100 : 0;
@@ -1020,7 +990,6 @@ async function handlePublicStats(req, res) {
     const overvalued = valid.filter(e => e.deviation < 0).length;
     const undervalued = valid.filter(e => e.deviation > 0).length;
 
-    // R²(决定系数)
     let r2 = 0, corr = 0, medDevPct = 0, p90DevPct = 0;
     if (valued >= 2) {
       const meanPrice = valid.reduce((s, d) => s + d.price, 0) / valued;
@@ -1038,20 +1007,17 @@ async function handlePublicStats(req, res) {
       r2 = ssTot > 0 ? Math.round((1 - ssRes / ssTot) * 1000) / 1000 : 0;
       corr = (denEst > 0 && denPrice > 0) ? Math.round((num / Math.sqrt(denEst * denPrice)) * 1000) / 1000 : 0;
 
-      // 中位数偏差率
       const sortedDevPct = valid.map(d => d.deviationPercent).sort((a, b) => a - b);
       const medIdx = Math.floor(sortedDevPct.length / 2);
       medDevPct = sortedDevPct.length % 2 === 0
         ? Math.round((sortedDevPct[medIdx - 1] + sortedDevPct[medIdx]) / 2 * 100) / 100
         : Math.round(sortedDevPct[medIdx] * 100) / 100;
 
-      // P90偏差率
       const sortedAbsDevPct = valid.map(d => Math.abs(d.deviationPercent)).sort((a, b) => a - b);
       const p90Idx = Math.min(Math.floor(sortedAbsDevPct.length * 0.9), sortedAbsDevPct.length - 1);
       p90DevPct = Math.round(sortedAbsDevPct[p90Idx] * 100) / 100;
     }
 
-    // 散点数据（精简字段）
     const scatter = valid.map(d => ({
       x: d.estimatedValue,
       y: d.price,
@@ -1059,18 +1025,104 @@ async function handlePublicStats(req, res) {
       p: d.deviationPercent,
     }));
 
-    res.json({
-      success: true,
-      data: {
-        summary: {
-          total, valued, avgPrice, avgEst, avgDev, avgDevPct,
-          mae, maePct, accPct, hit10, hit20, hit30,
-          overvalued, undervalued,
-          r2, corr, medDevPct, p90DevPct,
-        },
-        scatter,
+    return {
+      summary: {
+        total, valued, avgPrice, avgEst, avgDev, avgDevPct,
+        mae, maePct, accPct, hit10, hit20, hit30,
+        overvalued, undervalued,
+        r2, corr, medDevPct, p90DevPct,
       },
-    });
+      scatter,
+    };
+}
+
+// 用指定权重重算列表中每条记录的估值
+function reevaluateList(list, effectiveWeights) {
+  if (!effectiveWeights) return;
+  for (const item of list) {
+    const showTitle = item.showTitle || '';
+    const priceInCents = Math.round((item.price || 0) * 100);
+    if (showTitle) {
+      try {
+        const valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
+        item.estimatedValue = Math.round((valuation.details ? valuation.details.finalValue : 0) * 100) / 100;
+        item.deviation = Math.round((item.estimatedValue - item.price) * 100) / 100;
+        item.deviationPercent = item.price > 0 ? Math.round((item.deviation / item.price * 100) * 100) / 100 : 0;
+      } catch (e) {
+        // 重算失败保留数据库中的旧值
+      }
+    }
+  }
+}
+
+// ============================================================
+// 管理后台：刷新统计数据缓存
+// ============================================================
+app.post('/api/admin/refresh-stats', async (req, res) => {
+  const { password, customWeights } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  try {
+    const { list, total } = await db.queryAllDealsForStats();
+    if (list.length === 0) {
+      await db.setConfig('stats_cache', { summary: null, scatter: [], total: 0, cachedAt: new Date().toISOString() });
+      return res.json({ success: true, data: { summary: null, scatter: [], total: 0 }, message: '暂无成交记录，已清空缓存' });
+    }
+
+    // 获取有效权重：优先用上传的 customWeights，否则用服务器默认配置
+    let effectiveWeights = customWeights;
+    if (!effectiveWeights) {
+      try {
+        const serverConfig = await db.getConfig('default_weights');
+        if (serverConfig) effectiveWeights = serverConfig;
+      } catch (e) { /* 忽略 */ }
+    }
+
+    // 重算估值
+    reevaluateList(list, effectiveWeights);
+
+    // 计算统计指标
+    const { summary, scatter } = computeStatsFromList(list, total);
+
+    // 缓存到数据库
+    const cacheData = { summary, scatter, cachedAt: new Date().toISOString() };
+    await db.setConfig('stats_cache', cacheData);
+
+    console.log('[/api/admin/refresh-stats] 统计数据缓存已更新, valued=' + summary.valued);
+    res.json({ success: true, data: cacheData, message: '统计仪表盘和散点图数据已更新（' + summary.valued + '条记录）' });
+  } catch (err) {
+    console.error('[/api/admin/refresh-stats] Error:', err.message);
+    res.json({ success: false, error: '更新统计数据失败: ' + err.message });
+  }
+});
+
+// ============================================================
+// 公开统计接口（优先返回缓存，无缓存时实时计算）
+// ============================================================
+async function handlePublicStats(req, res) {
+  try {
+    // 优先返回缓存的统计数据
+    const cached = await db.getConfig('stats_cache');
+    if (cached && cached.summary) {
+      return res.json({ success: true, data: cached });
+    }
+
+    // 无缓存时实时计算（使用服务器默认配置重算）
+    const { list, total } = await db.queryAllDealsForStats();
+    if (list.length === 0) {
+      return res.json({ success: true, data: { summary: null, scatter: [], total: 0 } });
+    }
+
+    let effectiveWeights = null;
+    try {
+      const serverConfig = await db.getConfig('default_weights');
+      if (serverConfig) effectiveWeights = serverConfig;
+    } catch (e) { /* 忽略 */ }
+
+    reevaluateList(list, effectiveWeights);
+    const { summary, scatter } = computeStatsFromList(list, total);
+    res.json({ success: true, data: { summary, scatter } });
   } catch (err) {
     console.error('[/api/public-stats] Error:', err.message);
     res.json({ success: false, error: '统计数据获取失败' });
