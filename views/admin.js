@@ -1855,13 +1855,16 @@ function getAdminPage() {
       sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">需要专武的角色</h4><div style="font-size:12px;color:#ccc;">' + config.needSigWeapons.map(escapeHtml).join('、') + '</div>');
     }
 
-    // 有效金系数
-    if (config.yellowSegments && config.yellowSegments.length) {
-      var ysRows = config.yellowSegments.map(function(s) {
-        return '≥' + (s.minYellow || 0) + '黄: 基准' + s.baseYellow + '金, 步长' + s.step + '金, 系数' + s.baseCoeff + ', 每金浮动' + s.stepCoeff;
-      }).join('<br>');
-      var ymc = config.yellowMaxCoeff != null ? '　最大系数: <span style="color:#fbbf24;">' + config.yellowMaxCoeff + '</span>' : '';
-      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">有效金系数</h4><div style="font-size:12px;color:#ccc;">' + ysRows + ymc + '</div>');
+    // 有效金系数（按系数前总价分段）
+    if (config.effYellowThreshold != null) {
+      var effHtml = '阈值: <span style="color:#e94560;">' + config.effYellowThreshold + '元</span><br>' +
+        '<span style="color:#22c55e;">低价账号:</span> 基准' + (config.effYellowBaseLow != null ? config.effYellowBaseLow : 35) + '金, ' +
+        '每步浮动' + (config.effYellowStepCoeffLow != null ? config.effYellowStepCoeffLow : 0.015) + ', ' +
+        '上限' + (config.effYellowMaxCoeffLow != null ? config.effYellowMaxCoeffLow : 2.0) + '<br>' +
+        '<span style="color:#e94560;">高价账号:</span> 基准' + (config.effYellowBaseHigh != null ? config.effYellowBaseHigh : 20) + '金, ' +
+        '每步浮动' + (config.effYellowStepCoeffHigh != null ? config.effYellowStepCoeffHigh : 0.008) + ', ' +
+        '上限' + (config.effYellowMaxCoeffHigh != null ? config.effYellowMaxCoeffHigh : 3.0);
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">有效金系数（按系数前总价分段）</h4><div style="font-size:12px;color:#ccc;">' + effHtml + '</div>');
     }
 
     // 抽数定价

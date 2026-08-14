@@ -810,10 +810,11 @@ function getPageHTML() {
       if (sigCount > 0) {
         hlHtml += '<span style="background:#2e2a1a;border:1px solid #fbbf24;border-radius:4px;padding:2px 8px;font-size:11px;color:#fbbf24;">专武 ' + sigCount + ' 把</span>';
       }
-      // 黄数
+      // 金数
       const yi = det.yellowInfo || {};
       if (yi.yellowCount > 0) {
-        hlHtml += '<span style="background:#2e241a;border:1px solid #f59e0b;border-radius:4px;padding:2px 8px;font-size:11px;color:#f59e0b;">' + yi.yellowCount + '黄 [' + (yi.tierLabel || '') + ']</span>';
+        var goldBadge = (yi.effectiveYellow != null ? yi.effectiveYellow : '-') + '/' + (yi.limitedYellow != null ? yi.limitedYellow : yi.yellowCount) + '/' + (yi.totalYellow != null ? yi.totalYellow : (yi.rawYellowCount || 0));
+        hlHtml += '<span style="background:#2e241a;border:1px solid #f59e0b;border-radius:4px;padding:2px 8px;font-size:11px;color:#f59e0b;">' + goldBadge + '金 [有效/限定/总]</span>';
       }
       // 抽数
       if (info.pulls > 0) {
@@ -882,7 +883,8 @@ function getPageHTML() {
       if (flatActive) {
         detailHtml += resultRow('低命折扣', '× ' + fd.value + '（' + fd.notes.join('，') + '）', '#a78bfa');
       } else if (yi.yellowCount > 0) {
-        detailHtml += resultRow('黄数系数', yi.yellowCount + '黄 [' + (yi.tierLabel || '') + '] × ' + yi.coefficient, '#f59e0b');
+        var goldDisplay = (yi.effectiveYellow != null ? yi.effectiveYellow : '-') + '/' + (yi.limitedYellow != null ? yi.limitedYellow : yi.yellowCount) + '/' + (yi.totalYellow != null ? yi.totalYellow : (yi.rawYellowCount || 0));
+        detailHtml += resultRow('有效金系数', goldDisplay + ' [' + (yi.tierLabel || '') + '] × ' + yi.coefficient, '#f59e0b');
       }
       // 最终价值
       detailHtml += '<div class="result-row" style="border-top:1px solid #333;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
@@ -939,7 +941,9 @@ function getPageHTML() {
         resHtml += resultRow('车架模组', motoList.length + '个: ' + motoList.join('、'), '#fbbf24');
       }
       if (info.pulls > 0) resHtml += resultRow('抽数', info.pulls + ' 抽', '#2dd4bf');
-      resHtml += resultRow('有效黄数', info.yellowCount || 0, '#f59e0b');
+      var yiInfo = det.yellowInfo || {};
+      var goldSummary = (yiInfo.effectiveYellow != null ? yiInfo.effectiveYellow : '-') + '/' + (yiInfo.limitedYellow != null ? yiInfo.limitedYellow : '-') + '/' + (info.yellowCount || 0);
+      resHtml += resultRow('有效金/限定金/总金数', goldSummary, '#f59e0b');
       document.getElementById('result-resources').innerHTML = resHtml;
 
       document.getElementById('result').classList.add('show');

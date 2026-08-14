@@ -11,7 +11,7 @@
 'use strict';
 
 // 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 17;
+const CONFIG_VERSION = 18;
 
 // ============================================================
 // 角色定价配置（对应油猴脚本 CHAR_TIERS）
@@ -92,11 +92,19 @@ const DEFAULT_WEIGHTS = {
   needSigDiscount: 0.3,
   // 强绑角色折扣（强绑队友全不在场时，角色价值 × 此值）
   teamDepDiscount: 0.7,
-  // 有效金系数上限
+  // 限定金系数上限
   yellowMaxCoeff: 3.0,
-  // 有效金分段系数（null=使用单公式模式；数组=分段模式，每段独立配置基准/浮动）
+  // 限定金分段系数（null=使用单公式模式；数组=分段模式，每段独立配置基准/浮动）
   // 格式: [{ minYellow: 0, baseYellow: 0, baseCoeff: 0.30, step: 1, stepCoeff: 0.015 }, ...]
   yellowSegments: null,
+  // 有效金系数（基于有效金数，按系数前总价分段）
+  effYellowThreshold: 767,      // 系数前总价阈值（低于此值用低价参数，否则用高价参数）
+  effYellowBaseLow: 35,         // 低价账号基准有效金数
+  effYellowStepCoeffLow: 0.015, // 低价账号每步浮动
+  effYellowMaxCoeffLow: 2.0,    // 低价账号系数上限
+  effYellowBaseHigh: 20,         // 高价账号基准有效金数
+  effYellowStepCoeffHigh: 0.008, // 高价账号每步浮动
+  effYellowMaxCoeffHigh: 3.0,    // 高价账号系数上限
 };
 
 // 默认抽数阶梯定价公式参数（对应油猴脚本 DEFAULT_PULL_FORMULA）
@@ -419,12 +427,20 @@ function buildDefaultWeights(customWeights) {
   w.pullBase = (saved.pullBase != null) ? saved.pullBase : DEFAULT_PULL_FORMULA.pullBase;
   w.pullBasePrice = (saved.pullBasePrice != null) ? saved.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
   w.pullStepPrice = (saved.pullStepPrice != null) ? saved.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
-  // 有效金系数公式参数
+  // 限定金系数公式参数
   w.yellowBase = (saved.yellowBase != null) ? saved.yellowBase : 40;
   w.yellowStep = (saved.yellowStep != null) ? saved.yellowStep : 1;
   w.yellowBaseCoeff = (saved.yellowBaseCoeff != null) ? saved.yellowBaseCoeff : 1.0;
   w.yellowStepCoeff = (saved.yellowStepCoeff != null) ? saved.yellowStepCoeff : 0.01;
   w.yellowMaxCoeff = (saved.yellowMaxCoeff != null) ? saved.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
+  // 有效金系数参数
+  w.effYellowThreshold = (saved.effYellowThreshold != null) ? saved.effYellowThreshold : DEFAULT_WEIGHTS.effYellowThreshold;
+  w.effYellowBaseLow = (saved.effYellowBaseLow != null) ? saved.effYellowBaseLow : DEFAULT_WEIGHTS.effYellowBaseLow;
+  w.effYellowStepCoeffLow = (saved.effYellowStepCoeffLow != null) ? saved.effYellowStepCoeffLow : DEFAULT_WEIGHTS.effYellowStepCoeffLow;
+  w.effYellowMaxCoeffLow = (saved.effYellowMaxCoeffLow != null) ? saved.effYellowMaxCoeffLow : DEFAULT_WEIGHTS.effYellowMaxCoeffLow;
+  w.effYellowBaseHigh = (saved.effYellowBaseHigh != null) ? saved.effYellowBaseHigh : DEFAULT_WEIGHTS.effYellowBaseHigh;
+  w.effYellowStepCoeffHigh = (saved.effYellowStepCoeffHigh != null) ? saved.effYellowStepCoeffHigh : DEFAULT_WEIGHTS.effYellowStepCoeffHigh;
+  w.effYellowMaxCoeffHigh = (saved.effYellowMaxCoeffHigh != null) ? saved.effYellowMaxCoeffHigh : DEFAULT_WEIGHTS.effYellowMaxCoeffHigh;
   w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
   // 数据迁移：旧的'秧秧'是五星角色，现已改名为'秧秧玄翎'，四星'秧秧'价格应为0
   if (saved.charPrices && saved.charPrices['秧秧'] != null && saved.charPrices['秧秧'] > 0) {
@@ -956,7 +972,7 @@ function calculatePullValue(pulls) {
 }
 
 /**
- * 计算有效金系数（公式：baseCoeff + floor((yellowCount - base) / step) * stepCoeff）
+ * 计算限定金系数（公式：baseCoeff + floor((yellowCount - base) / step) * stepCoeff）
  */
 function getYellowCoeff(yellowCount) {
   var maxCoeff = (weights && weights.yellowMaxCoeff != null) ? weights.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
@@ -985,7 +1001,7 @@ function getYellowCoeff(yellowCount) {
 
     var segTierStart = segBase + segTierIndex * segStep;
     var segTierEnd = segTierStart + segStep;
-    var segTierLabel = segTierStart + '~' + segTierEnd + '有效';
+    var segTierLabel = segTierStart + '~' + segTierEnd + '限定';
 
     return {
       yellowCount: yellowCount,
@@ -1007,12 +1023,50 @@ function getYellowCoeff(yellowCount) {
 
   var tierStart = base + tierIndex * step;
   var tierEnd = tierStart + step;
-  var tierLabel = tierStart + '~' + tierEnd + '有效';
+  var tierLabel = tierStart + '~' + tierEnd + '限定';
 
   return {
     yellowCount: yellowCount,
     coefficient: Math.round(coefficient * 1000) / 1000,
     tierLabel: tierLabel,
+  };
+}
+
+/**
+ * 计算有效金系数（基于有效金数，按系数前总价分段使用不同参数）
+ * 低价账号（totalBeforeYellow < threshold）: 基准35, 步长0.015, 上限2.0
+ * 高价账号（totalBeforeYellow >= threshold）: 基准20, 步长0.008, 上限3.0
+ */
+function getEffectiveYellowCoeff(effectiveYellow, totalBeforeYellow) {
+  var w = weights || DEFAULT_WEIGHTS;
+  var threshold = (w.effYellowThreshold != null) ? w.effYellowThreshold : 767;
+  var isLowPrice = totalBeforeYellow < threshold;
+
+  var base, stepCoeff, maxCoeff;
+  if (isLowPrice) {
+    base = (w.effYellowBaseLow != null) ? w.effYellowBaseLow : 35;
+    stepCoeff = (w.effYellowStepCoeffLow != null) ? w.effYellowStepCoeffLow : 0.015;
+    maxCoeff = (w.effYellowMaxCoeffLow != null) ? w.effYellowMaxCoeffLow : 2.0;
+  } else {
+    base = (w.effYellowBaseHigh != null) ? w.effYellowBaseHigh : 20;
+    stepCoeff = (w.effYellowStepCoeffHigh != null) ? w.effYellowStepCoeffHigh : 0.008;
+    maxCoeff = (w.effYellowMaxCoeffHigh != null) ? w.effYellowMaxCoeffHigh : 3.0;
+  }
+
+  var tierIndex = Math.floor((effectiveYellow - base) / 1);
+  var coefficient = 1.0 + tierIndex * stepCoeff;
+  if (coefficient < 0.1) coefficient = 0.1;
+  if (maxCoeff > 0 && coefficient > maxCoeff) coefficient = maxCoeff;
+
+  var tierStart = base + tierIndex;
+  var tierEnd = tierStart + 1;
+  var tierLabel = tierStart + '~' + tierEnd + '有效金' + (isLowPrice ? '(低价)' : '(高价)');
+
+  return {
+    yellowCount: effectiveYellow,
+    coefficient: Math.round(coefficient * 1000) / 1000,
+    tierLabel: tierLabel,
+    isLowPrice: isLowPrice,
   };
 }
 
@@ -1226,27 +1280,93 @@ function calculateValue(parsed, price) {
     return { name: weapon.name, refine: weapon.refine, isSig: isSig };
   });
 
-  // 有效黄数：S/A/B/C/D级角色(1+命座) + 其专武(精炼数)
-  const EFFECTIVE_TIERS = ['S', 'A', 'B', 'C', 'D'];
-  var effectiveYellow = 0;
+  // 限定金数：S/A/B/C/D级角色(1+命座) + 其专武(精炼数)
+  const LIMITED_TIERS = ['S', 'A', 'B', 'C', 'D'];
+  var limitedYellow = 0;
   var countedWeapons = {};
   for (var ci = 0; ci < parsed.characters.length; ci++) {
     var char = parsed.characters[ci];
-    if (EFFECTIVE_TIERS.indexOf(char.tier) < 0) continue;
-    effectiveYellow += 1 + (char.const || 0);
+    if (LIMITED_TIERS.indexOf(char.tier) < 0) continue;
+    limitedYellow += 1 + (char.const || 0);
     var sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[char.name] || SIG_WEAPONS[char.name]) : SIG_WEAPONS[char.name];
     if (sigName && hasSignatureWeapons.indexOf(char.name) >= 0 && !countedWeapons[sigName]) {
       var sigWeapon = parsed.weapons.find(function(wp) { return wp.name === sigName; });
       if (sigWeapon) {
-        effectiveYellow += sigWeapon.refine || 1;
+        limitedYellow += sigWeapon.refine || 1;
         countedWeapons[sigName] = true;
       }
     }
   }
 
-  // 6. 有效金系数（基于有效黄数计算）
-  const yellowInfo = getYellowCoeff(effectiveYellow);
+  // 有效金数：S/A级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武 + 满命角色(1+命座) + 其专武（不重复计算）
+  const EFFECTIVE_TIERS = ['S', 'A'];
+  var effectiveYellow = 0;
+  var effectiveCountedWeapons = {};
+  var effectiveCountedChars = {};
+  // S/A级角色
+  for (var eci = 0; eci < parsed.characters.length; eci++) {
+    var eChar = parsed.characters[eci];
+    if (EFFECTIVE_TIERS.indexOf(eChar.tier) < 0) continue;
+    effectiveYellow += 1 + (eChar.const || 0);
+    effectiveCountedChars[eChar.name] = true;
+    var eSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[eChar.name] || SIG_WEAPONS[eChar.name]) : SIG_WEAPONS[eChar.name];
+    if (eSigName && hasSignatureWeapons.indexOf(eChar.name) >= 0 && !effectiveCountedWeapons[eSigName]) {
+      var eSigWeapon = parsed.weapons.find(function(wp) { return wp.name === eSigName; });
+      if (eSigWeapon) {
+        effectiveYellow += eSigWeapon.refine || 1;
+        effectiveCountedWeapons[eSigName] = true;
+      }
+    }
+  }
+  // 完整配队角色（排除已计入的S/A级角色）
+  var teamCharNames = {};
+  for (var ti = 0; ti < satisfiedTeams.length; ti++) {
+    var team = satisfiedTeams[ti];
+    for (var mi = 0; mi < team.members.length; mi++) {
+      teamCharNames[team.members[mi]] = true;
+    }
+  }
+  for (var tci = 0; tci < parsed.characters.length; tci++) {
+    var tChar = parsed.characters[tci];
+    if (!teamCharNames[tChar.name]) continue;
+    if (effectiveCountedChars[tChar.name]) continue; // 已计入
+    effectiveYellow += 1 + (tChar.const || 0);
+    effectiveCountedChars[tChar.name] = true;
+    var tSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[tChar.name] || SIG_WEAPONS[tChar.name]) : SIG_WEAPONS[tChar.name];
+    if (tSigName && hasSignatureWeapons.indexOf(tChar.name) >= 0 && !effectiveCountedWeapons[tSigName]) {
+      var tSigWeapon = parsed.weapons.find(function(wp) { return wp.name === tSigName; });
+      if (tSigWeapon) {
+        effectiveYellow += tSigWeapon.refine || 1;
+        effectiveCountedWeapons[tSigName] = true;
+      }
+    }
+  }
+
+  // 满命角色（任意级别，不重复计算）
+  for (var fci = 0; fci < parsed.characters.length; fci++) {
+    var fChar = parsed.characters[fci];
+    if ((fChar.const || 0) < 6) continue;
+    if (effectiveCountedChars[fChar.name]) continue;
+    effectiveYellow += 1 + (fChar.const || 0);
+    effectiveCountedChars[fChar.name] = true;
+    var fSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[fChar.name] || SIG_WEAPONS[fChar.name]) : SIG_WEAPONS[fChar.name];
+    if (fSigName && hasSignatureWeapons.indexOf(fChar.name) >= 0 && !effectiveCountedWeapons[fSigName]) {
+      var fSigWeapon = parsed.weapons.find(function(wp) { return wp.name === fSigName; });
+      if (fSigWeapon) {
+        effectiveYellow += fSigWeapon.refine || 1;
+        effectiveCountedWeapons[fSigName] = true;
+      }
+    }
+  }
+
+  // 6. 有效金系数（基于有效金数计算，按系数前总价分段使用不同参数）
+  // 先计算系数前总价（所有组件已在前面计算完毕）
+  const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
+  const yellowInfo = getEffectiveYellowCoeff(effectiveYellow, totalBeforeYellow);
   yellowInfo.rawYellowCount = parsed.yellowCount;
+  yellowInfo.effectiveYellow = effectiveYellow;
+  yellowInfo.limitedYellow = limitedYellow;
+  yellowInfo.totalYellow = parsed.yellowCount;
   const yellowCoeff = yellowInfo.coefficient;
 
   // 账号等级、四星角色数
@@ -1256,9 +1376,6 @@ function calculateValue(parsed, price) {
   const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
   const fiveStarChars = parsed.characters.length;
   const maxConstChars = parsed.characters.filter(c => c.const >= 6).length;
-
-  // 总价值
-  const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
 
   // 低命折扣系数
   let flatDiscount = 1;
@@ -1465,6 +1582,7 @@ module.exports = {
   getCharValue,
   calculatePullValue,
   getYellowCoeff,
+  getEffectiveYellowCoeff,
   calculateValue,
   // 对外接口
   evaluateWithPrice,

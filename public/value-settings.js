@@ -81,8 +81,16 @@
     w.yellowBaseCoeff = (s.yellowBaseCoeff != null) ? s.yellowBaseCoeff : (DEFAULT_WEIGHTS.yellowBaseCoeff != null ? DEFAULT_WEIGHTS.yellowBaseCoeff : 1.0);
     w.yellowStepCoeff = (s.yellowStepCoeff != null) ? s.yellowStepCoeff : (DEFAULT_WEIGHTS.yellowStepCoeff != null ? DEFAULT_WEIGHTS.yellowStepCoeff : 0.01);
     w.yellowMaxCoeff = (s.yellowMaxCoeff != null) ? s.yellowMaxCoeff : (DEFAULT_WEIGHTS.yellowMaxCoeff != null ? DEFAULT_WEIGHTS.yellowMaxCoeff : 3.0);
-  // 有效金分段系数：优先使用保存的分段配置，否则为null（单公式模式）
+  // 限定金分段系数：优先使用保存的分段配置，否则为null（单公式模式）
   w.yellowSegments = (s.yellowSegments && s.yellowSegments.length > 0) ? s.yellowSegments : (DEFAULT_WEIGHTS.yellowSegments || null);
+    // 有效金系数参数（按系数前总价分段）
+    w.effYellowThreshold = (s.effYellowThreshold != null) ? s.effYellowThreshold : (DEFAULT_WEIGHTS.effYellowThreshold != null ? DEFAULT_WEIGHTS.effYellowThreshold : 767);
+    w.effYellowBaseLow = (s.effYellowBaseLow != null) ? s.effYellowBaseLow : (DEFAULT_WEIGHTS.effYellowBaseLow != null ? DEFAULT_WEIGHTS.effYellowBaseLow : 35);
+    w.effYellowStepCoeffLow = (s.effYellowStepCoeffLow != null) ? s.effYellowStepCoeffLow : (DEFAULT_WEIGHTS.effYellowStepCoeffLow != null ? DEFAULT_WEIGHTS.effYellowStepCoeffLow : 0.015);
+    w.effYellowMaxCoeffLow = (s.effYellowMaxCoeffLow != null) ? s.effYellowMaxCoeffLow : (DEFAULT_WEIGHTS.effYellowMaxCoeffLow != null ? DEFAULT_WEIGHTS.effYellowMaxCoeffLow : 2.0);
+    w.effYellowBaseHigh = (s.effYellowBaseHigh != null) ? s.effYellowBaseHigh : (DEFAULT_WEIGHTS.effYellowBaseHigh != null ? DEFAULT_WEIGHTS.effYellowBaseHigh : 20);
+    w.effYellowStepCoeffHigh = (s.effYellowStepCoeffHigh != null) ? s.effYellowStepCoeffHigh : (DEFAULT_WEIGHTS.effYellowStepCoeffHigh != null ? DEFAULT_WEIGHTS.effYellowStepCoeffHigh : 0.008);
+    w.effYellowMaxCoeffHigh = (s.effYellowMaxCoeffHigh != null) ? s.effYellowMaxCoeffHigh : (DEFAULT_WEIGHTS.effYellowMaxCoeffHigh != null ? DEFAULT_WEIGHTS.effYellowMaxCoeffHigh : 3.0);
     w.needSigDiscount = (s.needSigDiscount != null) ? s.needSigDiscount : (DEFAULT_WEIGHTS.needSigDiscount != null ? DEFAULT_WEIGHTS.needSigDiscount : 0.3);
     w.teamDepDiscount = (s.teamDepDiscount != null) ? s.teamDepDiscount : (DEFAULT_WEIGHTS.teamDepDiscount != null ? DEFAULT_WEIGHTS.teamDepDiscount : 0.7);
     w.c6Base = (s.c6Base != null) ? s.c6Base : (DEFAULT_WEIGHTS.c6Base != null ? DEFAULT_WEIGHTS.c6Base : 3);
@@ -955,221 +963,138 @@
     c6Section.appendChild(c6DefaultRow);
     dialog.appendChild(c6Section);
 
-    // ===== 5. 有效金阶梯系数（分段模式） =====
+    // ===== 5. 有效金系数（按系数前总价分段） =====
     var yellowSection = document.createElement('div');
     yellowSection.style.cssText = 'margin-bottom:20px;';
     var yellowTitle = document.createElement('div');
-    yellowTitle.style.cssText = 'font-size:14px;font-weight:600;color:#fbbf24;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    yellowTitle.textContent = '有效金阶梯系数（分段配置，有效金越多越稀有）';
+    yellowTitle.style.cssText = 'font-size:14px;font-weight:600;color:#f59e0b;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
+    yellowTitle.textContent = '有效金系数（按系数前总价分段）';
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S/A/B/C/D级角色(1+命座数) + 其专武精炼数。可添加多个分段，每段独立配置基准系数和浮动。公式：基准系数 + floor((有效金 - 基准金) / 每档) × 每金浮动。';
+    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武 + 满命角色(含命座) + 其专武。按系数前总价分段使用不同参数：低于阈值用低价参数，高于阈值用高价参数。';
     yellowSection.appendChild(yellowDesc);
 
-    // 分段列表容器
-    var yellowSegList = document.createElement('div');
-    yellowSegList.style.cssText = 'margin-bottom:8px;max-height:280px;overflow-y:auto;border:1px solid #2a2a4a;border-radius:8px;padding:6px;';
-    yellowSection.appendChild(yellowSegList);
-
-    // 初始化分段数据：优先从 yellowSegments 加载，否则从单公式参数转换
-    var yellowSegEntries;
-    if (w.yellowSegments && w.yellowSegments.length > 0) {
-      yellowSegEntries = w.yellowSegments.map(function(s) {
-        return { minYellow: s.minYellow != null ? s.minYellow : 0, baseYellow: s.baseYellow != null ? s.baseYellow : (s.minYellow != null ? s.minYellow : 0), baseCoeff: s.baseCoeff != null ? s.baseCoeff : 1.0, step: (s.step != null) ? s.step : 1, stepCoeff: (s.stepCoeff != null) ? s.stepCoeff : 0.01 };
-      });
-    } else {
-      // 从单公式参数转换为单个分段
-      yellowSegEntries = [{ minYellow: 0, baseYellow: w.yellowBase != null ? w.yellowBase : 40, baseCoeff: w.yellowBaseCoeff != null ? w.yellowBaseCoeff : 1.0, step: w.yellowStep != null ? w.yellowStep : 1, stepCoeff: w.yellowStepCoeff != null ? w.yellowStepCoeff : 0.01 }];
+    function yfLabel(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:10px;';
+      return s;
+    }
+    function yfInput(val, step, color, title, inpW) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:' + (inpW||48) + 'px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:' + color + ';font-size:11px;text-align:center;font-weight:600;';
+      return i;
     }
 
-    function renderYellowSegList() {
-      yellowSegList.innerHTML = '';
-      if (yellowSegEntries.length === 0) {
-        yellowSegList.innerHTML = '<div style="font-size:12px;color:#555;padding:8px 0;">暂无分段，可点击下方"添加分段"</div>';
-        return;
-      }
-      // 按 minYellow 排序
-      yellowSegEntries.sort(function(a, b) { return a.minYellow - b.minYellow; });
-      for (var i = 0; i < yellowSegEntries.length; i++) {
-        (function(idx) {
-          var e = yellowSegEntries[idx];
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:4px;padding:4px 4px;font-size:11px;border-bottom:1px solid #1a1a3a;flex-wrap:wrap;';
+    // 阈值输入
+    var thresholdRow = document.createElement('div');
+    thresholdRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
+    thresholdRow.appendChild(yfLabel('系数前总价阈值'));
+    var effThresholdInp = yfInput(w.effYellowThreshold != null ? w.effYellowThreshold : 767, '1', '#e94560', '低于此值用低价参数，否则用高价参数', 60);
+    effThresholdInp.style.textAlign = 'right';
+    thresholdRow.appendChild(effThresholdInp);
+    thresholdRow.appendChild(yfLabel('元'));
+    yellowSection.appendChild(thresholdRow);
 
-          // 段标签
-          var segLab = document.createElement('span');
-          segLab.textContent = '段' + (idx + 1);
-          segLab.style.cssText = 'color:#fbbf24;font-size:11px;font-weight:600;min-width:28px;';
-          row.appendChild(segLab);
+    // 低价账号参数
+    var lowRow = document.createElement('div');
+    lowRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(34,197,94,0.06);border-radius:6px;border:1px solid rgba(34,197,94,0.2);';
+    var lowTitle = document.createElement('span');
+    lowTitle.textContent = '低价账号(<阈值)';
+    lowTitle.style.cssText = 'color:#22c55e;font-size:11px;font-weight:600;margin-right:8px;';
+    lowRow.appendChild(lowTitle);
+    lowRow.appendChild(yfLabel('基准金'));
+    var effBaseLowInp = yfInput(w.effYellowBaseLow != null ? w.effYellowBaseLow : 35, '1', '#f59e0b', '低价账号基准有效金数', 42);
+    effBaseLowInp.style.textAlign = 'right';
+    lowRow.appendChild(effBaseLowInp);
+    lowRow.appendChild(yfLabel('|每步浮动'));
+    var effStepLowInp = yfInput(w.effYellowStepCoeffLow != null ? w.effYellowStepCoeffLow : 0.015, '0.001', '#10b981', '低价账号每步浮动系数', 52);
+    effStepLowInp.style.textAlign = 'right';
+    lowRow.appendChild(effStepLowInp);
+    lowRow.appendChild(yfLabel('|上限'));
+    var effMaxLowInp = yfInput(w.effYellowMaxCoeffLow != null ? w.effYellowMaxCoeffLow : 2.0, '0.1', '#e94560', '低价账号系数上限', 42);
+    effMaxLowInp.style.textAlign = 'right';
+    lowRow.appendChild(effMaxLowInp);
+    yellowSection.appendChild(lowRow);
 
-          // ≥N黄
-          var geLab = document.createElement('span');
-          geLab.textContent = '≥'; geLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(geLab);
-          var minInp = document.createElement('input');
-          minInp.type = 'number'; minInp.value = e.minYellow; minInp.min = 0; minInp.step = 1;
-          minInp.style.cssText = 'width:42px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;font-weight:600;';
-          minInp.title = '该分段起始有效黄数';
-          minInp.onchange = function() { e.minYellow = parseInt(minInp.value) || 0; updateYellowPreview(); };
-          row.appendChild(minInp);
+    // 高价账号参数
+    var highRow = document.createElement('div');
+    highRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(233,69,96,0.06);border-radius:6px;border:1px solid rgba(233,69,96,0.2);';
+    var highTitle = document.createElement('span');
+    highTitle.textContent = '高价账号(≥阈值)';
+    highTitle.style.cssText = 'color:#e94560;font-size:11px;font-weight:600;margin-right:8px;';
+    highRow.appendChild(highTitle);
+    highRow.appendChild(yfLabel('基准金'));
+    var effBaseHighInp = yfInput(w.effYellowBaseHigh != null ? w.effYellowBaseHigh : 20, '1', '#f59e0b', '高价账号基准有效金数', 42);
+    effBaseHighInp.style.textAlign = 'right';
+    highRow.appendChild(effBaseHighInp);
+    highRow.appendChild(yfLabel('|每步浮动'));
+    var effStepHighInp = yfInput(w.effYellowStepCoeffHigh != null ? w.effYellowStepCoeffHigh : 0.008, '0.001', '#10b981', '高价账号每步浮动系数', 52);
+    effStepHighInp.style.textAlign = 'right';
+    highRow.appendChild(effStepHighInp);
+    highRow.appendChild(yfLabel('|上限'));
+    var effMaxHighInp = yfInput(w.effYellowMaxCoeffHigh != null ? w.effYellowMaxCoeffHigh : 3.0, '0.1', '#e94560', '高价账号系数上限', 42);
+    effMaxHighInp.style.textAlign = 'right';
+    highRow.appendChild(effMaxHighInp);
+    yellowSection.appendChild(highRow);
 
-          var huangLab = document.createElement('span');
-          huangLab.textContent = '黄'; huangLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(huangLab);
-
-          var sep1 = document.createElement('span');
-          sep1.textContent = '|'; sep1.style.cssText = 'color:#333;margin:0 2px;';
-          row.appendChild(sep1);
-
-          // 基准金
-          var baseLab = document.createElement('span');
-          baseLab.textContent = '基准'; baseLab.style.cssText = 'color:#fbbf24;font-size:10px;';
-          row.appendChild(baseLab);
-          var baseInp = document.createElement('input');
-          baseInp.type = 'number'; baseInp.value = e.baseYellow; baseInp.min = 0; baseInp.step = 1;
-          baseInp.style.cssText = 'width:42px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
-          baseInp.title = '基准有效金（公式中的base）';
-          baseInp.onchange = function() { e.baseYellow = parseInt(baseInp.value) || 0; updateYellowPreview(); };
-          row.appendChild(baseInp);
-
-          var sep2 = document.createElement('span');
-          sep2.textContent = '|'; sep2.style.cssText = 'color:#333;margin:0 2px;';
-          row.appendChild(sep2);
-
-          // 基准系数
-          var bcLab = document.createElement('span');
-          bcLab.textContent = '系数'; bcLab.style.cssText = 'color:#4ade80;font-size:10px;';
-          row.appendChild(bcLab);
-          var bcInp = document.createElement('input');
-          bcInp.type = 'number'; bcInp.value = e.baseCoeff; bcInp.min = 0; bcInp.step = 0.05;
-          bcInp.style.cssText = 'width:48px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#4ade80;font-size:11px;text-align:right;font-weight:600;';
-          bcInp.title = '基准系数（基准金处的系数值）';
-          bcInp.onchange = function() { e.baseCoeff = parseFloat(bcInp.value) || 0; updateYellowPreview(); };
-          row.appendChild(bcInp);
-
-          var sep3 = document.createElement('span');
-          sep3.textContent = '|'; sep3.style.cssText = 'color:#333;margin:0 2px;';
-          row.appendChild(sep3);
-
-          // 每档
-          var stepLab = document.createElement('span');
-          stepLab.textContent = '每'; stepLab.style.cssText = 'color:#fbbf24;font-size:10px;';
-          row.appendChild(stepLab);
-          var stepInp = document.createElement('input');
-          stepInp.type = 'number'; stepInp.value = e.step; stepInp.min = 1; stepInp.step = 1;
-          stepInp.style.cssText = 'width:36px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#fbbf24;font-size:11px;text-align:center;';
-          stepInp.title = '每档金数';
-          stepInp.onchange = function() { e.step = parseInt(stepInp.value) || 1; updateYellowPreview(); };
-          row.appendChild(stepInp);
-
-          var jinLab = document.createElement('span');
-          jinLab.textContent = '金'; jinLab.style.cssText = 'color:#555;font-size:10px;';
-          row.appendChild(jinLab);
-
-          var sep4 = document.createElement('span');
-          sep4.textContent = '|'; sep4.style.cssText = 'color:#333;margin:0 2px;';
-          row.appendChild(sep4);
-
-          // 每金浮动
-          var scLab = document.createElement('span');
-          scLab.textContent = '浮动'; scLab.style.cssText = 'color:#60a5fa;font-size:10px;';
-          row.appendChild(scLab);
-          var scInp = document.createElement('input');
-          scInp.type = 'number'; scInp.value = e.stepCoeff; scInp.min = 0; scInp.step = 0.005;
-          scInp.style.cssText = 'width:52px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#60a5fa;font-size:11px;text-align:right;font-weight:600;';
-          scInp.title = '每档浮动系数';
-          scInp.onchange = function() { e.stepCoeff = parseFloat(scInp.value) || 0; updateYellowPreview(); };
-          row.appendChild(scInp);
-
-          // 删除按钮
-          var delBtn = document.createElement('button');
-          delBtn.textContent = '×'; delBtn.title = '删除该分段';
-          delBtn.style.cssText = 'padding:1px 6px;border:none;border-radius:3px;background:#1a1a2e;color:#e94560;font-size:13px;cursor:pointer;line-height:1;margin-left:4px;';
-          delBtn.onclick = function() { yellowSegEntries.splice(idx, 1); renderYellowSegList(); updateYellowPreview(); };
-          row.appendChild(delBtn);
-
-          yellowSegList.appendChild(row);
-        })(i);
-      }
-    }
-    renderYellowSegList();
-
-    // 按钮行：添加分段 + 系数上限 + 载入默认
+    // 载入默认按钮
     var yellowBtnRow = document.createElement('div');
     yellowBtnRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;';
-
-    var addSegBtn = document.createElement('button');
-    addSegBtn.textContent = '+ 添加分段';
-    addSegBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#fbbf24;font-size:11px;cursor:pointer;';
-    addSegBtn.onclick = function() {
-      var lastMin = yellowSegEntries.length > 0 ? yellowSegEntries[yellowSegEntries.length - 1].minYellow : 0;
-      yellowSegEntries.push({ minYellow: lastMin + 20, baseYellow: lastMin + 20, baseCoeff: 1.0, step: 1, stepCoeff: 0.01 });
-      renderYellowSegList();
-      updateYellowPreview();
-    };
-    yellowBtnRow.appendChild(addSegBtn);
-
-    var ySepMax = document.createElement('span');
-    ySepMax.textContent = '|'; ySepMax.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
-    yellowBtnRow.appendChild(ySepMax);
-
-    var yellowMaxCoeffLabel = document.createElement('span');
-    yellowMaxCoeffLabel.textContent = '系数上限';
-    yellowMaxCoeffLabel.style.cssText = 'font-size:12px;color:#e94560;font-weight:600;';
-    yellowBtnRow.appendChild(yellowMaxCoeffLabel);
-    var yellowMaxCoeffInput = document.createElement('input');
-    yellowMaxCoeffInput.type = 'number'; yellowMaxCoeffInput.min = 0; yellowMaxCoeffInput.step = 0.1;
-    yellowMaxCoeffInput.value = w.yellowMaxCoeff != null ? w.yellowMaxCoeff : 3.0;
-    yellowMaxCoeffInput.style.cssText = 'width:50px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#e94560;font-size:12px;text-align:right;font-weight:600;';
-    yellowMaxCoeffInput.title = '系数上限（0=不限，默认3.0）';
-    yellowMaxCoeffInput.onchange = updateYellowPreview;
-    yellowBtnRow.appendChild(yellowMaxCoeffInput);
-
-    var ySepDef = document.createElement('span');
-    ySepDef.textContent = '|'; ySepDef.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
-    yellowBtnRow.appendChild(ySepDef);
-
     var yellowDefaultBtn = document.createElement('button');
     yellowDefaultBtn.textContent = '载入默认';
-    yellowDefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#fbbf24;font-size:11px;cursor:pointer;';
+    yellowDefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#f59e0b;font-size:11px;cursor:pointer;';
     yellowDefaultBtn.onclick = function() {
-      yellowSegEntries = [{ minYellow: 0, baseYellow: 40, baseCoeff: 1.0, step: 1, stepCoeff: 0.01 }];
-      yellowMaxCoeffInput.value = 3.0;
-      renderYellowSegList();
+      effThresholdInp.value = 767;
+      effBaseLowInp.value = 35; effStepLowInp.value = 0.015; effMaxLowInp.value = 2.0;
+      effBaseHighInp.value = 20; effStepHighInp.value = 0.008; effMaxHighInp.value = 3.0;
       updateYellowPreview();
     };
     yellowBtnRow.appendChild(yellowDefaultBtn);
-
     yellowSection.appendChild(yellowBtnRow);
 
     // 预览
     var yellowPreview = document.createElement('div');
-    yellowPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(251,191,36,0.05);border-radius:6px;border:1px solid rgba(251,191,36,0.15);margin-top:8px;';
+    yellowPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(245,158,11,0.05);border-radius:6px;border:1px solid rgba(245,158,11,0.15);margin-top:8px;';
     yellowSection.appendChild(yellowPreview);
 
     function updateYellowPreview() {
-      var maxCoeff = parseFloat(yellowMaxCoeffInput.value) || 0;
-      var segs = yellowSegEntries.slice().sort(function(a, b) { return a.minYellow - b.minYellow; });
-      var samples = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 240];
-      var html = '';
+      var threshold = parseFloat(effThresholdInp.value) || 767;
+      var lowBase = parseFloat(effBaseLowInp.value) || 35;
+      var lowStep = parseFloat(effStepLowInp.value) || 0.015;
+      var lowMax = parseFloat(effMaxLowInp.value) || 2.0;
+      var highBase = parseFloat(effBaseHighInp.value) || 20;
+      var highStep = parseFloat(effStepHighInp.value) || 0.008;
+      var highMax = parseFloat(effMaxHighInp.value) || 3.0;
+      var samples = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100];
+      var html = '<div style="color:#22c55e;margin-bottom:4px;">低价账号(总价<' + threshold + '):</div>';
       for (var si = 0; si < samples.length; si++) {
         var y = samples[si];
-        var seg = segs[0];
-        for (var sj = 0; sj < segs.length; sj++) {
-          if (y >= segs[sj].minYellow) seg = segs[sj]; else break;
-        }
-        var segBase = seg.baseYellow != null ? seg.baseYellow : seg.minYellow;
-        var segStep = (seg.step != null) ? seg.step : 1;
-        var segBaseCoeff = seg.baseCoeff != null ? seg.baseCoeff : 1.0;
-        var segStepCoeff = (seg.stepCoeff != null) ? seg.stepCoeff : 0.01;
-        var coeff = segBaseCoeff + Math.floor((y - segBase) / segStep) * segStepCoeff;
+        var coeff = 1.0 + Math.floor((y - lowBase) / 1) * lowStep;
         if (coeff < 0.1) coeff = 0.1;
-        if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
-        html += y + '有效 → ×' + (Math.round(coeff * 1000) / 1000) + '　';
+        if (lowMax > 0 && coeff > lowMax) coeff = lowMax;
+        html += y + '有效金→×' + (Math.round(coeff * 1000) / 1000) + '　';
+      }
+      html += '<div style="color:#e94560;margin-top:6px;margin-bottom:4px;">高价账号(总价≥' + threshold + '):</div>';
+      for (var sj = 0; sj < samples.length; sj++) {
+        var y2 = samples[sj];
+        var coeff2 = 1.0 + Math.floor((y2 - highBase) / 1) * highStep;
+        if (coeff2 < 0.1) coeff2 = 0.1;
+        if (highMax > 0 && coeff2 > highMax) coeff2 = highMax;
+        html += y2 + '有效金→×' + (Math.round(coeff2 * 1000) / 1000) + '　';
       }
       yellowPreview.innerHTML = html;
     }
+    // 绑定onchange
+    effThresholdInp.onchange = updateYellowPreview;
+    effBaseLowInp.onchange = updateYellowPreview;
+    effStepLowInp.onchange = updateYellowPreview;
+    effMaxLowInp.onchange = updateYellowPreview;
+    effBaseHighInp.onchange = updateYellowPreview;
+    effStepHighInp.onchange = updateYellowPreview;
+    effMaxHighInp.onchange = updateYellowPreview;
     updateYellowPreview();
 
     dialog.appendChild(yellowSection);
@@ -1691,10 +1616,14 @@
       for (var tw = 0; tw < c6TierList.length; tw++) {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
       }
-      // 重置有效金分段系数
-      yellowSegEntries = [{ minYellow: 0, baseYellow: 40, baseCoeff: 1.0, step: 1, stepCoeff: 0.01 }];
-      yellowMaxCoeffInput.value = (DEFAULT_WEIGHTS.yellowMaxCoeff != null) ? DEFAULT_WEIGHTS.yellowMaxCoeff : 3.0;
-      renderYellowSegList();
+      // 重置有效金系数
+      effThresholdInp.value = (DEFAULT_WEIGHTS.effYellowThreshold != null) ? DEFAULT_WEIGHTS.effYellowThreshold : 767;
+      effBaseLowInp.value = (DEFAULT_WEIGHTS.effYellowBaseLow != null) ? DEFAULT_WEIGHTS.effYellowBaseLow : 35;
+      effStepLowInp.value = (DEFAULT_WEIGHTS.effYellowStepCoeffLow != null) ? DEFAULT_WEIGHTS.effYellowStepCoeffLow : 0.015;
+      effMaxLowInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeffLow != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeffLow : 2.0;
+      effBaseHighInp.value = (DEFAULT_WEIGHTS.effYellowBaseHigh != null) ? DEFAULT_WEIGHTS.effYellowBaseHigh : 20;
+      effStepHighInp.value = (DEFAULT_WEIGHTS.effYellowStepCoeffHigh != null) ? DEFAULT_WEIGHTS.effYellowStepCoeffHigh : 0.008;
+      effMaxHighInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeffHigh != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeffHigh : 3.0;
       updateYellowPreview();
       // 重置配队（使用 DEFAULT_WEIGHTS.teamPremiums，包含服务器配置）
       teamEntries.length = 0;
@@ -1865,19 +1794,14 @@
       }
       newW.c6TierWeights = newC6Weights;
 
-      // 收集有效金分段系数
-      newW.yellowMaxCoeff = parseFloat(yellowMaxCoeffInput.value) || 3.0;
-      newW.yellowSegments = yellowSegEntries.map(function(e) {
-        return { minYellow: e.minYellow, baseYellow: e.baseYellow, baseCoeff: e.baseCoeff, step: e.step, stepCoeff: e.stepCoeff };
-      });
-      // 向后兼容：将最后一段保存为单公式参数
-      if (yellowSegEntries.length > 0) {
-        var lastSeg = yellowSegEntries[yellowSegEntries.length - 1];
-        newW.yellowBase = lastSeg.baseYellow;
-        newW.yellowStep = lastSeg.step;
-        newW.yellowBaseCoeff = lastSeg.baseCoeff;
-        newW.yellowStepCoeff = lastSeg.stepCoeff;
-      }
+      // 收集有效金系数参数
+      newW.effYellowThreshold = parseFloat(effThresholdInp.value) || 767;
+      newW.effYellowBaseLow = parseFloat(effBaseLowInp.value) || 35;
+      newW.effYellowStepCoeffLow = parseFloat(effStepLowInp.value) || 0.015;
+      newW.effYellowMaxCoeffLow = parseFloat(effMaxLowInp.value) || 2.0;
+      newW.effYellowBaseHigh = parseFloat(effBaseHighInp.value) || 20;
+      newW.effYellowStepCoeffHigh = parseFloat(effStepHighInp.value) || 0.008;
+      newW.effYellowMaxCoeffHigh = parseFloat(effMaxHighInp.value) || 3.0;
 
       // 收集低命折扣系数规则
       var newFlatDiscountRules = [];
