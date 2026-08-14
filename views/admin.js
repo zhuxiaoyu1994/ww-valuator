@@ -415,7 +415,7 @@ function getAdminPage() {
         </div>
         <div id="config-preview" style="display:none;background:#0d0d22;border:1px solid #2a2a4a;border-radius:8px;padding:16px;margin-bottom:16px;">
           <h4 style="color:#4ade80;font-size:13px;margin-bottom:8px;">配置预览</h4>
-          <div id="config-preview-content" style="font-size:12px;color:#ccc;max-height:300px;overflow-y:auto;"></div>
+          <div id="config-preview-content" style="font-size:12px;color:#ccc;max-height:500px;overflow-y:auto;"></div>
         </div>
         <button id="config-upload-btn" onclick="uploadConfig()" disabled style="padding:10px 24px;background:#60a5fa;color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;opacity:0.5;">上传配置</button>
         <span id="config-upload-status" style="margin-left:12px;font-size:13px;"></span>
@@ -424,7 +424,7 @@ function getAdminPage() {
         <h2>当前服务器配置</h2>
         <p style="color:#aaa;font-size:13px;margin-bottom:12px;">点击刷新查看当前服务器存储的默认配置状态</p>
         <button onclick="checkServerConfig()" style="padding:8px 20px;background:#1a1a3a;color:#4ade80;border:1px solid #2a2a4a;border-radius:6px;font-size:13px;cursor:pointer;">检查服务器配置</button>
-        <div id="server-config-status" style="margin-top:12px;font-size:13px;"></div>
+        <div id="server-config-status" style="margin-top:12px;font-size:13px;max-height:500px;overflow-y:auto;"></div>
       </div>
       <div class="mon-card">
         <h2>估值规则设置</h2>
@@ -1673,18 +1673,7 @@ function getAdminPage() {
         // 预览
         const preview = document.getElementById('config-preview');
         const content = document.getElementById('config-preview-content');
-        const keys = Object.keys(config);
-        let html = '<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">';
-        for (const key of keys) {
-          const val = config[key];
-          let valStr;
-          if (Array.isArray(val)) valStr = '[' + val.length + ' 项]';
-          else if (typeof val === 'object' && val !== null) valStr = '{' + Object.keys(val).length + ' 键}';
-          else valStr = String(val);
-          html += '<span style="color:#8ecdf5;">' + escapeHtml(key) + '</span><span style="color:#aaa;">' + escapeHtml(valStr) + '</span>';
-        }
-        html += '</div>';
-        content.innerHTML = html;
+        content.innerHTML = renderConfigHumanReadable(config);
         preview.style.display = '';
         const btn = document.getElementById('config-upload-btn');
         btn.disabled = false;
@@ -1740,18 +1729,8 @@ function getAdminPage() {
       const json = await resp.json();
       if (json.success && json.data) {
         const config = json.data;
-        const keys = Object.keys(config);
-        let html = '<div style="color:#4ade80;margin-bottom:8px;">✓ 服务器已配置默认估值规则</div>';
-        html += '<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">';
-        for (const key of keys) {
-          const val = config[key];
-          let valStr;
-          if (Array.isArray(val)) valStr = '[' + val.length + ' 项]';
-          else if (typeof val === 'object' && val !== null) valStr = '{' + Object.keys(val).length + ' 键}';
-          else valStr = String(val);
-          html += '<span style="color:#8ecdf5;">' + escapeHtml(key) + '</span><span style="color:#aaa;">' + escapeHtml(valStr) + '</span>';
-        }
-        html += '</div>';
+        let html = '<div style="color:#4ade80;margin-bottom:12px;">✓ 服务器已配置默认估值规则</div>';
+        html += renderConfigHumanReadable(config);
         status.innerHTML = html;
       } else {
         status.innerHTML = '<span style="color:#fbbf24;">服务器未配置默认估值规则，使用源码内置默认值</span>';
@@ -1759,6 +1738,150 @@ function getAdminPage() {
     } catch (err) {
       status.innerHTML = '<span style="color:#ef4444;">检查失败: ' + escapeHtml(err.message) + '</span>';
     }
+  }
+
+  // ============================================================
+  // 配置人类可读渲染
+  // ============================================================
+  function renderConfigHumanReadable(config) {
+    var sections = [];
+
+    // 角色基础定价
+    if (config.charPrices && Object.keys(config.charPrices).length) {
+      var rows = Object.entries(config.charPrices).map(function(e) {
+        return '<span style="color:#e0e0e0;">' + escapeHtml(e[0]) + '</span>: <span style="color:#fbbf24;">' + e[1] + '元</span>';
+      }).join('　');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">角色基础定价（C0）</h4><div style="line-height:2;font-size:12px;">' + rows + '</div>');
+    }
+
+    // 命座溢价
+    if (config.constPremiums && Object.keys(config.constPremiums).length) {
+      var cpRows = Object.entries(config.constPremiums).map(function(e) {
+        var vals = e[1];
+        var parts = [];
+        for (var c = 1; c <= 6; c++) {
+          if (vals[c] != null) parts.push('C' + c + ':+' + vals[c]);
+        }
+        return '<span style="color:#e0e0e0;">' + escapeHtml(e[0]) + '</span> <span style="color:#aaa;">(' + parts.join(', ') + ')</span>';
+      }).join('　');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">命座溢价（C1-C6）</h4><div style="line-height:2;font-size:12px;">' + cpRows + '</div>');
+    }
+
+    // C6命座级别系数
+    if (config.c6TierWeights) {
+      var tw = Object.entries(config.c6TierWeights).map(function(e) {
+        return e[0] + '级: ' + e[1];
+      }).join('　');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">C6命座级别系数</h4><div style="font-size:12px;color:#ccc;">' + tw + '</div>');
+    }
+
+    // C6满命加成公式
+    if (config.c6Base != null) {
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">C6满命加成公式</h4><div style="font-size:12px;color:#ccc;">' +
+        '基准加成: <span style="color:#fbbf24;">' + config.c6Base + '</span>　' +
+        '基准满命: <span style="color:#fbbf24;">' + config.c6BaseBonus + '</span>　' +
+        '每档命数: <span style="color:#fbbf24;">' + config.c6Step + '</span>　' +
+        '每档浮动: <span style="color:#fbbf24;">' + config.c6StepBonus + '</span></div>');
+    }
+
+    // C6满命多角色溢价
+    if (config.c6MultiBonus && config.c6MultiBonus.length) {
+      var mbRows = config.c6MultiBonus.map(function(r) {
+        return '加权满命≥' + r.count + ': +' + (r.bonus * 100) + '%';
+      }).join('　');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">C6满命多角色溢价</h4><div style="font-size:12px;color:#ccc;">' + mbRows + '</div>');
+    }
+
+    // 满命抽数加成公式
+    if (config.pullC6Base != null) {
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">满命抽数加成公式</h4><div style="font-size:12px;color:#ccc;">' +
+        '基准加成: <span style="color:#fbbf24;">' + config.pullC6Base + '</span>　' +
+        '基准满命: <span style="color:#fbbf24;">' + config.pullC6BaseBonus + '</span>　' +
+        '每档命数: <span style="color:#fbbf24;">' + config.pullC6Step + '</span>　' +
+        '每档浮动: <span style="color:#fbbf24;">' + config.pullC6StepBonus + '</span></div>');
+    }
+
+    // 配队人数加成
+    if (config.teamMultiBonus && config.teamMultiBonus.length) {
+      var tmRows = config.teamMultiBonus.map(function(r) {
+        return r.count + '人: ×' + r.coef;
+      }).join('　');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">配队人数加成</h4><div style="font-size:12px;color:#ccc;">' + tmRows + '</div>');
+    }
+
+    // 配队组合溢价
+    if (config.teamPremiums && Object.keys(config.teamPremiums).length) {
+      var tpRows = Object.entries(config.teamPremiums).filter(function(e) { return e[1].enabled !== false; }).map(function(e) {
+        return '<span style="color:#e0e0e0;">' + escapeHtml(e[0]) + '</span> <span style="color:#aaa;">(' + e[1].chars.join('+') + ')</span> <span style="color:#fbbf24;">×' + e[1].multiplier + '</span>';
+      }).join('<br>');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">配队组合溢价</h4><div style="line-height:2;font-size:12px;">' + tpRows + '</div>');
+    }
+
+    // 配队折扣规则
+    if (config.flatDiscountRules && config.flatDiscountRules.length) {
+      var fdRows = config.flatDiscountRules.map(function(r) {
+        return r.tiers.join('/') + '级且≤C' + r.maxConst + ': ×' + r.discount;
+      }).join('　');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">配队折扣规则</h4><div style="font-size:12px;color:#ccc;">' + fdRows + '</div>');
+    }
+
+    // 强绑角色
+    var teamMates = config.teamMates || {};
+    var oldDep = config.c6TeamDependency || {};
+    var depKeys = Object.keys(Object.assign({}, teamMates, oldDep));
+    if (depKeys.length) {
+      var depRows = depKeys.map(function(k) {
+        if (teamMates[k] && teamMates[k].length) {
+          return '<span style="color:#e0e0e0;">' + escapeHtml(k) + '</span> → <span style="color:#aaa;">需 ' + teamMates[k].join('/') + '</span>';
+        }
+        if (oldDep[k]) {
+          return '<span style="color:#e0e0e0;">' + escapeHtml(k) + '</span> → <span style="color:#aaa;">需 ' + oldDep[k].teammate + '</span>';
+        }
+        return '';
+      }).filter(Boolean).join('<br>');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">强绑角色</h4><div style="line-height:2;font-size:12px;">' + depRows + '</div>');
+    }
+
+    // 折扣参数
+    var discountParts = [];
+    if (config.needSigDiscount != null) discountParts.push('无专武折扣: ×' + config.needSigDiscount);
+    if (config.teamDepDiscount != null) discountParts.push('无强绑折扣: ×' + config.teamDepDiscount);
+    if (discountParts.length) {
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">折扣参数</h4><div style="font-size:12px;color:#ccc;">' + discountParts.join('　') + '</div>');
+    }
+
+    // 需要专武的角色
+    if (config.needSigWeapons && config.needSigWeapons.length) {
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">需要专武的角色</h4><div style="font-size:12px;color:#ccc;">' + config.needSigWeapons.map(escapeHtml).join('、') + '</div>');
+    }
+
+    // 有效金系数
+    if (config.yellowSegments && config.yellowSegments.length) {
+      var ysRows = config.yellowSegments.map(function(s) {
+        return '≥' + (s.minYellow || 0) + '黄: 基准' + s.baseYellow + '金, 步长' + s.step + '金, 系数' + s.baseCoeff + ', 每金浮动' + s.stepCoeff;
+      }).join('<br>');
+      var ymc = config.yellowMaxCoeff != null ? '　最大系数: <span style="color:#fbbf24;">' + config.yellowMaxCoeff + '</span>' : '';
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">有效金系数</h4><div style="font-size:12px;color:#ccc;">' + ysRows + ymc + '</div>');
+    }
+
+    // 抽数定价
+    if (config.pullBase != null) {
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">抽数定价</h4><div style="font-size:12px;color:#ccc;">' +
+        '基准抽数: <span style="color:#fbbf24;">' + config.pullBase + '</span>　' +
+        '基准价格: <span style="color:#fbbf24;">' + config.pullBasePrice + '元</span>　' +
+        '每抽浮动: <span style="color:#fbbf24;">' + config.pullStepPrice + '元</span></div>');
+    }
+
+    // 服饰和车架
+    if (config.outfit != null || config.motoFrame != null) {
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">服饰和车架</h4><div style="font-size:12px;color:#ccc;">' +
+        '服饰: <span style="color:#fbbf24;">' + (config.outfit || 0) + '元</span>　' +
+        '车架: <span style="color:#fbbf24;">' + (config.motoFrame || 0) + '元</span></div>');
+    }
+
+    return '<div style="display:flex;flex-direction:column;gap:14px;">' + sections.map(function(s) {
+      return '<div style="background:#0d0d22;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;">' + s + '</div>';
+    }).join('') + '</div>';
   }
 
   // ============================================================
