@@ -411,10 +411,10 @@ function getPageHTML() {
     .settings-btn:hover { border-color: #fbbf24; background: rgba(251,191,36,0.08); }
     .settings-btn.customized { color: #4ade80; border-color: #4ade80; }
     .settings-btn.customized:hover { background: rgba(74,222,128,0.08); }
-    /* "估值不准"按钮 - 固定在预估价值容器右上角 */
+    /* "估值不准"按钮 - 显示在估值结果下方 */
     .adjust-link {
       display: none;
-      position: absolute; top: 0; right: 0; z-index: 10;
+      margin-top: 12px;
       padding: 6px 14px; border: 1px solid #fbbf24; border-radius: 8px;
       background: rgba(15,15,35,0.9); color: #fbbf24; font-size: 12px;
       cursor: pointer; transition: all 0.2s; font-family: inherit;
@@ -485,8 +485,8 @@ function getPageHTML() {
 
     <!-- 估值规则设置入口 -->
     <div class="settings-bar">
-      <button class="settings-btn" id="settings-btn" onclick="safeOpenValueSettings()">估值规则设置</button>
-      <button class="settings-btn" id="stats-btn" onclick="openStatsModal()" style="margin-left:8px;">算法准确性报告</button>
+      <button class="settings-btn" id="settings-btn" onclick="safeOpenValueSettings()" style="display:none;">估值规则设置</button>
+      <button class="settings-btn" id="stats-btn" onclick="openStatsModal()">算法准确性报告</button>
     </div>
 
     <!-- 按编号查询 -->
@@ -772,7 +772,6 @@ function getPageHTML() {
       const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
       const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(2) + '%' : d.costPerformance.toFixed(2) + '%';
       let summaryHtml = '';
-      summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="safeOpenValueSettings()">估值不准？修改规则</button>';
       summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
       summaryHtml += '<div class="label">预估价值</div>';
       if (d.price && d.price > 0) {
@@ -780,6 +779,7 @@ function getPageHTML() {
         const diffText = diff >= 0 ? '+' + diff : diff;
         summaryHtml += '<div class="ratio ' + ratioClass + '">性价比 ' + ratioText + ' (标价' + d.price + '元 · 差价' + diffText + '元)</div>';
       }
+      summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="openStatsModal()">估值不准？查看算法准确性报告</button>';
       document.getElementById('result-summary').innerHTML = summaryHtml;
 
       const det = d.details;
