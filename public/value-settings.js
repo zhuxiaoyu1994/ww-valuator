@@ -2016,4 +2016,7 @@
   window.checkNewRulesAvailable = checkNewRulesAvailable;
   window.loadLatestRules = loadLatestRules;
   window.dismissNewRules = dismissNewRules;
+
+  // 预加载默认配置，使 getSavedWeights() 的 CONFIG_VERSION 检查能正常工作
+  fetchDefaults();
 })();

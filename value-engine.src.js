@@ -80,13 +80,13 @@ const DEFAULT_WEIGHTS = {
   flatDiscountRules: [
     { tiers: ['S', 'A'], maxConst: 2, discount: 0.8 },
   ],
-  // C6配队依赖：满命角色缺少关键队友时，降级C6权重 + 打折角色价值
+  // C6配队依赖（向后兼容配置，仅提取 teammate 字段用于 teamMates 迁移；不影响角色等级）
   c6TeamDependency: {
-    '卡提希娅': { teammate: '夏空', weightTier: 'A', valueDiscount: 0.7 },
-    '弗洛洛': { teammate: '坎特蕾拉', weightTier: 'A', valueDiscount: 0.7 },
-    '露西': { teammate: '丽贝卡', weightTier: 'B', valueDiscount: 0.7 },
-    '绯雪': { teammate: '洛瑟菈', weightTier: 'A', valueDiscount: 0.7 },
-    '秧秧玄翎': { teammate: '穗穗', weightTier: 'A', valueDiscount: 0.7 },
+    '卡提希娅': { teammate: '夏空' },
+    '弗洛洛': { teammate: '坎特蕾拉' },
+    '露西': { teammate: '丽贝卡' },
+    '绯雪': { teammate: '洛瑟菈' },
+    '秧秧玄翎': { teammate: '穗穗' },
   },
   // 无专武折扣（需要专武的角色，无专武时价值 × 此值）
   needSigDiscount: 0.3,

@@ -948,7 +948,10 @@ app.post('/admin/api/cache-clear', (req, res) => {
 app.get('/api/config/default', async (req, res) => {
   try {
     const { value: config, updatedAt } = await db.getConfigWithMeta('default_weights');
-    res.json({ success: true, data: config, configUpdatedAt: updatedAt });
+    // 补充 configVersion，使前端能检测到版本变更并自动清理旧配置
+    const defaults = valueEngine.getDefaults();
+    const merged = config ? { ...config, configVersion: defaults.configVersion } : { configVersion: defaults.configVersion };
+    res.json({ success: true, data: merged, configUpdatedAt: updatedAt });
   } catch (e) {
     res.json({ success: true, data: null, configUpdatedAt: null });
   }

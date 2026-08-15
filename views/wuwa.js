@@ -583,6 +583,16 @@ function getPageHTML() {
       if (json.success && json.data) {
         window._serverDefaultConfig = json.data;
         console.log('[config] 已加载服务器端默认估值配置');
+        // 检测 CONFIG_VERSION 变更（代码更新时不改变数据库 updated_at，需独立检查）
+        var serverConfigVersion = json.data.configVersion || 1;
+        var storedConfigVersion = parseInt(localStorage.getItem('mw_eval_config_version') || '0', 10);
+        if (serverConfigVersion > storedConfigVersion) {
+          if (localStorage.getItem('mw_eval_weights')) {
+            localStorage.removeItem('mw_eval_weights');
+            console.log('[config] 检测到CONFIG_VERSION更新(' + storedConfigVersion + '→' + serverConfigVersion + ')，已自动清除旧配置');
+          }
+          localStorage.setItem('mw_eval_config_version', String(serverConfigVersion));
+        }
         // 检测服务器端配置是否已更新（基于数据库 updated_at 时间戳）
         var serverUpdatedAt = json.configUpdatedAt;
         var storedUpdatedAt = localStorage.getItem('mw_config_updated_at');
