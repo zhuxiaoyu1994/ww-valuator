@@ -83,14 +83,14 @@
     w.yellowMaxCoeff = (s.yellowMaxCoeff != null) ? s.yellowMaxCoeff : (DEFAULT_WEIGHTS.yellowMaxCoeff != null ? DEFAULT_WEIGHTS.yellowMaxCoeff : 3.0);
   // 限定金分段系数：优先使用保存的分段配置，否则为null（单公式模式）
   w.yellowSegments = (s.yellowSegments && s.yellowSegments.length > 0) ? s.yellowSegments : (DEFAULT_WEIGHTS.yellowSegments || null);
-    // 有效金系数参数（按系数前总价分段）
-    w.effYellowThreshold = (s.effYellowThreshold != null) ? s.effYellowThreshold : (DEFAULT_WEIGHTS.effYellowThreshold != null ? DEFAULT_WEIGHTS.effYellowThreshold : 767);
-    w.effYellowBaseLow = (s.effYellowBaseLow != null) ? s.effYellowBaseLow : (DEFAULT_WEIGHTS.effYellowBaseLow != null ? DEFAULT_WEIGHTS.effYellowBaseLow : 35);
-    w.effYellowStepCoeffLow = (s.effYellowStepCoeffLow != null) ? s.effYellowStepCoeffLow : (DEFAULT_WEIGHTS.effYellowStepCoeffLow != null ? DEFAULT_WEIGHTS.effYellowStepCoeffLow : 0.015);
-    w.effYellowMaxCoeffLow = (s.effYellowMaxCoeffLow != null) ? s.effYellowMaxCoeffLow : (DEFAULT_WEIGHTS.effYellowMaxCoeffLow != null ? DEFAULT_WEIGHTS.effYellowMaxCoeffLow : 2.0);
-    w.effYellowBaseHigh = (s.effYellowBaseHigh != null) ? s.effYellowBaseHigh : (DEFAULT_WEIGHTS.effYellowBaseHigh != null ? DEFAULT_WEIGHTS.effYellowBaseHigh : 20);
-    w.effYellowStepCoeffHigh = (s.effYellowStepCoeffHigh != null) ? s.effYellowStepCoeffHigh : (DEFAULT_WEIGHTS.effYellowStepCoeffHigh != null ? DEFAULT_WEIGHTS.effYellowStepCoeffHigh : 0.008);
-    w.effYellowMaxCoeffHigh = (s.effYellowMaxCoeffHigh != null) ? s.effYellowMaxCoeffHigh : (DEFAULT_WEIGHTS.effYellowMaxCoeffHigh != null ? DEFAULT_WEIGHTS.effYellowMaxCoeffHigh : 3.0);
+    // 有效金系数参数（基于有效金数分段）
+    w.effYellowBaseCoeff = (s.effYellowBaseCoeff != null) ? s.effYellowBaseCoeff : (DEFAULT_WEIGHTS.effYellowBaseCoeff != null ? DEFAULT_WEIGHTS.effYellowBaseCoeff : 0.3);
+    w.effYellowSeg1Threshold = (s.effYellowSeg1Threshold != null) ? s.effYellowSeg1Threshold : (DEFAULT_WEIGHTS.effYellowSeg1Threshold != null ? DEFAULT_WEIGHTS.effYellowSeg1Threshold : 10);
+    w.effYellowSeg1Step = (s.effYellowSeg1Step != null) ? s.effYellowSeg1Step : (DEFAULT_WEIGHTS.effYellowSeg1Step != null ? DEFAULT_WEIGHTS.effYellowSeg1Step : 0.03);
+    w.effYellowSeg2Threshold = (s.effYellowSeg2Threshold != null) ? s.effYellowSeg2Threshold : (DEFAULT_WEIGHTS.effYellowSeg2Threshold != null ? DEFAULT_WEIGHTS.effYellowSeg2Threshold : 40);
+    w.effYellowSeg2Step = (s.effYellowSeg2Step != null) ? s.effYellowSeg2Step : (DEFAULT_WEIGHTS.effYellowSeg2Step != null ? DEFAULT_WEIGHTS.effYellowSeg2Step : 0.02);
+    w.effYellowSeg3Step = (s.effYellowSeg3Step != null) ? s.effYellowSeg3Step : (DEFAULT_WEIGHTS.effYellowSeg3Step != null ? DEFAULT_WEIGHTS.effYellowSeg3Step : 0.008);
+    w.effYellowMaxCoeff = (s.effYellowMaxCoeff != null) ? s.effYellowMaxCoeff : (DEFAULT_WEIGHTS.effYellowMaxCoeff != null ? DEFAULT_WEIGHTS.effYellowMaxCoeff : 2.5);
     w.needSigDiscount = (s.needSigDiscount != null) ? s.needSigDiscount : (DEFAULT_WEIGHTS.needSigDiscount != null ? DEFAULT_WEIGHTS.needSigDiscount : 0.3);
     w.teamDepDiscount = (s.teamDepDiscount != null) ? s.teamDepDiscount : (DEFAULT_WEIGHTS.teamDepDiscount != null ? DEFAULT_WEIGHTS.teamDepDiscount : 0.7);
     w.c6Base = (s.c6Base != null) ? s.c6Base : (DEFAULT_WEIGHTS.c6Base != null ? DEFAULT_WEIGHTS.c6Base : 3);
@@ -965,16 +965,16 @@
     c6Section.appendChild(c6DefaultRow);
     dialog.appendChild(c6Section);
 
-    // ===== 5. 有效金系数（按系数前总价分段） =====
+    // ===== 5. 有效金系数（按有效金数分段） =====
     var yellowSection = document.createElement('div');
     yellowSection.style.cssText = 'margin-bottom:20px;';
     var yellowTitle = document.createElement('div');
     yellowTitle.style.cssText = 'font-size:14px;font-weight:600;color:#f59e0b;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    yellowTitle.textContent = '有效金系数（按系数前总价分段）';
+    yellowTitle.textContent = '有效金系数（按有效金数分段）';
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按系数前总价分段使用不同参数：低于阈值用低价参数，高于阈值用高价参数。';
+    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分3段，每段不同步长：第1段快速上升，第2段中速，第3段缓慢。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {
@@ -990,57 +990,65 @@
       return i;
     }
 
-    // 阈值输入
-    var thresholdRow = document.createElement('div');
-    thresholdRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
-    thresholdRow.appendChild(yfLabel('系数前总价阈值'));
-    var effThresholdInp = yfInput(w.effYellowThreshold != null ? w.effYellowThreshold : 767, '1', '#e94560', '低于此值用低价参数，否则用高价参数', 60);
-    effThresholdInp.style.textAlign = 'right';
-    thresholdRow.appendChild(effThresholdInp);
-    thresholdRow.appendChild(yfLabel('元'));
-    yellowSection.appendChild(thresholdRow);
+    // 基准系数 + 上限
+    var baseRow = document.createElement('div');
+    baseRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
+    baseRow.appendChild(yfLabel('基准系数(有效金=0)'));
+    var effBaseCoeffInp = yfInput(w.effYellowBaseCoeff != null ? w.effYellowBaseCoeff : 0.3, '0.01', '#f59e0b', '有效金=0时的系数', 48);
+    effBaseCoeffInp.style.textAlign = 'right';
+    baseRow.appendChild(effBaseCoeffInp);
+    baseRow.appendChild(yfLabel('| 系数上限'));
+    var effMaxCoeffInp = yfInput(w.effYellowMaxCoeff != null ? w.effYellowMaxCoeff : 2.5, '0.1', '#e94560', '系数最大值', 48);
+    effMaxCoeffInp.style.textAlign = 'right';
+    baseRow.appendChild(effMaxCoeffInp);
+    yellowSection.appendChild(baseRow);
 
-    // 低价账号参数
-    var lowRow = document.createElement('div');
-    lowRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(34,197,94,0.06);border-radius:6px;border:1px solid rgba(34,197,94,0.2);';
-    var lowTitle = document.createElement('span');
-    lowTitle.textContent = '低价账号(<阈值)';
-    lowTitle.style.cssText = 'color:#22c55e;font-size:11px;font-weight:600;margin-right:8px;';
-    lowRow.appendChild(lowTitle);
-    lowRow.appendChild(yfLabel('基准金'));
-    var effBaseLowInp = yfInput(w.effYellowBaseLow != null ? w.effYellowBaseLow : 35, '1', '#f59e0b', '低价账号基准有效金数', 42);
-    effBaseLowInp.style.textAlign = 'right';
-    lowRow.appendChild(effBaseLowInp);
-    lowRow.appendChild(yfLabel('|每步浮动'));
-    var effStepLowInp = yfInput(w.effYellowStepCoeffLow != null ? w.effYellowStepCoeffLow : 0.015, '0.001', '#10b981', '低价账号每步浮动系数', 52);
-    effStepLowInp.style.textAlign = 'right';
-    lowRow.appendChild(effStepLowInp);
-    lowRow.appendChild(yfLabel('|上限'));
-    var effMaxLowInp = yfInput(w.effYellowMaxCoeffLow != null ? w.effYellowMaxCoeffLow : 2.0, '0.1', '#e94560', '低价账号系数上限', 42);
-    effMaxLowInp.style.textAlign = 'right';
-    lowRow.appendChild(effMaxLowInp);
-    yellowSection.appendChild(lowRow);
+    // 第1段
+    var seg1Row = document.createElement('div');
+    seg1Row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(34,197,94,0.06);border-radius:6px;border:1px solid rgba(34,197,94,0.2);';
+    var seg1Title = document.createElement('span');
+    seg1Title.textContent = '第1段(0~T1)';
+    seg1Title.style.cssText = 'color:#22c55e;font-size:11px;font-weight:600;margin-right:8px;';
+    seg1Row.appendChild(seg1Title);
+    seg1Row.appendChild(yfLabel('边界T1'));
+    var effSeg1TInp = yfInput(w.effYellowSeg1Threshold != null ? w.effYellowSeg1Threshold : 10, '1', '#f59e0b', '第1段有效金上界', 42);
+    effSeg1TInp.style.textAlign = 'right';
+    seg1Row.appendChild(effSeg1TInp);
+    seg1Row.appendChild(yfLabel('|每金浮动'));
+    var effSeg1StepInp = yfInput(w.effYellowSeg1Step != null ? w.effYellowSeg1Step : 0.03, '0.001', '#10b981', '第1段每金浮动系数', 52);
+    effSeg1StepInp.style.textAlign = 'right';
+    seg1Row.appendChild(effSeg1StepInp);
+    yellowSection.appendChild(seg1Row);
 
-    // 高价账号参数
-    var highRow = document.createElement('div');
-    highRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(233,69,96,0.06);border-radius:6px;border:1px solid rgba(233,69,96,0.2);';
-    var highTitle = document.createElement('span');
-    highTitle.textContent = '高价账号(≥阈值)';
-    highTitle.style.cssText = 'color:#e94560;font-size:11px;font-weight:600;margin-right:8px;';
-    highRow.appendChild(highTitle);
-    highRow.appendChild(yfLabel('基准金'));
-    var effBaseHighInp = yfInput(w.effYellowBaseHigh != null ? w.effYellowBaseHigh : 20, '1', '#f59e0b', '高价账号基准有效金数', 42);
-    effBaseHighInp.style.textAlign = 'right';
-    highRow.appendChild(effBaseHighInp);
-    highRow.appendChild(yfLabel('|每步浮动'));
-    var effStepHighInp = yfInput(w.effYellowStepCoeffHigh != null ? w.effYellowStepCoeffHigh : 0.008, '0.001', '#10b981', '高价账号每步浮动系数', 52);
-    effStepHighInp.style.textAlign = 'right';
-    highRow.appendChild(effStepHighInp);
-    highRow.appendChild(yfLabel('|上限'));
-    var effMaxHighInp = yfInput(w.effYellowMaxCoeffHigh != null ? w.effYellowMaxCoeffHigh : 3.0, '0.1', '#e94560', '高价账号系数上限', 42);
-    effMaxHighInp.style.textAlign = 'right';
-    highRow.appendChild(effMaxHighInp);
-    yellowSection.appendChild(highRow);
+    // 第2段
+    var seg2Row = document.createElement('div');
+    seg2Row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(245,158,11,0.06);border-radius:6px;border:1px solid rgba(245,158,11,0.2);';
+    var seg2Title = document.createElement('span');
+    seg2Title.textContent = '第2段(T1~T2)';
+    seg2Title.style.cssText = 'color:#f59e0b;font-size:11px;font-weight:600;margin-right:8px;';
+    seg2Row.appendChild(seg2Title);
+    seg2Row.appendChild(yfLabel('边界T2'));
+    var effSeg2TInp = yfInput(w.effYellowSeg2Threshold != null ? w.effYellowSeg2Threshold : 40, '1', '#f59e0b', '第2段有效金上界', 42);
+    effSeg2TInp.style.textAlign = 'right';
+    seg2Row.appendChild(effSeg2TInp);
+    seg2Row.appendChild(yfLabel('|每金浮动'));
+    var effSeg2StepInp = yfInput(w.effYellowSeg2Step != null ? w.effYellowSeg2Step : 0.02, '0.001', '#10b981', '第2段每金浮动系数', 52);
+    effSeg2StepInp.style.textAlign = 'right';
+    seg2Row.appendChild(effSeg2StepInp);
+    yellowSection.appendChild(seg2Row);
+
+    // 第3段
+    var seg3Row = document.createElement('div');
+    seg3Row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(233,69,96,0.06);border-radius:6px;border:1px solid rgba(233,69,96,0.2);';
+    var seg3Title = document.createElement('span');
+    seg3Title.textContent = '第3段(T2+)';
+    seg3Title.style.cssText = 'color:#e94560;font-size:11px;font-weight:600;margin-right:8px;';
+    seg3Row.appendChild(seg3Title);
+    seg3Row.appendChild(yfLabel('每金浮动'));
+    var effSeg3StepInp = yfInput(w.effYellowSeg3Step != null ? w.effYellowSeg3Step : 0.008, '0.001', '#10b981', '第3段每金浮动系数', 52);
+    effSeg3StepInp.style.textAlign = 'right';
+    seg3Row.appendChild(effSeg3StepInp);
+    yellowSection.appendChild(seg3Row);
 
     // 载入默认按钮
     var yellowBtnRow = document.createElement('div');
@@ -1049,9 +1057,10 @@
     yellowDefaultBtn.textContent = '载入默认';
     yellowDefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#f59e0b;font-size:11px;cursor:pointer;';
     yellowDefaultBtn.onclick = function() {
-      effThresholdInp.value = 767;
-      effBaseLowInp.value = 35; effStepLowInp.value = 0.015; effMaxLowInp.value = 2.0;
-      effBaseHighInp.value = 20; effStepHighInp.value = 0.008; effMaxHighInp.value = 3.0;
+      effBaseCoeffInp.value = 0.3; effMaxCoeffInp.value = 2.5;
+      effSeg1TInp.value = 10; effSeg1StepInp.value = 0.03;
+      effSeg2TInp.value = 40; effSeg2StepInp.value = 0.02;
+      effSeg3StepInp.value = 0.008;
       updateYellowPreview();
     };
     yellowBtnRow.appendChild(yellowDefaultBtn);
@@ -1063,40 +1072,52 @@
     yellowSection.appendChild(yellowPreview);
 
     function updateYellowPreview() {
-      var threshold = parseFloat(effThresholdInp.value) || 767;
-      var lowBase = parseFloat(effBaseLowInp.value) || 35;
-      var lowStep = parseFloat(effStepLowInp.value) || 0.015;
-      var lowMax = parseFloat(effMaxLowInp.value) || 2.0;
-      var highBase = parseFloat(effBaseHighInp.value) || 20;
-      var highStep = parseFloat(effStepHighInp.value) || 0.008;
-      var highMax = parseFloat(effMaxHighInp.value) || 3.0;
+      var bc = parseFloat(effBaseCoeffInp.value) || 0.3;
+      var mc = parseFloat(effMaxCoeffInp.value) || 2.5;
+      var t1 = parseFloat(effSeg1TInp.value) || 10;
+      var t2 = parseFloat(effSeg2TInp.value) || 40;
+      var s1 = parseFloat(effSeg1StepInp.value) || 0.03;
+      var s2 = parseFloat(effSeg2StepInp.value) || 0.02;
+      var s3 = parseFloat(effSeg3StepInp.value) || 0.008;
       var samples = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100];
-      var html = '<div style="color:#22c55e;margin-bottom:4px;">低价账号(总价<' + threshold + '):</div>';
+      var html = '';
       for (var si = 0; si < samples.length; si++) {
         var y = samples[si];
-        var coeff = 1.0 + Math.floor((y - lowBase) / 1) * lowStep;
+        var coeff = bc;
+        var prevT = 0;
+        var segs = [{t:t1, s:s1}, {t:t2, s:s2}];
+        for (var sj = 0; sj < segs.length; sj++) {
+          var seg = segs[sj];
+          var w2 = seg.t - prevT;
+          if (w2 <= 0) continue;
+          if (y <= seg.t) {
+            coeff += (y - prevT) * seg.s;
+            if (mc > 0 && coeff > mc) coeff = mc;
+            break;
+          } else {
+            coeff += w2 * seg.s;
+            if (mc > 0 && coeff > mc) coeff = mc;
+          }
+          prevT = seg.t;
+        }
+        if (y > t2) {
+          coeff += (y - t2) * s3;
+          if (mc > 0 && coeff > mc) coeff = mc;
+        }
         if (coeff < 0.1) coeff = 0.1;
-        if (lowMax > 0 && coeff > lowMax) coeff = lowMax;
-        html += y + '有效金→×' + (Math.round(coeff * 1000) / 1000) + '　';
-      }
-      html += '<div style="color:#e94560;margin-top:6px;margin-bottom:4px;">高价账号(总价≥' + threshold + '):</div>';
-      for (var sj = 0; sj < samples.length; sj++) {
-        var y2 = samples[sj];
-        var coeff2 = 1.0 + Math.floor((y2 - highBase) / 1) * highStep;
-        if (coeff2 < 0.1) coeff2 = 0.1;
-        if (highMax > 0 && coeff2 > highMax) coeff2 = highMax;
-        html += y2 + '有效金→×' + (Math.round(coeff2 * 1000) / 1000) + '　';
+        var color = y <= t1 ? '#22c55e' : (y <= t2 ? '#f59e0b' : '#e94560');
+        html += '<span style="color:' + color + ';">' + y + '金→×' + (Math.round(coeff * 1000) / 1000) + '</span>　';
       }
       yellowPreview.innerHTML = html;
     }
     // 绑定onchange
-    effThresholdInp.onchange = updateYellowPreview;
-    effBaseLowInp.onchange = updateYellowPreview;
-    effStepLowInp.onchange = updateYellowPreview;
-    effMaxLowInp.onchange = updateYellowPreview;
-    effBaseHighInp.onchange = updateYellowPreview;
-    effStepHighInp.onchange = updateYellowPreview;
-    effMaxHighInp.onchange = updateYellowPreview;
+    effBaseCoeffInp.onchange = updateYellowPreview;
+    effMaxCoeffInp.onchange = updateYellowPreview;
+    effSeg1TInp.onchange = updateYellowPreview;
+    effSeg1StepInp.onchange = updateYellowPreview;
+    effSeg2TInp.onchange = updateYellowPreview;
+    effSeg2StepInp.onchange = updateYellowPreview;
+    effSeg3StepInp.onchange = updateYellowPreview;
     updateYellowPreview();
 
     dialog.appendChild(yellowSection);
@@ -1518,7 +1539,7 @@
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowThreshold: true, effYellowBaseLow: true, effYellowStepCoeffLow: true, effYellowMaxCoeffLow: true, effYellowBaseHigh: true, effYellowStepCoeffHigh: true, effYellowMaxCoeffHigh: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowBaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3Step: true, effYellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -1619,13 +1640,13 @@
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
       }
       // 重置有效金系数
-      effThresholdInp.value = (DEFAULT_WEIGHTS.effYellowThreshold != null) ? DEFAULT_WEIGHTS.effYellowThreshold : 767;
-      effBaseLowInp.value = (DEFAULT_WEIGHTS.effYellowBaseLow != null) ? DEFAULT_WEIGHTS.effYellowBaseLow : 35;
-      effStepLowInp.value = (DEFAULT_WEIGHTS.effYellowStepCoeffLow != null) ? DEFAULT_WEIGHTS.effYellowStepCoeffLow : 0.015;
-      effMaxLowInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeffLow != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeffLow : 2.0;
-      effBaseHighInp.value = (DEFAULT_WEIGHTS.effYellowBaseHigh != null) ? DEFAULT_WEIGHTS.effYellowBaseHigh : 20;
-      effStepHighInp.value = (DEFAULT_WEIGHTS.effYellowStepCoeffHigh != null) ? DEFAULT_WEIGHTS.effYellowStepCoeffHigh : 0.008;
-      effMaxHighInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeffHigh != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeffHigh : 3.0;
+      effBaseCoeffInp.value = (DEFAULT_WEIGHTS.effYellowBaseCoeff != null) ? DEFAULT_WEIGHTS.effYellowBaseCoeff : 0.3;
+      effMaxCoeffInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeff != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeff : 2.5;
+      effSeg1TInp.value = (DEFAULT_WEIGHTS.effYellowSeg1Threshold != null) ? DEFAULT_WEIGHTS.effYellowSeg1Threshold : 10;
+      effSeg1StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg1Step != null) ? DEFAULT_WEIGHTS.effYellowSeg1Step : 0.03;
+      effSeg2TInp.value = (DEFAULT_WEIGHTS.effYellowSeg2Threshold != null) ? DEFAULT_WEIGHTS.effYellowSeg2Threshold : 40;
+      effSeg2StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg2Step != null) ? DEFAULT_WEIGHTS.effYellowSeg2Step : 0.02;
+      effSeg3StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg3Step != null) ? DEFAULT_WEIGHTS.effYellowSeg3Step : 0.008;
       updateYellowPreview();
       // 重置配队（使用 DEFAULT_WEIGHTS.teamPremiums，包含服务器配置）
       teamEntries.length = 0;
@@ -1797,13 +1818,13 @@
       newW.c6TierWeights = newC6Weights;
 
       // 收集有效金系数参数
-      newW.effYellowThreshold = parseFloat(effThresholdInp.value) || 767;
-      newW.effYellowBaseLow = parseFloat(effBaseLowInp.value) || 35;
-      newW.effYellowStepCoeffLow = parseFloat(effStepLowInp.value) || 0.015;
-      newW.effYellowMaxCoeffLow = parseFloat(effMaxLowInp.value) || 2.0;
-      newW.effYellowBaseHigh = parseFloat(effBaseHighInp.value) || 20;
-      newW.effYellowStepCoeffHigh = parseFloat(effStepHighInp.value) || 0.008;
-      newW.effYellowMaxCoeffHigh = parseFloat(effMaxHighInp.value) || 3.0;
+      newW.effYellowBaseCoeff = parseFloat(effBaseCoeffInp.value) || 0.3;
+      newW.effYellowMaxCoeff = parseFloat(effMaxCoeffInp.value) || 2.5;
+      newW.effYellowSeg1Threshold = parseFloat(effSeg1TInp.value) || 10;
+      newW.effYellowSeg1Step = parseFloat(effSeg1StepInp.value) || 0.03;
+      newW.effYellowSeg2Threshold = parseFloat(effSeg2TInp.value) || 40;
+      newW.effYellowSeg2Step = parseFloat(effSeg2StepInp.value) || 0.02;
+      newW.effYellowSeg3Step = parseFloat(effSeg3StepInp.value) || 0.008;
 
       // 收集低命折扣系数规则
       var newFlatDiscountRules = [];

@@ -1855,16 +1855,13 @@ function getAdminPage() {
       sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">需要专武的角色</h4><div style="font-size:12px;color:#ccc;">' + config.needSigWeapons.map(escapeHtml).join('、') + '</div>');
     }
 
-    // 有效金系数（按系数前总价分段）
-    if (config.effYellowThreshold != null) {
-      var effHtml = '阈值: <span style="color:#e94560;">' + config.effYellowThreshold + '元</span><br>' +
-        '<span style="color:#22c55e;">低价账号:</span> 基准' + (config.effYellowBaseLow != null ? config.effYellowBaseLow : 35) + '金, ' +
-        '每步浮动' + (config.effYellowStepCoeffLow != null ? config.effYellowStepCoeffLow : 0.015) + ', ' +
-        '上限' + (config.effYellowMaxCoeffLow != null ? config.effYellowMaxCoeffLow : 2.0) + '<br>' +
-        '<span style="color:#e94560;">高价账号:</span> 基准' + (config.effYellowBaseHigh != null ? config.effYellowBaseHigh : 20) + '金, ' +
-        '每步浮动' + (config.effYellowStepCoeffHigh != null ? config.effYellowStepCoeffHigh : 0.008) + ', ' +
-        '上限' + (config.effYellowMaxCoeffHigh != null ? config.effYellowMaxCoeffHigh : 3.0);
-      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">有效金系数（按系数前总价分段）</h4><div style="font-size:12px;color:#ccc;">' + effHtml + '</div>');
+    // 有效金系数（按有效金数分段）
+    if (config.effYellowBaseCoeff != null) {
+      var effHtml = '基准系数: <span style="color:#f59e0b;">' + config.effYellowBaseCoeff + '</span> | 上限: <span style="color:#e94560;">' + (config.effYellowMaxCoeff != null ? config.effYellowMaxCoeff : 2.5) + '</span><br>' +
+        '<span style="color:#22c55e;">第1段(0~' + (config.effYellowSeg1Threshold != null ? config.effYellowSeg1Threshold : 10) + '):</span> 每金浮动' + (config.effYellowSeg1Step != null ? config.effYellowSeg1Step : 0.03) + '<br>' +
+        '<span style="color:#f59e0b;">第2段(' + (config.effYellowSeg1Threshold != null ? config.effYellowSeg1Threshold : 10) + '~' + (config.effYellowSeg2Threshold != null ? config.effYellowSeg2Threshold : 40) + '):</span> 每金浮动' + (config.effYellowSeg2Step != null ? config.effYellowSeg2Step : 0.02) + '<br>' +
+        '<span style="color:#e94560;">第3段(' + (config.effYellowSeg2Threshold != null ? config.effYellowSeg2Threshold : 40) + '+):</span> 每金浮动' + (config.effYellowSeg3Step != null ? config.effYellowSeg3Step : 0.008);
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">有效金系数（按有效金数分段）</h4><div style="font-size:12px;color:#ccc;">' + effHtml + '</div>');
     }
 
     // 抽数定价
