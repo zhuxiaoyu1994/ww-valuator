@@ -7716,20 +7716,20 @@ function openSettings() {
       newW.teamMultiBonus = newTeamMultiBonus;
 
       // 收集抽数阶梯公式参数
-      newW.pullBase = parseFloat(pfBaseInp.value) || DEFAULT_PULL_FORMULA.pullBase;
-      newW.pullBasePrice = parseFloat(pfBasePriceInp.value) || DEFAULT_PULL_FORMULA.pullBasePrice;
-      newW.pullStepPrice = parseFloat(pfStepPriceInp.value) || DEFAULT_PULL_FORMULA.pullStepPrice;
+      var _pb = parseFloat(pfBaseInp.value); newW.pullBase = !isNaN(_pb) ? _pb : DEFAULT_PULL_FORMULA.pullBase;
+      var _pbp = parseFloat(pfBasePriceInp.value); newW.pullBasePrice = !isNaN(_pbp) ? _pbp : DEFAULT_PULL_FORMULA.pullBasePrice;
+      var _psp = parseFloat(pfStepPriceInp.value); newW.pullStepPrice = !isNaN(_psp) ? _psp : DEFAULT_PULL_FORMULA.pullStepPrice;
 
       // 收集满命抽数加成公式参数
-      newW.pullC6Base = parseFloat(pc6BaseInp.value) || DEFAULT_WEIGHTS.pullC6Base;
+      var _pc6b = parseFloat(pc6BaseInp.value); newW.pullC6Base = !isNaN(_pc6b) ? _pc6b : DEFAULT_WEIGHTS.pullC6Base;
       newW.pullC6BaseBonus = (parseFloat(pc6BaseBonusInp.value) || 0) / 100;
-      newW.pullC6Step = parseFloat(pc6StepInp.value) || DEFAULT_WEIGHTS.pullC6Step;
+      var _pc6s = parseFloat(pc6StepInp.value); newW.pullC6Step = (!isNaN(_pc6s) && _pc6s > 0) ? _pc6s : DEFAULT_WEIGHTS.pullC6Step;
       newW.pullC6StepBonus = (parseFloat(pc6StepBonusInp.value) || 0) / 100;
 
       // 收集满命溢价公式参数
-      newW.c6Base = parseFloat(c6BaseInp.value) || DEFAULT_WEIGHTS.c6Base;
+      var _c6b = parseFloat(c6BaseInp.value); newW.c6Base = !isNaN(_c6b) ? _c6b : DEFAULT_WEIGHTS.c6Base;
       newW.c6BaseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
-      newW.c6Step = parseFloat(c6StepInp.value) || DEFAULT_WEIGHTS.c6Step;
+      var _c6s = parseFloat(c6StepInp.value); newW.c6Step = (!isNaN(_c6s) && _c6s > 0) ? _c6s : DEFAULT_WEIGHTS.c6Step;
       newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
 
       // 收集满命权重
@@ -7741,15 +7741,15 @@ function openSettings() {
       newW.c6TierWeights = newC6Weights;
 
       // 收集有效金系数参数（每段独立基准系数）
-      newW.effYellowSeg1BaseCoeff = parseFloat(effSeg1BaseInp.value) || 0.3;
-      newW.effYellowSeg1Threshold = parseFloat(effSeg1TInp.value) || 10;
-      newW.effYellowSeg1Step = parseFloat(effSeg1StepInp.value) || 0.03;
-      newW.effYellowSeg2BaseCoeff = parseFloat(effSeg2BaseInp.value) || 0.6;
-      newW.effYellowSeg2Threshold = parseFloat(effSeg2TInp.value) || 40;
-      newW.effYellowSeg2Step = parseFloat(effSeg2StepInp.value) || 0.02;
-      newW.effYellowSeg3BaseCoeff = parseFloat(effSeg3BaseInp.value) || 1.2;
-      newW.effYellowSeg3Step = parseFloat(effSeg3StepInp.value) || 0.008;
-      newW.effYellowMaxCoeff = parseFloat(effMaxCoeffInp.value) || 2.5;
+      var _e1b = parseFloat(effSeg1BaseInp.value); newW.effYellowSeg1BaseCoeff = !isNaN(_e1b) ? _e1b : 0.3;
+      var _e1t = parseFloat(effSeg1TInp.value); newW.effYellowSeg1Threshold = !isNaN(_e1t) ? _e1t : 10;
+      var _e1s = parseFloat(effSeg1StepInp.value); newW.effYellowSeg1Step = !isNaN(_e1s) ? _e1s : 0.03;
+      var _e2b = parseFloat(effSeg2BaseInp.value); newW.effYellowSeg2BaseCoeff = !isNaN(_e2b) ? _e2b : 0.6;
+      var _e2t = parseFloat(effSeg2TInp.value); newW.effYellowSeg2Threshold = !isNaN(_e2t) ? _e2t : 40;
+      var _e2s = parseFloat(effSeg2StepInp.value); newW.effYellowSeg2Step = !isNaN(_e2s) ? _e2s : 0.02;
+      var _e3b = parseFloat(effSeg3BaseInp.value); newW.effYellowSeg3BaseCoeff = !isNaN(_e3b) ? _e3b : 1.2;
+      var _e3s = parseFloat(effSeg3StepInp.value); newW.effYellowSeg3Step = !isNaN(_e3s) ? _e3s : 0.008;
+      var _emc = parseFloat(effMaxCoeffInp.value); newW.effYellowMaxCoeff = !isNaN(_emc) ? _emc : 2.5;
 
       // 收集低命折扣系数规则
       var newFlatDiscountRules = [];
