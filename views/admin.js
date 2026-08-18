@@ -672,13 +672,20 @@ function getAdminPage() {
     }
   }
 
-  // 初始加载：自动获取前4页数据
+  // 初始加载：历史记录模式全量获取，实时模式获取4页
   async function fetchDealsInitial() {
-    var targetPages = dealsSource === 'database' ? 1 : 4;
     await fetchDeals(true);
-    for (var p = 1; p < targetPages; p++) {
-      if (!dealsHasMore || dealsLoading) break;
-      await fetchDeals(false);
+    if (dealsSource === 'database') {
+      while (dealsHasMore) {
+        var prevLen = dealsData.length;
+        await fetchDeals(false);
+        if (dealsData.length === prevLen) break;
+      }
+    } else {
+      for (var p = 1; p < 4; p++) {
+        if (!dealsHasMore || dealsLoading) break;
+        await fetchDeals(false);
+      }
     }
   }
 
@@ -711,7 +718,7 @@ function getAdminPage() {
     const tbody = document.getElementById('d-tbody');
     const moreBtn = document.getElementById('d-more-btn');
     if (reset) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">正在' + (dealsSource === 'database' ? '读取数据库' : '获取成交数据并计算估值') + '...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#666;">正在' + (dealsSource === 'database' ? '全量读取数据库' : '获取成交数据并计算估值') + '...</td></tr>';
     } else {
       moreBtn.textContent = '加载中...';
       moreBtn.disabled = true;

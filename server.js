@@ -1136,6 +1136,41 @@ app.get('/api/public-stats', (req, res) => handlePublicStats(req, res));
 app.post('/api/public-stats', (req, res) => handlePublicStats(req, res));
 
 // ============================================================
+// 推送配置云端同步（油猴脚本调用）
+// ============================================================
+app.post('/api/push-config/sync', async (req, res) => {
+  const { password, pushConfig } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  try {
+    await db.setConfig('push_config', { pushConfig, syncedAt: new Date().toISOString() });
+    res.json({ success: true, message: '推送配置已同步到服务器' });
+  } catch (err) {
+    console.error('[/api/push-config/sync] Error:', err.message);
+    res.json({ success: false, error: '同步失败: ' + err.message });
+  }
+});
+
+app.post('/api/push-config/get', async (req, res) => {
+  const { password } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  try {
+    const data = await db.getConfig('push_config');
+    if (data && data.pushConfig) {
+      res.json({ success: true, pushConfig: data.pushConfig, syncedAt: data.syncedAt });
+    } else {
+      res.json({ success: true, pushConfig: null, message: '服务器暂无推送配置' });
+    }
+  } catch (err) {
+    console.error('[/api/push-config/get] Error:', err.message);
+    res.json({ success: false, error: '读取失败: ' + err.message });
+  }
+});
+
+// ============================================================
 // 启动服务器
 // ============================================================
 

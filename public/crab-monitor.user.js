@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮监控助手
 // @namespace    pxb7-monitor
-// @version      2.3.6
-// @description  监控螃蟹网+盼之鸣潮账号列表，自动发现高性价比账号
+// @version      2.8.0
+// @description  监控螃蟹网+盼之+氪金兽+7881鸣潮账号列表，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/product/*
@@ -12,6 +12,11 @@
 // @connect      sctapi.ftqq.com
 // @connect      www.pushplus.plus
 // @connect      www.pzds.com
+// @connect      api.kejinshou.com
+// @connect      www.kejinshou.com
+// @connect      search.7881.com
+// @connect      gw.7881.com
+// @connect      www.youxigujia.cn
 // @run-at       document-start
 // ==/UserScript==
 
@@ -134,14 +139,16 @@
     yellowMaxCoeff: 3.0,
     // 限定金分段系数（null=单公式模式；数组=分段模式）
     yellowSegments: null,
-    // 有效金系数（基于有效金数分段，不同段使用不同步长）
-    effYellowBaseCoeff: 0.3,       // 基准系数（有效金=0时的系数）
-    effYellowSeg1Threshold: 10,   // 第1段边界（0~10有效金）
+    // 有效金系数（基于有效金数分段，每段独立基准系数，互不影响）
+    effYellowSeg1BaseCoeff: 0.3,   // 第1段基准系数（有效金=0时的系数）
+    effYellowSeg1Threshold: 10,    // 第1段边界（0~10有效金）
     effYellowSeg1Step: 0.03,       // 第1段每金浮动
-    effYellowSeg2Threshold: 40,   // 第2段边界（10~40有效金）
+    effYellowSeg2BaseCoeff: 0.4,   // 第2段基准系数（绝对，gold=0时的虚拟截距）
+    effYellowSeg2Threshold: 40,    // 第2段边界（10~40有效金）
     effYellowSeg2Step: 0.02,       // 第2段每金浮动
+    effYellowSeg3BaseCoeff: 0.88,  // 第3段基准系数（绝对，gold=0时的虚拟截距）
     effYellowSeg3Step: 0.008,      // 第3段（40+有效金）每金浮动
-    effYellowMaxCoeff: 2.5,       // 系数上限
+    effYellowMaxCoeff: 2.5,        // 系数上限
   };
 
   // 默认配队列表
@@ -373,6 +380,25 @@
     pay: 'https://www.pzds.com/confirmOrder/fullPayment?status=null&orderNo&gameId=303&goodsNo=',
   };
 
+  // 氪金兽平台URL（MWP API，MD5签名+token自动续期）
+  const KJS_URLS = {
+    api: 'https://api.kejinshou.com/h5/mwp.kjs_search.product.search/1.0',
+    detail: 'https://www.kejinshou.com/goods/details/',
+  };
+
+  // 7881平台URL（API抓取，需MD5签名）
+  const QY_URLS = {
+    list: 'https://search.7881.com/A5752-100003-0-0-0.html',
+    detail: 'https://search.7881.com/',
+    api: 'https://gw.7881.com/goods-service-api/api/goods/list',
+  };
+
+  // 服务器同步URL（推送配置云端同步）
+  const SYNC_URLS = {
+    sync: 'https://www.youxigujia.cn/api/push-config/sync',
+    get: 'https://www.youxigujia.cn/api/push-config/get',
+  };
+
   // 配置常量
   const CONFIG = {
     refreshInterval: 60000,      // 列表刷新间隔 60秒
@@ -403,7 +429,7 @@
     '五星角色', '四星角色', '五星武器', '金色武器', '地图探索度',
     '余波珊瑚', '残振珊瑚', '浮金波纹', '铸潮波纹', '唤声涡纹',
     '摩托饰品', '车架模组', '星声', '月相', '服饰', '皮肤', '摩托', '车架', '涂装',
-    '数据坞等级', '联觉等级',
+    '数据坞等级', '联觉等级', '总黄数', '黄数',
   ];
 
   // ============================================================
@@ -433,6 +459,8 @@
   let refreshIntervalSec = 15;   // 刷新间隔（秒），可设置
   let flashSaleEnabled = true;   // 秒杀库池监控开关
   let pzdsEnabled = false;      // 盼之平台监控开关
+  let kjsEnabled = false;       // 氪金兽平台监控开关
+  let qyEnabled = false;        // 7881平台监控开关
   // 检查已售设置
   let soldCheckRatio = 40;       // 检查已售的性价比阈值(%)
   let soldCheckDiff = 0;         // 检查已售的差价阈值(元)
@@ -445,6 +473,7 @@
     serverChanKey: 'SCT383470T7x9zy1jphllnHLuo7vpw0WA4\nSCT378977TClEq1lr2mRcBmHgadFxK6CVr\nSCT383733TlGLAHCEQaaGqSxiCi0FHEDMU', // Server酱SendKey（微信）
     pushPlusToken: '',     // 旧格式：PushPlus Token字符串（兼容）
     pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt, priority}]
+    syncPassword: '',    // 云端同步密码（管理后台密码）
     secondaryDelay: 10,    // 从通知延迟秒数
     soundAlert: true,      // 声音提醒
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
@@ -719,14 +748,37 @@
     w.yellowStepCoeff = (saved.yellowStepCoeff != null) ? saved.yellowStepCoeff : 0.01;
     w.yellowMaxCoeff = (saved.yellowMaxCoeff != null) ? saved.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
     w.yellowSegments = (saved.yellowSegments && saved.yellowSegments.length > 0) ? saved.yellowSegments : (DEFAULT_WEIGHTS.yellowSegments || null);
-    // 有效金系数参数（基于有效金数分段）
-    w.effYellowBaseCoeff = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowBaseCoeff;
+    // 有效金系数参数（每段独立基准系数，互不影响）
     w.effYellowSeg1Threshold = (saved.effYellowSeg1Threshold != null) ? saved.effYellowSeg1Threshold : DEFAULT_WEIGHTS.effYellowSeg1Threshold;
     w.effYellowSeg1Step = (saved.effYellowSeg1Step != null) ? saved.effYellowSeg1Step : DEFAULT_WEIGHTS.effYellowSeg1Step;
     w.effYellowSeg2Threshold = (saved.effYellowSeg2Threshold != null) ? saved.effYellowSeg2Threshold : DEFAULT_WEIGHTS.effYellowSeg2Threshold;
     w.effYellowSeg2Step = (saved.effYellowSeg2Step != null) ? saved.effYellowSeg2Step : DEFAULT_WEIGHTS.effYellowSeg2Step;
     w.effYellowSeg3Step = (saved.effYellowSeg3Step != null) ? saved.effYellowSeg3Step : DEFAULT_WEIGHTS.effYellowSeg3Step;
     w.effYellowMaxCoeff = (saved.effYellowMaxCoeff != null) ? saved.effYellowMaxCoeff : DEFAULT_WEIGHTS.effYellowMaxCoeff;
+    // 向后兼容：旧配置只有effYellowBaseCoeff，自动计算各段基准系数
+    if (saved.effYellowSeg1BaseCoeff != null) {
+      w.effYellowSeg1BaseCoeff = saved.effYellowSeg1BaseCoeff;
+    } else if (saved.effYellowBaseCoeff != null) {
+      w.effYellowSeg1BaseCoeff = saved.effYellowBaseCoeff;
+    } else {
+      w.effYellowSeg1BaseCoeff = DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+    }
+    if (saved.effYellowSeg2BaseCoeff != null) {
+      w.effYellowSeg2BaseCoeff = saved.effYellowSeg2BaseCoeff;
+    } else {
+      // 旧累积式→新绝对式：seg2Base(新) = oldBase + T1*(step1-step2)
+      var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+      w.effYellowSeg2BaseCoeff = _oldBase + w.effYellowSeg1Threshold * (w.effYellowSeg1Step - w.effYellowSeg2Step);
+    }
+    if (saved.effYellowSeg3BaseCoeff != null) {
+      w.effYellowSeg3BaseCoeff = saved.effYellowSeg3BaseCoeff;
+    } else {
+      // 旧累积式→新绝对式：seg3Base(新) = (oldBase + T1*step1 + (T2-T1)*step2) - T2*step3
+      var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+      var _seg2Val = _oldBase + w.effYellowSeg1Threshold * w.effYellowSeg1Step;
+      var _seg3Val = _seg2Val + (w.effYellowSeg2Threshold - w.effYellowSeg1Threshold) * w.effYellowSeg2Step;
+      w.effYellowSeg3BaseCoeff = _seg3Val - w.effYellowSeg2Threshold * w.effYellowSeg3Step;
+    }
 
     // 改进5：角色价格表（按角色名，合并默认值与用户自定义）
     w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
@@ -858,9 +910,12 @@
     // 格式2: 【keyword】：数字（盼之详情页格式）
     const match2 = text.match(new RegExp('【' + escaped + '】\\s*[：:]?\\s*(\\d[\\d,]*)', 'i'));
     if (match2) return parseInt(match2[1].replace(/,/g, ''));
-    // 格式3: 数字+keyword（盼之列表页内联格式，如"1088星声"）
-    const match3 = text.match(new RegExp('(\\d[\\d,]*)\\s*' + escaped, 'i'));
+    // 格式3: keyword数量：数字（7881格式，如"星声数量:15533"）
+    const match3 = text.match(new RegExp(escaped + '数量[：:]\\s*(\\d[\\d,]*)', 'i'));
     if (match3) return parseInt(match3[1].replace(/,/g, ''));
+    // 格式4: 数字+keyword（盼之列表页内联格式，如"1088星声"）
+    const match4 = text.match(new RegExp('(\\d[\\d,]*)\\s*' + escaped, 'i'));
+    if (match4) return parseInt(match4[1].replace(/,/g, ''));
     return 0;
   }
 
@@ -873,8 +928,8 @@
     const chars = [];
     if (!section) return chars;
 
-    // 按逗号、顿号、空格分割
-    const items = section.split(/[,，、\s;；]+/).filter(s => s.length > 0);
+    // 按逗号、顿号、空格分割，清理末尾】和过滤"N个"计数前缀
+    const items = section.split(/[,，、\s;；]+/).map(s => s.replace(/[】\s]+$/, '').trim()).filter(s => s.length > 0 && !/^\d+个$/.test(s));
 
     for (const item of items) {
       let constNum = 0;
@@ -1012,10 +1067,17 @@
         refine = parseInt(m[1]);
         name = m[2];
       } else {
-        name = item;
-        refine = 1;
+        // "N命武器名"（氪金兽结构化格式，如 "5命千古洑流" 表示精5）
+        const m2 = item.match(/^(\d+)命(.+)$/);
+        if (m2) {
+          refine = parseInt(m2[1]);
+          name = m2[2];
+        } else {
+          name = item;
+          refine = 1;
+        }
       }
-      if (name) weapons.push({ name, refine });
+      if (name && !/^\d+$/.test(name)) weapons.push({ name, refine });
     }
     return weapons;
   }
@@ -1024,14 +1086,14 @@
    * 提取黄数
    */
   function extractYellowCount(text) {
-    // "N黄" 或 "N黄数"
-    let m = text.match(/(\d+)\s*黄/);
-    if (m) return parseInt(m[1]);
-    // "黄数：N" 或 "黄：N"
-    m = text.match(/黄[数]?[：:]\s*(\d+)/);
+    // "黄数：N" 或 "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
+    let m = text.match(/黄[数]?[：:]\s*(\d+)/);
     if (m) return parseInt(m[1]);
     // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
     m = text.match(/【黄[数]?】\s*[：:]?\s*(\d+)/);
+    if (m) return parseInt(m[1]);
+    // "N黄" 或 "N黄数"（放最后，避免误匹配前一个字段的数字）
+    m = text.match(/(\d+)\s*黄/);
     if (m) return parseInt(m[1]);
     return 0;
   }
@@ -1349,62 +1411,52 @@
   }
 
   /**
-   * 计算有效金系数（基于有效金数分段，不同段使用不同步长）
-   * 第1段(0~T1): 步长step1，快速上升
-   * 第2段(T1~T2): 步长step2，中速上升
-   * 第3段(T2+): 步长step3，缓慢上升
-   * 系数在各段间连续，最终受maxCoeff上限约束
+   * 计算有效金系数（基于有效金数分段，每段完全独立）
+   * 每段用绝对gold线性公式：coeff = segBase + gold × segStep
+   * threshold仅用于判断分段归属，不参与计算
+   * 调整任意段的base/step/threshold不影响其他段的计算结果
    */
   function getEffectiveYellowCoeff(effectiveYellow) {
     var w = weights || DEFAULT_WEIGHTS;
-    var baseCoeff = (w.effYellowBaseCoeff != null) ? w.effYellowBaseCoeff : 0.3;
+    var seg1Base = (w.effYellowSeg1BaseCoeff != null) ? w.effYellowSeg1BaseCoeff : 0.3;
     var seg1Threshold = (w.effYellowSeg1Threshold != null) ? w.effYellowSeg1Threshold : 10;
-    var seg2Threshold = (w.effYellowSeg2Threshold != null) ? w.effYellowSeg2Threshold : 40;
     var seg1Step = (w.effYellowSeg1Step != null) ? w.effYellowSeg1Step : 0.03;
+    var seg2Base = (w.effYellowSeg2BaseCoeff != null) ? w.effYellowSeg2BaseCoeff : 0.4;
+    var seg2Threshold = (w.effYellowSeg2Threshold != null) ? w.effYellowSeg2Threshold : 40;
     var seg2Step = (w.effYellowSeg2Step != null) ? w.effYellowSeg2Step : 0.02;
+    var seg3Base = (w.effYellowSeg3BaseCoeff != null) ? w.effYellowSeg3BaseCoeff : 0.88;
     var seg3Step = (w.effYellowSeg3Step != null) ? w.effYellowSeg3Step : 0.008;
     var maxCoeff = (w.effYellowMaxCoeff != null) ? w.effYellowMaxCoeff : 2.5;
 
-    var coeff = baseCoeff;
-    var prevThreshold = 0;
-    var segments = [
-      { threshold: seg1Threshold, step: seg1Step },
-      { threshold: seg2Threshold, step: seg2Step },
-    ];
+    var coeff;
+    var segIdx;
+    var segLabel;
 
-    for (var si = 0; si < segments.length; si++) {
-      var seg = segments[si];
-      var segWidth = seg.threshold - prevThreshold;
-      if (segWidth <= 0) continue;
-
-      if (effectiveYellow <= seg.threshold) {
-        coeff += (effectiveYellow - prevThreshold) * seg.step;
-        if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
-        if (coeff < 0.1) coeff = 0.1;
-        var segLabel = prevThreshold + '~' + seg.threshold + '有效金';
-        return {
-          yellowCount: effectiveYellow,
-          coefficient: Math.round(coeff * 1000) / 1000,
-          tierLabel: segLabel,
-          segIdx: si,
-        };
-      } else {
-        coeff += segWidth * seg.step;
-        if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
-      }
-      prevThreshold = seg.threshold;
+    if (effectiveYellow <= seg1Threshold) {
+      // 第1段: 0 ~ T1
+      coeff = seg1Base + effectiveYellow * seg1Step;
+      segIdx = 0;
+      segLabel = '0~' + seg1Threshold + '有效金';
+    } else if (effectiveYellow <= seg2Threshold) {
+      // 第2段: T1 ~ T2
+      coeff = seg2Base + effectiveYellow * seg2Step;
+      segIdx = 1;
+      segLabel = seg1Threshold + '~' + seg2Threshold + '有效金';
+    } else {
+      // 第3段: T2+
+      coeff = seg3Base + effectiveYellow * seg3Step;
+      segIdx = 2;
+      segLabel = seg2Threshold + '+有效金';
     }
 
-    // 超过所有段，用第3段步长延伸
-    coeff += (effectiveYellow - seg2Threshold) * seg3Step;
     if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
     if (coeff < 0.1) coeff = 0.1;
 
     return {
       yellowCount: effectiveYellow,
       coefficient: Math.round(coeff * 1000) / 1000,
-      tierLabel: seg2Threshold + '+有效金',
-      segIdx: 2,
+      tierLabel: segLabel,
+      segIdx: segIdx,
     };
   }
 
@@ -1723,8 +1775,8 @@
     const yellowCoeff = yellowInfo.coefficient;
 
     // 账号等级、四星角色数
-    // 优先从"联觉等级"提取，避免误匹配"数据坞等级"等其他含"级"的字段
-    const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
+    // 优先从"联觉等级"提取，避免误匹配"数据坞等级"等其他含"级"的字段；氪金兽卖家格式用"冒险等级"；7881格式用"等级:N"
+    const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/冒险等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/等级[：:]\s*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
     const level = levelMatch ? parseInt(levelMatch[1]) : 1;
     const fourStarMatch = (parsed.rawText || '').match(/(\d+)个四星角色/);
     const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
@@ -1969,6 +2021,12 @@
   function getProductUrl(row) {
     if (row.platform === 'pzds') {
       return PZDS_URLS.detail + '/' + row.productId.replace(/^pz_/, '') + '/6';
+    }
+    if (row.platform === 'kjs') {
+      return KJS_URLS.detail + row.productId.replace(/^kjs_/, '');
+    }
+    if (row.platform === 'qy') {
+      return QY_URLS.detail + row.productId.replace(/^qy_/, '') + '.html';
     }
     return 'https://www.pxb7.com/product/' + row.productId + '/1';
   }
@@ -2498,6 +2556,913 @@
     console.log('[鸣潮监控-盼之] 批量处理完成，表格共' + tableData.length + '行');
   }
 
+  // ============================================================
+  // 氪金兽平台 MWP API 抓取（MD5签名 + token自动续期）
+  // ============================================================
+
+  /**
+   * MD5哈希（纯JS实现，UTF-8编码）
+   * 氪金兽MWP协议签名依赖MD5，Tampermonkey无内置实现
+   */
+  function kjsMd5(str) {
+    function rl(n, c) { return (n << c) | (n >>> (32 - c)); }
+    function cmn(q, a, b, x, s, t) {
+      a = (((a + q) | 0) + ((x + t) | 0)) | 0;
+      return ((rl(a, s) + b) | 0);
+    }
+    function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
+    function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
+    function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+    function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
+    function binl2hex(buf) {
+      const hexTab = '0123456789abcdef';
+      let str = '';
+      for (let i = 0; i < buf.length * 4; i++) {
+        str += hexTab.charAt((buf[i >> 2] >> ((i % 4) * 8 + 4)) & 0xf) + hexTab.charAt((buf[i >> 2] >> ((i % 4) * 8)) & 0xf);
+      }
+      return str;
+    }
+    function utf8Encode(str) {
+      return unescape(encodeURIComponent(str));
+    }
+    function md51(s) {
+      const n = s.length;
+      const state = [1732584193, -271733879, -1732584194, 271733878];
+      let i;
+      for (i = 64; i <= s.length; i += 64) {
+        md5cycle(state, utf8md52blk(s.substring(i - 64, i)));
+      }
+      s = s.substring(i - 64);
+      const tail = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (i = 0; i < s.length; i++) tail[i >> 2] |= s.charCodeAt(i) << ((i % 4) << 3);
+      tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+      if (i > 55) {
+        md5cycle(state, tail);
+        for (i = 0; i < 16; i++) tail[i] = 0;
+      }
+      tail[14] = n * 8;
+      md5cycle(state, tail);
+      return state;
+    }
+    function md5cycle(x, k) {
+      let a = x[0], b = x[1], c = x[2], d = x[3];
+      a = ff(a, b, c, d, k[0], 7, -680876936);
+      d = ff(d, a, b, c, k[1], 12, -389564586);
+      c = ff(c, d, a, b, k[2], 17, 606105819);
+      b = ff(b, c, d, a, k[3], 22, -1044525330);
+      a = ff(a, b, c, d, k[4], 7, -176418897);
+      d = ff(d, a, b, c, k[5], 12, 1200080426);
+      c = ff(c, d, a, b, k[6], 17, -1473231341);
+      b = ff(b, c, d, a, k[7], 22, -45705983);
+      a = ff(a, b, c, d, k[8], 7, 1770035416);
+      d = ff(d, a, b, c, k[9], 12, -1958414417);
+      c = ff(c, d, a, b, k[10], 17, -42063);
+      b = ff(b, c, d, a, k[11], 22, -1990404162);
+      a = ff(a, b, c, d, k[12], 7, 1804603682);
+      d = ff(d, a, b, c, k[13], 12, -40341101);
+      c = ff(c, d, a, b, k[14], 17, -1502002290);
+      b = ff(b, c, d, a, k[15], 22, 1236535329);
+      a = gg(a, b, c, d, k[1], 5, -165796510);
+      d = gg(d, a, b, c, k[6], 9, -1069501632);
+      c = gg(c, d, a, b, k[11], 14, 643717713);
+      b = gg(b, c, d, a, k[0], 20, -373897302);
+      a = gg(a, b, c, d, k[5], 5, -701558691);
+      d = gg(d, a, b, c, k[10], 9, 38016083);
+      c = gg(c, d, a, b, k[15], 14, -660478335);
+      b = gg(b, c, d, a, k[4], 20, -405537848);
+      a = gg(a, b, c, d, k[9], 5, 568446438);
+      d = gg(d, a, b, c, k[14], 9, -1019803690);
+      c = gg(c, d, a, b, k[3], 14, -187363961);
+      b = gg(b, c, d, a, k[8], 20, 1163531501);
+      a = gg(a, b, c, d, k[13], 5, -1444681467);
+      d = gg(d, a, b, c, k[2], 9, -51403784);
+      c = gg(c, d, a, b, k[7], 14, 1735328473);
+      b = gg(b, c, d, a, k[12], 20, -1926607734);
+      a = hh(a, b, c, d, k[5], 4, -378558);
+      d = hh(d, a, b, c, k[8], 11, -2022574463);
+      c = hh(c, d, a, b, k[11], 16, 1839030562);
+      b = hh(b, c, d, a, k[14], 23, -35309556);
+      a = hh(a, b, c, d, k[1], 4, -1530992060);
+      d = hh(d, a, b, c, k[4], 11, 1272893353);
+      c = hh(c, d, a, b, k[7], 16, -155497632);
+      b = hh(b, c, d, a, k[10], 23, -1094730640);
+      a = hh(a, b, c, d, k[13], 4, 681279174);
+      d = hh(d, a, b, c, k[0], 11, -358537222);
+      c = hh(c, d, a, b, k[3], 16, -722521979);
+      b = hh(b, c, d, a, k[6], 23, 76029189);
+      a = hh(a, b, c, d, k[9], 4, -640364487);
+      d = hh(d, a, b, c, k[12], 11, -421815835);
+      c = hh(c, d, a, b, k[15], 16, 530742520);
+      b = hh(b, c, d, a, k[2], 23, -995338651);
+      a = ii(a, b, c, d, k[0], 6, -198630844);
+      d = ii(d, a, b, c, k[7], 10, 1126891415);
+      c = ii(c, d, a, b, k[14], 15, -1416354905);
+      b = ii(b, c, d, a, k[5], 21, -57434055);
+      a = ii(a, b, c, d, k[12], 6, 1700485571);
+      d = ii(d, a, b, c, k[3], 10, -1894986606);
+      c = ii(c, d, a, b, k[10], 15, -1051523);
+      b = ii(b, c, d, a, k[1], 21, -2054922799);
+      a = ii(a, b, c, d, k[8], 6, 1873313359);
+      d = ii(d, a, b, c, k[15], 10, -30611744);
+      c = ii(c, d, a, b, k[6], 15, -1560198380);
+      b = ii(b, c, d, a, k[13], 21, 1309151649);
+      a = ii(a, b, c, d, k[4], 6, -145523070);
+      d = ii(d, a, b, c, k[11], 10, -1120210379);
+      c = ii(c, d, a, b, k[2], 15, 718787259);
+      b = ii(b, c, d, a, k[9], 21, -343485551);
+      x[0] = (x[0] + a) | 0;
+      x[1] = (x[1] + b) | 0;
+      x[2] = (x[2] + c) | 0;
+      x[3] = (x[3] + d) | 0;
+    }
+    function utf8md52blk(s) {
+      const md5blks = [];
+      for (let i = 0; i < 64; i++) {
+        md5blks[i >> 2] |= s.charCodeAt(i) << ((i % 4) << 3);
+      }
+      return md5blks;
+    }
+    return binl2hex(md51(utf8Encode(str)));
+  }
+
+  // 氪金兽token状态（内存缓存，页面加载后首次请求自动续期）
+  const kjsTokenState = { token: '', encToken: '' };
+
+  /**
+   * 构建MWP签名
+   * 规则（逆向自氪金兽前端 kjs-app.js）：
+   * 1. 取所有mw-*参数（排除mw-sign/mw-did/mw-sid/mw-pv），按key排序
+   * 2. 依次拼接参数值 + API方法名 + 版本号 + md5(data JSON字符串)
+   * 3. 有token时再拼接token，整体md5
+   */
+  function kjsBuildSign(params, dataStr, token) {
+    const keys = Object.keys(params)
+      .filter(k => k.indexOf('mw-') === 0 && ['mw-sign', 'mw-did', 'mw-sid', 'mw-pv'].indexOf(k) === -1)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const parts = keys.map(k => params[k]);
+    parts.push('mwp.kjs_search.product.search');
+    parts.push('1.0');
+    parts.push(kjsMd5(dataStr));
+    if (token) parts.push(token);
+    return kjsMd5(parts.join('&'));
+  }
+
+  /**
+   * 调用氪金兽商品搜索API（按最新发布排序）
+   * 首次请求无token会返回FAIL_SYS_TOKEN_NEED_RENEW，携带新token自动重试
+   * @param {number} page - 页码（从1开始，每页最多60条）
+   * @returns {Promise<Array>} 商品数组
+   */
+  function kjsSearch(page) {
+    return new Promise((resolve) => {
+      const dataStr = JSON.stringify({
+        gameId: '7265',
+        cateId: 7996,
+        type: 'goods',
+        originOrder: 'upper_at_desc',   // 最新发布优先
+        priceStart: 300,                 // 最低价格300元，过滤低价账号
+        size: 60,
+        page: page,
+      });
+      attempt(0);
+      function attempt(n) {
+        const params = {
+          'mw-appkey': '100222',
+          'mw-pv': 'H5',
+          'mw-k7': 'h5',
+          'mw-smid': '',
+          'mw-sid': '',
+          'mw-t': String(Date.now()),
+          'mw-h5-token': kjsTokenState.token,
+          'mw-h5-token-enc': kjsTokenState.encToken,
+          data: dataStr,
+        };
+        params['mw-sign'] = kjsBuildSign(params, dataStr, kjsTokenState.token);
+        // 手动构建URL，避免 URLSearchParams 可能的编码差异
+        let url = KJS_URLS.api + '?';
+        for (const k in params) {
+          url += (url.endsWith('?') ? '' : '&') + k + '=' + encodeURIComponent(params[k]);
+        }
+        if (n === 0) console.log('[鸣潮监控-氪金兽] 签名参数:', { token: kjsTokenState.token ? kjsTokenState.token.slice(0, 12) + '...' : '(空)', sign: params['mw-sign'] });
+        GM_xmlhttpRequest({
+          method: 'GET',
+          url: url,
+          anonymous: true,
+          headers: {
+            'Accept': 'application/json',
+            'Referer': 'https://www.kejinshou.com/goods/7265',
+            'Origin': 'https://www.kejinshou.com',
+          },
+          timeout: 15000,
+          onload(res) {
+            try {
+              const json = JSON.parse(res.responseText);
+              if (json.ret === 'FAIL_SYS_TOKEN_NEED_RENEW' && n < 2) {
+                kjsTokenState.token = json.token || '';
+                kjsTokenState.encToken = json.encToken || '';
+                attempt(n + 1);
+                return;
+              }
+              if (json.ret === 'FAIL_SYS_SIGN_ERROR') {
+                console.warn('[鸣潮监控-氪金兽] 签名错误 | token=' + (kjsTokenState.token || '(空)') + ' sign=' + (params['mw-sign'] || '') + ' attempt=' + n);
+                kjsTokenState.token = '';
+                kjsTokenState.encToken = '';
+              }
+              if (json.ret !== 'SUCCESS' || !json.data || !json.data.data) {
+                console.warn('[鸣潮监控-氪金兽] API返回异常: ' + json.ret);
+                resolve([]);
+                return;
+              }
+              resolve(parseKJSList(json.data.data));
+            } catch (e) {
+              console.error('[鸣潮监控-氪金兽] 响应解析失败:', e);
+              resolve([]);
+            }
+          },
+          onerror(err) {
+            console.error('[鸣潮监控-氪金兽] 请求失败:', err);
+            resolve([]);
+          },
+          ontimeout() {
+            console.error('[鸣潮监控-氪金兽] 请求超时');
+            resolve([]);
+          },
+        });
+      }
+    });
+  }
+
+  /**
+   * 解析氪金兽API商品列表
+   * API返回的subTitle含完整角色/武器列表，无需再抓详情页
+   * @param {object} data - API响应data.data
+   * @returns {Array} 商品数组 [{productId, showTitle, price, platform, onStandTime}]
+   */
+  function parseKJSList(data) {
+    const list = Array.isArray(data.list) ? data.list : [];
+    const products = [];
+    for (const it of list) {
+      if (!it || !it.id) continue;
+      const price = parseFloat(it.price);
+      if (!(price > 0)) continue;
+      let desc = kjsNormalizeText(String(it.subTitle || '').trim());
+      var roleLevel = it.roleLevel || it.level || it.gameLevel || it.accountLevel;
+      if (roleLevel && !/联觉等级|冒险等级/.test(desc)) {
+        desc = '联觉等级:' + roleLevel + ' ' + desc;
+      }
+      if (desc.length < 10) continue;
+      let onStandTime = 0;
+      if (it.polishAt) {
+        const parsed = new Date(String(it.polishAt).replace(/-/g, '/'));
+        if (!isNaN(parsed.getTime())) {
+          // polishAt只有日期无时间，用当前时分秒补充
+          const now = new Date();
+          parsed.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+          onStandTime = parsed.getTime();
+        }
+      }
+      products.push({
+        productId: 'kjs_' + it.id,
+        productUniqueNo: String(it.id),
+        showTitle: desc,
+        price: price,
+        discount: 0,
+        platform: 'kjs',
+        listTime: onStandTime || Date.now(),
+        onStandTime: onStandTime,
+        onStandTimeStr: (it.polishTimeDesc ? it.polishTimeDesc + ' ' : '') + (it.polishAt || ''),
+      });
+    }
+    return products;
+  }
+
+  /**
+   * 氪金兽描述文本归一化（转成本脚本可解析的格式）
+   * 结构化格式: "联觉等级:80 总黄数:71 ... 五星角色数:18 6鸣露西，6鸣爱弥斯... 五星武器数:14 5鸣千古洑流..."
+   * 卖家格式:   "【鸣潮】冒险等级：80，男主，五星数量：38，五星角色:维里奈 * 4命,...__五星武器:赫奕流明,..."
+   */
+  function kjsNormalizeText(text) {
+    // Format C: 资源值无冒号 → 补冒号（"星声15722" → "星声:15722"）
+    text = text.replace(/(月相|星声|余波珊瑚|浮金波纹|铸潮波纹|唤声涡纹)(\d+)/g, '$1:$2');
+
+    // Format C: 清理无用段落（必须在合并分段之前执行，否则【】边界丢失后皮肤正则会吞掉角色/武器列表）
+    text = text.replace(/【绑定情况】[：:][\s\S]*?(?=【|$)/g, '');
+    text = text.replace(/皮肤[：:][^【]*/g, '');
+
+    // Format C: 合并命座分段到角色列表
+    var constSections = ['满命', '六命', '五命', '四命', '三命', '二命', '一命', '零命'];
+    var allCharsWithConst = [];
+    for (var ci = 0; ci < constSections.length; ci++) {
+      var csPat = '【' + constSections[ci] + '角色】[：:]\\s*([^【]*)';
+      var csMatch = text.match(new RegExp(csPat));
+      if (csMatch) {
+        var csItems = csMatch[1].split(/[,，、\s]+/).filter(Boolean);
+        for (var cj = 0; cj < csItems.length; cj++) {
+          allCharsWithConst.push(csItems[cj]);
+        }
+      }
+    }
+    if (allCharsWithConst.length > 0) {
+      text = text.replace(/【按角色】[：:][\s\S]*?(?=【|$)/g, '五星角色:' + allCharsWithConst.join(',') + ' ');
+      text = text.replace(/【[满六五四三二一零]命角色】[：:][\s\S]*?(?=【|$)/g, '');
+    }
+
+    // Format C: 合并精炼分段到武器列表
+    var refineSections = ['精五', '精四', '精三', '精二', '精一', '精0'];
+    var allWeaponsWithRefine = [];
+    for (var ri = 0; ri < refineSections.length; ri++) {
+      var rsPat = '【' + refineSections[ri] + '武器】[：:]\\s*([^【]*)';
+      var rsMatch = text.match(new RegExp(rsPat));
+      if (rsMatch) {
+        var rsItems = rsMatch[1].split(/[,，、\s]+/).filter(Boolean);
+        for (var rj = 0; rj < rsItems.length; rj++) {
+          allWeaponsWithRefine.push(rsItems[rj]);
+        }
+      }
+    }
+    if (allWeaponsWithRefine.length > 0) {
+      text = text.replace(/【按武器】[：:][\s\S]*?(?=【|$)/g, '五星武器:' + allWeaponsWithRefine.join(',') + ' ');
+      text = text.replace(/【精[五四三二一0]武器】[：:][\s\S]*?(?=【|$)/g, '');
+    }
+
+    // 通用转换（Format A/B/C 共用）
+    text = text
+      .replace(/[·・]/g, '')
+      .replace(/(\d+)鸣/g, '$1命')
+      .replace(/(星声|月相|余波珊瑚|浮金波纹|铸潮波纹|唤声涡纹)数量/g, '$1')
+      .replace(/五星数量[：:]\s*(\d+)/g, '总黄数:$1')
+      .replace(/__/g, '，')
+      .replace(/卖家说[\s\S]*$/, '')
+      .replace(/(五星角色|五星武器)数\s*[:：]\s*(\d+)\s*([^五]*?)(?=五星|$)/g, function(m, kw, cnt, rest) {
+        const items = rest.split(/[,，、\s]+/).filter(Boolean);
+        return kw + ':' + items.slice(0, parseInt(cnt, 10)).join('，');
+      })
+      .replace(/四星角色数?\s*[:：]\s*(?:\d+\s*)?[\s\S]*?(?=五星角色|五星武器|联觉等级|冒险等级|$)/g, '')
+      .replace(/([^,，、\s;；*]+)\s*\*\s*(\d+)命/g, '$1($2命)')
+      .replace(/([^,，、\s;；*]+)\s*\*\s*(\d+)精/g, '精$2$1');
+
+    return text;
+  }
+
+  /**
+   * 处理氪金兽平台商品（类似processPZProduct，subTitle已完整无需详情页）
+   * 价格单位为元，商品ID为数字（kjs_前缀标识平台）
+   * @param {object} product - parseKJSList返回的商品对象
+   */
+  function processKJSProduct(product) {
+    const productId = product.productId;
+    if (!productId) return;
+
+    const showTitle = product.showTitle || '';
+    const price = product.price || 0;
+
+    if (/自主截图/.test(showTitle)) {
+      console.log('[鸣潮监控-氪金兽] 跳过自主截图商品: ' + product.productUniqueNo);
+      return;
+    }
+
+    // 过滤旧商品：跳过超过48小时的上架商品
+    if (product.onStandTime > 0) {
+      const ageHours = (Date.now() - product.onStandTime) / 3600000;
+      if (ageHours > 48) {
+        console.log('[鸣潮监控-氪金兽] 跳过旧商品: ' + product.productUniqueNo + ' 上架于' + product.onStandTimeStr + ' (' + Math.round(ageHours) + '小时前)');
+        return;
+      }
+    }
+
+    // 去重：已见商品检查价格变化
+    if (seenIds.includes(productId)) {
+      const existRow = tableData.find(r => r.productId === productId);
+      if (!existRow) {
+        const idx = seenIds.indexOf(productId);
+        if (idx > -1) seenIds.splice(idx, 1);
+      } else {
+        if (price < existRow.price) {
+          if (!existRow.priceHistory) existRow.priceHistory = [];
+          existRow.priceHistory.push({ price: existRow.price, time: Date.now() });
+          const oldPrice = existRow.price;
+          existRow.price = price;
+          if (existRow.value && existRow.value > 0) {
+            existRow.ratio = ((existRow.value - price) / price) * 100;
+          }
+          existRow.priceDrop = (existRow.priceDrop || 0) + (oldPrice - price);
+          existRow.status = '降价';
+          if (!batchMode) {
+            sortTableData();
+            saveTableData();
+            refreshTableDisplay();
+          }
+          console.log('[鸣潮监控-氪金兽] 降价: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+              (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+              (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
+            const { title, body, mdBody } = buildNotifyContent('降价', existRow, oldPrice, price);
+            notify(productId + '_drop', title, body, mdBody);
+            notifiedIds.push(productId + '_drop');
+            if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          }
+        }
+        return;
+      }
+    }
+    seenIds.push(productId);
+    if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    // 解析和估值
+    const parsed = parseAccountInfo(showTitle);
+    const valuation = calculateValue(parsed, price);
+
+    console.log('[鸣潮监控-氪金兽] 解析结果: ' + product.productUniqueNo +
+      ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
+      ' | 星声' + parsed.starSound + ' 黄' + parsed.yellowCount +
+      ' | Lv.' + valuation.level +
+      ' | 估值¥' + valuation.totalValue.toFixed(0) +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.levelFound && valuation.level < 70 ? ' [等级低于70，不收录]' : ''));
+
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) {
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
+    // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
+    if (valuation.levelFound && valuation.level < 70) {
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
+    // 内容指纹去重（跨平台+同平台重复上架）
+    const fingerprint = generateFingerprint(parsed);
+    const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
+    if (dupRow) {
+      console.log('[鸣潮监控-氪金兽] 重复(指纹匹配): ' + product.productUniqueNo + ' ¥' + price + ' → 已有:' + dupRow.productId + ' ¥' + dupRow.price);
+      if (price < dupRow.price) {
+        if (!dupRow.priceHistory) dupRow.priceHistory = [];
+        dupRow.priceHistory.push({ price: dupRow.price, time: Date.now() });
+        const oldPrice = dupRow.price;
+        dupRow.price = price;
+        dupRow.productId = productId;
+        if (product.productUniqueNo) dupRow.productUniqueNo = product.productUniqueNo;
+        dupRow.platform = 'kjs';
+        dupRow.ratio = ((dupRow.value - price) / price) * 100;
+        dupRow.priceDrop = (dupRow.priceDrop || 0) + (oldPrice - price);
+        dupRow.status = '降价';
+        if (!batchMode) {
+          sortTableData();
+          saveTableData();
+          refreshTableDisplay();
+        }
+        console.log('[鸣潮监控-氪金兽] 指纹重复更新低价: ¥' + oldPrice + ' → ¥' + price);
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+            (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+            (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
+          const { title, body, mdBody } = buildNotifyContent('降价', dupRow, oldPrice, price);
+          notify(productId + '_drop', title, body, mdBody);
+          notifiedIds.push(productId + '_drop');
+          if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+        }
+      }
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
+    // 添加到表格
+    addTableRow({
+      productId,
+      productUniqueNo: product.productUniqueNo || '',
+      fingerprint,
+      showTitle: showTitle,
+      price,
+      value: valuation.totalValue,
+      ratio: valuation.ratio,
+      status: '初估',
+      platform: 'kjs',
+      effectiveYellow: valuation.effectiveYellow || 0,
+      parsed: {
+        yellowCount: parsed.yellowCount,
+        pulls: Math.round(parsed.pulls * 10) / 10,
+        motoCount: parsed.motoCount,
+        characters: parsed.characters.map(c => ({ name: c.name, const: c.const, tier: c.tier, isHot: c.isHot, price: c.price })),
+        weapons: parsed.weapons.map(w => ({ name: w.name, refine: w.refine })),
+      },
+      valuation: valuation,
+      listTime: product.listTime || Date.now(),
+      firstSeen: Date.now(),
+    });
+
+    console.log('[鸣潮监控-氪金兽] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
+
+    // 氪金兽商品跳过详情队列（列表数据已完整），直接推送通知
+    tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, product.productUniqueNo || '', 'kjs');
+  }
+
+  /**
+   * 处理氪金兽商品列表（批量模式）
+   */
+  async function handleKJSListResponse(list) {
+    if (!Array.isArray(list)) return;
+    console.log('[鸣潮监控-氪金兽] handleKJSListResponse: 收到' + list.length + '条商品，当前表格' + tableData.length + '行');
+    list.forEach(function(p) {
+      console.log('  - ' + (p.productUniqueNo || '') + ' ¥' + (p.price || 0).toFixed(0) + ' [' + (p.onStandTimeStr || '') + '] ' + (p.showTitle || '').substring(0, 60));
+    });
+
+    batchMode = true;
+    try {
+      for (const product of list) {
+        try {
+          processKJSProduct(product);
+        } catch (e) {
+          console.error('[鸣潮监控-氪金兽] 处理商品失败: ' + (product.productUniqueNo || product.productId), e);
+        }
+      }
+    } finally {
+      batchMode = false;
+    }
+    trimTableData();
+    sortTableData();
+    saveTableData();
+    saveStorage(STORAGE_KEYS.seen, seenIds);
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[鸣潮监控-氪金兽] 批量处理完成，表格共' + tableData.length + '行');
+  }
+
+  // ============================================================
+  // 7881平台监控（API抓取，MD5签名认证）
+  // ============================================================
+
+  /**
+   * 生成7881 API签名头
+   * 算法：pubKey = MD5(secretKey + timestamp)，lbsign = MD5(pubKey + JSON.stringify(paramObj))
+   * @param {object} paramObj - 请求参数对象
+   * @returns {{lbtimestamp: number, lbsign: string}} 签名头
+   */
+  function qyInitHeader(paramObj) {
+    const secretKey = 'lb88ebb30d3ecb40d2bd6c7393a835c2c5';
+    const timestamp = Date.now();
+    const pubKey = kjsMd5(secretKey + timestamp);
+    const lbsign = kjsMd5(pubKey + JSON.stringify(paramObj));
+    return { lbtimestamp: timestamp, lbsign: lbsign };
+  }
+
+  /**
+   * 通过7881内部API抓取商品列表（按最新发布排序）
+   * 7881商品通过AJAX动态加载，SSR页面不含商品数据，需直接调用API
+   * @param {number} page - 页码（从1开始）
+   * @returns {Promise<Array>} 商品数组
+   */
+  function qySearch(page) {
+    return new Promise((resolve, reject) => {
+      const paramObj = {
+        marketRequestSource: 'search',
+        sellerType: 'C',
+        gameId: 'A5752',
+        gtid: '100003',
+        goodsSortType: '6',
+        pageNum: page,
+        pageSize: 30,
+        extendAttrList: [],
+      };
+      const headerObj = qyInitHeader(paramObj);
+      const url = QY_URLS.api;
+      console.log('[鸣潮监控-7881] API请求: ' + url + ' (page=' + page + ')');
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url: url,
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/json',
+          'lb-timestamp': String(headerObj.lbtimestamp),
+          'lb-sign': headerObj.lbsign,
+          'Origin': 'https://search.7881.com',
+          'Referer': 'https://search.7881.com/A5752-100003-0-0-0.html',
+        },
+        data: JSON.stringify(paramObj),
+        onload: function(response) {
+          if (response.status !== 200) {
+            console.warn('[鸣潮监控-7881] HTTP ' + response.status);
+            resolve([]);
+            return;
+          }
+          try {
+            const json = JSON.parse(response.responseText);
+            if (json.code !== 0 || !json.body || !json.body.results) {
+              console.warn('[鸣潮监控-7881] API返回异常: code=' + json.code + ' msg=' + (json.msg || ''));
+              resolve([]);
+              return;
+            }
+            const products = extractQYProducts(json.body.results);
+            resolve(products);
+          } catch (e) {
+            console.error('[鸣潮监控-7881] JSON解析失败:', e);
+            resolve([]);
+          }
+        },
+        onerror: function(err) {
+          console.error('[鸣潮监控-7881] 请求失败:', err);
+          resolve([]);
+        },
+        ontimeout: function() {
+          console.error('[鸣潮监控-7881] 请求超时');
+          resolve([]);
+        }
+      });
+    });
+  }
+
+  /**
+   * 抓取7881商品详情页，提取五星武器和资源数据
+   * 7881列表标题可能缺少武器和资源数据，需从详情页meta description中提取
+   * 格式：五星武器：武器名(精N武器名),... 星声数量：N 浮金波纹数量：N ...
+   * @param {string} goodsId - 商品ID
+   * @returns {Promise<{weapons: string, resources: string}>} weapons如"五星武器:精5血誓盟约", resources如"星声数量:630 浮金波纹数量:5"
+   */
+  function fetchQYDetail(goodsId) {
+    return new Promise((resolve) => {
+      const url = QY_URLS.detail + goodsId + '.html';
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        timeout: 10000,
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml',
+          'User-Agent': 'Mozilla/5.0',
+        },
+        onload: function(response) {
+          if (response.status !== 200) { resolve({ weapons: '', resources: '' }); return; }
+          try {
+            const html = response.responseText;
+            const metaMatch = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+            if (!metaMatch) { resolve({ weapons: '', resources: '' }); return; }
+            const desc = metaMatch[1];
+            let weapons = '';
+            let resources = '';
+
+            // 提取五星武器（精N武器名格式）
+            const weaponSectionMatch = desc.match(/五星武器[：:]([^，]+)/);
+            if (weaponSectionMatch) {
+              const weaponStr = weaponSectionMatch[1];
+              const refineRegex = /精(\d+)([^()（）,，\s]+)/g;
+              const weaponList = [];
+              let m;
+              while ((m = refineRegex.exec(weaponStr)) !== null) {
+                weaponList.push('精' + m[1] + m[2]);
+              }
+              if (weaponList.length > 0) {
+                weapons = '五星武器:' + weaponList.join(',');
+              }
+            }
+
+            // 提取资源数据（星声/浮金波纹/铸潮波纹/唤声涡纹）
+            const resourceTypes = ['星声', '浮金波纹', '铸潮波纹', '唤声涡纹'];
+            const resourceParts = [];
+            for (const res of resourceTypes) {
+              const resMatch = desc.match(new RegExp(res + '数量[：:]\\s*(\\d+)', 'i'));
+              if (resMatch) {
+                resourceParts.push(res + '数量:' + resMatch[1]);
+              }
+            }
+            resources = resourceParts.join(' ');
+
+            resolve({ weapons, resources });
+          } catch (e) {
+            resolve({ weapons: '', resources: '' });
+          }
+        },
+        onerror: function() { resolve({ weapons: '', resources: '' }); },
+        ontimeout: function() { resolve({ weapons: '', resources: '' }); }
+      });
+    });
+  }
+
+  /**
+   * 从7881 API响应中提取商品列表
+   * API返回JSON，results数组中每个商品含goodsId、title、price等字段
+   * 注意：7881标题只含角色信息，武器信息需后续从详情页获取
+   * @param {Array} results - API返回的body.results数组
+   * @returns {Array} 商品数组
+   */
+  function extractQYProducts(results) {
+    const products = [];
+    if (!results || !Array.isArray(results)) {
+      console.log('[鸣潮监控-7881] 解析到0条商品');
+      return products;
+    }
+    for (const item of results) {
+      const goodsId = item.goodsId;
+      const price = parseFloat(item.price) || 0;
+      const title = item.title || '';
+      if (!goodsId || price <= 0 || !title) continue;
+
+      const serverStr = item.groupName ? item.groupName + (item.serverName ? '-' + item.serverName : '') : '';
+
+      products.push({
+        productId: 'qy_' + goodsId,
+        productUniqueNo: goodsId,
+        price: price,
+        showTitle: title,
+        onStandTimeStr: '',
+        server: serverStr,
+        platform: 'qy',
+      });
+    }
+    console.log('[鸣潮监控-7881] 解析到' + products.length + '条商品');
+    return products;
+  }
+
+  function processQYProduct(product) {
+    const productId = product.productId;
+    if (!productId) return;
+    const showTitle = product.showTitle || '';
+    const price = product.price || 0;
+    if (seenIds.includes(productId)) {
+      const existRow = tableData.find(r => r.productId === productId);
+      if (!existRow) {
+        const idx = seenIds.indexOf(productId);
+        if (idx > -1) seenIds.splice(idx, 1);
+      } else {
+        if (price < existRow.price) {
+          if (!existRow.priceHistory) existRow.priceHistory = [];
+          existRow.priceHistory.push({ price: existRow.price, time: Date.now() });
+          const oldPrice = existRow.price;
+          existRow.price = price;
+          if (existRow.value && existRow.value > 0) {
+            existRow.ratio = ((existRow.value - price) / price) * 100;
+          }
+          existRow.priceDrop = (existRow.priceDrop || 0) + (oldPrice - price);
+          existRow.status = '降价';
+          if (!batchMode) {
+            sortTableData();
+            saveTableData();
+            refreshTableDisplay();
+          }
+          console.log('[鸣潮监控-7881] 降价: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+              (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+              (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
+            const { title, body, mdBody } = buildNotifyContent('降价', existRow, oldPrice, price);
+            notify(productId + '_drop', title, body, mdBody);
+            notifiedIds.push(productId + '_drop');
+            if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          }
+        }
+        return;
+      }
+    }
+    seenIds.push(productId);
+    if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+    const parsed = parseAccountInfo(showTitle);
+    const valuation = calculateValue(parsed, price);
+    console.log('[鸣潮监控-7881] 解析结果: ' + product.productUniqueNo +
+      ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
+      ' | 星声' + parsed.starSound + ' 黄' + parsed.yellowCount +
+      ' | Lv.' + valuation.level +
+      ' | 估值¥' + valuation.totalValue.toFixed(0) +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.levelFound && valuation.level < 70 ? ' [等级低于70，不收录]' : ''));
+    if (valuation.totalValue < 300) {
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+    if (valuation.levelFound && valuation.level < 70) {
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+    const fingerprint = generateFingerprint(parsed);
+    const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
+    if (dupRow) {
+      console.log('[鸣潮监控-7881] 重复(指纹匹配): ' + product.productUniqueNo + ' ¥' + price + ' → 已有:' + dupRow.productId + ' ¥' + dupRow.price);
+      if (price < dupRow.price) {
+        if (!dupRow.priceHistory) dupRow.priceHistory = [];
+        dupRow.priceHistory.push({ price: dupRow.price, time: Date.now() });
+        const oldPrice = dupRow.price;
+        dupRow.price = price;
+        dupRow.productId = productId;
+        if (product.productUniqueNo) dupRow.productUniqueNo = product.productUniqueNo;
+        dupRow.platform = 'qy';
+        dupRow.ratio = ((dupRow.value - price) / price) * 100;
+        dupRow.priceDrop = (dupRow.priceDrop || 0) + (oldPrice - price);
+        dupRow.status = '降价';
+        if (!batchMode) {
+          sortTableData();
+          saveTableData();
+          refreshTableDisplay();
+        }
+        console.log('[鸣潮监控-7881] 指纹重复更新低价: ¥' + oldPrice + ' → ¥' + price);
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+            (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+            (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
+          const { title, body, mdBody } = buildNotifyContent('降价', dupRow, oldPrice, price);
+          notify(productId + '_drop', title, body, mdBody);
+          notifiedIds.push(productId + '_drop');
+          if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+        }
+      }
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+    addTableRow({
+      productId,
+      productUniqueNo: product.productUniqueNo || '',
+      fingerprint,
+      showTitle: showTitle,
+      price,
+      value: valuation.totalValue,
+      ratio: valuation.ratio,
+      status: '初估',
+      platform: 'qy',
+      effectiveYellow: valuation.effectiveYellow || 0,
+      parsed: {
+        yellowCount: parsed.yellowCount,
+        pulls: Math.round(parsed.pulls * 10) / 10,
+        motoCount: parsed.motoCount,
+        characters: parsed.characters.map(c => ({ name: c.name, const: c.const, tier: c.tier, isHot: c.isHot, price: c.price })),
+        weapons: parsed.weapons.map(w => ({ name: w.name, refine: w.refine })),
+      },
+      valuation: valuation,
+      listTime: Date.now(),
+      firstSeen: Date.now(),
+    });
+    console.log('[鸣潮监控-7881] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
+    tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, product.productUniqueNo || '', 'qy');
+  }
+
+  async function handleQYListResponse(list) {
+    if (!Array.isArray(list)) return;
+    console.log('[鸣潮监控-7881] handleQYListResponse: 收到' + list.length + '条商品，当前表格' + tableData.length + '行');
+    list.forEach(function(p) {
+      console.log('  - ' + (p.productUniqueNo || '') + ' ¥' + (p.price || 0).toFixed(0) + ' [' + (p.onStandTimeStr || '') + '] ' + (p.showTitle || '').substring(0, 60));
+    });
+
+    // 为新商品批量获取详情数据（武器+资源，7881标题可能缺少这些信息）
+    const newProducts = list.filter(p => !seenIds.includes(p.productId));
+    if (newProducts.length > 0) {
+      console.log('[鸣潮监控-7881] 为' + newProducts.length + '个新商品获取详情数据');
+      const concurrency = 5;
+      for (let i = 0; i < newProducts.length; i += concurrency) {
+        const batch = newProducts.slice(i, i + concurrency);
+        await Promise.all(batch.map(async p => {
+          const detail = await fetchQYDetail(p.productUniqueNo);
+          const parts = [];
+
+          // 武器处理：标题有摘要格式（五星武器:N个）时替换为详细数据，无武器时追加
+          if (detail.weapons) {
+            const weaponSummary = p.showTitle.match(/五星武器[：:]\s*\d+\s*个?/);
+            const hasDetailedWeapons = /五星武器[：:][^]*精\d/.test(p.showTitle);
+            if (weaponSummary && !hasDetailedWeapons) {
+              // 移除摘要格式"五星武器:N个"，替换为详细武器列表
+              p.showTitle = p.showTitle.replace(/五星武器[：:]\s*\d+\s*个?/g, '').replace(/\s+/g, ' ').trim();
+              parts.push(detail.weapons);
+            } else if (!p.showTitle.includes('五星武器')) {
+              // 标题完全无武器段落，追加详细数据
+              parts.push(detail.weapons);
+            }
+          }
+
+          // 资源数据：始终追加（7881标题经常缺少星声/波纹等资源数据）
+          if (detail.resources) {
+            parts.push(detail.resources);
+          }
+
+          if (parts.length > 0) {
+            const extraStr = parts.join(' ');
+            if (p.showTitle.endsWith('】')) {
+              p.showTitle = p.showTitle.slice(0, -1) + ' ' + extraStr + '】';
+            } else {
+              p.showTitle = p.showTitle + ' ' + extraStr;
+            }
+            console.log('[鸣潮监控-7881] 详情补充: ' + p.productUniqueNo + ' → ' + extraStr);
+          }
+        }));
+      }
+    }
+
+    batchMode = true;
+    try {
+      for (const product of list) {
+        try {
+          processQYProduct(product);
+        } catch (e) {
+          console.error('[鸣潮监控-7881] 处理商品失败: ' + (product.productUniqueNo || product.productId), e);
+        }
+      }
+    } finally {
+      batchMode = false;
+    }
+    trimTableData();
+    sortTableData();
+    saveTableData();
+    saveStorage(STORAGE_KEYS.seen, seenIds);
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[鸣潮监控-7881] 批量处理完成，表格共' + tableData.length + '行');
+  }
+
   /**
    * 调用详情API
    */
@@ -2906,7 +3871,7 @@
       valuation: valuation,
       showTitle: showTitle,
       productUniqueNo: productUniqueNo,
-      platform: platform === '秒杀' ? '' : (productId.indexOf('pz_') === 0 ? 'pzds' : ''),
+      platform: platform === '秒杀' ? '' : (productId.indexOf('pz_') === 0 ? 'pzds' : (productId.indexOf('kjs_') === 0 ? 'kjs' : (productId.indexOf('qy_') === 0 ? 'qy' : ''))),
     };
     const { title, body, mdBody } = buildNotifyContent(prefix, notifyRow, null, price, matchedCharNames || undefined);
     notify(productId, title, body, mdBody);
@@ -2980,8 +3945,8 @@
     detailCallsThisMinute++;
     updateBottomBar();
 
-    // 盼之平台商品跳过详情API（使用列表页SSR数据的初估结果）
-    if (item.productId && item.productId.indexOf('pz_') === 0) {
+    // 盼之/氪金兽平台商品跳过详情API（使用列表页数据的初估结果）
+    if (item.productId && (item.productId.indexOf('pz_') === 0 || item.productId.indexOf('kjs_') === 0 || item.productId.indexOf('qy_') === 0)) {
       processNextDetail();
       return;
     }
@@ -3099,7 +4064,7 @@
               valuation: valuation,
               showTitle: showTitle,
               productUniqueNo: productUniqueNo,
-              platform: item.productId.indexOf('pz_') === 0 ? 'pzds' : '',
+              platform: item.productId.indexOf('pz_') === 0 ? 'pzds' : (item.productId.indexOf('kjs_') === 0 ? 'kjs' : (item.productId.indexOf('qy_') === 0 ? 'qy' : '')),
             };
             const { title: notifyTitle, body: notifyBody, mdBody: notifyMd } = buildNotifyContent(prefix, notifyRow, null, notifyPrice, matchedCharNames || undefined);
             notify(item.productId, notifyTitle, notifyBody, notifyMd);
@@ -3888,6 +4853,18 @@
         '<input type="checkbox" id="mwPzdsEnabled" ' + (pzdsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控盼之平台（pzds.com鸣潮商品池）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过SSR HTML抓取盼之平台商品列表，无需API token，扫描前2页</div>' +
+        // 氪金兽平台监控
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwKjsEnabled" ' + (kjsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控氪金兽平台（kejinshou.com鸣潮成品号）</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过MWP API按最新发布顺序获取氪金兽商品列表（含完整角色武器数据），扫描第1页</div>' +
+        // 7881平台监控
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwQyEnabled" ' + (qyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控7881平台（search.7881.com鸣潮成品号）</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取7881商品列表（MD5签名认证），按最新发布排序</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -4004,8 +4981,18 @@
           '</div>' +
         '</div>' +
         // 测试按钮
-        '<div style="margin-bottom:16px;text-align:center;">' +
+        '<div style="margin-bottom:12px;text-align:center;">' +
           '<button id="mwTestPush" style="padding:8px 24px;border:1px solid #0f3460;border-radius:6px;background:#16213e;color:#10b981;font-size:13px;cursor:pointer;">发送测试通知</button>' +
+        '</div>' +
+        // 云端同步
+        '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;border:1px solid #1e3a5f;">' +
+          '<div style="font-size:12px;font-weight:600;color:#6a9fff;margin-bottom:4px;">推送配置云端同步</div>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">同步PushPlus订阅者和Server酱Key到服务器，换电脑不丢失</div>' +
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+          '<input type="password" id="mwSyncPassword" placeholder="管理后台密码" value="' + (pushConfig.syncPassword || '') + '" style="flex:1;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
+          '<button id="mwSyncUpload" style="padding:5px 10px;border:none;border-radius:4px;background:#3b82f6;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">上传</button>' +
+          '<button id="mwSyncDownload" style="padding:5px 10px;border:none;border-radius:4px;background:#6366f1;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">恢复</button>' +
+          '</div>' +
         '</div>' +
         // 操作按钮（固定底部）
         '<div style="display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#1a1a2e;padding:12px 24px 16px;margin:8px -24px 0;border-top:1px solid #0f3460;z-index:5;border-radius:0 0 12px 12px;">' +
@@ -4221,6 +5208,29 @@
         notify('test', '测试通知 - 鸣潮监控助手', '如果您收到了这条通知，说明推送配置正确！\n标价100元 估值200元\n差价+100元 性价比+100%');
       };
 
+      // 云端同步
+      box.querySelector('#mwSyncUpload').onclick = function () {
+        var pw = box.querySelector('#mwSyncPassword').value.trim();
+        if (!pw) { alert('请输入管理后台密码'); return; }
+        pushConfig.syncPassword = pw;
+        syncPushConfigToServer(pw, false);
+      };
+      box.querySelector('#mwSyncDownload').onclick = function () {
+        var pw = box.querySelector('#mwSyncPassword').value.trim();
+        if (!pw) { alert('请输入管理后台密码'); return; }
+        pushConfig.syncPassword = pw;
+        loadPushConfigFromServer(pw, function (ok) {
+          if (ok) {
+            alert('推送配置已从服务器恢复，正在刷新面板...');
+            renderPpList();
+            box.querySelector('#mwServerChanKey').value = pushConfig.serverChanKey || '';
+            box.querySelector('#mwSecondaryDelay').value = pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20;
+          } else {
+            alert('服务器暂无推送配置或恢复失败');
+          }
+        });
+      };
+
       box.querySelector('#mwNotifyCancel').onclick = function () { overlay.remove(); };
       box.querySelector('#mwNotifySave').onclick = function () {
         notifyDiffThreshold = parseFloat(box.querySelector('#mwNotifyDiff').value) || 0;
@@ -4237,6 +5247,8 @@
         refreshIntervalSec = newInterval;
         flashSaleEnabled = box.querySelector('#mwFlashSaleEnabled').checked;
         pzdsEnabled = box.querySelector('#mwPzdsEnabled').checked;
+        kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
+        qyEnabled = box.querySelector('#mwQyEnabled').checked;
         soldCheckRatio = parseFloat(box.querySelector('#mwSoldCheckRatio').value) || 0;
         soldCheckDiff = parseFloat(box.querySelector('#mwSoldCheckDiff').value) || 0;
         soldCheckMinValue = parseFloat(box.querySelector('#mwSoldCheckMinValue').value) || 0;
@@ -4247,8 +5259,13 @@
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
         pushConfig.serverChanKey = box.querySelector('#mwServerChanKey').value.trim();
         pushConfig.secondaryDelay = parseInt(box.querySelector('#mwSecondaryDelay').value) || 0;
+        pushConfig.syncPassword = box.querySelector('#mwSyncPassword').value.trim();
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
         saveState();
+        // 如果设置了同步密码，自动上传到服务器
+        if (pushConfig.syncPassword) {
+          syncPushConfigToServer(pushConfig.syncPassword, true);
+        }
         // 如果刷新间隔变了且正在监控，重启定时器
         if (intervalChanged && monitorRunning) {
           if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
@@ -4595,6 +5612,10 @@
       // 平台标识
       const platformBadge = row.platform === 'pzds'
         ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#38bdf8;background:rgba(56,189,248,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="盼之平台">盼</span>'
+        : row.platform === 'kjs'
+        ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#a855f7;background:rgba(168,85,247,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="氪金兽">兽</span>'
+        : row.platform === 'qy'
+        ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#3b82f6;background:rgba(59,130,246,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="7881">78</span>'
         : '<span style="display:inline-block;font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="螃蟹网">蟹</span>';
 
       html += '<tr class="' + rowClass + '" data-product-id="' + row.productId + '" title="' + tooltip + '">' +
@@ -4973,6 +5994,10 @@
         '<span style="margin-left:8px;font-size:12px;padding:2px 8px;border-radius:4px;background:' + color + ';color:#fff;font-weight:600;">' + getRatioLabel(ratio) + '</span></div>' +
         '<div>' + (row.platform === 'pzds'
           ? '<span style="font-size:10px;font-weight:600;color:#38bdf8;background:rgba(56,189,248,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">盼之</span>'
+          : row.platform === 'kjs'
+          ? '<span style="font-size:10px;font-weight:600;color:#a855f7;background:rgba(168,85,247,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">氪金兽</span>'
+          : row.platform === 'qy'
+          ? '<span style="font-size:10px;font-weight:600;color:#3b82f6;background:rgba(59,130,246,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">7881</span>'
           : '<span style="font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">螃蟹</span>')
         + '<a href="' + productLink + '" target="_blank" style="font-size:11px;color:#6a9fff;text-decoration:none;cursor:pointer;" title="点击查看账号详情">' + (row.productUniqueNo || String(row.productId).slice(-6)) + ' 🔗</a>' +
         '<span id="mw-hover-close" style="font-size:18px;color:#666;cursor:pointer;line-height:1;padding:2px 6px;margin-left:8px;border-radius:4px;">✕</span></div>' +
@@ -5860,7 +6885,7 @@ function openSettings() {
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分3段，每段不同步长：第1段快速上升，第2段中速，第3段缓慢。';
+    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分3段，每段独立基准系数，调整一段不影响其他段。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {
@@ -5876,18 +6901,14 @@ function openSettings() {
       return i;
     }
 
-    // 基准系数 + 上限
-    var baseRow = document.createElement('div');
-    baseRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
-    baseRow.appendChild(yfLabel('基准系数(有效金=0)'));
-    var effBaseCoeffInp = yfInput(weights.effYellowBaseCoeff != null ? weights.effYellowBaseCoeff : 0.3, '0.01', '#f59e0b', '有效金=0时的系数', 48);
-    effBaseCoeffInp.style.textAlign = 'right';
-    baseRow.appendChild(effBaseCoeffInp);
-    baseRow.appendChild(yfLabel('| 系数上限'));
+    // 系数上限
+    var maxRow = document.createElement('div');
+    maxRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
+    maxRow.appendChild(yfLabel('系数上限'));
     var effMaxCoeffInp = yfInput(weights.effYellowMaxCoeff != null ? weights.effYellowMaxCoeff : 2.5, '0.1', '#e94560', '系数最大值', 48);
     effMaxCoeffInp.style.textAlign = 'right';
-    baseRow.appendChild(effMaxCoeffInp);
-    yellowSection.appendChild(baseRow);
+    maxRow.appendChild(effMaxCoeffInp);
+    yellowSection.appendChild(maxRow);
 
     // 第1段
     var seg1Row = document.createElement('div');
@@ -5896,7 +6917,11 @@ function openSettings() {
     seg1Title.textContent = '第1段(0~T1)';
     seg1Title.style.cssText = 'color:#22c55e;font-size:11px;font-weight:600;margin-right:8px;';
     seg1Row.appendChild(seg1Title);
-    seg1Row.appendChild(yfLabel('边界T1'));
+    seg1Row.appendChild(yfLabel('基准'));
+    var effSeg1BaseInp = yfInput(weights.effYellowSeg1BaseCoeff != null ? weights.effYellowSeg1BaseCoeff : 0.3, '0.01', '#f59e0b', '第1段基准系数（有效金=0时的系数）', 42);
+    effSeg1BaseInp.style.textAlign = 'right';
+    seg1Row.appendChild(effSeg1BaseInp);
+    seg1Row.appendChild(yfLabel('|边界T1'));
     var effSeg1TInp = yfInput(weights.effYellowSeg1Threshold != null ? weights.effYellowSeg1Threshold : 10, '1', '#f59e0b', '第1段有效金上界', 42);
     effSeg1TInp.style.textAlign = 'right';
     seg1Row.appendChild(effSeg1TInp);
@@ -5913,7 +6938,11 @@ function openSettings() {
     seg2Title.textContent = '第2段(T1~T2)';
     seg2Title.style.cssText = 'color:#f59e0b;font-size:11px;font-weight:600;margin-right:8px;';
     seg2Row.appendChild(seg2Title);
-    seg2Row.appendChild(yfLabel('边界T2'));
+    seg2Row.appendChild(yfLabel('基准'));
+    var effSeg2BaseInp = yfInput(weights.effYellowSeg2BaseCoeff != null ? weights.effYellowSeg2BaseCoeff : 0.4, '0.01', '#f59e0b', '第2段基准系数（绝对，gold=0时的虚拟截距）', 42);
+    effSeg2BaseInp.style.textAlign = 'right';
+    seg2Row.appendChild(effSeg2BaseInp);
+    seg2Row.appendChild(yfLabel('|边界T2'));
     var effSeg2TInp = yfInput(weights.effYellowSeg2Threshold != null ? weights.effYellowSeg2Threshold : 40, '1', '#f59e0b', '第2段有效金上界', 42);
     effSeg2TInp.style.textAlign = 'right';
     seg2Row.appendChild(effSeg2TInp);
@@ -5930,7 +6959,11 @@ function openSettings() {
     seg3Title.textContent = '第3段(T2+)';
     seg3Title.style.cssText = 'color:#e94560;font-size:11px;font-weight:600;margin-right:8px;';
     seg3Row.appendChild(seg3Title);
-    seg3Row.appendChild(yfLabel('每金浮动'));
+    seg3Row.appendChild(yfLabel('基准'));
+    var effSeg3BaseInp = yfInput(weights.effYellowSeg3BaseCoeff != null ? weights.effYellowSeg3BaseCoeff : 0.88, '0.01', '#f59e0b', '第3段基准系数（绝对，gold=0时的虚拟截距）', 42);
+    effSeg3BaseInp.style.textAlign = 'right';
+    seg3Row.appendChild(effSeg3BaseInp);
+    seg3Row.appendChild(yfLabel('|每金浮动'));
     var effSeg3StepInp = yfInput(weights.effYellowSeg3Step != null ? weights.effYellowSeg3Step : 0.008, '0.001', '#10b981', '第3段每金浮动系数', 52);
     effSeg3StepInp.style.textAlign = 'right';
     seg3Row.appendChild(effSeg3StepInp);
@@ -5943,10 +6976,10 @@ function openSettings() {
     loadYellowDefaultBtn.textContent = '载入默认';
     loadYellowDefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #0f3460;border-radius:4px;background:#1a1a2e;color:#f59e0b;font-size:11px;cursor:pointer;';
     loadYellowDefaultBtn.onclick = function() {
-      effBaseCoeffInp.value = 0.3; effMaxCoeffInp.value = 2.5;
-      effSeg1TInp.value = 10; effSeg1StepInp.value = 0.03;
-      effSeg2TInp.value = 40; effSeg2StepInp.value = 0.02;
-      effSeg3StepInp.value = 0.008;
+      effSeg1BaseInp.value = 0.3; effSeg1TInp.value = 10; effSeg1StepInp.value = 0.03;
+      effSeg2BaseInp.value = 0.4; effSeg2TInp.value = 40; effSeg2StepInp.value = 0.02;
+      effSeg3BaseInp.value = 0.88; effSeg3StepInp.value = 0.008;
+      effMaxCoeffInp.value = 2.5;
       updateYellowPreview();
     };
     yellowBtnRow.appendChild(loadYellowDefaultBtn);
@@ -5958,7 +6991,9 @@ function openSettings() {
     yellowSection.appendChild(yellowPreview);
 
     function updateYellowPreview() {
-      var bc = parseFloat(effBaseCoeffInp.value) || 0.3;
+      var b1 = parseFloat(effSeg1BaseInp.value) || 0.3;
+      var b2 = parseFloat(effSeg2BaseInp.value) || 0.4;
+      var b3 = parseFloat(effSeg3BaseInp.value) || 0.88;
       var mc = parseFloat(effMaxCoeffInp.value) || 2.5;
       var t1 = parseFloat(effSeg1TInp.value) || 10;
       var t2 = parseFloat(effSeg2TInp.value) || 40;
@@ -5969,27 +7004,15 @@ function openSettings() {
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var y = samples[si];
-        var coeff = bc;
-        var prevT = 0;
-        var segs = [{t:t1, s:s1}, {t:t2, s:s2}];
-        for (var sj = 0; sj < segs.length; sj++) {
-          var seg = segs[sj];
-          var w2 = seg.t - prevT;
-          if (w2 <= 0) continue;
-          if (y <= seg.t) {
-            coeff += (y - prevT) * seg.s;
-            if (mc > 0 && coeff > mc) coeff = mc;
-            break;
-          } else {
-            coeff += w2 * seg.s;
-            if (mc > 0 && coeff > mc) coeff = mc;
-          }
-          prevT = seg.t;
+        var coeff;
+        if (y <= t1) {
+          coeff = b1 + y * s1;
+        } else if (y <= t2) {
+          coeff = b2 + y * s2;
+        } else {
+          coeff = b3 + y * s3;
         }
-        if (y > t2) {
-          coeff += (y - t2) * s3;
-          if (mc > 0 && coeff > mc) coeff = mc;
-        }
+        if (mc > 0 && coeff > mc) coeff = mc;
         if (coeff < 0.1) coeff = 0.1;
         var color = y <= t1 ? '#22c55e' : (y <= t2 ? '#f59e0b' : '#e94560');
         html += '<span style="color:' + color + ';">' + y + '金→×' + (Math.round(coeff * 1000) / 1000) + '</span>　';
@@ -5997,7 +7020,9 @@ function openSettings() {
       yellowPreview.innerHTML = html;
     }
     // 绑定onchange
-    effBaseCoeffInp.onchange = updateYellowPreview;
+    effSeg1BaseInp.onchange = updateYellowPreview;
+    effSeg2BaseInp.onchange = updateYellowPreview;
+    effSeg3BaseInp.onchange = updateYellowPreview;
     effMaxCoeffInp.onchange = updateYellowPreview;
     effSeg1TInp.onchange = updateYellowPreview;
     effSeg1StepInp.onchange = updateYellowPreview;
@@ -6429,7 +7454,7 @@ function openSettings() {
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowBaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3Step: true, effYellowMaxCoeff: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, effYellowMaxCoeff: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true };
     for (var wk of Object.keys(DEFAULT_WEIGHTS)) {
       if (skipKeys[wk]) continue;
       var meta = WEIGHT_LABELS[wk] || { label: wk, desc: '' };
@@ -6523,13 +7548,15 @@ function openSettings() {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
       }
       // 重置有效金系数
-      effBaseCoeffInp.value = (DEFAULT_WEIGHTS.effYellowBaseCoeff != null) ? DEFAULT_WEIGHTS.effYellowBaseCoeff : 0.3;
-      effMaxCoeffInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeff != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeff : 2.5;
+      effSeg1BaseInp.value = (DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff != null) ? DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff : 0.3;
       effSeg1TInp.value = (DEFAULT_WEIGHTS.effYellowSeg1Threshold != null) ? DEFAULT_WEIGHTS.effYellowSeg1Threshold : 10;
       effSeg1StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg1Step != null) ? DEFAULT_WEIGHTS.effYellowSeg1Step : 0.03;
+      effSeg2BaseInp.value = (DEFAULT_WEIGHTS.effYellowSeg2BaseCoeff != null) ? DEFAULT_WEIGHTS.effYellowSeg2BaseCoeff : 0.4;
       effSeg2TInp.value = (DEFAULT_WEIGHTS.effYellowSeg2Threshold != null) ? DEFAULT_WEIGHTS.effYellowSeg2Threshold : 40;
       effSeg2StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg2Step != null) ? DEFAULT_WEIGHTS.effYellowSeg2Step : 0.02;
+      effSeg3BaseInp.value = (DEFAULT_WEIGHTS.effYellowSeg3BaseCoeff != null) ? DEFAULT_WEIGHTS.effYellowSeg3BaseCoeff : 0.88;
       effSeg3StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg3Step != null) ? DEFAULT_WEIGHTS.effYellowSeg3Step : 0.008;
+      effMaxCoeffInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeff != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeff : 2.5;
       updateYellowPreview();
       // 重置配队
       teamEntries.length = 0;
@@ -6713,14 +7740,16 @@ function openSettings() {
       }
       newW.c6TierWeights = newC6Weights;
 
-      // 收集有效金系数参数
-      newW.effYellowBaseCoeff = parseFloat(effBaseCoeffInp.value) || 0.3;
-      newW.effYellowMaxCoeff = parseFloat(effMaxCoeffInp.value) || 2.5;
+      // 收集有效金系数参数（每段独立基准系数）
+      newW.effYellowSeg1BaseCoeff = parseFloat(effSeg1BaseInp.value) || 0.3;
       newW.effYellowSeg1Threshold = parseFloat(effSeg1TInp.value) || 10;
       newW.effYellowSeg1Step = parseFloat(effSeg1StepInp.value) || 0.03;
+      newW.effYellowSeg2BaseCoeff = parseFloat(effSeg2BaseInp.value) || 0.6;
       newW.effYellowSeg2Threshold = parseFloat(effSeg2TInp.value) || 40;
       newW.effYellowSeg2Step = parseFloat(effSeg2StepInp.value) || 0.02;
+      newW.effYellowSeg3BaseCoeff = parseFloat(effSeg3BaseInp.value) || 1.2;
       newW.effYellowSeg3Step = parseFloat(effSeg3StepInp.value) || 0.008;
+      newW.effYellowMaxCoeff = parseFloat(effMaxCoeffInp.value) || 2.5;
 
       // 收集低命折扣系数规则
       var newFlatDiscountRules = [];
@@ -6967,6 +7996,9 @@ function openSettings() {
     var buyUrl;
     if (productId.indexOf('pz_') === 0) {
       buyUrl = PZDS_URLS.pay + (productUniqueNo || productId.replace(/^pz_/, ''));
+    } else if (productId.indexOf('kjs_') === 0) {
+      // 氪金兽无自动付款链接，跳转商品详情页
+      buyUrl = KJS_URLS.detail + (productUniqueNo || productId.replace(/^kjs_/, ''));
     } else {
       buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
     }
@@ -7097,7 +8129,7 @@ function openSettings() {
     }
 
     // ===== 标题：差价 + 现价 + 估价 + 类型 + 平台 =====
-    var platformName = row.platform === 'pzds' ? '盼之' : '螃蟹网';
+    var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : '螃蟹网'));
     var title = '差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估价¥' + value.toFixed(0) + ' ' + prefix + ' ' + platformName;
     if (suffix) title += ' ' + suffix;
 
@@ -7216,7 +8248,7 @@ function openSettings() {
     // ===== 纯文本版（桌面通知用）=====
     var lines = [];
     lines.push('💰 价格信息');
-    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : '螃蟹网') + ')');
+    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : '螃蟹网') + ')');
     lines.push(priceInfo);
     lines.push('估值¥' + value.toFixed(0) + ' 差价¥' + diff.toFixed(0) + ' 性价比' + ratio.toFixed(1) + '%');
     lines.push('');
@@ -7265,7 +8297,7 @@ function openSettings() {
     // 价格模块
     mdLines.push('**💰 价格信息**');
     mdLines.push('');
-    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : '螃蟹网') + ')');
+    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : '螃蟹网') + ')');
     if (oldPrice != null && oldPrice !== newPrice) {
       mdLines.push('原价 ~~¥' + oldPrice.toFixed(0) + '~~ → <font color="#e94560">**现价 ¥' + newPrice.toFixed(0) + '**</font>' + (dropAmtStr ? ' 🔥**' + dropAmtStr + '**' : ''));
     } else {
@@ -7461,7 +8493,9 @@ function openSettings() {
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     const bannerLink = cleanId.indexOf('pz_') === 0
       ? PZDS_URLS.detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
-      : 'https://www.pxb7.com/product/' + cleanId + '/1';
+      : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
+        : (cleanId.indexOf('qy_') === 0 ? QY_URLS.detail + cleanId.replace(/^qy_/, '') + '.html'
+        : 'https://www.pxb7.com/product/' + cleanId + '/1'));
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
 
@@ -7533,7 +8567,9 @@ function openSettings() {
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     const productUrl = cleanId.indexOf('pz_') === 0
       ? PZDS_URLS.detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
-      : 'https://www.pxb7.com/product/' + cleanId + '/1';
+      : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
+        : (cleanId.indexOf('qy_') === 0 ? QY_URLS.detail + cleanId.replace(/^qy_/, '') + '.html'
+        : 'https://www.pxb7.com/product/' + cleanId + '/1'));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
     // Server酱推送（微信）- 支持多个SendKey
@@ -7602,6 +8638,78 @@ function openSettings() {
       // 延迟为0时直接发送
       secondarySubs.forEach(function (sub) { sendPushPlus(sub, title, pushBody); });
     }
+  }
+
+  // ============================================================
+  // 推送配置云端同步
+  // ============================================================
+
+  function syncPushConfigToServer(password, silent) {
+    if (!password) { if (!silent) alert('请先输入同步密码'); return; }
+    var payload = {
+      serverChanKey: pushConfig.serverChanKey || '',
+      pushPlusSubscribers: pushConfig.pushPlusSubscribers || [],
+      secondaryDelay: pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20,
+    };
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: SYNC_URLS.sync,
+      headers: { 'Content-Type': 'application/json' },
+      data: JSON.stringify({ password: password, pushConfig: payload }),
+      onload: function (resp) {
+        try {
+          var json = JSON.parse(resp.responseText);
+          if (json.success) {
+            console.log('[鸣潮监控] 推送配置已同步到服务器');
+            if (!silent) alert('推送配置已同步到服务器');
+          } else {
+            console.error('[鸣潮监控] 同步失败:', json.error);
+            if (!silent) alert('同步失败: ' + (json.error || '未知错误'));
+          }
+        } catch (e) {
+          console.error('[鸣潮监控] 同步响应解析失败');
+          if (!silent) alert('同步失败: 服务器响应异常');
+        }
+      },
+      onerror: function (e) {
+        console.error('[鸣潮监控] 同步网络错误');
+        if (!silent) alert('同步失败: 网络错误');
+      },
+    });
+  }
+
+  function loadPushConfigFromServer(password, onDone) {
+    if (!password) { if (onDone) onDone(false); return; }
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: SYNC_URLS.get,
+      headers: { 'Content-Type': 'application/json' },
+      data: JSON.stringify({ password: password }),
+      onload: function (resp) {
+        try {
+          var json = JSON.parse(resp.responseText);
+          if (json.success && json.pushConfig) {
+            var remote = json.pushConfig;
+            pushConfig.serverChanKey = remote.serverChanKey || pushConfig.serverChanKey || '';
+            pushConfig.pushPlusSubscribers = Array.isArray(remote.pushPlusSubscribers) ? remote.pushPlusSubscribers : pushConfig.pushPlusSubscribers;
+            pushConfig.secondaryDelay = remote.secondaryDelay != null ? remote.secondaryDelay : pushConfig.secondaryDelay;
+            saveState();
+            console.log('[鸣潮监控] 推送配置已从服务器恢复 (' + (json.syncedAt || '未知时间') + ')');
+            if (onDone) onDone(true);
+          } else {
+            console.log('[鸣潮监控] 服务器暂无推送配置');
+            if (onDone) onDone(false);
+          }
+        } catch (e) {
+          console.error('[鸣潮监控] 恢复响应解析失败');
+          if (onDone) onDone(false);
+        }
+      },
+      onerror: function (e) {
+        console.error('[鸣潮监控] 恢复网络错误');
+        if (onDone) onDone(false);
+      },
+    });
   }
 
   // ============================================================
@@ -7853,6 +8961,8 @@ function openSettings() {
       refreshIntervalSec: refreshIntervalSec,
       flashSaleEnabled: flashSaleEnabled,
       pzdsEnabled: pzdsEnabled,
+      kjsEnabled: kjsEnabled,
+      qyEnabled: qyEnabled,
       soldCheckRatio: soldCheckRatio,
       soldCheckDiff: soldCheckDiff,
       soldCheckMinValue: soldCheckMinValue,
@@ -8004,6 +9114,32 @@ function openSettings() {
           console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzdsTotal + '条');
         }
       }
+
+      // 氪金兽平台扫描（MWP API，按最新发布排序）
+      if (kjsEnabled) {
+        try {
+          const kjsProducts = await kjsSearch(1);
+          if (kjsProducts.length > 0) {
+            await handleKJSListResponse(kjsProducts);
+            console.log('[鸣潮监控-氪金兽] 扫描完成，获取' + kjsProducts.length + '条');
+          }
+        } catch (e) {
+          console.error('[鸣潮监控-氪金兽] 扫描失败:', e);
+        }
+      }
+
+      // 7881平台扫描（API抓取，MD5签名认证，按最新发布排序）
+      if (qyEnabled) {
+        try {
+          const qyProducts = await qySearch(1);
+          if (qyProducts.length > 0) {
+            await handleQYListResponse(qyProducts);
+            console.log('[鸣潮监控-7881] 扫描完成，获取' + qyProducts.length + '条');
+          }
+        } catch (e) {
+          console.error('[鸣潮监控-7881] 扫描失败:', e);
+        }
+      }
     } catch (e) {
       lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
       console.error('[鸣潮监控] 列表刷新失败:', e);
@@ -8065,6 +9201,8 @@ function openSettings() {
     }
     flashSaleEnabled = savedState.flashSaleEnabled != null ? savedState.flashSaleEnabled : true;
     pzdsEnabled = savedState.pzdsEnabled != null ? savedState.pzdsEnabled : false;
+    kjsEnabled = savedState.kjsEnabled != null ? savedState.kjsEnabled : false;
+    qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
     soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 40;
     soldCheckDiff = savedState.soldCheckDiff != null ? savedState.soldCheckDiff : 0;
     soldCheckMinValue = savedState.soldCheckMinValue != null ? savedState.soldCheckMinValue : 0;
@@ -8086,6 +9224,15 @@ function openSettings() {
     // 确保数组存在
     if (!Array.isArray(pushConfig.pushPlusSubscribers)) {
       pushConfig.pushPlusSubscribers = [];
+    }
+
+    // 如果设置了同步密码，从服务器自动恢复推送配置（换电脑时自动恢复）
+    if (pushConfig.syncPassword) {
+      loadPushConfigFromServer(pushConfig.syncPassword, function (ok) {
+        if (ok && typeof refreshTableDisplay === 'function') {
+          refreshTableDisplay();
+        }
+      });
     }
 
     // 加载估值权重（改进4）

@@ -97,14 +97,16 @@ const DEFAULT_WEIGHTS = {
   // 限定金分段系数（null=使用单公式模式；数组=分段模式，每段独立配置基准/浮动）
   // 格式: [{ minYellow: 0, baseYellow: 0, baseCoeff: 0.30, step: 1, stepCoeff: 0.015 }, ...]
   yellowSegments: null,
-  // 有效金系数（基于有效金数分段，不同段使用不同步长）
-  effYellowBaseCoeff: 0.3,       // 基准系数（有效金=0时的系数）
-  effYellowSeg1Threshold: 10,   // 第1段边界（0~10有效金）
+  // 有效金系数（基于有效金数分段，每段独立基准系数，互不影响）
+  effYellowSeg1BaseCoeff: 0.3,   // 第1段基准系数（有效金=0时的系数）
+  effYellowSeg1Threshold: 10,    // 第1段边界（0~10有效金）
   effYellowSeg1Step: 0.03,       // 第1段每金浮动
-  effYellowSeg2Threshold: 40,   // 第2段边界（10~40有效金）
+  effYellowSeg2BaseCoeff: 0.4,   // 第2段基准系数（绝对，gold=0时的虚拟截距）
+  effYellowSeg2Threshold: 40,    // 第2段边界（10~40有效金）
   effYellowSeg2Step: 0.02,       // 第2段每金浮动
+  effYellowSeg3BaseCoeff: 0.88,  // 第3段基准系数（绝对，gold=0时的虚拟截距）
   effYellowSeg3Step: 0.008,      // 第3段（40+有效金）每金浮动
-  effYellowMaxCoeff: 2.5,       // 系数上限
+  effYellowMaxCoeff: 2.5,        // 系数上限
 };
 
 // 默认抽数阶梯定价公式参数（对应油猴脚本 DEFAULT_PULL_FORMULA）
@@ -433,14 +435,37 @@ function buildDefaultWeights(customWeights) {
   w.yellowBaseCoeff = (saved.yellowBaseCoeff != null) ? saved.yellowBaseCoeff : 1.0;
   w.yellowStepCoeff = (saved.yellowStepCoeff != null) ? saved.yellowStepCoeff : 0.01;
   w.yellowMaxCoeff = (saved.yellowMaxCoeff != null) ? saved.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
-  // 有效金系数参数（基于有效金数分段）
-  w.effYellowBaseCoeff = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowBaseCoeff;
+  // 有效金系数参数（每段独立基准系数，互不影响）
   w.effYellowSeg1Threshold = (saved.effYellowSeg1Threshold != null) ? saved.effYellowSeg1Threshold : DEFAULT_WEIGHTS.effYellowSeg1Threshold;
   w.effYellowSeg1Step = (saved.effYellowSeg1Step != null) ? saved.effYellowSeg1Step : DEFAULT_WEIGHTS.effYellowSeg1Step;
   w.effYellowSeg2Threshold = (saved.effYellowSeg2Threshold != null) ? saved.effYellowSeg2Threshold : DEFAULT_WEIGHTS.effYellowSeg2Threshold;
   w.effYellowSeg2Step = (saved.effYellowSeg2Step != null) ? saved.effYellowSeg2Step : DEFAULT_WEIGHTS.effYellowSeg2Step;
   w.effYellowSeg3Step = (saved.effYellowSeg3Step != null) ? saved.effYellowSeg3Step : DEFAULT_WEIGHTS.effYellowSeg3Step;
   w.effYellowMaxCoeff = (saved.effYellowMaxCoeff != null) ? saved.effYellowMaxCoeff : DEFAULT_WEIGHTS.effYellowMaxCoeff;
+  // 向后兼容：旧配置只有effYellowBaseCoeff，自动计算各段基准系数
+  if (saved.effYellowSeg1BaseCoeff != null) {
+    w.effYellowSeg1BaseCoeff = saved.effYellowSeg1BaseCoeff;
+  } else if (saved.effYellowBaseCoeff != null) {
+    w.effYellowSeg1BaseCoeff = saved.effYellowBaseCoeff;
+  } else {
+    w.effYellowSeg1BaseCoeff = DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+  }
+  if (saved.effYellowSeg2BaseCoeff != null) {
+    w.effYellowSeg2BaseCoeff = saved.effYellowSeg2BaseCoeff;
+  } else {
+    // 旧累积式→新绝对式：seg2Base(新) = oldBase + T1*(step1-step2)
+    var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+    w.effYellowSeg2BaseCoeff = _oldBase + w.effYellowSeg1Threshold * (w.effYellowSeg1Step - w.effYellowSeg2Step);
+  }
+  if (saved.effYellowSeg3BaseCoeff != null) {
+    w.effYellowSeg3BaseCoeff = saved.effYellowSeg3BaseCoeff;
+  } else {
+    // 旧累积式→新绝对式：seg3Base(新) = (oldBase + T1*step1 + (T2-T1)*step2) - T2*step3
+    var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+    var _seg2Val = _oldBase + w.effYellowSeg1Threshold * w.effYellowSeg1Step;
+    var _seg3Val = _seg2Val + (w.effYellowSeg2Threshold - w.effYellowSeg1Threshold) * w.effYellowSeg2Step;
+    w.effYellowSeg3BaseCoeff = _seg3Val - w.effYellowSeg2Threshold * w.effYellowSeg3Step;
+  }
   w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
   // 数据迁移：旧的'秧秧'是五星角色，现已改名为'秧秧玄翎'，四星'秧秧'价格应为0
   if (saved.charPrices && saved.charPrices['秧秧'] != null && saved.charPrices['秧秧'] > 0) {
@@ -571,6 +596,9 @@ function extractNumber(text, keyword) {
   // 格式2: 【keyword】：数字（盼之格式）
   const match2 = text.match(new RegExp('【' + escaped + '】\\s*[：:]?\\s*(\\d[\\d,]*)', 'i'));
   if (match2) return parseInt(match2[1].replace(/,/g, ''));
+  // 格式3: keyword数量：数字（7881格式，如"星声数量:15533"）
+  const match3 = text.match(new RegExp(escaped + '数量[：:]\\s*(\\d[\\d,]*)', 'i'));
+  if (match3) return parseInt(match3[1].replace(/,/g, ''));
   return 0;
 }
 
@@ -581,7 +609,7 @@ function parseCharacters(section) {
   const chars = [];
   if (!section) return chars;
 
-  const items = section.split(/[,，、\s;；]+/).filter(s => s.length > 0);
+  const items = section.split(/[,，、\s;；]+/).map(s => s.replace(/[】\s]+$/, '').trim()).filter(s => s.length > 0 && !/^\d+个$/.test(s));
 
   for (const item of items) {
     let constNum = 0;
@@ -724,14 +752,14 @@ function parseWeapons(section) {
  * 提取黄数
  */
 function extractYellowCount(text) {
-  // "N黄" 或 "N黄数"
-  let m = text.match(/(\d+)\s*黄/);
-  if (m) return parseInt(m[1]);
-  // "黄数：N" 或 "黄：N"
-  m = text.match(/黄[数]?[：:]\s*(\d+)/);
+  // "黄数：N" 或 "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
+  let m = text.match(/黄[数]?[：:]\s*(\d+)/);
   if (m) return parseInt(m[1]);
   // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
   m = text.match(/【黄[数]?】\s*[：:]?\s*(\d+)/);
+  if (m) return parseInt(m[1]);
+  // "N黄" 或 "N黄数"（放最后，避免误匹配前一个字段的数字）
+  m = text.match(/(\d+)\s*黄/);
   if (m) return parseInt(m[1]);
   return 0;
 }
@@ -1033,64 +1061,49 @@ function getYellowCoeff(yellowCount) {
 }
 
 /**
- * 计算有效金系数（基于有效金数分段，不同段使用不同步长）
- * 第1段(0~T1): 步长step1，快速上升
- * 第2段(T1~T2): 步长step2，中速上升
- * 第3段(T2+): 步长step3，缓慢上升
- * 系数在各段间连续，最终受maxCoeff上限约束
+ * 计算有效金系数（基于有效金数分段，每段完全独立）
+ * 每段用绝对gold线性公式：coeff = segBase + gold × segStep
+ * threshold仅用于判断分段归属，不参与计算
+ * 调整任意段的base/step/threshold不影响其他段的计算结果
  */
 function getEffectiveYellowCoeff(effectiveYellow) {
   var w = weights || DEFAULT_WEIGHTS;
-  var baseCoeff = (w.effYellowBaseCoeff != null) ? w.effYellowBaseCoeff : 0.3;
+  var seg1Base = (w.effYellowSeg1BaseCoeff != null) ? w.effYellowSeg1BaseCoeff : 0.3;
   var seg1Threshold = (w.effYellowSeg1Threshold != null) ? w.effYellowSeg1Threshold : 10;
-  var seg2Threshold = (w.effYellowSeg2Threshold != null) ? w.effYellowSeg2Threshold : 40;
   var seg1Step = (w.effYellowSeg1Step != null) ? w.effYellowSeg1Step : 0.03;
+  var seg2Base = (w.effYellowSeg2BaseCoeff != null) ? w.effYellowSeg2BaseCoeff : 0.4;
+  var seg2Threshold = (w.effYellowSeg2Threshold != null) ? w.effYellowSeg2Threshold : 40;
   var seg2Step = (w.effYellowSeg2Step != null) ? w.effYellowSeg2Step : 0.02;
+  var seg3Base = (w.effYellowSeg3BaseCoeff != null) ? w.effYellowSeg3BaseCoeff : 0.88;
   var seg3Step = (w.effYellowSeg3Step != null) ? w.effYellowSeg3Step : 0.008;
   var maxCoeff = (w.effYellowMaxCoeff != null) ? w.effYellowMaxCoeff : 2.5;
 
-  var coeff = baseCoeff;
-  var prevThreshold = 0;
-  var segIdx = 0;
-  var segments = [
-    { threshold: seg1Threshold, step: seg1Step },
-    { threshold: seg2Threshold, step: seg2Step },
-  ];
+  var coeff;
+  var segIdx;
+  var segLabel;
 
-  for (var si = 0; si < segments.length; si++) {
-    var seg = segments[si];
-    var segWidth = seg.threshold - prevThreshold;
-    if (segWidth <= 0) continue;
-
-    if (effectiveYellow <= seg.threshold) {
-      coeff += (effectiveYellow - prevThreshold) * seg.step;
-      if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
-      if (coeff < 0.1) coeff = 0.1;
-      var segLabel = prevThreshold + '~' + seg.threshold + '有效金';
-      return {
-        yellowCount: effectiveYellow,
-        coefficient: Math.round(coeff * 1000) / 1000,
-        tierLabel: segLabel,
-        segIdx: si,
-      };
-    } else {
-      coeff += segWidth * seg.step;
-      if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
-    }
-    prevThreshold = seg.threshold;
-    segIdx = si + 1;
+  if (effectiveYellow <= seg1Threshold) {
+    coeff = seg1Base + effectiveYellow * seg1Step;
+    segIdx = 0;
+    segLabel = '0~' + seg1Threshold + '有效金';
+  } else if (effectiveYellow <= seg2Threshold) {
+    coeff = seg2Base + effectiveYellow * seg2Step;
+    segIdx = 1;
+    segLabel = seg1Threshold + '~' + seg2Threshold + '有效金';
+  } else {
+    coeff = seg3Base + effectiveYellow * seg3Step;
+    segIdx = 2;
+    segLabel = seg2Threshold + '+有效金';
   }
 
-  // 超过所有段，用第3段步长延伸
-  coeff += (effectiveYellow - seg2Threshold) * seg3Step;
   if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
   if (coeff < 0.1) coeff = 0.1;
 
   return {
     yellowCount: effectiveYellow,
     coefficient: Math.round(coeff * 1000) / 1000,
-    tierLabel: seg2Threshold + '+有效金',
-    segIdx: 2,
+    tierLabel: segLabel,
+    segIdx: segIdx,
   };
 }
 
@@ -1376,7 +1389,7 @@ function calculateValue(parsed, price) {
   const yellowCoeff = yellowInfo.coefficient;
 
   // 账号等级、四星角色数
-  const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
+  const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/等级[：:]\s*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
   const level = levelMatch ? parseInt(levelMatch[1]) : 1;
   const fourStarMatch = (parsed.rawText || '').match(/(\d+)个四星角色/);
   const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
