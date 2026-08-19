@@ -539,7 +539,7 @@ function getPageHTML() {
     </div>
   </div>
 
-  <script src="/public/value-settings.js" onerror="window.__vsFailed=true"></script>
+  <script src="/public/value-settings.js?v=20260819" onerror="window.__vsFailed=true"></script>
   <script>
     // 切换估值设置面板到绝区零上下文（存储键 zzz_eval_weights，默认配置走 zzz 引擎）
     if (typeof setValueSettingsGame === 'function') setValueSettingsGame('zzz');

@@ -84,7 +84,12 @@ function cacheSet(key, data) {
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/public', express.static(path.join(__dirname, 'public')));
+// 静态JS必须每次验证（ETag），避免浏览器缓存旧版 value-settings.js 导致规则面板不同步
+app.use('/public', express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  maxAge: 0,
+  setHeaders: (res) => res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'),
+}));
 
 // IP黑名单拦截中间件
 app.use((req, res, next) => {

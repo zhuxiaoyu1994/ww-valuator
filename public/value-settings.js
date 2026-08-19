@@ -224,6 +224,8 @@
     var existing = document.getElementById('mw-settings-modal');
     if (existing) { existing.remove(); return; }
 
+    // 每次打开都强制从服务器拉取最新配置（服务器规则可能已更新，避免读到旧缓存）
+    cachedDefaults = null;
     fetchDefaults().then(function (defaults) {
       if (!defaults) {
         alert('无法加载默认权重配置，请检查网络后重试');
@@ -233,8 +235,8 @@
     });
   }
 
-  function buildSettingsModal(defaults, onSave) {
-    var saved = getSavedWeights() || {};
+  function buildSettingsModal(defaults, onSave, ignoreSaved) {
+    var saved = ignoreSaved ? {} : (getSavedWeights() || {});
     var w = loadWeights(defaults, saved);
 
     // 收集所有角色名（按级别排序）
@@ -1009,8 +1011,8 @@
     // 基准系数 + 上限
     var baseRow = document.createElement('div');
     baseRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
-    baseRow.appendChild(yfLabel('基准系数(有效金=0)'));
-    var effBaseCoeffInp = yfInput(w.effYellowBaseCoeff != null ? w.effYellowBaseCoeff : 0.3, '0.01', '#f59e0b', '有效金=0时的系数', 48);
+    baseRow.appendChild(yfLabel('第1段基准系数(有效金=0)'));
+    var effBaseCoeffInp = yfInput(w.effYellowSeg1BaseCoeff != null ? w.effYellowSeg1BaseCoeff : (w.effYellowBaseCoeff != null ? w.effYellowBaseCoeff : 0.3), '0.01', '#f59e0b', '第1段基准系数（有效金=0时的系数）', 48);
     effBaseCoeffInp.style.textAlign = 'right';
     baseRow.appendChild(effBaseCoeffInp);
     baseRow.appendChild(yfLabel('| 系数上限'));
@@ -1043,7 +1045,11 @@
     seg2Title.textContent = '第2段(T1~T2)';
     seg2Title.style.cssText = 'color:#f59e0b;font-size:11px;font-weight:600;margin-right:8px;';
     seg2Row.appendChild(seg2Title);
-    seg2Row.appendChild(yfLabel('边界T2'));
+    seg2Row.appendChild(yfLabel('基准'));
+    var effSeg2BaseInp = yfInput(w.effYellowSeg2BaseCoeff != null ? w.effYellowSeg2BaseCoeff : 0.4, '0.01', '#f59e0b', '第2段基准系数（独立计算）', 48);
+    effSeg2BaseInp.style.textAlign = 'right';
+    seg2Row.appendChild(effSeg2BaseInp);
+    seg2Row.appendChild(yfLabel('| 边界T2'));
     var effSeg2TInp = yfInput(w.effYellowSeg2Threshold != null ? w.effYellowSeg2Threshold : 40, '1', '#f59e0b', '第2段有效金上界', 42);
     effSeg2TInp.style.textAlign = 'right';
     seg2Row.appendChild(effSeg2TInp);
@@ -1060,7 +1066,11 @@
     seg3Title.textContent = '第3段(T2+)';
     seg3Title.style.cssText = 'color:#e94560;font-size:11px;font-weight:600;margin-right:8px;';
     seg3Row.appendChild(seg3Title);
-    seg3Row.appendChild(yfLabel('每金浮动'));
+    seg3Row.appendChild(yfLabel('基准'));
+    var effSeg3BaseInp = yfInput(w.effYellowSeg3BaseCoeff != null ? w.effYellowSeg3BaseCoeff : 0.88, '0.01', '#f59e0b', '第3段基准系数（独立计算）', 48);
+    effSeg3BaseInp.style.textAlign = 'right';
+    seg3Row.appendChild(effSeg3BaseInp);
+    seg3Row.appendChild(yfLabel('| 每金浮动'));
     var effSeg3StepInp = yfInput(w.effYellowSeg3Step != null ? w.effYellowSeg3Step : 0.008, '0.001', '#10b981', '第3段每金浮动系数', 52);
     effSeg3StepInp.style.textAlign = 'right';
     seg3Row.appendChild(effSeg3StepInp);
@@ -1075,8 +1085,8 @@
     yellowDefaultBtn.onclick = function() {
       effBaseCoeffInp.value = 0.3; effMaxCoeffInp.value = 2.5;
       effSeg1TInp.value = 10; effSeg1StepInp.value = 0.03;
-      effSeg2TInp.value = 40; effSeg2StepInp.value = 0.02;
-      effSeg3StepInp.value = 0.008;
+      effSeg2BaseInp.value = 0.4; effSeg2TInp.value = 40; effSeg2StepInp.value = 0.02;
+      effSeg3BaseInp.value = 0.88; effSeg3StepInp.value = 0.008;
       updateYellowPreview();
     };
     yellowBtnRow.appendChild(yellowDefaultBtn);
@@ -1088,38 +1098,29 @@
     yellowSection.appendChild(yellowPreview);
 
     function updateYellowPreview() {
-      var bc = parseFloat(effBaseCoeffInp.value) || 0.3;
+      var b1 = parseFloat(effBaseCoeffInp.value) || 0.3;
       var mc = parseFloat(effMaxCoeffInp.value) || 2.5;
       var t1 = parseFloat(effSeg1TInp.value) || 10;
       var t2 = parseFloat(effSeg2TInp.value) || 40;
       var s1 = parseFloat(effSeg1StepInp.value) || 0.03;
+      var b2 = parseFloat(effSeg2BaseInp.value) || 0.4;
       var s2 = parseFloat(effSeg2StepInp.value) || 0.02;
+      var b3 = parseFloat(effSeg3BaseInp.value) || 0.88;
       var s3 = parseFloat(effSeg3StepInp.value) || 0.008;
       var samples = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100];
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var y = samples[si];
-        var coeff = bc;
-        var prevT = 0;
-        var segs = [{t:t1, s:s1}, {t:t2, s:s2}];
-        for (var sj = 0; sj < segs.length; sj++) {
-          var seg = segs[sj];
-          var w2 = seg.t - prevT;
-          if (w2 <= 0) continue;
-          if (y <= seg.t) {
-            coeff += (y - prevT) * seg.s;
-            if (mc > 0 && coeff > mc) coeff = mc;
-            break;
-          } else {
-            coeff += w2 * seg.s;
-            if (mc > 0 && coeff > mc) coeff = mc;
-          }
-          prevT = seg.t;
+        // 与引擎一致：每段完全独立 coeff = segBase + gold × segStep
+        var coeff;
+        if (y <= t1) {
+          coeff = b1 + y * s1;
+        } else if (y <= t2) {
+          coeff = b2 + y * s2;
+        } else {
+          coeff = b3 + y * s3;
         }
-        if (y > t2) {
-          coeff += (y - t2) * s3;
-          if (mc > 0 && coeff > mc) coeff = mc;
-        }
+        if (mc > 0 && coeff > mc) coeff = mc;
         if (coeff < 0.1) coeff = 0.1;
         var color = y <= t1 ? '#22c55e' : (y <= t2 ? '#f59e0b' : '#e94560');
         html += '<span style="color:' + color + ';">' + y + '金→×' + (Math.round(coeff * 1000) / 1000) + '</span>　';
@@ -1131,8 +1132,10 @@
     effMaxCoeffInp.onchange = updateYellowPreview;
     effSeg1TInp.onchange = updateYellowPreview;
     effSeg1StepInp.onchange = updateYellowPreview;
+    effSeg2BaseInp.onchange = updateYellowPreview;
     effSeg2TInp.onchange = updateYellowPreview;
     effSeg2StepInp.onchange = updateYellowPreview;
+    effSeg3BaseInp.onchange = updateYellowPreview;
     effSeg3StepInp.onchange = updateYellowPreview;
     updateYellowPreview();
 
@@ -1555,7 +1558,7 @@
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowBaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3Step: true, effYellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowBaseCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, effYellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -1587,106 +1590,16 @@
       if (hasCustom && !confirm('检测到您有自定义配置，加载最新规则将覆盖当前设置（保存后生效）。是否继续？')) {
         return;
       }
-      // 重置其他权重
-      for (var key in DEFAULT_WEIGHTS) {
-        if (!DEFAULT_WEIGHTS.hasOwnProperty(key) || skipKeys[key] || !weightInputs[key]) continue;
-        weightInputs[key].value = DEFAULT_WEIGHTS[key];
-      }
-      // 构建重置用的 needSig 集合和 teamMates 映射（从 DEFAULT_WEIGHTS，包含服务器配置）
-      var _resetNeedSigSet = {};
-      var _resetNeedSigList = DEFAULT_WEIGHTS.needSigWeapons || defaults.needSigWeapons || [];
-      for (var rnsi = 0; rnsi < _resetNeedSigList.length; rnsi++) {
-        var rnsName = typeof _resetNeedSigList[rnsi] === 'string' ? _resetNeedSigList[rnsi] : _resetNeedSigList[rnsi].name;
-        _resetNeedSigSet[rnsName] = true;
-      }
-      var _resetTeamMatesMap = {};
-      var _resetRawTM = DEFAULT_WEIGHTS.teamMates || defaults.teamMates || {};
-      for (var rtmn in _resetRawTM) {
-        if (!_resetRawTM.hasOwnProperty(rtmn)) continue;
-        var rmates = _resetRawTM[rtmn];
-        if (Array.isArray(rmates) && rmates.length > 0) _resetTeamMatesMap[rtmn] = [].concat(rmates);
-      }
-      // 重置角色价格
-      charEntries.length = 0;
-      deletedChars.length = 0;
-      // 重置角色级别覆盖（恢复所有角色到默认级别）
-      if (w.charTierOverride) {
-        w.charTierOverride = {};
-      }
-      for (var rt = 0; rt < tierOrder.length; rt++) {
-        var rtk = tierOrder[rt];
-        if (!CHAR_TIERS[rtk]) continue;
-        var rTier = CHAR_TIERS[rtk];
-        for (var rc = 0; rc < rTier.chars.length; rc++) {
-          var rName = rTier.chars[rc];
-          var rPrice = (DEFAULT_WEIGHTS.charPrices && DEFAULT_WEIGHTS.charPrices[rName] != null) ? DEFAULT_WEIGHTS.charPrices[rName] : (DEFAULT_CHAR_PRICES[rName] != null ? DEFAULT_CHAR_PRICES[rName] : rTier.price);
-          var rWeapon = (DEFAULT_WEIGHTS.sigWeaponsOverride && DEFAULT_WEIGHTS.sigWeaponsOverride[rName]) || SIG_WEAPONS[rName] || '';
-          var rConstPrices = (DEFAULT_WEIGHTS.constPrices && DEFAULT_WEIGHTS.constPrices[rName]) ? Object.assign({}, DEFAULT_WEIGHTS.constPrices[rName]) : (DEFAULT_CONST_PRICES[rName] ? Object.assign({}, DEFAULT_CONST_PRICES[rName]) : {});
-          charEntries.push({
-            name: rName,
-            weapon: rWeapon,
-            price: rPrice,
-            tier: rtk,
-            constPrices: rConstPrices,
-            needSig: !!_resetNeedSigSet[rName],
-            teamMates: _resetTeamMatesMap[rName] ? [].concat(_resetTeamMatesMap[rName]) : [],
-          });
+      // 强制从服务器拉取最新规则并重建面板（忽略本地自定义配置）
+      cachedDefaults = null;
+      overlay.remove();
+      fetchDefaults().then(function (freshDefaults) {
+        if (!freshDefaults) {
+          alert('无法加载最新规则，请检查网络后重试');
+          return;
         }
-      }
-      renderCharList();
-      // 重置抽数公式参数
-      pullBaseInput.value = (DEFAULT_WEIGHTS.pullBase != null) ? DEFAULT_WEIGHTS.pullBase : 200;
-      pullBasePriceInput.value = (DEFAULT_WEIGHTS.pullBasePrice != null) ? DEFAULT_WEIGHTS.pullBasePrice : 1.0;
-      pullStepPriceInput.value = (DEFAULT_WEIGHTS.pullStepPrice != null) ? DEFAULT_WEIGHTS.pullStepPrice : 0.002;
-      updatePullPreview();
-      // 重置满命溢价公式参数
-      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
-      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
-      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
-      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
-      updateC6Preview();
-      // 重置满命抽数加成公式参数
-      pullC6BaseInput.value = (DEFAULT_WEIGHTS.pullC6Base != null) ? DEFAULT_WEIGHTS.pullC6Base : 5;
-      pullC6BaseBonusInput.value = (DEFAULT_WEIGHTS.pullC6BaseBonus != null) ? DEFAULT_WEIGHTS.pullC6BaseBonus * 100 : 50;
-      pullC6StepInput.value = (DEFAULT_WEIGHTS.pullC6Step != null) ? DEFAULT_WEIGHTS.pullC6Step : 0.1;
-      pullC6StepBonusInput.value = (DEFAULT_WEIGHTS.pullC6StepBonus != null) ? DEFAULT_WEIGHTS.pullC6StepBonus * 100 : 0.5;
-      updatePullC6Preview();
-      // 重置满命权重
-      for (var tw = 0; tw < c6TierList.length; tw++) {
-        if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
-      }
-      // 重置有效金系数
-      effBaseCoeffInp.value = (DEFAULT_WEIGHTS.effYellowBaseCoeff != null) ? DEFAULT_WEIGHTS.effYellowBaseCoeff : 0.3;
-      effMaxCoeffInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeff != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeff : 2.5;
-      effSeg1TInp.value = (DEFAULT_WEIGHTS.effYellowSeg1Threshold != null) ? DEFAULT_WEIGHTS.effYellowSeg1Threshold : 10;
-      effSeg1StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg1Step != null) ? DEFAULT_WEIGHTS.effYellowSeg1Step : 0.03;
-      effSeg2TInp.value = (DEFAULT_WEIGHTS.effYellowSeg2Threshold != null) ? DEFAULT_WEIGHTS.effYellowSeg2Threshold : 40;
-      effSeg2StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg2Step != null) ? DEFAULT_WEIGHTS.effYellowSeg2Step : 0.02;
-      effSeg3StepInp.value = (DEFAULT_WEIGHTS.effYellowSeg3Step != null) ? DEFAULT_WEIGHTS.effYellowSeg3Step : 0.008;
-      updateYellowPreview();
-      // 重置配队（使用 DEFAULT_WEIGHTS.teamPremiums，包含服务器配置）
-      teamEntries.length = 0;
-      var _resetTP = DEFAULT_WEIGHTS.teamPremiums || {};
-      for (var rtpn in _resetTP) {
-        if (!_resetTP.hasOwnProperty(rtpn)) continue;
-        var rtp = _resetTP[rtpn];
-        if (rtp && rtp.enabled !== false) {
-          teamEntries.push({ name: rtpn, chars: [].concat(rtp.chars || []), multiplier: rtp.multiplier || 1.0, enabled: true });
-        }
-      }
-      renderTeamList();
-      // 重置多配队系数
-      teamMultiEntries.length = 0;
-      for (var tm = 0; tm < DEFAULT_WEIGHTS.teamMultiBonus.length; tm++) {
-        teamMultiEntries.push({ count: DEFAULT_WEIGHTS.teamMultiBonus[tm].count, coef: DEFAULT_WEIGHTS.teamMultiBonus[tm].coef });
-      }
-      renderTeamMultiList();
-      // 重置低命折扣系数
-      flatDiscountEntries.length = 0;
-      for (var fdi = 0; fdi < DEFAULT_WEIGHTS.flatDiscountRules.length; fdi++) {
-        flatDiscountEntries.push({ tiers: [].concat(DEFAULT_WEIGHTS.flatDiscountRules[fdi].tiers || []), maxConst: DEFAULT_WEIGHTS.flatDiscountRules[fdi].maxConst, discount: DEFAULT_WEIGHTS.flatDiscountRules[fdi].discount });
-      }
-      renderFlatDiscountList();
+        buildSettingsModal(freshDefaults, onSave, true);
+      });
     };
 
     var cancelBtn = document.createElement('button');
@@ -1833,13 +1746,16 @@
       }
       newW.c6TierWeights = newC6Weights;
 
-      // 收集有效金系数参数
+      // 收集有效金系数参数（每段独立基准系数，与引擎公式一致）
       newW.effYellowBaseCoeff = parseFloat(effBaseCoeffInp.value) || 0.3;
+      newW.effYellowSeg1BaseCoeff = parseFloat(effBaseCoeffInp.value) || 0.3;
       newW.effYellowMaxCoeff = parseFloat(effMaxCoeffInp.value) || 2.5;
       newW.effYellowSeg1Threshold = parseFloat(effSeg1TInp.value) || 10;
       newW.effYellowSeg1Step = parseFloat(effSeg1StepInp.value) || 0.03;
+      newW.effYellowSeg2BaseCoeff = parseFloat(effSeg2BaseInp.value) || 0.4;
       newW.effYellowSeg2Threshold = parseFloat(effSeg2TInp.value) || 40;
       newW.effYellowSeg2Step = parseFloat(effSeg2StepInp.value) || 0.02;
+      newW.effYellowSeg3BaseCoeff = parseFloat(effSeg3BaseInp.value) || 0.88;
       newW.effYellowSeg3Step = parseFloat(effSeg3StepInp.value) || 0.008;
 
       // 收集低命折扣系数规则
