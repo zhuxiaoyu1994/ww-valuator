@@ -1,6 +1,6 @@
 /**
- * server.js - 鸣潮估价助手
- * 轻量估价工具，支持按编号查询和粘贴描述估价
+ * server.js - 多游戏估价助手
+ * 支持鸣潮(wuwa)和绝区零(zzz)等多款游戏账号估价
  */
 
 'use strict';
@@ -9,12 +9,30 @@ const express = require('express');
 const path = require('path');
 const https = require('https');
 
-const valueEngine = require('./value-engine');
+const { createEngine } = require('./value-engine');
+const WUWA_CONFIG = require('./configs/wuwa');
+const ZZZ_CONFIG = require('./configs/zzz');
 const db = require('./db');
+
+// 多游戏引擎实例
+const engines = {
+  wuwa: createEngine(WUWA_CONFIG),
+  zzz: createEngine(ZZZ_CONFIG),
+};
+const gameConfigs = { wuwa: WUWA_CONFIG, zzz: ZZZ_CONFIG };
+const validGames = Object.keys(engines);
+
+function getEngine(game) {
+  return engines[game] || engines.wuwa;
+}
+function getConfigKey(game) {
+  return 'default_weights_' + (game || 'wuwa');
+}
 
 // HTML页面模板（从views/目录加载）
 const getPlatformPage = require('./views/platform');
 const getPageHTML = require('./views/wuwa');
+const getZZZPage = require('./views/zzz');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
 
@@ -100,18 +118,17 @@ app.use((req, res, next) => {
  * 优先返回数据库中存储的服务器端配置，无则返回源码内置默认值
  */
 app.get('/api/defaults', async (req, res) => {
+  const game = req.query.game || 'wuwa';
+  const engine = getEngine(game);
   try {
-    // 优先从数据库获取服务器端配置
-    const serverConfig = await db.getConfig('default_weights');
+    const serverConfig = await db.getConfig(getConfigKey(game));
     if (serverConfig) {
-      const defaults = valueEngine.getDefaults();
-      // 将服务器端配置合并到 weights 子对象中，使前端 loadWeights 能正确使用
+      const defaults = engine.getDefaults();
       defaults.weights = Object.assign({}, defaults.weights, serverConfig);
-      // 同时合并到顶层，保持向后兼容
       const merged = Object.assign({}, defaults, serverConfig);
       res.json({ success: true, data: merged });
     } else {
-      const defaults = valueEngine.getDefaults();
+      const defaults = engine.getDefaults();
       res.json({ success: true, data: defaults });
     }
   } catch (err) {
@@ -124,11 +141,12 @@ app.get('/api/defaults', async (req, res) => {
  * 估值接口 - 输入文本返回估值
  */
 app.post('/api/x9k2-eval', (req, res) => {
-  const { showTitle, priceInCents, customWeights } = req.body;
+  const { showTitle, priceInCents, customWeights, game } = req.body;
   if (!showTitle) {
     return res.status(400).json({ success: false, error: 'showTitle is required' });
   }
-  const result = valueEngine.evaluateWithPrice(showTitle, priceInCents || 0, customWeights || null);
+  const engine = getEngine(game);
+  const result = engine.evaluateWithPrice(showTitle, priceInCents || 0, customWeights || null);
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
 
   // 记录查询日志
@@ -169,7 +187,7 @@ app.post('/api/x9k2-eval', (req, res) => {
         yellowCount: result.info.yellowCount,
         pulls: result.info.pulls,
       },
-      shortDescription: valueEngine.generateShortDescription(result),
+      shortDescription: engine.generateShortDescription(result),
     },
   });
 });
@@ -179,7 +197,7 @@ app.post('/api/x9k2-eval', (req, res) => {
  * 支持商品编号（如 MEBNB9606）和数字 productId
  */
 app.post('/api/x9k2-find', async (req, res) => {
-  const { productId, customWeights } = req.body;
+  const { productId, customWeights, game } = req.body;
   if (!productId) {
     return res.status(400).json({ success: false, error: '请输入商品编号' });
   }
@@ -226,7 +244,8 @@ app.post('/api/x9k2-find', async (req, res) => {
       return res.json({ success: false, error: '无法获取商品描述信息' });
     }
 
-    const result = valueEngine.evaluateWithPrice(showTitle, priceInCents, customWeights || null);
+    const engine = getEngine(game);
+    const result = engine.evaluateWithPrice(showTitle, priceInCents, customWeights || null);
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
 
     // 记录查询日志
@@ -269,7 +288,7 @@ app.post('/api/x9k2-find', async (req, res) => {
           yellowCount: result.info.yellowCount,
           pulls: result.info.pulls,
         },
-        shortDescription: valueEngine.generateShortDescription(result),
+        shortDescription: engine.generateShortDescription(result),
         url: `https://www.pxb7.com/buy/10302/detail?productId=${actualProductId}`,
       },
     });
@@ -622,7 +641,7 @@ function fetchSoldProducts(pageIndex, pageSize) {
  * source: 'live'（默认）从API实时获取并存入数据库；'database' 从数据库读取历史记录
  */
 app.post('/api/deals', async (req, res) => {
-  const { password, page, pageSize, customWeights, source } = req.body;
+  const { password, page, pageSize, customWeights, source, game } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
@@ -634,12 +653,13 @@ app.post('/api/deals', async (req, res) => {
     try {
       const offset = (pageIndex - 1) * ps;
       const { list, total } = await db.queryDeals(ps, offset);
+      const engine = getEngine(game);
 
       // 获取有效权重（与实时模式相同逻辑）
       let effectiveWeights = customWeights;
       if (!effectiveWeights) {
         try {
-          const serverConfig = await db.getConfig('default_weights');
+          const serverConfig = await db.getConfig(getConfigKey(game));
           if (serverConfig) effectiveWeights = serverConfig;
         } catch (e) { /* 忽略 */ }
       }
@@ -650,11 +670,11 @@ app.post('/api/deals', async (req, res) => {
         const priceInCents = Math.round((item.price || 0) * 100);
         if (showTitle) {
           try {
-            const valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
+            const valuation = engine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
             item.estimatedValue = Math.round((valuation.details ? valuation.details.finalValue : 0) * 100) / 100;
             item.deviation = Math.round((item.estimatedValue - item.price) * 100) / 100;
             item.deviationPercent = item.price > 0 ? Math.round((item.deviation / item.price * 100) * 100) / 100 : 0;
-            item.shortDescription = valueEngine.generateShortDescription(valuation);
+            item.shortDescription = engine.generateShortDescription(valuation);
             item.yellowCount = valuation.info ? valuation.info.yellowCount : 0;
             item.pulls = valuation.info ? valuation.info.pulls : 0;
             item.characters = valuation.details ? valuation.details.characters : [];
@@ -693,10 +713,11 @@ app.post('/api/deals', async (req, res) => {
     }
 
     // 无自定义权重时，尝试从数据库加载服务器端默认配置
+    const engine = getEngine(game);
     let effectiveWeights = customWeights;
     if (!effectiveWeights) {
       try {
-        const serverConfig = await db.getConfig('default_weights');
+        const serverConfig = await db.getConfig(getConfigKey(game));
         if (serverConfig) effectiveWeights = serverConfig;
       } catch (e) { /* 忽略 */ }
     }
@@ -711,8 +732,8 @@ app.post('/api/deals', async (req, res) => {
       let shortDesc = '';
       if (showTitle) {
         try {
-          valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
-          shortDesc = valueEngine.generateShortDescription(valuation);
+          valuation = engine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
+          shortDesc = engine.generateShortDescription(valuation);
         } catch (e) {
           // 估价失败不阻断流程
         }
@@ -800,6 +821,10 @@ app.get('/', (req, res) => {
 
 app.get('/wuwa', (req, res) => {
   res.send(getPageHTML());
+});
+
+app.get('/zzz', (req, res) => {
+  res.send(getZZZPage());
 });
 
 // ============================================================
@@ -946,10 +971,11 @@ app.post('/admin/api/cache-clear', (req, res) => {
 
 // 获取默认估值配置（公开接口，网站页面加载时调用）
 app.get('/api/config/default', async (req, res) => {
+  const game = req.query.game || 'wuwa';
+  const engine = getEngine(game);
   try {
-    const { value: config, updatedAt } = await db.getConfigWithMeta('default_weights');
-    // 补充 configVersion，使前端能检测到版本变更并自动清理旧配置
-    const defaults = valueEngine.getDefaults();
+    const { value: config, updatedAt } = await db.getConfigWithMeta(getConfigKey(game));
+    const defaults = engine.getDefaults();
     const merged = config ? { ...config, configVersion: defaults.configVersion } : { configVersion: defaults.configVersion };
     res.json({ success: true, data: merged, configUpdatedAt: updatedAt });
   } catch (e) {
@@ -959,14 +985,14 @@ app.get('/api/config/default', async (req, res) => {
 
 // 更新默认估值配置（需管理密码）
 app.post('/api/config/update', async (req, res) => {
-  const { password, config } = req.body;
+  const { password, config, game } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
   if (!config || typeof config !== 'object') {
     return res.json({ success: false, error: '配置数据无效' });
   }
-  const ok = await db.setConfig('default_weights', config);
+  const ok = await db.setConfig(getConfigKey(game), config);
   if (ok) {
     res.json({ success: true, message: '配置已更新' });
   } else {
@@ -1040,14 +1066,14 @@ function computeStatsFromList(list, total) {
 }
 
 // 用指定权重重算列表中每条记录的估值
-function reevaluateList(list, effectiveWeights) {
+function reevaluateList(list, effectiveWeights, engine) {
   if (!effectiveWeights) return;
   for (const item of list) {
     const showTitle = item.showTitle || '';
     const priceInCents = Math.round((item.price || 0) * 100);
     if (showTitle) {
       try {
-        const valuation = valueEngine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
+        const valuation = engine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
         item.estimatedValue = Math.round((valuation.details ? valuation.details.finalValue : 0) * 100) / 100;
         item.deviation = Math.round((item.estimatedValue - item.price) * 100) / 100;
         item.deviationPercent = item.price > 0 ? Math.round((item.deviation / item.price * 100) * 100) / 100 : 0;
@@ -1063,6 +1089,7 @@ function reevaluateList(list, effectiveWeights) {
 // ============================================================
 app.post('/api/admin/refresh-stats', async (req, res) => {
   const { password, customWeights } = req.body;
+  const game = req.body.game || 'wuwa';
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
@@ -1073,17 +1100,18 @@ app.post('/api/admin/refresh-stats', async (req, res) => {
       return res.json({ success: true, data: { summary: null, scatter: [], total: 0 }, message: '暂无成交记录，已清空缓存' });
     }
 
+    const engine = getEngine(game);
     // 获取有效权重：优先用上传的 customWeights，否则用服务器默认配置
     let effectiveWeights = customWeights;
     if (!effectiveWeights) {
       try {
-        const serverConfig = await db.getConfig('default_weights');
+        const serverConfig = await db.getConfig(getConfigKey(game));
         if (serverConfig) effectiveWeights = serverConfig;
       } catch (e) { /* 忽略 */ }
     }
 
     // 重算估值
-    reevaluateList(list, effectiveWeights);
+    reevaluateList(list, effectiveWeights, engine);
 
     // 计算统计指标
     const { summary, scatter } = computeStatsFromList(list, total);
@@ -1104,6 +1132,7 @@ app.post('/api/admin/refresh-stats', async (req, res) => {
 // 公开统计接口（优先返回缓存，无缓存时实时计算）
 // ============================================================
 async function handlePublicStats(req, res) {
+  const game = (req.method === 'GET' ? req.query.game : req.body.game) || 'wuwa';
   try {
     // 优先返回缓存的统计数据
     const cached = await db.getConfig('stats_cache');
@@ -1117,13 +1146,14 @@ async function handlePublicStats(req, res) {
       return res.json({ success: true, data: { summary: null, scatter: [], total: 0 } });
     }
 
+    const engine = getEngine(game);
     let effectiveWeights = null;
     try {
-      const serverConfig = await db.getConfig('default_weights');
+      const serverConfig = await db.getConfig(getConfigKey(game));
       if (serverConfig) effectiveWeights = serverConfig;
     } catch (e) { /* 忽略 */ }
 
-    reevaluateList(list, effectiveWeights);
+    reevaluateList(list, effectiveWeights, engine);
     const { summary, scatter } = computeStatsFromList(list, total);
     res.json({ success: true, data: { summary, scatter } });
   } catch (err) {

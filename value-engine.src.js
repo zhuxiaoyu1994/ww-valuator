@@ -1,336 +1,46 @@
 /**
- * value-engine.js - 鸣潮账号估值引擎
- * 从油猴脚本（螃蟹网鸣潮监控助手.user.js）完整移植估值逻辑，
- * 确保两端估值结果完全一致。
+ * value-engine.js - 多游戏账号估值引擎（工厂模式）
+ * 通过 createEngine(config) 传入游戏配置，创建对应游戏的估值引擎实例。
+ * 估值逻辑（有效金系数、抽数定价、满命加成等）通用，仅配置数据按游戏区分。
  *
- * 对外接口（保持不变）：
- *   - evaluateWithPrice(showTitle, priceInCents)
- *   - generateShortDescription(evaluation)
+ * 对外接口：
+ *   - createEngine(config) → engine instance
+ *   - engine.evaluateWithPrice(showTitle, priceInCents, customWeights?)
+ *   - engine.generateShortDescription(evaluation)
+ *   - engine.getDefaults()
  */
 
 'use strict';
 
-// 配置版本号（递增后强制覆盖用户旧配置）
-const CONFIG_VERSION = 19;
+const WUWA_CONFIG = require('./configs/wuwa');
 
-// ============================================================
-// 角色定价配置（对应油猴脚本 CHAR_TIERS）
-// ============================================================
-const CHAR_TIERS = {
-  S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅'] },
-  A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '弗洛洛', '洛瑟菈'] },
-  B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '露西', '嘉贝莉娜', '奥古斯塔', '仇远', '尤诺', '陆赫斯', '赞妮', '布兰特', '守岸人', '西格莉卡'] },
-  C: { price: 5, isHot: false, chars: ['露帕', '珂莱塔', '菲比', '坎特蕾拉', '椿'] },
-  D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡'] },
-  E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心', '秧秧'] },
-};
+function createEngine(config) {
+  const CONFIG_VERSION = config.configVersion;
+  const CHAR_TIERS = config.charTiers;
+  const SIG_WEAPONS = config.sigWeapons;
+  const FULL_CONST_WEIGHT = config.fullConstWeight;
+  const DEFAULT_WEIGHTS = config.defaultWeights;
+  const DEFAULT_PULL_FORMULA = config.defaultPullFormula;
+  const DEFAULT_TEAM_MATES = config.defaultTeamMates;
+  const DEFAULT_TEAMS = config.defaultTeams;
+  const DEFAULT_CHAR_PRICES = config.defaultCharPrices;
+  const DEFAULT_CONST_PREMIUMS = config.defaultConstPremiums;
+  const DEFAULT_NEED_SIG_WEAPONS = config.defaultNeedSigWeapons;
+  const CHAR_ALIASES = config.charAliases;
+  const SECTION_KEYWORDS = config.sectionKeywords;
+  const WEIGHT_LABELS = config.weightLabels;
 
-// ============================================================
-// 专武映射（角色名 -> 专武名，对应油猴脚本 SIG_WEAPONS）
-// ============================================================
-const SIG_WEAPONS = {
-  '忌炎': '苍鳞千嶂', '吟霖': '掣傀之手', '今汐': '时和岁稔', '长离': '赫奕流明',
-  '相里要': '诸方玄枢', '椿': '裁春', '珂莱塔': '死与舞', '折枝': '琼枝冰绡',
-  '守岸人': '星序协响', '洛瑟菈': '存帧', '莫宁': '宙算仪轨', '千咲': '昙切',
-  '爱弥斯': '永远的启明星', '弗洛洛': '幽冥的忘忧章', '卡提希娅': '不屈命定之冠',
-  '尤诺': '万物持存的注释', '夏空': '林间的咏叹调', '赞妮': '焰光裁定',
-  '坎特蕾拉': '海的呢喃', '仇远': '裁竹', '布兰特': '不灭航路', '露帕': '焰痕',
-  '奥古斯塔': '驭冕铸雷之权', '嘉贝莉娜': '光影双生', '西格莉卡': '昭日译注',
-  '达妮娅': '赝作的矮星', '菲比': '和光回唱', '绯雪': '灼霜', '琳奈': '溢彩荧辉',
-  '丽贝卡': '碎骨', '陆赫斯': '白昼之脊', '秧秧玄翎': '天之苍苍', '穗穗': '栖霞饮露',
-  '露西': '蜃影', '洛可可': '悲喜剧',
-};
-
-// 满命权重（对应油猴脚本 FULL_CONST_WEIGHT）
-const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 };
-
-// ============================================================
-// 估值权重默认值（对应油猴脚本 DEFAULT_WEIGHTS）
-// ============================================================
-const DEFAULT_WEIGHTS = {
-  // 满命溢价（加权满命数档位）
-  c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
-  c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
-  // 满命溢价公式参数（加权满命数 → 角色价值溢价系数）
-  c6Base: 3,          // 基准加权满命数
-  c6BaseBonus: 1.0,   // 基准溢价（100%）
-  c6Step: 0.1,        // 每档满命数
-  c6StepBonus: 0.05,  // 每档浮动（5%）
-  // 资源定价
-  outfit: 0,             // 服饰/皮肤单价
-  motoFrame: 0,          // 车架模组单价
-  // 满命抽数加成公式参数（加权满命数 → 抽数价值加成系数）
-  pullC6Base: 5,          // 基准加权满命数
-  pullC6BaseBonus: 0.5,   // 基准加成（50%）
-  pullC6Step: 0.1,        // 每档满命数
-  pullC6StepBonus: 0.005, // 每档浮动（0.5%）
-  // 多配队额外系数
-  teamMultiBonus: [
-    { count: 2, coef: 1.05 },
-    { count: 3, coef: 1.1 },
-    { count: 4, coef: 1.15 },
-    { count: 5, coef: 1.2 },
-    { count: 6, coef: 1.25 },
-    { count: 7, coef: 1.3 },
-    { count: 8, coef: 1.35 },
-    { count: 9, coef: 1.4 },
-    { count: 10, coef: 1.45 },
-  ],
-  // 低命折扣系数规则（指定级别角色均不超过N命时，总价值打折）
-  flatDiscountRules: [
-    { tiers: ['S', 'A'], maxConst: 2, discount: 0.8 },
-  ],
-  // C6配队依赖（向后兼容配置，仅提取 teammate 字段用于 teamMates 迁移；不影响角色等级）
-  c6TeamDependency: {
-    '卡提希娅': { teammate: '夏空' },
-    '弗洛洛': { teammate: '坎特蕾拉' },
-    '露西': { teammate: '丽贝卡' },
-    '绯雪': { teammate: '洛瑟菈' },
-    '秧秧玄翎': { teammate: '穗穗' },
-  },
-  // 无专武折扣（需要专武的角色，无专武时价值 × 此值）
-  needSigDiscount: 0.3,
-  // 强绑角色折扣（强绑队友全不在场时，角色价值 × 此值）
-  teamDepDiscount: 0.7,
-  // 限定金系数上限
-  yellowMaxCoeff: 3.0,
-  // 限定金分段系数（null=使用单公式模式；数组=分段模式，每段独立配置基准/浮动）
-  // 格式: [{ minYellow: 0, baseYellow: 0, baseCoeff: 0.30, step: 1, stepCoeff: 0.015 }, ...]
-  yellowSegments: null,
-  // 有效金系数（基于有效金数分段，每段独立基准系数，互不影响）
-  effYellowSeg1BaseCoeff: 0.3,   // 第1段基准系数（有效金=0时的系数）
-  effYellowSeg1Threshold: 10,    // 第1段边界（0~10有效金）
-  effYellowSeg1Step: 0.03,       // 第1段每金浮动
-  effYellowSeg2BaseCoeff: 0.4,   // 第2段基准系数（绝对，gold=0时的虚拟截距）
-  effYellowSeg2Threshold: 40,    // 第2段边界（10~40有效金）
-  effYellowSeg2Step: 0.02,       // 第2段每金浮动
-  effYellowSeg3BaseCoeff: 0.88,  // 第3段基准系数（绝对，gold=0时的虚拟截距）
-  effYellowSeg3Step: 0.008,      // 第3段（40+有效金）每金浮动
-  effYellowMaxCoeff: 2.5,        // 系数上限
-};
-
-// 默认抽数阶梯定价公式参数（对应油猴脚本 DEFAULT_PULL_FORMULA）
-const DEFAULT_PULL_FORMULA = {
-  pullBase: 200,        // 基准抽数
-  pullBasePrice: 1.0,   // 基准每抽价格（元）
-  pullStepPrice: 0.002, // 每多一抽的浮动价格
-};
-
-// 默认强绑队友配置（对应油猴脚本 DEFAULT_TEAM_MATES）
-const DEFAULT_TEAM_MATES = {
-  '爱弥斯': ['千咲', '琳奈', '莫宁', '达妮娅'],
-  '绯雪': ['洛瑟菈'],
-  '秧秧玄翎': ['穗穗'],
-  '卡提希娅': ['夏空'],
-  '弗洛洛': ['仇远', '坎特蕾拉'],
-  '洛瑟菈': ['绯雪'],
-  '露西': ['丽贝卡'],
-  '嘉贝莉娜': ['仇远'],
-  '奥古斯塔': ['尤诺'],
-  '仇远': ['嘉贝莉娜', '弗洛洛'],
-  '尤诺': ['奥古斯塔', '忌炎'],
-  '陆赫斯': ['琳奈'],
-  '赞妮': ['菲比'],
-  '布兰特': ['露帕'],
-  '西格莉卡': ['仇远'],
-  '露帕': ['布兰特'],
-  '珂莱塔': ['折枝'],
-  '菲比': ['赞妮'],
-  '坎特蕾拉': ['弗洛洛', '西格莉卡'],
-  '椿': ['守岸人'],
-  '吟霖': ['今汐', '相里要'],
-  '相里要': ['吟霖'],
-};
-
-// ============================================================
-// 默认配队列表（对应油猴脚本 DEFAULT_TEAMS）
-// ============================================================
-const DEFAULT_TEAMS = [
-  { name: '日月守', members: ['奥古斯塔', '尤诺', '守岸人'], multiplier: 1.1 },
-  { name: '弗坎守', members: ['弗洛洛', '坎特蕾拉', '守岸人'], multiplier: 1.2 },
-  { name: '爱达千', members: ['爱弥斯', '达妮娅', '千咲'], multiplier: 1.2 },
-  { name: '卡夏千', members: ['卡提希娅', '夏空', '千咲'], multiplier: 1.2 },
-  { name: '露丽守', members: ['露西', '丽贝卡', '守岸人'], multiplier: 1.1 },
-  { name: '西仇守', members: ['西格莉卡', '仇远', '守岸人'], multiplier: 1.2 },
-  { name: '嘉仇守', members: ['嘉贝莉娜', '仇远', '守岸人'], multiplier: 1.1 },
-  { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.3 },
-  { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
-  { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
-  { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.4 },
-  { name: '秧千穗', members: ['秧秧玄翎', '千咲', '穗穗'], multiplier: 1.4 },
-];
-
-// ============================================================
-// 默认抽数阶梯定价（对应油猴脚本 DEFAULT_PULL_TIERS）
-// ============================================================
-const DEFAULT_PULL_TIERS = [
-  { minPull: 0, maxPull: 50, perPullPrice: 0.6 },
-  { minPull: 50, maxPull: 100, perPullPrice: 0.7 },
-  { minPull: 100, maxPull: 150, perPullPrice: 0.8 },
-  { minPull: 150, maxPull: 200, perPullPrice: 0.9 },
-  { minPull: 200, maxPull: 250, perPullPrice: 1 },
-  { minPull: 250, maxPull: 300, perPullPrice: 1.1 },
-  { minPull: 300, maxPull: 350, perPullPrice: 1.2 },
-  { minPull: 350, maxPull: 400, perPullPrice: 1.3 },
-  { minPull: 400, maxPull: 450, perPullPrice: 1.4 },
-  { minPull: 450, maxPull: 500, perPullPrice: 1.5 },
-  { minPull: 500, maxPull: 550, perPullPrice: 1.6 },
-  { minPull: 550, maxPull: 600, perPullPrice: 1.7 },
-  { minPull: 600, maxPull: 650, perPullPrice: 1.8 },
-  { minPull: 650, maxPull: 700, perPullPrice: 1.9 },
-  { minPull: 700, maxPull: 750, perPullPrice: 2 },
-  { minPull: 750, maxPull: 800, perPullPrice: 2.1 },
-  { minPull: 800, maxPull: 850, perPullPrice: 2.2 },
-  { minPull: 850, maxPull: 900, perPullPrice: 2.3 },
-  { minPull: 900, maxPull: 950, perPullPrice: 2.4 },
-  { minPull: 950, maxPull: 1000, perPullPrice: 2.5 },
-  { minPull: 1000, maxPull: 1050, perPullPrice: 2.6 },
-  { minPull: 1050, maxPull: 1100, perPullPrice: 2.7 },
-  { minPull: 1100, maxPull: 1150, perPullPrice: 2.8 },
-  { minPull: 1150, maxPull: 1200, perPullPrice: 2.9 },
-  { minPull: 1200, maxPull: 1250, perPullPrice: 3.1 },
-  { minPull: 1250, maxPull: 1300, perPullPrice: 3.2 },
-  { minPull: 1300, maxPull: 1350, perPullPrice: 3.3 },
-  { minPull: 1350, maxPull: 1400, perPullPrice: 3.4 },
-  { minPull: 1400, maxPull: 1450, perPullPrice: 3.6 },
-  { minPull: 1450, maxPull: 1500, perPullPrice: 3.7 },
-  { minPull: 1500, maxPull: 1550, perPullPrice: 3.8 },
-  { minPull: 1550, maxPull: 1600, perPullPrice: 3.9 },
-  { minPull: 1600, maxPull: 9999, perPullPrice: 4.2 },
-];
-
-// ============================================================
-// 默认黄数阶梯系数（对应油猴脚本 DEFAULT_YELLOW_TIERS）
-// ============================================================
-const DEFAULT_YELLOW_TIERS = [
-  { minYellow: 0, maxYellow: 5, coefficient: 0.45 },
-  { minYellow: 5, maxYellow: 10, coefficient: 0.5 },
-  { minYellow: 10, maxYellow: 20, coefficient: 0.55 },
-  { minYellow: 20, maxYellow: 30, coefficient: 0.65 },
-  { minYellow: 30, maxYellow: 40, coefficient: 0.75 },
-  { minYellow: 40, maxYellow: 50, coefficient: 0.85 },
-  { minYellow: 50, maxYellow: 60, coefficient: 0.95 },
-  { minYellow: 60, maxYellow: 70, coefficient: 1 },
-  { minYellow: 70, maxYellow: 80, coefficient: 1.05 },
-  { minYellow: 80, maxYellow: 90, coefficient: 1.1 },
-  { minYellow: 90, maxYellow: 100, coefficient: 1.15 },
-  { minYellow: 100, maxYellow: 110, coefficient: 1.2 },
-  { minYellow: 110, maxYellow: 120, coefficient: 1.25 },
-  { minYellow: 120, maxYellow: 130, coefficient: 1.3 },
-  { minYellow: 130, maxYellow: 140, coefficient: 1.35 },
-  { minYellow: 140, maxYellow: 150, coefficient: 1.4 },
-  { minYellow: 150, maxYellow: 160, coefficient: 1.45 },
-  { minYellow: 160, maxYellow: 170, coefficient: 1.5 },
-  { minYellow: 170, maxYellow: 180, coefficient: 1.55 },
-  { minYellow: 180, maxYellow: 190, coefficient: 1.6 },
-  { minYellow: 190, maxYellow: 200, coefficient: 1.65 },
-  { minYellow: 200, maxYellow: 210, coefficient: 1.69 },
-  { minYellow: 210, maxYellow: 220, coefficient: 1.73 },
-  { minYellow: 220, maxYellow: 230, coefficient: 1.77 },
-  { minYellow: 230, maxYellow: 240, coefficient: 1.8 },
-  { minYellow: 240, maxYellow: 250, coefficient: 1.83 },
-  { minYellow: 250, maxYellow: 260, coefficient: 1.86 },
-  { minYellow: 260, maxYellow: 270, coefficient: 1.89 },
-  { minYellow: 270, maxYellow: 280, coefficient: 1.92 },
-  { minYellow: 280, maxYellow: 290, coefficient: 1.95 },
-  { minYellow: 290, maxYellow: 300, coefficient: 1.98 },
-  { minYellow: 300, maxYellow: 999, coefficient: 2 },
-];
-
-// ============================================================
-// 默认角色价格表（对应油猴脚本 DEFAULT_CHAR_PRICES，按角色名）
-// ============================================================
-const DEFAULT_CHAR_PRICES = {
-  '爱弥斯': 45, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
-  '琳奈': 25, '守岸人': 15, '千咲': 25, '穗穗': 35, '莫宁': 25, '秧秧玄翎': 40,
-  '洛瑟菈': 25,
-  '达妮娅': 15, '夏空': 15,
-  '露西': 20, '嘉贝莉娜': 18, '奥古斯塔': 18, '仇远': 15, '尤诺': 15,
-  '陆赫斯': 20, '赞妮': 18, '布兰特': 15, '西格莉卡': 20,
-  '露帕': 10, '珂莱塔': 10, '菲比': 10, '坎特蕾拉': 10, '椿': 10,
-  '忌炎': 2, '吟霖': 2, '相里要': 2, '今汐': 2, '长离': 2, '折枝': 2, '洛可可': 2,
-  '丽贝卡': 2, '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0, '秧秧': 0,
-};
-
-// ============================================================
-// 默认命座溢价（对应油猴脚本 DEFAULT_CONST_PREMIUMS，按角色名）
-// ============================================================
-const DEFAULT_CONST_PREMIUMS = {
-  '爱弥斯': { '1': 45, '2': 90, '3': 135, '4': 140, '5': 155, '6': 270 },
-  '绯雪': { '1': 60, '2': 80, '3': 120, '4': 150, '5': 180, '6': 320 },
-  '卡提希娅': { '1': 35, '2': 70, '3': 105, '4': 110, '5': 125, '6': 210 },
-  '弗洛洛': { '1': 35, '2': 70, '3': 105, '4': 115, '5': 125, '6': 210 },
-  '奥古斯塔': { '2': 20, '6': 80 },
-  '尤诺': { '2': 20, '6': 60 },
-  '露西': { '3': 30, '6': 80 },
-  '忌炎': { '6': 30 },
-  '守岸人': { '2': 20, '6': 50 },
-  '赞妮': { '2': 20, '6': 60 },
-  '椿': { '6': 50 },
-  '莫宁': { '1': 20, '6': 80 },
-  '珂莱塔': { '6': 50 },
-  '秧秧玄翎': { '1': 40, '2': 80, '3': 120, '4': 130, '5': 140, '6': 240 },
-  '千咲': { '2': 20, '3': 30, '6': 60 },
-  '嘉贝莉娜': { '3': 30, '6': 80 },
-  '陆赫斯': { '6': 100 },
-  '西格莉卡': { '6': 100 },
-  '丽贝卡': { '3': 20, '6': 50 },
-  '仇远': { '3': 30, '6': 50 },
-  '今汐': { '6': 30 },
-  '吟霖': { '6': 30 },
-  '坎特蕾拉': { '2': 30, '6': 50 },
-  '夏空': { '2': 20, '3': 30, '6': 50 },
-  '布兰特': { '6': 80 },
-  '长离': { '6': 30 },
-  '相里要': { '6': 30 },
-  '洛可可': { '6': 30 },
-  '琳奈': { '6': 80 },
-  '洛瑟菈': { '6': 80 },
-  '折枝': { '6': 20 },
-  '菲比': { '2': 30, '6': 80 },
-  '露帕': { '6': 80 },
-  '达妮娅': { '2': 30, '6': 80 },
-  '穗穗': { '2': 50, '6': 120 },
-};
-
-// 需要专武的角色列表（无专武时按 needSigDiscount 折扣，折扣值在权重中配置）
-const DEFAULT_NEED_SIG_WEAPONS = [
-  '爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅', '弗洛洛', '嘉贝莉娜',
-  '陆赫斯', '赞妮', '西格莉卡', '珂莱塔', '椿', '忌炎', '今汐',
-];
-
-// ============================================================
-// 角色名别名（兼容卖家常见错字/异体字）
-// ============================================================
-const CHAR_ALIASES = {
-  '爱弥丝': '爱弥斯',
-};
-
-// ============================================================
-// 角色名查找表（对应油猴脚本 CHAR_LOOKUP）
-// ============================================================
-const CHAR_LOOKUP = {};
-for (const [tier, info] of Object.entries(CHAR_TIERS)) {
-  for (const name of info.chars) {
-    CHAR_LOOKUP[name] = { tier, price: info.price, isHot: info.isHot };
+  const CHAR_LOOKUP = {};
+  for (const [tier, info] of Object.entries(CHAR_TIERS)) {
+    for (const name of info.chars) {
+      CHAR_LOOKUP[name] = { tier, price: info.price, isHot: info.isHot };
+    }
   }
-}
-// 注册别名到查找表
-for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
-  if (CHAR_LOOKUP[canonical]) {
-    CHAR_LOOKUP[alias] = CHAR_LOOKUP[canonical];
+  for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
+    if (CHAR_LOOKUP[canonical]) {
+      CHAR_LOOKUP[alias] = CHAR_LOOKUP[canonical];
+    }
   }
-}
-
-// ============================================================
-// 已知段落关键词（对应油猴脚本 SECTION_KEYWORDS）
-// ============================================================
-const SECTION_KEYWORDS = [
-  '五星角色', '四星角色', '五星武器', '金色武器', '地图探索度',
-  '余波珊瑚', '残振珊瑚', '浮金波纹', '铸潮波纹', '唤声涡纹',
-  '摩托饰品', '车架模组', '星声', '月相', '服饰', '皮肤', '摩托', '车架', '涂装',
-  '数据坞等级', '联觉等级',
-];
 
 // ============================================================
 // 构建默认权重对象（对应油猴脚本 loadWeights，saved 为空）
@@ -521,13 +231,6 @@ function buildDefaultWeights(customWeights) {
   return w;
 }
 
-// 权重标签定义（供设置面板显示用，对应油猴脚本 WEIGHT_LABELS）
-const WEIGHT_LABELS = {
-  outfit: { label: '服饰/皮肤', desc: '每个服饰/皮肤（元）' },
-  motoFrame: { label: '车架模组', desc: '每个车架模组（元）' },
-  needSigDiscount: { label: '无专武折扣', desc: '需要专武的角色无专武时，价值×此值（0.3=30%）' },
-  teamDepDiscount: { label: '强绑折扣', desc: '强绑队友全不在场时，角色价值×此值（0.7=70%）' },
-};
 
 /**
  * 获取默认权重配置（供前端 /api/defaults 接口使用）
@@ -1559,51 +1262,22 @@ function generateShortDescription(evaluation) {
   return desc;
 }
 
-// ============================================================
-// 导出
-// ============================================================
-module.exports = {
-  // 常量
-  CONFIG_VERSION,
-  CHAR_TIERS,
-  SIG_WEAPONS,
-  FULL_CONST_WEIGHT,
-  CHAR_LOOKUP,
-  CHAR_ALIASES,
-  SECTION_KEYWORDS,
-  DEFAULT_WEIGHTS,
-  DEFAULT_TEAMS,
-  DEFAULT_PULL_FORMULA,
-  DEFAULT_TEAM_MATES,
-  DEFAULT_CHAR_PRICES,
-  DEFAULT_CONST_PREMIUMS,
-  DEFAULT_NEED_SIG_WEAPONS,
-  // 构建函数
-  buildDefaultCharPrices,
-  buildDefaultConstPrices,
-  convertPremiumsToConstPrices,
-  buildDefaultTeamPremiums,
-  buildDefaultWeights,
-  getDefaults,
-  // 解析函数
-  parseAccountInfo,
-  extractSection,
-  extractNumber,
-  parseCharacters,
-  findCharsInText,
-  parseWeapons,
-  extractYellowCount,
-  extractListCount,
-  extractListItems,
-  // 计算函数
-  checkHasSigWeapon,
-  calcConstPremium,
-  getCharValue,
-  calculatePullValue,
-  getYellowCoeff,
-  getEffectiveYellowCoeff,
-  calculateValue,
-  // 对外接口
-  evaluateWithPrice,
-  generateShortDescription,
-};
+  return {
+    CONFIG_VERSION,
+    CHAR_TIERS, SIG_WEAPONS, FULL_CONST_WEIGHT, CHAR_LOOKUP, CHAR_ALIASES,
+    SECTION_KEYWORDS, DEFAULT_WEIGHTS, DEFAULT_TEAMS, DEFAULT_PULL_FORMULA,
+    DEFAULT_TEAM_MATES, DEFAULT_CHAR_PRICES, DEFAULT_CONST_PREMIUMS,
+    DEFAULT_NEED_SIG_WEAPONS,
+    buildDefaultCharPrices, buildDefaultConstPrices, convertPremiumsToConstPrices,
+    buildDefaultTeamPremiums, buildDefaultWeights, getDefaults,
+    parseAccountInfo, extractSection, extractNumber, parseCharacters,
+    findCharsInText, parseWeapons, extractYellowCount, extractListCount,
+    extractListItems, checkHasSigWeapon, calcConstPremium, getCharValue,
+    calculatePullValue, getYellowCoeff, getEffectiveYellowCoeff, calculateValue,
+    evaluateWithPrice, generateShortDescription,
+  };
+}
+
+const wuwaEngine = createEngine(WUWA_CONFIG);
+
+module.exports = { createEngine, ...wuwaEngine };

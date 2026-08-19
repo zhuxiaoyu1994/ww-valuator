@@ -138,6 +138,7 @@ function getPlatformPage() {
     }
     .game-card.wuwa .game-name { color: #ff6b7a; }
     .game-card.zzz .game-name { color: #ffb84d; }
+    .game-card.zzz .enter-arrow { color: #ffb84d; }
     .game-card.huan .game-name { color: #9d7cff; }
     .game-card.endfield .game-name { color: #4ade80; }
     .game-card.delta .game-name { color: #60a5fa; }
@@ -262,16 +263,14 @@ function getPlatformPage() {
       </a>
 
       <!-- 绝区零 -->
-      <div class="game-card zzz disabled">
+      <a class="game-card zzz clickable" href="/zzz">
         <div class="accent"></div>
         <div class="game-icon zzz">绝</div>
         <div class="game-name">绝区零</div>
-        <div class="game-desc">账号估价即将上线</div>
-        <span class="status-badge soon">敬请期待</span>
-        <div class="coming-soon-mask">
-          <div class="coming-soon-text">敬请期待</div>
-        </div>
-      </div>
+        <div class="game-desc">账号价值评估 · 角色音擎定价 · Beta测试中</div>
+        <span class="status-badge available">Beta</span>
+        <div class="enter-arrow">进入估价 →</div>
+      </a>
 
       <!-- 异环 -->
       <div class="game-card huan disabled">
