@@ -1,17 +1,17 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 19,
+  configVersion: 20,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
   // 多游戏解析参数（与油猴脚本 GAME_CONFIGS 保持一致）
-  levelKeywords: ['联觉等级', '冒险等级'],
+  levelKeywords: ['联觉等级', '冒险等级', '等级'],
   yellowUnits: ['黄'],
   constUnits: ['命'],
   constUnitDisplay: '命',
-  charSectionKeywords: ['五星角色'],
-  weaponSectionKeywords: ['五星武器', '武器', '金色武器'],
+  charSectionKeywords: ['五星角色', '按角色', '满命角色', '三命角色', '二命角色', '一命角色'],
+  weaponSectionKeywords: ['五星武器', '武器', '金色武器', '精一武器'],
   resources: [
     { key: 'starSound', name: '星声', div: 160 },
     { key: 'moonPhase', name: '月相', div: 160 },
@@ -142,6 +142,7 @@ const WUWA_CONFIG = {
     '余波珊瑚', '残振珊瑚', '浮金波纹', '铸潮波纹', '唤声涡纹',
     '摩托饰品', '车架模组', '星声', '月相', '服饰', '皮肤', '摩托', '车架', '涂装',
     '数据坞等级', '联觉等级',
+    '按角色', '满命角色', '三命角色', '二命角色', '一命角色', '精一武器', '五星角色数量', '等级',
   ],
 
   weightLabels: {

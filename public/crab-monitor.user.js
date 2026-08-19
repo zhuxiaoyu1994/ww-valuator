@@ -26,7 +26,7 @@
   'use strict';
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 19;
+  const CONFIG_VERSION = 20;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -37,7 +37,7 @@
       name: '鸣潮',
       storagePrefix: 'mw',
       minLevel: 70,                                  // 收录/通知的最低账号等级
-      levelKeywords: ['联觉等级', '冒险等级'],          // 等级关键词（按优先级）
+      levelKeywords: ['联觉等级', '冒险等级', '等级'],          // 等级关键词（按优先级）
       yellowUnits: ['黄'],                            // 限定金数量单位（"N黄"/"黄数:N"）
       constUnits: ['命'],                             // 命座单位（"N命X"/"满命X"）
       constUnitDisplay: '命',                          // 命座显示单位（表格/通知/CSV）
@@ -50,8 +50,8 @@
         qyGtid: '100003',
       },
       keywords: {
-        charSections: ['五星角色'],                     // 角色段落关键词（多段落合并解析）
-        weaponSections: ['五星武器', '武器', '金色武器'], // 武器段落关键词（按顺序回退）
+        charSections: ['五星角色', '按角色', '满命角色', '三命角色', '二命角色', '一命角色'],                     // 角色段落关键词（多段落合并解析）
+        weaponSections: ['五星武器', '武器', '金色武器', '精一武器'], // 武器段落关键词（按顺序回退）
         removeSections: ['四星角色'],                   // kjs归一化时移除的低价值段落
         resources: [
           { key: 'starSound', name: '星声', div: 160 },
@@ -207,6 +207,7 @@
         '余波珊瑚', '残振珊瑚', '浮金波纹', '铸潮波纹', '唤声涡纹',
         '摩托饰品', '车架模组', '星声', '月相', '服饰', '皮肤', '摩托', '车架', '涂装',
         '数据坞等级', '联觉等级',
+        '按角色', '满命角色', '三命角色', '二命角色', '一命角色', '精一武器', '五星角色数量', '等级',
       ],
       weightLabels: {
         outfit: { label: '服饰/皮肤', desc: '每个服饰/皮肤（元）' },
@@ -1078,6 +1079,11 @@
     const match3 = text.match(new RegExp(pattern3));
     if (match3) return match3[1].trim();
 
+    // 格式4: keyword\ncontent（螃蟹网移动端格式，换行分隔关键词和内容）
+    const pattern4 = escaped + '\\n\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
+    const match4 = text.match(new RegExp(pattern4));
+    if (match4) return match4[1].trim();
+
     return '';
   }
 
@@ -1095,9 +1101,12 @@
     // 格式3: keyword数量：数字（7881格式，如"星声数量:15533"）
     const match3 = text.match(new RegExp(escaped + '数量[：:]\\s*(\\d[\\d,]*)', 'i'));
     if (match3) return parseInt(match3[1].replace(/,/g, ''));
-    // 格式4: 数字+keyword（盼之列表页内联格式，如"1088星声"）
-    const match4 = text.match(new RegExp('(\\d[\\d,]*)\\s*' + escaped, 'i'));
+    // 格式4: keyword\n数字（螃蟹网移动端格式，换行分隔）
+    const match4 = text.match(new RegExp(escaped + '\\n\\s*(\\d[\\d,]*)', 'i'));
     if (match4) return parseInt(match4[1].replace(/,/g, ''));
+    // 格式5: 数字+keyword（盼之列表页内联格式，如"1088星声"）
+    const match5 = text.match(new RegExp('(\\d[\\d,]*)\\s*' + escaped, 'i'));
+    if (match5) return parseInt(match5[1].replace(/,/g, ''));
     return 0;
   }
 
@@ -1259,6 +1268,9 @@
       if (m) return parseInt(m[1]);
       // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
       m = text.match(new RegExp('【' + unit + '[数]?】\\s*[：:]?\\s*(\\d+)'));
+      if (m) return parseInt(m[1]);
+      // "黄数\nN"（螃蟹网移动端格式，换行分隔）
+      m = text.match(new RegExp(unit + '[数]?\\n\\s*(\\d+)'));
       if (m) return parseInt(m[1]);
     }
     // "N黄" 或 "N金"（放最后，避免误匹配前一个字段的数字）
@@ -1689,7 +1701,7 @@
             var _nsDiscountRate = w.needSigDiscount != null ? w.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
             var _origVal = Math.round((val + premium) / _nsDiscountRate);
             var _discountAmount = _origVal - Math.round(val + premium);
-            sigDiscountNotes.push(char.name + '无专武(×' + _nsDiscountRate + ', -' + _discountAmount + '元)');
+            sigDiscountNotes.push(char.name + '无专武×' + Math.round(_nsDiscountRate * 100) + '%');
             break;
           }
         }
@@ -6670,7 +6682,7 @@ function openSettings() {
 
             var sigCheck = document.createElement('input');
             sigCheck.type = 'checkbox'; sigCheck.checked = !!entry.needSig;
-            sigCheck.title = '勾选=需要专武（无专武时价值×' + (w.needSigDiscount != null ? w.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount) + '）';
+            sigCheck.title = '勾选=需要专武（无专武时价值×' + Math.round((w.needSigDiscount != null ? w.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount) * 100) + '%）';
             sigCheck.style.cssText = 'margin:0;cursor:pointer;accent-color:#ef4444;';
             sigCheck.onchange = function() { entry.needSig = sigCheck.checked; };
             row.appendChild(sigCheck);

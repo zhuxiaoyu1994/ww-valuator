@@ -475,7 +475,7 @@
             // 专武复选框
             var sigCheck = document.createElement('input');
             sigCheck.type = 'checkbox'; sigCheck.checked = !!entry.needSig;
-            sigCheck.title = '勾选=需要专武（无专武时价值×' + (w.needSigDiscount != null ? w.needSigDiscount : 0.3) + '）';
+            sigCheck.title = '勾选=需要专武（无专武时价值×' + Math.round((w.needSigDiscount != null ? w.needSigDiscount : 0.3) * 100) + '%）';
             sigCheck.style.cssText = 'margin:0;cursor:pointer;accent-color:#f87171;';
             sigCheck.onchange = function() { entry.needSig = sigCheck.checked; };
             row.appendChild(sigCheck);
@@ -547,7 +547,7 @@
             var mateBtn = document.createElement('button');
             var mateCount = entry.teamMates ? entry.teamMates.length : 0;
             mateBtn.textContent = '强绑' + (mateCount > 0 ? '(' + mateCount + ')' : '');
-            mateBtn.title = '编辑强绑队友（全不在场时价值×' + (w.teamDepDiscount != null ? w.teamDepDiscount : 0.7) + '）';
+            mateBtn.title = '编辑强绑队友（全不在场时价值×' + Math.round((w.teamDepDiscount != null ? w.teamDepDiscount : 0.7) * 100) + '%）';
             mateBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a3a;color:' + (mateCount > 0 ? '#fbbf24' : '#555') + ';font-size:11px;cursor:pointer;line-height:1.4;';
             mateBtn.onclick = function() {
               var mateOverlay = document.createElement('div');
@@ -555,7 +555,7 @@
               var mateBox = document.createElement('div');
               mateBox.style.cssText = 'background:#0f0f23;border-radius:12px;padding:20px;width:340px;max-height:500px;overflow-y:auto;color:#e0e0e0;';
               var mateHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#fbbf24;">编辑强绑队友 - ' + entry.name + '</div>';
-              mateHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">勾选强绑队友，当这些队友全不在账号中时，角色价值×' + (w.teamDepDiscount != null ? w.teamDepDiscount : 0.7) + '。可与无专武折扣叠加。</div>';
+              mateHTML += '<div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;">勾选强绑队友，当这些队友全不在账号中时，角色价值×' + Math.round((w.teamDepDiscount != null ? w.teamDepDiscount : 0.7) * 100) + '%。可与无专武折扣叠加。</div>';
               var _curMates = entry.teamMates || [];
               for (var mi = 0; mi < allCharNames.length; mi++) {
                 var mname = allCharNames[mi];

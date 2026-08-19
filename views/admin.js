@@ -1913,8 +1913,8 @@ function getAdminPage() {
 
     // 折扣参数
     var discountParts = [];
-    if (config.needSigDiscount != null) discountParts.push('无专武折扣: ×' + config.needSigDiscount);
-    if (config.teamDepDiscount != null) discountParts.push('无强绑折扣: ×' + config.teamDepDiscount);
+    if (config.needSigDiscount != null) discountParts.push('无专武折扣: ×' + Math.round(config.needSigDiscount * 100) + '%');
+    if (config.teamDepDiscount != null) discountParts.push('无强绑折扣: ×' + Math.round(config.teamDepDiscount * 100) + '%');
     if (discountParts.length) {
       sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">折扣参数</h4><div style="font-size:12px;color:#ccc;">' + discountParts.join('　') + '</div>');
     }

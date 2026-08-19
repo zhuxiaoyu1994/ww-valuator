@@ -303,6 +303,11 @@ function extractSection(text, keyword) {
   const match3 = text.match(new RegExp(pattern3));
   if (match3) return match3[1].trim();
 
+  // 格式4: keyword\ncontent（螃蟹网移动端格式，换行分隔关键词和内容）
+  const pattern4 = escaped + '\\n\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
+  const match4 = text.match(new RegExp(pattern4));
+  if (match4) return match4[1].trim();
+
   return '';
 }
 
@@ -320,6 +325,9 @@ function extractNumber(text, keyword) {
   // 格式3: keyword数量：数字（7881格式，如"星声数量:15533"）
   const match3 = text.match(new RegExp(escaped + '数量[：:]\\s*(\\d[\\d,]*)', 'i'));
   if (match3) return parseInt(match3[1].replace(/,/g, ''));
+  // 格式4: keyword\n数字（螃蟹网移动端格式，换行分隔）
+  const match4 = text.match(new RegExp(escaped + '\\n\\s*(\\d[\\d,]*)', 'i'));
+  if (match4) return parseInt(match4[1].replace(/,/g, ''));
   return 0;
 }
 
@@ -463,6 +471,9 @@ function extractYellowCount(text) {
     if (m) return parseInt(m[1]);
     // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
     m = text.match(new RegExp('【' + unit + '[数]?】\\s*[：:]?\\s*(\\d+)'));
+    if (m) return parseInt(m[1]);
+    // "黄数\nN"（螃蟹网移动端格式，换行分隔）
+    m = text.match(new RegExp(unit + '[数]?\\n\\s*(\\d+)'));
     if (m) return parseInt(m[1]);
   }
   // "N黄" 或 "N金"（放最后，避免误匹配前一个字段的数字）
@@ -850,7 +861,7 @@ function calculateValue(parsed, price) {
       if (_isNeedSig) {
         var _origVal = Math.round((val + premium) / _nsDiscount);
         var _discountAmount = _origVal - Math.round(val + premium);
-        sigDiscountNotes.push(char.name + '无专武(×' + _nsDiscount + ', -' + _discountAmount + '元)');
+        sigDiscountNotes.push(char.name + '无专武×' + Math.round(_nsDiscount * 100) + '%');
       }
     }
 
