@@ -1,10 +1,12 @@
 // ==UserScript==
-// @name         螃蟹网鸣潮监控助手
+// @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      2.8.0
-// @description  监控螃蟹网+盼之+氪金兽+7881鸣潮账号列表，自动发现高性价比账号
+// @version      3.0.1
+// @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
+// @match        https://www.pxb7.com/buy/10312/*
+// @match        https://www.pxb7.com/buy/10312
 // @match        https://www.pxb7.com/product/*
 // @grant        GM_notification
 // @grant        GM_xmlhttpRequest
@@ -27,145 +29,443 @@
   const CONFIG_VERSION = 19;
 
   // ============================================================
-  // 常量定义
+  // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
   // ============================================================
-
-  // 角色定价表
-  const CHAR_TIERS = {
-    S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅'] },
-    A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '弗洛洛', '洛瑟菈'] },
-    B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '露西', '嘉贝莉娜', '奥古斯塔', '仇远', '尤诺', '陆赫斯', '赞妮', '布兰特', '守岸人', '西格莉卡'] },
-    C: { price: 5, isHot: false, chars: ['露帕', '珂莱塔', '菲比', '坎特蕾拉', '椿'] },
-    D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡'] },
-    E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心', '秧秧'] },
-  };
-
-  // 专武映射（角色名 -> 专武名）
-  const SIG_WEAPONS = {
-    '忌炎': '苍鳞千嶂', '吟霖': '掣傀之手', '今汐': '时和岁稔', '长离': '赫奕流明',
-    '相里要': '诸方玄枢', '椿': '裁春', '珂莱塔': '死与舞', '折枝': '琼枝冰绡',
-    '守岸人': '星序协响', '洛瑟菈': '存帧', '莫宁': '宙算仪轨', '千咲': '昙切',
-    '爱弥斯': '永远的启明星', '弗洛洛': '幽冥的忘忧章', '卡提希娅': '不屈命定之冠',
-    '尤诺': '万物持存的注释', '夏空': '林间的咏叹调', '赞妮': '焰光裁定',
-    '坎特蕾拉': '海的呢喃', '仇远': '裁竹', '布兰特': '不灭航路', '露帕': '焰痕',
-    '奥古斯塔': '驭冕铸雷之权', '嘉贝莉娜': '光影双生', '西格莉卡': '昭日译注',
-    '达妮娅': '赝作的矮星', '菲比': '和光回唱', '绯雪': '灼霜', '琳奈': '溢彩荧辉',
-    '丽贝卡': '碎骨', '陆赫斯': '白昼之脊', '秧秧玄翎': '天之苍苍', '穗穗': '栖霞饮露',
-    '露西': '蜃影', '洛可可': '悲喜剧',
-  };
-
-  // 配队定义
-  const TEAMS = [
-    { name: '爱弥斯队', members: ['爱弥斯', '卡提希娅', '守岸人'], multiplier: 1.2 },
-    { name: '绯雪队', members: ['绯雪', '卡提希娅', '守岸人'], multiplier: 1.2 },
-    { name: '琳奈队', members: ['琳奈', '千咲', '守岸人'], multiplier: 1.2 },
-    { name: '莫宁队', members: ['莫宁', '卡提希娅', '守岸人'], multiplier: 1.15 },
-    { name: '达妮娅队', members: ['达妮娅', '洛瑟菈', '守岸人'], multiplier: 1.15 },
-    { name: '夏空队', members: ['夏空', '洛瑟菈', '守岸人'], multiplier: 1.15 },
-    { name: '穗穗队', members: ['穗穗', '卡提希娅', '守岸人'], multiplier: 1.15 },
-  ];
-
-  // 角色名缩写映射（用于表格显示）
-  const CHAR_ABBR = {
-    '爱弥斯': '爱', '绯雪': '绯', '卡提希娅': '卡', '弗洛洛': '弗',
-    '琳奈': '琳', '守岸人': '守', '千咲': '千', '穗穗': '穗', '莫宁': '莫',
-    '达妮娅': '达', '洛瑟菈': '瑟', '夏空': '夏',
-    '布兰特': '布', '露帕': '帕', '珂莱塔': '珂', '菲比': '菲', '赞妮': '赞',
-    '尤诺': '尤', '陆赫斯': '陆', '坎特蕾拉': '坎', '仇远': '仇', '奥古斯塔': '奥',
-    '嘉贝莉娜': '嘉', '西格莉卡': '西', '丽贝卡': '丽', '露西': '露', '椿': '椿',
-    '忌炎': '忌', '吟霖': '吟', '相里要': '相', '今汐': '今', '长离': '长', '折枝': '折', '洛可可': '可',
-    '维里奈': '维', '卡卡罗': '罗', '安可': '安', '凌阳': '凌', '鉴心': '鉴',
-  };
-
-  // 满命权重
-  const FULL_CONST_WEIGHT = { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 };
-
-  // 角色名别名（兼容卖家常见错字/异体字）
-  const CHAR_ALIASES = {
-    '爱弥丝': '爱弥斯',
-  };
-
-  // ============================================================
-  // 估值权重默认值（可被用户在设置面板中覆盖）
-  // ============================================================
-
-  // 默认权重参数（参考性价比脚本 CONFIG.weights）
-  const DEFAULT_WEIGHTS = {
-    // 满命溢价（加权满命数档位）
-    c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
-    c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
-    // 满命溢价公式参数（加权满命数 → 角色价值溢价系数）
-    c6Base: 3,          // 基准加权满命数
-    c6BaseBonus: 1.0,   // 基准溢价（100%）
-    c6Step: 0.1,        // 每档满命数
-    c6StepBonus: 0.05,  // 每档浮动（5%）
-    // 资源定价
-    outfit: 0,             // 服饰/皮肤单价
-    motoFrame: 0,          // 车架模组单价
-    // 满命抽数加成公式参数（加权满命数 → 抽数价值加成系数）
-    pullC6Base: 5,          // 基准加权满命数
-    pullC6BaseBonus: 0.5,   // 基准加成（50%）
-    pullC6Step: 0.1,        // 每档满命数
-    pullC6StepBonus: 0.005, // 每档浮动（0.5%）
-    // 多配队额外系数
-    teamMultiBonus: [
-      { count: 2, coef: 1.05 },
-      { count: 3, coef: 1.1 },
-      { count: 4, coef: 1.15 },
-      { count: 5, coef: 1.2 },
-      { count: 6, coef: 1.25 },
-      { count: 7, coef: 1.3 },
-      { count: 8, coef: 1.35 },
-      { count: 9, coef: 1.4 },
-      { count: 10, coef: 1.45 },
-    ],
-    // 低命折扣系数规则（指定级别角色均不超过N命时，总价值打折）
-    flatDiscountRules: [
-      { tiers: ['S', 'A'], maxConst: 2, discount: 0.8 },
-    ],
-    // C6配队依赖（向后兼容配置，仅提取 teammate 字段用于 teamMates 迁移；不影响角色等级）
-    c6TeamDependency: {
-      '卡提希娅': { teammate: '夏空' },
-      '弗洛洛': { teammate: '坎特蕾拉' },
-      '露西': { teammate: '丽贝卡' },
-      '绯雪': { teammate: '洛瑟菈' },
-      '秧秧玄翎': { teammate: '穗穗' },
+  const GAME_CONFIGS = {
+    wuwa: {
+      key: 'wuwa',
+      name: '鸣潮',
+      storagePrefix: 'mw',
+      minLevel: 70,                                  // 收录/通知的最低账号等级
+      levelKeywords: ['联觉等级', '冒险等级'],          // 等级关键词（按优先级）
+      yellowUnits: ['黄'],                            // 限定金数量单位（"N黄"/"黄数:N"）
+      constUnits: ['命'],                             // 命座单位（"N命X"/"满命X"）
+      constUnitDisplay: '命',                          // 命座显示单位（表格/通知/CSV）
+      platformIds: {
+        pxb7: '10302',
+        pzds: '303',
+        kjs: '7265',
+        kjsCateId: 7996,
+        qy: 'A5752',
+        qyGtid: '100003',
+      },
+      keywords: {
+        charSections: ['五星角色'],                     // 角色段落关键词（多段落合并解析）
+        weaponSections: ['五星武器', '武器', '金色武器'], // 武器段落关键词（按顺序回退）
+        removeSections: ['四星角色'],                   // kjs归一化时移除的低价值段落
+        resources: [
+          { key: 'starSound', name: '星声', div: 160 },
+          { key: 'moonPhase', name: '月相', div: 160 },
+          { key: 'aftermathCoral', name: '余波珊瑚', div: 8 },
+          { key: 'floatGoldRipple', name: '浮金波纹', div: 1 },
+          { key: 'castTideRipple', name: '铸潮波纹', div: 1 },
+        ],
+      },
+      motoSectionKeywords: ['车架模组', '车架', '摩托'],
+      motoValueKeywords: ['车架模组', '车架'],   // 估值计价的车架段（摩托段仅计数显示）
+      motoAccessoryKeywords: ['摩托饰品'],
+      outfitSectionKeywords: ['服饰', '皮肤'],
+      labels: {
+        charColumn: '五星角色',
+        charSettingTitle: '五星角色定价（角色名 + 专武 + 估值 + 命座溢价）',
+        motoColumn: '摩托',
+      },
+      defaultCharNotifyRules: [
+        { chars: [{ name: '爱弥斯', minConst: 3 }, { name: '绯雪', minConst: 3 }, { name: '卡提希娅', minConst: 3 }, { name: '弗洛洛', minConst: 2 }, { name: '琳奈', minConst: 0 }, { name: '莫宁', minConst: 0 }, { name: '洛瑟菈', minConst: 0 }, { name: '夏空', minConst: 0 }], minDiff: -200 },
+      ],
+      charTiers: {
+        S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅'] },
+        A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '弗洛洛', '洛瑟菈'] },
+        B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '露西', '嘉贝莉娜', '奥古斯塔', '仇远', '尤诺', '陆赫斯', '赞妮', '布兰特', '守岸人', '西格莉卡'] },
+        C: { price: 5, isHot: false, chars: ['露帕', '珂莱塔', '菲比', '坎特蕾拉', '椿'] },
+        D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡'] },
+        E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心', '秧秧'] },
+      },
+      sigWeapons: {
+        '忌炎': '苍鳞千嶂', '吟霖': '掣傀之手', '今汐': '时和岁稔', '长离': '赫奕流明',
+        '相里要': '诸方玄枢', '椿': '裁春', '珂莱塔': '死与舞', '折枝': '琼枝冰绡',
+        '守岸人': '星序协响', '洛瑟菈': '存帧', '莫宁': '宙算仪轨', '千咲': '昙切',
+        '爱弥斯': '永远的启明星', '弗洛洛': '幽冥的忘忧章', '卡提希娅': '不屈命定之冠',
+        '尤诺': '万物持存的注释', '夏空': '林间的咏叹调', '赞妮': '焰光裁定',
+        '坎特蕾拉': '海的呢喃', '仇远': '裁竹', '布兰特': '不灭航路', '露帕': '焰痕',
+        '奥古斯塔': '驭冕铸雷之权', '嘉贝莉娜': '光影双生', '西格莉卡': '昭日译注',
+        '达妮娅': '赝作的矮星', '菲比': '和光回唱', '绯雪': '灼霜', '琳奈': '溢彩荧辉',
+        '丽贝卡': '碎骨', '陆赫斯': '白昼之脊', '秧秧玄翎': '天之苍苍', '穗穗': '栖霞饮露',
+        '露西': '蜃影', '洛可可': '悲喜剧',
+      },
+      charAbbr: {
+        '爱弥斯': '爱', '绯雪': '绯', '卡提希娅': '卡', '弗洛洛': '弗',
+        '琳奈': '琳', '守岸人': '守', '千咲': '千', '穗穗': '穗', '莫宁': '莫',
+        '达妮娅': '达', '洛瑟菈': '瑟', '夏空': '夏',
+        '布兰特': '布', '露帕': '帕', '珂莱塔': '珂', '菲比': '菲', '赞妮': '赞',
+        '尤诺': '尤', '陆赫斯': '陆', '坎特蕾拉': '坎', '仇远': '仇', '奥古斯塔': '奥',
+        '嘉贝莉娜': '嘉', '西格莉卡': '西', '丽贝卡': '丽', '露西': '露', '椿': '椿',
+        '忌炎': '忌', '吟霖': '吟', '相里要': '相', '今汐': '今', '长离': '长', '折枝': '折', '洛可可': '可',
+        '维里奈': '维', '卡卡罗': '罗', '安可': '安', '凌阳': '凌', '鉴心': '鉴',
+      },
+      charAliases: { '爱弥丝': '爱弥斯' },
+      fullConstWeight: { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
+      defaultCharPrices: {
+        '爱弥斯': 45, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
+        '琳奈': 25, '守岸人': 15, '千咲': 25, '穗穗': 35, '莫宁': 25, '秧秧玄翎': 40,
+        '洛瑟菈': 25,
+        '达妮娅': 15, '夏空': 15,
+        '露西': 20, '嘉贝莉娜': 18, '奥古斯塔': 18, '仇远': 15, '尤诺': 15,
+        '陆赫斯': 20, '赞妮': 18, '布兰特': 15, '西格莉卡': 20,
+        '露帕': 10, '珂莱塔': 10, '菲比': 10, '坎特蕾拉': 10, '椿': 10,
+        '忌炎': 2, '吟霖': 2, '相里要': 2, '今汐': 2, '长离': 2, '折枝': 2, '洛可可': 2,
+        '丽贝卡': 2, '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0, '秧秧': 0,
+      },
+      defaultConstPremiums: {
+        '爱弥斯': { '1': 45, '2': 90, '3': 135, '4': 140, '5': 155, '6': 270 },
+        '绯雪': { '1': 60, '2': 80, '3': 120, '4': 150, '5': 180, '6': 320 },
+        '秧秧玄翎': { '1': 40, '2': 80, '3': 120, '4': 130, '5': 140, '6': 240 },
+        '卡提希娅': { '1': 35, '2': 70, '3': 105, '4': 110, '5': 125, '6': 210 },
+        '琳奈': { '1': 10, '2': 20, '3': 40, '4': 50, '5': 60, '6': 80 },
+        '千咲': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+        '穗穗': { '1': 20, '2': 50, '3': 60, '4': 70, '5': 80, '6': 120 },
+        '莫宁': { '1': 20, '2': 40, '3': 50, '4': 60, '5': 70, '6': 80 },
+        '弗洛洛': { '1': 35, '2': 70, '3': 105, '4': 115, '5': 125, '6': 210 },
+        '洛瑟菈': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+        '达妮娅': { '1': 15, '2': 30, '3': 40, '4': 50, '5': 60, '6': 80 },
+        '夏空': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '露西': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+        '嘉贝莉娜': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+        '奥古斯塔': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+        '仇远': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '尤诺': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '陆赫斯': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 100 },
+        '赞妮': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '布兰特': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+        '守岸人': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '西格莉卡': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 100 },
+        '露帕': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
+        '珂莱塔': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '菲比': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '坎特蕾拉': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '椿': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
+        '忌炎': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+        '吟霖': { '1': 3, '2': 6, '3': 10, '4': 14, '5': 17, '6': 20 },
+        '相里要': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+        '今汐': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
+        '长离': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
+        '折枝': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
+        '洛可可': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
+        '丽贝卡': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
+      },
+      defaultNeedSigWeapons: [
+        '爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅', '弗洛洛', '嘉贝莉娜',
+        '陆赫斯', '赞妮', '西格莉卡', '珂莱塔', '椿', '忌炎', '今汐',
+      ],
+      defaultTeamMates: {
+        '爱弥斯': ['千咲', '琳奈', '莫宁', '达妮娅'],
+        '绯雪': ['洛瑟菈'],
+        '秧秧玄翎': ['穗穗'],
+        '卡提希娅': ['夏空'],
+        '弗洛洛': ['仇远', '坎特蕾拉'],
+        '洛瑟菈': ['绯雪'],
+        '露西': ['丽贝卡'],
+        '嘉贝莉娜': ['仇远'],
+        '奥古斯塔': ['尤诺'],
+        '仇远': ['嘉贝莉娜', '弗洛洛'],
+        '尤诺': ['奥古斯塔', '忌炎'],
+        '陆赫斯': ['琳奈'],
+        '赞妮': ['菲比'],
+        '布兰特': ['露帕'],
+        '西格莉卡': ['仇远'],
+        '露帕': ['布兰特'],
+        '珂莱塔': ['折枝'],
+        '菲比': ['赞妮'],
+        '坎特蕾拉': ['弗洛洛', '西格莉卡'],
+        '椿': ['守岸人'],
+        '吟霖': ['今汐', '相里要'],
+        '相里要': ['吟霖'],
+      },
+      defaultTeams: [
+        { name: '日月守', members: ['奥古斯塔', '尤诺', '守岸人'], multiplier: 1.1 },
+        { name: '弗坎守', members: ['弗洛洛', '坎特蕾拉', '守岸人'], multiplier: 1.2 },
+        { name: '爱达千', members: ['爱弥斯', '达妮娅', '千咲'], multiplier: 1.2 },
+        { name: '卡夏千', members: ['卡提希娅', '夏空', '千咲'], multiplier: 1.2 },
+        { name: '露丽守', members: ['露西', '丽贝卡', '守岸人'], multiplier: 1.1 },
+        { name: '西仇守', members: ['西格莉卡', '仇远', '守岸人'], multiplier: 1.2 },
+        { name: '嘉仇守', members: ['嘉贝莉娜', '仇远', '守岸人'], multiplier: 1.1 },
+        { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.3 },
+        { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
+        { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
+        { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.4 },
+        { name: '秧千穗', members: ['秧秧玄翎', '千咲', '穗穗'], multiplier: 1.4 },
+      ],
+      c6TeamDependency: {
+        '卡提希娅': { teammate: '夏空' },
+        '弗洛洛': { teammate: '坎特蕾拉' },
+        '露西': { teammate: '丽贝卡' },
+        '绯雪': { teammate: '洛瑟菈' },
+        '秧秧玄翎': { teammate: '穗穗' },
+      },
+      sectionKeywords: [
+        '五星角色', '四星角色', '五星武器', '金色武器', '地图探索度',
+        '余波珊瑚', '残振珊瑚', '浮金波纹', '铸潮波纹', '唤声涡纹',
+        '摩托饰品', '车架模组', '星声', '月相', '服饰', '皮肤', '摩托', '车架', '涂装',
+        '数据坞等级', '联觉等级',
+      ],
+      weightLabels: {
+        outfit: { label: '服饰/皮肤', desc: '每个服饰/皮肤（元）' },
+        motoFrame: { label: '车架模组', desc: '每个车架模组（元）' },
+        needSigDiscount: { label: '无专武折扣', desc: '需要专武的角色无专武时，价值×此值（0.3=30%）' },
+        teamDepDiscount: { label: '强绑折扣', desc: '强绑队友全不在场时，角色价值×此值（0.7=70%）' },
+      },
     },
-    // 无专武折扣（需要专武的角色，无专武时价值 × 此值）
-    needSigDiscount: 0.3,
-    // 强绑角色折扣（强绑队友全不在场时，角色价值 × 此值）
-    teamDepDiscount: 0.7,
-    // 限定金系数上限
-    yellowMaxCoeff: 3.0,
-    // 限定金分段系数（null=单公式模式；数组=分段模式）
-    yellowSegments: null,
-    // 有效金系数（基于有效金数分段，每段独立基准系数，互不影响）
-    effYellowSeg1BaseCoeff: 0.3,   // 第1段基准系数（有效金=0时的系数）
-    effYellowSeg1Threshold: 10,    // 第1段边界（0~10有效金）
-    effYellowSeg1Step: 0.03,       // 第1段每金浮动
-    effYellowSeg2BaseCoeff: 0.4,   // 第2段基准系数（绝对，gold=0时的虚拟截距）
-    effYellowSeg2Threshold: 40,    // 第2段边界（10~40有效金）
-    effYellowSeg2Step: 0.02,       // 第2段每金浮动
-    effYellowSeg3BaseCoeff: 0.88,  // 第3段基准系数（绝对，gold=0时的虚拟截距）
-    effYellowSeg3Step: 0.008,      // 第3段（40+有效金）每金浮动
-    effYellowMaxCoeff: 2.5,        // 系数上限
+
+    zzz: {
+      key: 'zzz',
+      name: '绝区零',
+      storagePrefix: 'zzz',
+      minLevel: 40,                                  // 绳网等级上限60，40≈鸣潮的70
+      levelKeywords: ['绳网等级', '联觉等级', '冒险等级'],
+      yellowUnits: ['黄', '金'],
+      constUnits: ['命', '影'],                       // 影画=N命（"N影X"/"满影X"）
+      constUnitDisplay: '影',                          // 命座显示单位（表格/通知/CSV）
+      platformIds: {
+        pxb7: '10312',
+        pzds: '275',
+        kjs: '2530',
+        kjsCateId: 2299,
+        qy: 'A5754',
+        qyGtid: '100003',
+      },
+      keywords: {
+        charSections: ['S级代理人', 'A级代理人', '限定代理人', '代理人', '五星角色'],
+        weaponSections: ['S级音擎', '金色音擎', '音擎', '五星武器'],
+        removeSections: [],
+        resources: [
+          { key: 'starSound', name: '菲林', div: 160 },
+          { key: 'moonPhase', name: '母带', div: 1 },
+          { key: 'aftermathCoral', name: '丁尼', div: 0 },
+          { key: 'floatGoldRipple', name: '调查记录', div: 0 },
+          { key: 'castTideRipple', name: '活跃天数', div: 0 },
+        ],
+      },
+      motoSectionKeywords: ['邦布'],
+      motoValueKeywords: ['邦布'],
+      motoAccessoryKeywords: [],
+      outfitSectionKeywords: ['服饰', '皮肤'],
+      labels: {
+        charColumn: '代理人',
+        charSettingTitle: '代理人定价（角色名 + 专武 + 估值 + 影画溢价）',
+        motoColumn: '邦布',
+      },
+      defaultCharNotifyRules: [],
+      charTiers: {
+        // 绝区零代理人分级（初版草稿定价，请在「估值设置」中按行情调整；
+        // 未在defaultCharPrices中单独定价的角色按级别默认价计算）
+        S: { price: 50, isHot: true, chars: ['艾莲', '朱鸢', '青衣', '简', '凯撒', '伯尼斯', '星见雅', '薇薇安', '雨果', '仪玄'] },
+        A: { price: 35, isHot: true, chars: ['潘引壶', '浮波柚叶'] },
+        B: { price: 25, isHot: true, chars: [] },
+        C: { price: 5, isHot: false, chars: [] },
+        D: { price: 3, isHot: false, chars: [] },
+        E: { price: 2, isHot: false, chars: [] },
+      },
+      sigWeapons: {},
+      charAbbr: {},
+      charAliases: { '雅': '星见雅' },   // 平台卖家常用"雅"指星见雅
+      fullConstWeight: { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
+      defaultCharPrices: {},
+      defaultConstPremiums: {},
+      defaultNeedSigWeapons: [],
+      defaultTeamMates: {},
+      defaultTeams: [],
+      c6TeamDependency: {},
+      sectionKeywords: [
+        'S级代理人', 'A级代理人', 'B级代理人', '限定代理人', '代理人',
+        'S级音擎', 'A级音擎', '金色音擎', '音擎', '驱动盘',
+        'S级邦布', 'A级邦布', '邦布',
+        '菲林', '母带', '丁尼', '调查记录', '活跃天数',
+        '绳网等级', '服饰', '皮肤',
+      ],
+      weightLabels: {
+        outfit: { label: '皮肤/外观', desc: '每个皮肤/外观（元）' },
+        motoFrame: { label: '邦布', desc: '每个邦布（元）' },
+        needSigDiscount: { label: '无专武折扣', desc: '需要专武的角色无专武时，价值×此值（0.3=30%）' },
+        teamDepDiscount: { label: '强绑折扣', desc: '强绑队友全不在场时，角色价值×此值（0.7=70%）' },
+      },
+    },
   };
 
-  // 默认配队列表
-  const DEFAULT_TEAMS = [
-    { name: '日月守', members: ['奥古斯塔', '尤诺', '守岸人'], multiplier: 1.1 },
-    { name: '弗坎守', members: ['弗洛洛', '坎特蕾拉', '守岸人'], multiplier: 1.2 },
-    { name: '爱达千', members: ['爱弥斯', '达妮娅', '千咲'], multiplier: 1.2 },
-    { name: '卡夏千', members: ['卡提希娅', '夏空', '千咲'], multiplier: 1.2 },
-    { name: '露丽守', members: ['露西', '丽贝卡', '守岸人'], multiplier: 1.1 },
-    { name: '西仇守', members: ['西格莉卡', '仇远', '守岸人'], multiplier: 1.2 },
-    { name: '嘉仇守', members: ['嘉贝莉娜', '仇远', '守岸人'], multiplier: 1.1 },
-    { name: '爱琳莫', members: ['爱弥斯', '莫宁', '琳奈'], multiplier: 1.3 },
-    { name: '三火队', members: ['布兰特', '露帕', '长离'], multiplier: 1.1 },
-    { name: '赞菲守', members: ['赞妮', '菲比', '守岸人'], multiplier: 1.1 },
-    { name: '绯洛穗', members: ['绯雪', '洛瑟菈', '穗穗'], multiplier: 1.4 },
-    { name: '秧千穗', members: ['秧秧玄翎', '千咲', '穗穗'], multiplier: 1.4 },
-  ];
+  // 当前游戏（init时根据URL/上次选择确定，可通过面板下拉框切换）
+  let currentGame = 'wuwa';
+  function G() { return GAME_CONFIGS[currentGame]; }
+
+  // 当前游戏的全局存储键（跨游戏共享）
+  const GLOBAL_STORAGE_KEYS = {
+    game: 'pxb7_monitor_current_game',
+  };
+
+  // 游戏相关常量（applyGameConfig时按当前游戏重新赋值）
+  let CHAR_TIERS = {};
+  let SIG_WEAPONS = {};
+  let CHAR_ABBR = {};
+  let CHAR_ALIASES = {};
+  let FULL_CONST_WEIGHT = {};
+  let DEFAULT_WEIGHTS = {};
+  let DEFAULT_TEAMS = [];
+  let DEFAULT_CHAR_PRICES = {};
+  let DEFAULT_CONST_PREMIUMS = {};
+  let DEFAULT_NEED_SIG_WEAPONS = [];
+  let DEFAULT_TEAM_MATES = {};
+  let WEIGHT_LABELS = {};
+  let SECTION_KEYWORDS = [];
+  let STORAGE_KEYS = {};
+  let CHAR_LOOKUP = {};
+
+  function buildStorageKeys(prefix) {
+    return {
+      table: prefix + '_monitor_table',
+      seen: prefix + '_monitor_seen',
+      notified: prefix + '_monitor_notified',
+      state: prefix + '_monitor_state',
+      weights: prefix + '_monitor_config',
+      configVersion: prefix + '_monitor_config_version',
+    };
+  }
+
+  // 按当前游戏应用配置（游戏切换时重新调用）
+  function applyGameConfig() {
+    const g = G();
+    CHAR_TIERS = g.charTiers;
+    SIG_WEAPONS = g.sigWeapons;
+    CHAR_ABBR = g.charAbbr;
+    CHAR_ALIASES = g.charAliases;
+    FULL_CONST_WEIGHT = g.fullConstWeight;
+    DEFAULT_TEAMS = g.defaultTeams;
+    DEFAULT_CHAR_PRICES = g.defaultCharPrices;
+    DEFAULT_CONST_PREMIUMS = g.defaultConstPremiums;
+    DEFAULT_NEED_SIG_WEAPONS = g.defaultNeedSigWeapons;
+    DEFAULT_TEAM_MATES = g.defaultTeamMates;
+    WEIGHT_LABELS = g.weightLabels;
+    SECTION_KEYWORDS = g.sectionKeywords;
+    STORAGE_KEYS = buildStorageKeys(g.storagePrefix);
+    DEFAULT_WEIGHTS = buildGameDefaultWeights(g);
+    // 构建角色名查找表
+    CHAR_LOOKUP = {};
+    for (const [tier, info] of Object.entries(CHAR_TIERS)) {
+      for (const name of info.chars) {
+        CHAR_LOOKUP[name] = { tier, price: info.price, isHot: info.isHot };
+      }
+    }
+    // 注册别名到查找表
+    for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
+      if (CHAR_LOOKUP[canonical]) {
+        CHAR_LOOKUP[alias] = CHAR_LOOKUP[canonical];
+      }
+    }
+  }
+
+  // 判断标题是否已含武器段（任一武器段关键词命中即算）
+  function hasWeaponSection(title) {
+    return G().keywords.weaponSections.some(kw => (title || '').indexOf(kw) >= 0);
+  }
+
+  // 更新面板中依赖游戏配置的动态文本（表头等）
+  function updateGameLabels() {
+    const thMoto = document.getElementById('mwThMoto');
+    const thChars = document.getElementById('mwThChars');
+    if (thMoto) thMoto.textContent = G().labels.motoColumn;
+    if (thChars) thChars.textContent = G().labels.charColumn;
+    if (dom.gameSelector) dom.gameSelector.value = currentGame;
+  }
+
+  // 切换监控游戏：记录选择，保存当前游戏状态，跳转到新游戏列表页
+  // （各游戏的数据/配置/状态通过存储键前缀完全隔离，新页面按URL自动识别游戏）
+  function switchGame(newGame) {
+    if (!GAME_CONFIGS[newGame] || newGame === currentGame) return;
+    localStorage.setItem(GLOBAL_STORAGE_KEYS.game, newGame);
+    saveState();
+    window.location.href = 'https://www.pxb7.com/buy/' + GAME_CONFIGS[newGame].platformIds.pxb7;
+  }
+
+  // 资源名称列表（用于kjs归一化等正则构建）
+  function resourceNames() {
+    return G().keywords.resources.map(r => r.name);
+  }
+  // 资源摘要文本（调试日志用，如"星声1234 月相56 黄12"）
+  function resourceSummaryText(parsed) {
+    return G().keywords.resources.map(r => r.name + (parsed[r.key] || 0)).join(' ');
+  }
+  // 游戏文本特征正则（判断文本是否为当前游戏的商品描述：等级/黄数单位/命座单位/资源名/精炼）
+  function gameTextPattern() {
+    const g = G();
+    return new RegExp('(?:级[，,]|' + g.yellowUnits.join('|') + '|金角色|' +
+      g.constUnits.join('|') + '|' + resourceNames().join('|') + '|精\\d)');
+  }
+  // 抽数计算公式文本（如"星声/160+月相/160+余波珊瑚/8+浮金波纹+铸潮波纹"）
+  function pullFormulaText() {
+    return G().keywords.resources.filter(r => r.div > 0)
+      .map(r => r.name + (r.div > 1 ? '/' + r.div : '')).join('+');
+  }
+  // 收录/通知最低等级
+  function minLevel() {
+    return G().minLevel;
+  }
+
+  // ============================================================
+  // 估值权重默认值（可被用户在设置面板中覆盖；数值参数两游戏相同）
+  // ============================================================
+  function buildGameDefaultWeights(g) {
+    return {
+      // 满命溢价（加权满命数档位）
+      c6TierWeights: g.fullConstWeight,
+      c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
+      // 满命溢价公式参数（加权满命数 → 角色价值溢价系数）
+      c6Base: 3,          // 基准加权满命数
+      c6BaseBonus: 1.0,   // 基准溢价（100%）
+      c6Step: 0.1,        // 每档满命数
+      c6StepBonus: 0.05,  // 每档浮动（5%）
+      // 资源定价
+      outfit: 0,             // 服饰/皮肤单价
+      motoFrame: 0,          // 车架模组/邦布单价
+      // 满命抽数加成公式参数（加权满命数 → 抽数价值加成系数）
+      pullC6Base: 5,          // 基准加权满命数
+      pullC6BaseBonus: 0.5,   // 基准加成（50%）
+      pullC6Step: 0.1,        // 每档满命数
+      pullC6StepBonus: 0.005, // 每档浮动（0.5%）
+      // 多配队额外系数
+      teamMultiBonus: [
+        { count: 2, coef: 1.05 },
+        { count: 3, coef: 1.1 },
+        { count: 4, coef: 1.15 },
+        { count: 5, coef: 1.2 },
+        { count: 6, coef: 1.25 },
+        { count: 7, coef: 1.3 },
+        { count: 8, coef: 1.35 },
+        { count: 9, coef: 1.4 },
+        { count: 10, coef: 1.45 },
+      ],
+      // 低命折扣系数规则（指定级别角色均不超过N命时，总价值打折）
+      flatDiscountRules: [
+        { tiers: ['S', 'A'], maxConst: 2, discount: 0.8 },
+      ],
+      // C6配队依赖（向后兼容配置，仅提取 teammate 字段用于 teamMates 迁移；不影响角色等级）
+      c6TeamDependency: g.c6TeamDependency,
+      // 无专武折扣（需要专武的角色，无专武时价值 × 此值）
+      needSigDiscount: 0.3,
+      // 强绑角色折扣（强绑队友全不在场时，角色价值 × 此值）
+      teamDepDiscount: 0.7,
+      // 限定金系数上限
+      yellowMaxCoeff: 3.0,
+      // 限定金分段系数（null=单公式模式；数组=分段模式）
+      yellowSegments: null,
+      // 有效金系数（基于有效金数分段，每段独立基准系数，互不影响）
+      effYellowSeg1BaseCoeff: 0.3,   // 第1段基准系数（有效金=0时的系数）
+      effYellowSeg1Threshold: 10,    // 第1段边界（0~10有效金）
+      effYellowSeg1Step: 0.03,       // 第1段每金浮动
+      effYellowSeg2BaseCoeff: 0.4,   // 第2段基准系数（绝对，gold=0时的虚拟截距）
+      effYellowSeg2Threshold: 40,    // 第2段边界（10~40有效金）
+      effYellowSeg2Step: 0.02,       // 第2段每金浮动
+      effYellowSeg3BaseCoeff: 0.88,  // 第3段基准系数（绝对，gold=0时的虚拟截距）
+      effYellowSeg3Step: 0.008,      // 第3段（40+有效金）每金浮动
+      effYellowMaxCoeff: 2.5,        // 系数上限
+    };
+  }
 
   // 默认抽数阶梯定价公式参数
   const DEFAULT_PULL_FORMULA = {
@@ -209,58 +509,6 @@
     { minYellow: 290, maxYellow: 300, coefficient: 1.98 },
     { minYellow: 300, maxYellow: 999, coefficient: 2 },
   ];
-
-  // 默认角色价格表（用户自定义）
-  const DEFAULT_CHAR_PRICES = {
-    '爱弥斯': 45, '绯雪': 60, '卡提希娅': 35, '弗洛洛': 35,
-    '琳奈': 25, '守岸人': 15, '千咲': 25, '穗穗': 35, '莫宁': 25, '秧秧玄翎': 40,
-    '洛瑟菈': 25,
-    '达妮娅': 15, '夏空': 15,
-    '露西': 20, '嘉贝莉娜': 18, '奥古斯塔': 18, '仇远': 15, '尤诺': 15,
-    '陆赫斯': 20, '赞妮': 18, '布兰特': 15, '西格莉卡': 20,
-    '露帕': 10, '珂莱塔': 10, '菲比': 10, '坎特蕾拉': 10, '椿': 10,
-    '忌炎': 2, '吟霖': 2, '相里要': 2, '今汐': 2, '长离': 2, '折枝': 2, '洛可可': 2,
-    '丽贝卡': 2, '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0, '秧秧': 0,
-  };
-
-  // 默认命座溢价
-  const DEFAULT_CONST_PREMIUMS = {
-    '爱弥斯': { '1': 45, '2': 90, '3': 135, '4': 140, '5': 155, '6': 270 },
-    '绯雪': { '1': 60, '2': 80, '3': 120, '4': 150, '5': 180, '6': 320 },
-    '秧秧玄翎': { '1': 40, '2': 80, '3': 120, '4': 130, '5': 140, '6': 240 },
-    '卡提希娅': { '1': 35, '2': 70, '3': 105, '4': 110, '5': 125, '6': 210 },
-    '琳奈': { '1': 10, '2': 20, '3': 40, '4': 50, '5': 60, '6': 80 },
-    '千咲': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
-    '穗穗': { '1': 20, '2': 50, '3': 60, '4': 70, '5': 80, '6': 120 },
-    '莫宁': { '1': 20, '2': 40, '3': 50, '4': 60, '5': 70, '6': 80 },
-    '弗洛洛': { '1': 35, '2': 70, '3': 105, '4': 115, '5': 125, '6': 210 },
-    '洛瑟菈': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
-    '达妮娅': { '1': 15, '2': 30, '3': 40, '4': 50, '5': 60, '6': 80 },
-    '夏空': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '露西': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
-    '嘉贝莉娜': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
-    '奥古斯塔': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
-    '仇远': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '尤诺': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '陆赫斯': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 100 },
-    '赞妮': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '布兰特': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
-    '守岸人': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '西格莉卡': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 100 },
-    '露帕': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 80 },
-    '珂莱塔': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '菲比': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '坎特蕾拉': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '椿': { '1': 10, '2': 20, '3': 30, '4': 40, '5': 50, '6': 60 },
-    '忌炎': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
-    '吟霖': { '1': 3, '2': 6, '3': 10, '4': 14, '5': 17, '6': 20 },
-    '相里要': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
-    '今汐': { '1': 5, '2': 10, '3': 15, '4': 20, '5': 25, '6': 30 },
-    '长离': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
-    '折枝': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
-    '洛可可': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
-    '丽贝卡': { '1': 3, '2': 6, '3': 10, '4': 12, '5': 15, '6': 20 },
-  };
 
   // 生成默认角色价格表（从 DEFAULT_CHAR_PRICES，回退到 CHAR_TIERS）
   function buildDefaultCharPrices() {
@@ -313,56 +561,6 @@
     return result;
   }
 
-  // 需要专武的角色列表（无专武时按 needSigDiscount 折扣，折扣值在权重中配置）
-  const DEFAULT_NEED_SIG_WEAPONS = [
-    '爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅', '弗洛洛', '嘉贝莉娜',
-    '陆赫斯', '赞妮', '西格莉卡', '珂莱塔', '椿', '忌炎', '今汐',
-  ];
-
-  // 默认强绑队友配置
-  const DEFAULT_TEAM_MATES = {
-    '爱弥斯': ['千咲', '琳奈', '莫宁', '达妮娅'],
-    '绯雪': ['洛瑟菈'],
-    '秧秧玄翎': ['穗穗'],
-    '卡提希娅': ['夏空'],
-    '弗洛洛': ['仇远', '坎特蕾拉'],
-    '洛瑟菈': ['绯雪'],
-    '露西': ['丽贝卡'],
-    '嘉贝莉娜': ['仇远'],
-    '奥古斯塔': ['尤诺'],
-    '仇远': ['嘉贝莉娜', '弗洛洛'],
-    '尤诺': ['奥古斯塔', '忌炎'],
-    '陆赫斯': ['琳奈'],
-    '赞妮': ['菲比'],
-    '布兰特': ['露帕'],
-    '西格莉卡': ['仇远'],
-    '露帕': ['布兰特'],
-    '珂莱塔': ['折枝'],
-    '菲比': ['赞妮'],
-    '坎特蕾拉': ['弗洛洛', '西格莉卡'],
-    '椿': ['守岸人'],
-    '吟霖': ['今汐', '相里要'],
-    '相里要': ['吟霖'],
-  };
-
-  // 权重标签定义（供设置面板显示用）
-  const WEIGHT_LABELS = {
-    outfit: { label: '服饰/皮肤', desc: '每个服饰/皮肤（元）' },
-    motoFrame: { label: '车架模组', desc: '每个车架模组（元）' },
-    needSigDiscount: { label: '无专武折扣', desc: '需要专武的角色无专武时，价值×此值（0.3=30%）' },
-    teamDepDiscount: { label: '强绑折扣', desc: '强绑队友全不在场时，角色价值×此值（0.7=70%）' },
-  };
-
-  // 存储键
-  const STORAGE_KEYS = {
-    table: 'mw_monitor_table',
-    seen: 'mw_monitor_seen',
-    notified: 'mw_monitor_notified',
-    state: 'mw_monitor_state',
-    weights: 'mw_monitor_config',
-    configVersion: 'mw_monitor_config_version',
-  };
-
   // API地址（从螃蟹网页面JS源码中逆向获取）
   // V.SEARCH = "/search", V.PRODUCT = "/product/web"
   // zt(url, body) = POST, Dt(url, body, {query}) = GET
@@ -373,12 +571,15 @@
     options: 'https://api-pc.pxb7.com/api/product/web/gameBizProd/selectSearchOption',
   };
 
-  // 盼之平台URL（SSR HTML抓取，无需API token）
-  const PZDS_URLS = {
-    list: 'https://www.pzds.com/goodsList/303',
-    detail: 'https://www.pzds.com/goodsDetails',
-    pay: 'https://www.pzds.com/confirmOrder/fullPayment?status=null&orderNo&gameId=303&goodsNo=',
-  };
+  // 盼之平台URL（SSR HTML抓取，无需API token；gameId按当前游戏动态生成）
+  function pzdsUrls() {
+    const gameId = G().platformIds.pzds;
+    return {
+      list: 'https://www.pzds.com/goodsList/' + gameId,
+      detail: 'https://www.pzds.com/goodsDetails',
+      pay: 'https://www.pzds.com/confirmOrder/fullPayment?status=null&orderNo&gameId=' + gameId + '&goodsNo=',
+    };
+  }
 
   // 氪金兽平台URL（MWP API，MD5签名+token自动续期）
   const KJS_URLS = {
@@ -386,12 +587,15 @@
     detail: 'https://www.kejinshou.com/goods/details/',
   };
 
-  // 7881平台URL（API抓取，需MD5签名）
-  const QY_URLS = {
-    list: 'https://search.7881.com/A5752-100003-0-0-0.html',
-    detail: 'https://search.7881.com/',
-    api: 'https://gw.7881.com/goods-service-api/api/goods/list',
-  };
+  // 7881平台URL（API抓取，需MD5签名；list URL按当前游戏动态生成）
+  function qyUrls() {
+    const g = G().platformIds;
+    return {
+      list: 'https://search.7881.com/' + g.qy + '-' + g.qyGtid + '-0-0-0.html',
+      detail: 'https://search.7881.com/',
+      api: 'https://gw.7881.com/goods-service-api/api/goods/list',
+    };
+  }
 
   // 服务器同步URL（推送配置云端同步）
   const SYNC_URLS = {
@@ -409,28 +613,6 @@
     maxNotifiedIds: 500,         // 已通知ID最大数量
     scanPages: 1,                // 默认扫描页数（每页20条，15秒刷新间隔下1页足够覆盖新增）
   };
-
-  // 构建角色名查找表
-  const CHAR_LOOKUP = {};
-  for (const [tier, info] of Object.entries(CHAR_TIERS)) {
-    for (const name of info.chars) {
-      CHAR_LOOKUP[name] = { tier, price: info.price, isHot: info.isHot };
-    }
-  }
-  // 注册别名到查找表
-  for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
-    if (CHAR_LOOKUP[canonical]) {
-      CHAR_LOOKUP[alias] = CHAR_LOOKUP[canonical];
-    }
-  }
-
-  // 已知段落关键词（用于文本分段提取）
-  const SECTION_KEYWORDS = [
-    '五星角色', '四星角色', '五星武器', '金色武器', '地图探索度',
-    '余波珊瑚', '残振珊瑚', '浮金波纹', '铸潮波纹', '唤声涡纹',
-    '摩托饰品', '车架模组', '星声', '月相', '服饰', '皮肤', '摩托', '车架', '涂装',
-    '数据坞等级', '联觉等级', '总黄数', '黄数',
-  ];
 
   // ============================================================
   // 内存状态
@@ -467,7 +649,7 @@
   let soldCheckMinValue = 0;     // 检查已售的估值下限(元)
   let soldCheckMaxValue = 0;     // 检查已售的估值上限(元，0=不限)
   // 指定账号通知规则
-  let charNotifyRules = [{ chars: [{ name: '爱弥斯', minConst: 3 }, { name: '绯雪', minConst: 3 }, { name: '卡提希娅', minConst: 3 }, { name: '弗洛洛', minConst: 2 }, { name: '琳奈', minConst: 0 }, { name: '莫宁', minConst: 0 }, { name: '洛瑟菈', minConst: 0 }, { name: '夏空', minConst: 0 }], minDiff: -200 }];
+  let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
   let pushConfig = {
     serverChanKey: 'SCT383470T7x9zy1jphllnHLuo7vpw0WA4\nSCT378977TClEq1lr2mRcBmHgadFxK6CVr\nSCT383733TlGLAHCEQaaGqSxiCi0FHEDMU', // Server酱SendKey（微信）
@@ -932,45 +1114,30 @@
     const items = section.split(/[,，、\s;；]+/).map(s => s.replace(/[】\s]+$/, '').trim()).filter(s => s.length > 0 && !/^\d+个$/.test(s));
 
     for (const item of items) {
-      let constNum = 0;
+      let constNum = -1;
       let name = '';
 
-      // 尝试 "满命XXX"
-      let m = item.match(/^满命(.+)$/);
-      if (m) {
-        constNum = 6;
-        name = m[1];
-      } else {
-        // 尝试 "N命XXX"
-        m = item.match(/^(\d+)命(.+)$/);
+      // 命座单位按当前游戏配置（鸣潮"命"、绝区零"命/影"）
+      for (const unit of G().constUnits) {
+        let m = item.match(new RegExp('^满' + unit + '(.+)$'));
+        if (m) { constNum = 6; name = m[1]; break; }
+        m = item.match(new RegExp('^(\\d+)' + unit + '(.+)$'));
+        if (m) { constNum = parseInt(m[1]); name = m[2]; break; }
+        m = item.match(new RegExp('^(.+?)\\(满' + unit + '\\)$'));
+        if (m) { constNum = 6; name = m[1]; break; }
+        m = item.match(new RegExp('^(.+?)\\((\\d+)' + unit + '\\)$'));
+        if (m) { constNum = parseInt(m[2]); name = m[1]; break; }
+      }
+      if (constNum < 0) {
+        // 尝试 "X+Y角色名"（盼之标题格式，如 "0+1爱弥斯"、"3+0维里奈"）
+        const m = item.match(/^(\d+)\+(\d+)(.+)$/);
         if (m) {
           constNum = parseInt(m[1]);
-          name = m[2];
+          name = m[3].replace(/^常驻武器/, '');
         } else {
-          // 尝试 "X+Y角色名"（盼之标题格式，如 "0+1爱弥斯"、"3+0维里奈"）
-          m = item.match(/^(\d+)\+(\d+)(.+)$/);
-          if (m) {
-            constNum = parseInt(m[1]);
-            name = m[3].replace(/^常驻武器/, '');
-          } else {
-            // 尝试 "XXX(满命)"
-            m = item.match(/^(.+?)\(满命\)$/);
-            if (m) {
-              name = m[1];
-              constNum = 6;
-            } else {
-              // 尝试 "XXX(N命)"
-              m = item.match(/^(.+?)\((\d+)命\)$/);
-              if (m) {
-                name = m[1];
-                constNum = parseInt(m[2]);
-              } else {
-                // 仅名称
-                name = item;
-                constNum = 0;
-              }
-            }
-          }
+          // 仅名称
+          name = item;
+          constNum = 0;
         }
       }
 
@@ -1012,28 +1179,28 @@
         }
         let found = false;
         for (const checkName of namesToCheck) {
-          // "满命" + name
-          if (text.includes('满命' + checkName)) {
-            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-            found = true; break;
+          // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
+          for (const unit of G().constUnits) {
+            if (text.includes('满' + unit + checkName)) {
+              chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+              found = true; break;
+            }
+            const m = text.match(new RegExp('(\\d+)' + unit + checkName));
+            if (m) {
+              chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
+              found = true; break;
+            }
+            if (text.includes(checkName + '(满' + unit + ')')) {
+              chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+              found = true; break;
+            }
+            const m2 = text.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
+            if (m2) {
+              chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
+              found = true; break;
+            }
           }
-          // "N命" + name
-          const m = text.match(new RegExp('(\\d+)命' + checkName));
-          if (m) {
-            chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
-            found = true; break;
-          }
-          // name + "(满命)"
-          if (text.includes(checkName + '(满命)')) {
-            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-            found = true; break;
-          }
-          // name + "(N命)"
-          const m2 = text.match(new RegExp(checkName + '\\((\\d+)命\\)'));
-          if (m2) {
-            chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
-            found = true; break;
-          }
+          if (found) break;
           // 仅出现名字
           if (text.includes(checkName)) {
             chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
@@ -1083,18 +1250,22 @@
   }
 
   /**
-   * 提取黄数
+   * 提取黄数（限定金数量，单位按当前游戏配置：鸣潮"黄"、绝区零"黄/金"）
    */
   function extractYellowCount(text) {
-    // "黄数：N" 或 "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
-    let m = text.match(/黄[数]?[：:]\s*(\d+)/);
-    if (m) return parseInt(m[1]);
-    // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
-    m = text.match(/【黄[数]?】\s*[：:]?\s*(\d+)/);
-    if (m) return parseInt(m[1]);
-    // "N黄" 或 "N黄数"（放最后，避免误匹配前一个字段的数字）
-    m = text.match(/(\d+)\s*黄/);
-    if (m) return parseInt(m[1]);
+    for (const unit of G().yellowUnits) {
+      // "黄数：N" 或 "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
+      let m = text.match(new RegExp(unit + '[数]?[：:]\\s*(\\d+)'));
+      if (m) return parseInt(m[1]);
+      // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
+      m = text.match(new RegExp('【' + unit + '[数]?】\\s*[：:]?\\s*(\\d+)'));
+      if (m) return parseInt(m[1]);
+    }
+    // "N黄" 或 "N金"（放最后，避免误匹配前一个字段的数字）
+    for (const unit of G().yellowUnits) {
+      const m = text.match(new RegExp('(\\d+)\\s*' + unit));
+      if (m) return parseInt(m[1]);
+    }
     return 0;
   }
 
@@ -1133,66 +1304,62 @@
 
     if (!text) return result;
 
-    // 提取五星角色
-    const charSection = extractSection(text, '五星角色');
-    if (charSection) {
-      result.characters = parseCharacters(charSection);
+    // 提取角色（按当前游戏的角色段落关键词，多段落合并、同名取高命）
+    for (const kw of G().keywords.charSections) {
+      const sec = extractSection(text, kw);
+      if (!sec) continue;
+      for (const c of parseCharacters(sec)) {
+        const existing = result.characters.find(x => x.name === c.name);
+        if (!existing) result.characters.push(c);
+        else if (c.const > existing.const) existing.const = c.const;
+      }
     }
     // 回退：直接在全文中查找角色
     if (result.characters.length === 0) {
       result.characters = findCharsInText(text);
     }
 
-    // 提取五星武器
-    let weaponSection = extractSection(text, '五星武器');
-    if (weaponSection) {
-      result.weapons = parseWeapons(weaponSection);
-    }
-    // 回退1：螃蟹网手机端格式只有"武器（N）"标题
-    if (result.weapons.length === 0) {
-      weaponSection = extractSection(text, '武器');
+    // 提取武器（按当前游戏的武器段落关键词，按顺序回退）
+    for (const kw of G().keywords.weaponSections) {
+      const weaponSection = extractSection(text, kw);
       if (weaponSection) {
         result.weapons = parseWeapons(weaponSection);
-      }
-    }
-    // 回退2：盼之手机端格式用"金色武器"
-    if (result.weapons.length === 0) {
-      weaponSection = extractSection(text, '金色武器');
-      if (weaponSection) {
-        result.weapons = parseWeapons(weaponSection);
+        if (result.weapons.length > 0) break;
       }
     }
 
-    // 提取资源数量
-    result.starSound = extractNumber(text, '星声');
-    result.moonPhase = extractNumber(text, '月相');
-    result.aftermathCoral = extractNumber(text, '余波珊瑚');
-    result.floatGoldRipple = extractNumber(text, '浮金波纹');
-    result.castTideRipple = extractNumber(text, '铸潮波纹');
+    // 提取资源数量（按当前游戏的资源关键词，key跨游戏一致）
+    for (const r of G().keywords.resources) {
+      result[r.key] = extractNumber(text, r.name);
+    }
 
     // 提取黄数
     result.yellowCount = extractYellowCount(text);
 
-    // 提取服饰、摩托、车架、涂装数量
-    result.outfitCount = extractListCount(text, '服饰');
-    // 回退：盼之格式用"皮肤"
-    if (result.outfitCount === 0) {
-      const skinSection = extractSection(text, '皮肤');
-      if (skinSection) {
-        const skinNum = parseInt(skinSection);
-        result.outfitCount = isNaN(skinNum) ? extractListCount(text, '皮肤') : skinNum;
+    // 提取服饰/皮肤数量（按当前游戏关键词；盼之格式段落可能是纯数字）
+    for (const kw of G().outfitSectionKeywords) {
+      if (result.outfitCount > 0) break;
+      result.outfitCount = extractListCount(text, kw);
+      if (result.outfitCount === 0) {
+        const sec = extractSection(text, kw);
+        if (sec) {
+          const num = parseInt(sec);
+          result.outfitCount = isNaN(num) ? extractListCount(text, kw) : num;
+        }
       }
     }
-    // 摩托只算车架模组（摩托饰品不算摩托），检查所有可能的段落标题
-    result.motoCount = extractListCount(text, '车架模组') + extractListCount(text, '车架') + extractListCount(text, '摩托');
-    // 摩托饰品单独计数（不算摩托）
-    result.motoAccessoryCount = extractListCount(text, '摩托饰品');
+    // 摩托/邦布（按当前游戏段落关键词求和；鸣潮摩托饰品单独计数不算车架）
+    result.motoCount = G().motoSectionKeywords.reduce((sum, kw) => sum + extractListCount(text, kw), 0);
+    result.motoAccessoryCount = G().motoAccessoryKeywords.reduce((sum, kw) => sum + extractListCount(text, kw), 0);
     result.vehicleFrameCount = extractListCount(text, '车架模组') + extractListCount(text, '车架');
     result.paintCount = extractListCount(text, '涂装');
 
-    // 计算总抽数
-    result.pulls = result.starSound / 160 + result.moonPhase / 160 +
-      result.aftermathCoral / 8 + result.floatGoldRipple + result.castTideRipple;
+    // 计算总抽数（按当前游戏资源关键词的换算除数，div=0的资源不计入）
+    result.pulls = 0;
+    for (const r of G().keywords.resources) {
+      if (r.div > 1) result.pulls += (result[r.key] || 0) / r.div;
+      else if (r.div === 1) result.pulls += (result[r.key] || 0);
+    }
 
     return result;
   }
@@ -1231,7 +1398,8 @@
    * 检查角色是否有专武
    */
   function checkHasSigWeapon(charName, weaponNames, weaponSectionText) {
-    const sigName = (weights.sigWeaponsOverride && weights.sigWeaponsOverride[charName]) || SIG_WEAPONS[charName];
+    const sigOverride = weights ? weights.sigWeaponsOverride : null;
+    const sigName = (sigOverride && sigOverride[charName]) || SIG_WEAPONS[charName];
     if (!sigName) return false;
     // 先检查武器列表
     if (weaponNames && weaponNames.some(w => w === sigName || w.includes(sigName) || sigName.includes(w))) {
@@ -1537,7 +1705,7 @@
       // 改进3：获取专武精炼数（0表示无专武，1-5表示精1-5）
       let sigRefine = 0;
       if (hasSig) {
-        const sigName = (weights.sigWeaponsOverride && weights.sigWeaponsOverride[char.name]) || SIG_WEAPONS[char.name];
+        const sigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[char.name]) || SIG_WEAPONS[char.name];
         if (sigName) {
           const sigWeapon = parsed.weapons.find(function (wp) {
             return wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name);
@@ -1686,10 +1854,10 @@
     const pullC6Bonus = Math.round(basePullValue * pullC6Multiplier);
     const pullValue = basePullValue + pullC6Bonus;
 
-    // 5. 其他资源（提取明细列表，按 weights 单价计价）
-    const outfits = extractListItems(parsed.rawText, '服饰');
-    const motoAccessories = extractListItems(parsed.rawText, '摩托饰品').concat(extractListItems(parsed.rawText, '摩托'));
-    const motoFrames = extractListItems(parsed.rawText, '车架模组').concat(extractListItems(parsed.rawText, '车架'));
+    // 5. 其他资源（提取明细列表，按 weights 单价计价；关键词按当前游戏）
+    const outfits = G().outfitSectionKeywords.reduce((arr, kw) => arr.concat(extractListItems(parsed.rawText, kw)), []);
+    const motoAccessories = G().motoAccessoryKeywords.reduce((arr, kw) => arr.concat(extractListItems(parsed.rawText, kw)), []);
+    const motoFrames = G().motoValueKeywords.reduce((arr, kw) => arr.concat(extractListItems(parsed.rawText, kw)), []);
     const paints = extractListItems(parsed.rawText, '涂装');
 
     const outfitValue = outfits.length * (w.outfit || 0);
@@ -1775,8 +1943,13 @@
     const yellowCoeff = yellowInfo.coefficient;
 
     // 账号等级、四星角色数
-    // 优先从"联觉等级"提取，避免误匹配"数据坞等级"等其他含"级"的字段；氪金兽卖家格式用"冒险等级"；7881格式用"等级:N"
-    const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/冒险等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/等级[：:]\s*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
+    // 优先按当前游戏的等级关键词提取（如鸣潮"联觉等级"、绝区零"绳网等级"），避免误匹配其他含"级"的字段；7881格式用"等级:N"
+    let levelMatch = null;
+    for (const kw of G().levelKeywords) {
+      levelMatch = (parsed.rawText || '').match(new RegExp(kw + '[】：:\\s]*(\\d+)'));
+      if (levelMatch) break;
+    }
+    if (!levelMatch) levelMatch = (parsed.rawText || '').match(/等级[：:]\s*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
     const level = levelMatch ? parseInt(levelMatch[1]) : 1;
     const fourStarMatch = (parsed.rawText || '').match(/(\d+)个四星角色/);
     const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
@@ -1797,7 +1970,7 @@
         const allWithinLimit = tierChars.every(c => c.const <= rule.maxConst);
         if (allWithinLimit) {
           flatDiscount = Math.min(flatDiscount, rule.discount);
-          const charSummary = tierChars.map(c => c.name + c.const + '命').join('/');
+          const charSummary = tierChars.map(c => c.name + c.const + G().constUnitDisplay).join('/');
           flatDiscountNotes.push('低命折扣系数(' + rule.tiers.join('+') + '级全≤' + rule.maxConst + '命: ' + charSummary + ') ×' + rule.discount);
         }
       }
@@ -1894,7 +2067,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: '',
-          gameId: '10302',
+          gameId: G().platformIds.pxb7,
           pageIndex: page,
           pageSize: 20,
           bizProd: 1,
@@ -1930,7 +2103,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: '',
-          gameId: '10302',
+          gameId: G().platformIds.pxb7,
           pageIndex: page,
           pageSize: 16,
           bizProd: 1,
@@ -2020,13 +2193,13 @@
    */
   function getProductUrl(row) {
     if (row.platform === 'pzds') {
-      return PZDS_URLS.detail + '/' + row.productId.replace(/^pz_/, '') + '/6';
+      return pzdsUrls().detail + '/' + row.productId.replace(/^pz_/, '') + '/6';
     }
     if (row.platform === 'kjs') {
       return KJS_URLS.detail + row.productId.replace(/^kjs_/, '');
     }
     if (row.platform === 'qy') {
-      return QY_URLS.detail + row.productId.replace(/^qy_/, '') + '.html';
+      return qyUrls().detail + row.productId.replace(/^qy_/, '') + '.html';
     }
     return 'https://www.pxb7.com/product/' + row.productId + '/1';
   }
@@ -2039,7 +2212,7 @@
    */
   function fetchListPZ(page) {
     return new Promise((resolve, reject) => {
-      const url = PZDS_URLS.list + '?page=' + page;
+      const url = pzdsUrls().list + '?page=' + page;
       GM_xmlhttpRequest({
         method: 'GET',
         url: url,
@@ -2078,7 +2251,7 @@
    */
   function fetchPZDetail(productUniqueNo) {
     return new Promise((resolve) => {
-      const url = PZDS_URLS.detail + '/' + productUniqueNo + '/6';
+      const url = pzdsUrls().detail + '/' + productUniqueNo + '/6';
       GM_xmlhttpRequest({
         method: 'GET',
         url: url,
@@ -2100,13 +2273,17 @@
             const span = doc.querySelector('div.text-overflow span');
             if (span) {
               const text = (span.textContent || '').trim();
-              // 验证提取的文本是否为有效商品描述
-              if (text.length > 20 && /(?:级[，,]|黄|金角色|星声|命|精\d)/.test(text)) {
+              // 验证提取的文本是否为有效商品描述（关键词按当前游戏）
+              if (text.length > 20 && gameTextPattern().test(text)) {
                 resolve(text);
                 return;
               }
             }
-            const match = html.match(/【联觉等级】[\s\S]*?(?=<\/)/);
+            let match = null;
+            for (const kw of G().levelKeywords) {
+              match = html.match(new RegExp('【' + kw + '】[\\s\\S]*?(?=<\\/)'));
+              if (match) break;
+            }
             if (match) { resolve(match[0].trim()); return; }
             resolve('');
           } catch (e) {
@@ -2257,7 +2434,11 @@
           }
           continue;
         }
-        const m2 = label.match(/^(\d+)命(.+)$/);
+        let m2 = null;
+        for (const unit of G().constUnits) {
+          m2 = label.match(new RegExp('^(\\d+)' + unit + '(.+)$'));
+          if (m2) break;
+        }
         if (m2) {
           let rawName = m2[2].replace(/[・·]/g, '');
           const canonicalName = CHAR_ALIASES[rawName] || rawName;
@@ -2269,10 +2450,10 @@
       }
       const missingChars = labelChars.filter(c => !product.showTitle.includes(c.name));
       if (missingChars.length > 0) {
-        product.showTitle += ' ' + missingChars.map(c => c.const + '命' + c.name).join('，');
+        product.showTitle += ' ' + missingChars.map(c => c.const + G().constUnits[0] + c.name).join('，');
       }
       if (weapons.size > 0) {
-        product.showTitle += ' 【金色武器】:' + Array.from(weapons).join(',');
+        product.showTitle += ' 【' + G().keywords.weaponSections[0] + '】:' + Array.from(weapons).join(',');
       }
     }
 
@@ -2314,8 +2495,8 @@
     // 验证detailText是否为有效商品描述（防止WAF拦截页面覆盖好的showTitle）
     let parseText = showTitle;
     if (detailText && detailText.length > 20) {
-      // 检查是否包含商品特征关键词
-      const hasProductPattern = /(?:级[，,]|黄[，,]|金角色|金武器|星声|月相|命|精\d)/.test(detailText);
+      // 检查是否包含商品特征关键词（按当前游戏）
+      const hasProductPattern = gameTextPattern().test(detailText);
       if (hasProductPattern) {
         parseText = detailText;
       } else {
@@ -2347,7 +2528,7 @@
         console.log('[鸣潮监控-盼之] 重新评估: ' + product.productUniqueNo + ' ¥' + price);
       } else {
         // 补充武器信息：已有行但 showTitle 缺少武器段时，用详情页文本更新
-        if (detailText && (existRow.showTitle || '').indexOf('【金色武器】') === -1) {
+        if (detailText && !hasWeaponSection(existRow.showTitle)) {
           existRow.showTitle = detailText;
           var newParsed = parseAccountInfo(detailText);
           var newValuation = calculateValue(newParsed, price);
@@ -2383,7 +2564,7 @@
           }
           console.log('[鸣潮监控-盼之] 降价: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
           // 降价通知
-          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= G().minLevel && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
               (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
               (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
             const { title, body, mdBody } = buildNotifyContent('降价', existRow, oldPrice, price);
@@ -2404,13 +2585,13 @@
     const valuation = calculateValue(parsed, price);
 
     console.log('[鸣潮监控-盼之] 解析结果: ' + product.productUniqueNo +
-      ' | 角色' + parsed.characters.length + '个:' + parsed.characters.map(c => c.const + '命' + c.name).join(',') +
+      ' | 角色' + parsed.characters.length + '个:' + parsed.characters.map(c => c.const + G().constUnitDisplay + c.name).join(',') +
       ' | 武器' + parsed.weapons.length + '个' +
-      ' | 星声' + parsed.starSound + ' 月相' + parsed.moonPhase + ' 黄' + parsed.yellowCount +
+      ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
-      (valuation.levelFound && valuation.level < 70 ? ' [等级低于70，不收录]' : ''));
+      (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
     // 估值低于300的垃圾数据不收录
     if (valuation.totalValue < 300) {
@@ -2419,7 +2600,7 @@
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
-    if (valuation.levelFound && valuation.level < 70) {
+    if (valuation.levelFound && valuation.level < G().minLevel) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       console.log('[鸣潮监控-盼之] 等级低于70，不收录: ' + product.productUniqueNo + ' Lv.' + valuation.level);
       return;
@@ -2449,7 +2630,7 @@
           refreshTableDisplay();
         }
         console.log('[鸣潮监控-盼之] 跨平台重复: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
-        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= G().minLevel && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
           const { title, body, mdBody } = buildNotifyContent('降价', dupRow, oldPrice, price);
@@ -2526,7 +2707,7 @@
       const existRow = tableData.find(r => r.productId === p.productId);
       if (!existRow) return true;
       // 已在表格中但 showTitle 缺少武器段（旧数据），需要补充详情
-      if (existRow.platform === 'pzds' && (existRow.showTitle || '').indexOf('【金色武器】') === -1) return true;
+      if (existRow.platform === 'pzds' && !hasWeaponSection(existRow.showTitle)) return true;
       return false;
     });
     if (needDetail.length > 0) {
@@ -2716,8 +2897,8 @@
   function kjsSearch(page) {
     return new Promise((resolve) => {
       const dataStr = JSON.stringify({
-        gameId: '7265',
-        cateId: 7996,
+        gameId: String(G().platformIds.kjs),
+        cateId: G().platformIds.kjsCateId,
         type: 'goods',
         originOrder: 'upper_at_desc',   // 最新发布优先
         priceStart: 300,                 // 最低价格300元，过滤低价账号
@@ -2750,7 +2931,7 @@
           anonymous: true,
           headers: {
             'Accept': 'application/json',
-            'Referer': 'https://www.kejinshou.com/goods/7265',
+            'Referer': 'https://www.kejinshou.com/goods/' + G().platformIds.kjs,
             'Origin': 'https://www.kejinshou.com',
           },
           timeout: 15000,
@@ -2805,10 +2986,15 @@
       if (!it || !it.id) continue;
       const price = parseFloat(it.price);
       if (!(price > 0)) continue;
+      // 调试：打印第一个商品的完整字段，帮助发现可用字段
+      if (products.length === 0) {
+        console.log('[鸣潮监控-氪金兽] 商品字段:', Object.keys(it).join(', '), '| roleLevel=' + (it.roleLevel || it.level || it.gameLevel || it.accountLevel || '(无)'));
+      }
       let desc = kjsNormalizeText(String(it.subTitle || '').trim());
+      // 从API字段补充等级（subTitle可能不含等级），使用当前游戏第一个等级关键词
       var roleLevel = it.roleLevel || it.level || it.gameLevel || it.accountLevel;
-      if (roleLevel && !/联觉等级|冒险等级/.test(desc)) {
-        desc = '联觉等级:' + roleLevel + ' ' + desc;
+      if (roleLevel && !new RegExp(G().levelKeywords.join('|')).test(desc)) {
+        desc = G().levelKeywords[0] + ':' + roleLevel + ' ' + desc;
       }
       if (desc.length < 10) continue;
       let onStandTime = 0;
@@ -2838,18 +3024,20 @@
 
   /**
    * 氪金兽描述文本归一化（转成本脚本可解析的格式）
-   * 结构化格式: "联觉等级:80 总黄数:71 ... 五星角色数:18 6鸣露西，6鸣爱弥斯... 五星武器数:14 5鸣千古洑流..."
-   * 卖家格式:   "【鸣潮】冒险等级：80，男主，五星数量：38，五星角色:维里奈 * 4命,...__五星武器:赫奕流明,..."
+   * Format A: "联觉等级:80 总黄数:71 ... 五星角色数:18 6鸣露西，6鸣爱弥斯... 五星武器数:14 5鸣千古洑流..."
+   * Format B: "【鸣潮】冒险等级：80，男主，五星数量：38，五星角色:维里奈 * 4命,...__五星武器:赫奕流明,..."
+   * Format C: "月相5180，星声15722 皮肤：...【按角色】：爱弥斯，赞妮，...【按武器】：...【满命角色】：满命卡提希娅【四命角色】：4命鉴心...【精二武器】：精2死与舞...【精一武器】：精1永远的启明星..."
    */
   function kjsNormalizeText(text) {
-    // Format C: 资源值无冒号 → 补冒号（"星声15722" → "星声:15722"）
-    text = text.replace(/(月相|星声|余波珊瑚|浮金波纹|铸潮波纹|唤声涡纹)(\d+)/g, '$1:$2');
+    // Format C: 资源值无冒号 → 补冒号（"星声15722" → "星声:15722"，资源名按当前游戏）
+    text = text.replace(new RegExp('(' + resourceNames().join('|') + ')(\\d+)', 'g'), '$1:$2');
 
     // Format C: 清理无用段落（必须在合并分段之前执行，否则【】边界丢失后皮肤正则会吞掉角色/武器列表）
     text = text.replace(/【绑定情况】[：:][\s\S]*?(?=【|$)/g, '');
     text = text.replace(/皮肤[：:][^【]*/g, '');
 
     // Format C: 合并命座分段到角色列表
+    // 【满命角色】：满命卡提希娅【四命角色】：4命鉴心...【零命角色】：0命赞妮，...
     var constSections = ['满命', '六命', '五命', '四命', '三命', '二命', '一命', '零命'];
     var allCharsWithConst = [];
     for (var ci = 0; ci < constSections.length; ci++) {
@@ -2863,11 +3051,14 @@
       }
     }
     if (allCharsWithConst.length > 0) {
+      // 用合并后的角色列表替换"【按角色】：..."段落
       text = text.replace(/【按角色】[：:][\s\S]*?(?=【|$)/g, '五星角色:' + allCharsWithConst.join(',') + ' ');
+      // 删除独立的命座分段
       text = text.replace(/【[满六五四三二一零]命角色】[：:][\s\S]*?(?=【|$)/g, '');
     }
 
     // Format C: 合并精炼分段到武器列表
+    // 【精二武器】：精2死与舞，精2漪澜浮录【精一武器】：精1永远的启明星，...
     var refineSections = ['精五', '精四', '精三', '精二', '精一', '精0'];
     var allWeaponsWithRefine = [];
     for (var ri = 0; ri < refineSections.length; ri++) {
@@ -2887,18 +3078,28 @@
 
     // 通用转换（Format A/B/C 共用）
     text = text
+      // "秧秧·玄翎" → "秧秧玄翎"
       .replace(/[·・]/g, '')
+      // "6鸣露西" → "6命露西"（氪金兽用"鸣"表示命座/精炼）
       .replace(/(\d+)鸣/g, '$1命')
-      .replace(/(星声|月相|余波珊瑚|浮金波纹|铸潮波纹|唤声涡纹)数量/g, '$1')
+      // "星声数量:1434" → "星声:1434"（资源名按当前游戏）
+      .replace(new RegExp('(' + resourceNames().join('|') + ')数量', 'g'), '$1')
+      // 卖家格式B: "五星数量：34" → "总黄数:34"
       .replace(/五星数量[：:]\s*(\d+)/g, '总黄数:$1')
+      // 卖家格式B: "__" → "，"
       .replace(/__/g, '，')
+      // 截掉卖家备注
       .replace(/卖家说[\s\S]*$/, '')
-      .replace(/(五星角色|五星武器)数\s*[:：]\s*(\d+)\s*([^五]*?)(?=五星|$)/g, function(m, kw, cnt, rest) {
+      // "五星角色数:18 6命露西，..." → 按数量截取前N项，剔除四星（关键词按当前游戏角色/武器段）
+      .replace(new RegExp('(' + G().keywords.charSections.concat(G().keywords.weaponSections).join('|') + ')数\\s*[:：]\\s*(\\d+)\\s*([^五]*?)(?=五星|$)', 'g'), function(m, kw, cnt, rest) {
         const items = rest.split(/[,，、\s]+/).filter(Boolean);
         return kw + ':' + items.slice(0, parseInt(cnt, 10)).join('，');
       })
-      .replace(/四星角色数?\s*[:：]\s*(?:\d+\s*)?[\s\S]*?(?=五星角色|五星武器|联觉等级|冒险等级|$)/g, '')
-      .replace(/([^,，、\s;；*]+)\s*\*\s*(\d+)命/g, '$1($2命)')
+      // 四星角色段落丢弃（边界用当前游戏的等级关键词+角色/武器段关键词）
+      .replace(new RegExp('四星角色数?\\s*[:：]\\s*(?:\\d+\\s*)?[\\s\\S]*?(?=' + G().keywords.charSections[0] + '|五星武器|' + G().levelKeywords.join('|') + '|$)', 'g'), '')
+      // "维里奈 * 4命" → "维里奈(4命)"（命座单位按当前游戏）
+      .replace(new RegExp('([^,，、\\s;；*]+)\\s*\\*\\s*(\\d+)(' + G().constUnits.join('|') + ')', 'g'), '$1($2$3)')
+      // "相位涟漪 * 2精" → "精2相位涟漪"
       .replace(/([^,，、\s;；*]+)\s*\*\s*(\d+)精/g, '精$2$1');
 
     return text;
@@ -2953,7 +3154,7 @@
             refreshTableDisplay();
           }
           console.log('[鸣潮监控-氪金兽] 降价: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
-          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= G().minLevel && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
               (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
               (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
             const { title, body, mdBody } = buildNotifyContent('降价', existRow, oldPrice, price);
@@ -2975,11 +3176,11 @@
 
     console.log('[鸣潮监控-氪金兽] 解析结果: ' + product.productUniqueNo +
       ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
-      ' | 星声' + parsed.starSound + ' 黄' + parsed.yellowCount +
+      ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
-      (valuation.levelFound && valuation.level < 70 ? ' [等级低于70，不收录]' : ''));
+      (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
     // 估值低于300的垃圾数据不收录
     if (valuation.totalValue < 300) {
@@ -2988,7 +3189,7 @@
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
-    if (valuation.levelFound && valuation.level < 70) {
+    if (valuation.levelFound && valuation.level < G().minLevel) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
@@ -3015,7 +3216,7 @@
           refreshTableDisplay();
         }
         console.log('[鸣潮监控-氪金兽] 指纹重复更新低价: ¥' + oldPrice + ' → ¥' + price);
-        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= G().minLevel && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
           const { title, body, mdBody } = buildNotifyContent('降价', dupRow, oldPrice, price);
@@ -3119,16 +3320,16 @@
       const paramObj = {
         marketRequestSource: 'search',
         sellerType: 'C',
-        gameId: 'A5752',
-        gtid: '100003',
+        gameId: G().platformIds.qy,
+        gtid: G().platformIds.qyGtid,
         goodsSortType: '6',
         pageNum: page,
         pageSize: 30,
         extendAttrList: [],
       };
       const headerObj = qyInitHeader(paramObj);
-      const url = QY_URLS.api;
-      console.log('[鸣潮监控-7881] API请求: ' + url + ' (page=' + page + ')');
+      const url = qyUrls().api;
+      console.log('[监控-7881] API请求: ' + url + ' (page=' + page + ')');
       GM_xmlhttpRequest({
         method: 'POST',
         url: url,
@@ -3138,7 +3339,7 @@
           'lb-timestamp': String(headerObj.lbtimestamp),
           'lb-sign': headerObj.lbsign,
           'Origin': 'https://search.7881.com',
-          'Referer': 'https://search.7881.com/A5752-100003-0-0-0.html',
+          'Referer': qyUrls().list,
         },
         data: JSON.stringify(paramObj),
         onload: function(response) {
@@ -3182,7 +3383,7 @@
    */
   function fetchQYDetail(goodsId) {
     return new Promise((resolve) => {
-      const url = QY_URLS.detail + goodsId + '.html';
+      const url = qyUrls().detail + goodsId + '.html';
       GM_xmlhttpRequest({
         method: 'GET',
         url: url,
@@ -3201,8 +3402,12 @@
             let weapons = '';
             let resources = '';
 
-            // 提取五星武器（精N武器名格式）
-            const weaponSectionMatch = desc.match(/五星武器[：:]([^，]+)/);
+            // 提取武器（精N武器名格式，武器段关键词按当前游戏）
+            let weaponSectionMatch = null;
+            for (const kw of G().keywords.weaponSections) {
+              weaponSectionMatch = desc.match(new RegExp(kw + '[：:]([^，]+)'));
+              if (weaponSectionMatch) break;
+            }
             if (weaponSectionMatch) {
               const weaponStr = weaponSectionMatch[1];
               const refineRegex = /精(\d+)([^()（）,，\s]+)/g;
@@ -3216,8 +3421,8 @@
               }
             }
 
-            // 提取资源数据（星声/浮金波纹/铸潮波纹/唤声涡纹）
-            const resourceTypes = ['星声', '浮金波纹', '铸潮波纹', '唤声涡纹'];
+            // 提取资源数据（资源名按当前游戏配置）
+            const resourceTypes = resourceNames();
             const resourceParts = [];
             for (const res of resourceTypes) {
               const resMatch = desc.match(new RegExp(res + '数量[：:]\\s*(\\d+)', 'i'));
@@ -3273,11 +3478,18 @@
     return products;
   }
 
+  /**
+   * 处理7881平台商品（API数据已含完整角色信息，无需详情页）
+   * @param {object} product - extractQYProducts返回的商品对象
+   */
   function processQYProduct(product) {
     const productId = product.productId;
     if (!productId) return;
+
     const showTitle = product.showTitle || '';
     const price = product.price || 0;
+
+    // 去重：已见商品检查价格变化
     if (seenIds.includes(productId)) {
       const existRow = tableData.find(r => r.productId === productId);
       if (!existRow) {
@@ -3300,7 +3512,7 @@
             refreshTableDisplay();
           }
           console.log('[鸣潮监控-7881] 降价: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
-          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= G().minLevel && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
               (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
               (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
             const { title, body, mdBody } = buildNotifyContent('降价', existRow, oldPrice, price);
@@ -3315,23 +3527,32 @@
     }
     seenIds.push(productId);
     if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    // 解析和估值
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
+
     console.log('[鸣潮监控-7881] 解析结果: ' + product.productUniqueNo +
       ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
-      ' | 星声' + parsed.starSound + ' 黄' + parsed.yellowCount +
+      ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
-      (valuation.levelFound && valuation.level < 70 ? ' [等级低于70，不收录]' : ''));
+      (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
+
+    // 估值低于300的垃圾数据不收录
     if (valuation.totalValue < 300) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
-    if (valuation.levelFound && valuation.level < 70) {
+
+    // 等级低于70的账号不收录
+    if (valuation.levelFound && valuation.level < G().minLevel) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
+
+    // 内容指纹去重（跨平台+同平台重复上架）
     const fingerprint = generateFingerprint(parsed);
     const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
     if (dupRow) {
@@ -3353,7 +3574,7 @@
           refreshTableDisplay();
         }
         console.log('[鸣潮监控-7881] 指纹重复更新低价: ¥' + oldPrice + ' → ¥' + price);
-        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= G().minLevel && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
           const { title, body, mdBody } = buildNotifyContent('降价', dupRow, oldPrice, price);
@@ -3366,6 +3587,8 @@
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
+
+    // 添加到表格
     addTableRow({
       productId,
       productUniqueNo: product.productUniqueNo || '',
@@ -3388,10 +3611,16 @@
       listTime: Date.now(),
       firstSeen: Date.now(),
     });
+
     console.log('[鸣潮监控-7881] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
+
+    // 7881商品跳过详情队列（API数据已含角色信息），直接推送通知
     tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, product.productUniqueNo || '', 'qy');
   }
 
+  /**
+   * 处理7881商品列表（批量模式）
+   */
   async function handleQYListResponse(list) {
     if (!Array.isArray(list)) return;
     console.log('[鸣潮监控-7881] handleQYListResponse: 收到' + list.length + '条商品，当前表格' + tableData.length + '行');
@@ -3410,15 +3639,16 @@
           const detail = await fetchQYDetail(p.productUniqueNo);
           const parts = [];
 
-          // 武器处理：标题有摘要格式（五星武器:N个）时替换为详细数据，无武器时追加
+          // 武器处理：标题有摘要格式（武器段:N个）时替换为详细数据，无武器时追加（关键词按当前游戏）
           if (detail.weapons) {
-            const weaponSummary = p.showTitle.match(/五星武器[：:]\s*\d+\s*个?/);
-            const hasDetailedWeapons = /五星武器[：:][^]*精\d/.test(p.showTitle);
+            const weaponKw = G().keywords.weaponSections.find(kw => p.showTitle.includes(kw));
+            const weaponSummary = weaponKw ? p.showTitle.match(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?')) : null;
+            const hasDetailedWeapons = weaponKw ? new RegExp(weaponKw + '[：:][^]*精\\d').test(p.showTitle) : false;
             if (weaponSummary && !hasDetailedWeapons) {
-              // 移除摘要格式"五星武器:N个"，替换为详细武器列表
-              p.showTitle = p.showTitle.replace(/五星武器[：:]\s*\d+\s*个?/g, '').replace(/\s+/g, ' ').trim();
+              // 移除摘要格式"武器段:N个"，替换为详细武器列表
+              p.showTitle = p.showTitle.replace(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?', 'g'), '').replace(/\s+/g, ' ').trim();
               parts.push(detail.weapons);
-            } else if (!p.showTitle.includes('五星武器')) {
+            } else if (!weaponKw) {
               // 标题完全无武器段落，追加详细数据
               parts.push(detail.weapons);
             }
@@ -3630,7 +3860,7 @@
           console.log('[鸣潮监控] 秒杀: ' + (existRow.productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
 
           // 秒杀通知（与降价通知相同逻辑，但标题不同）
-          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= G().minLevel && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
               (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
               (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_flash')) {
             const { title: flashTitle, body: flashMsg, mdBody: flashMd } = buildNotifyContent('秒杀', existRow, oldPrice, price);
@@ -3683,7 +3913,7 @@
         console.log('[鸣潮监控] 降价: ' + (existRow.productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
 
         // 降价通知（如果估值仍满足通知条件，且标价不高于上限）
-        if ((getRowValuation(existRow).level || 0) >= 70 && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+        if ((getRowValuation(existRow).level || 0) >= G().minLevel && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
           const { title: dropTitle, body: dropMsg, mdBody: dropMd } = buildNotifyContent('降价', existRow, oldPrice, price);
@@ -3719,7 +3949,7 @@
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤，列表页无等级信息时留待详情页判断）
-    if (valuation.levelFound && valuation.level < 70) {
+    if (valuation.levelFound && valuation.level < G().minLevel) {
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
@@ -3755,7 +3985,7 @@
         }
         console.log('[鸣潮监控] 重复上架合并(' + mergeStatus + '): ' + (productUniqueNo || productId) + ' ¥' + oldPrice + ' → ¥' + price);
         // 降价/秒杀通知
-        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= 70 && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= G().minLevel && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
             (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
             (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
           const { title: mergeTitle, body: mergeMsg, mdBody: mergeMd } = buildNotifyContent(mergeStatus, dupRow, oldPrice, price);
@@ -3976,7 +4206,7 @@
         }
 
         // 详估后等级低于70，从表格移除（详情页有完整等级信息，直接判断）
-        if (valuation.levelFound && valuation.level < 70) {
+        if (valuation.levelFound && valuation.level < G().minLevel) {
           const idx = tableData.findIndex(r => r.productId === item.productId);
           if (idx >= 0) {
             tableData.splice(idx, 1);
@@ -4018,9 +4248,9 @@
         });
 
         // ===== 通知逻辑 =====
-        // 自主截图账号不通知（信息不可靠），等级低于70不通知
+        // 自主截图账号不通知（信息不可靠），等级低于当前游戏阈值不通知
         const isSelfScreenshot = /自主截图/.test(showTitle);
-        if (notifyEnabled && !isSelfScreenshot && !notifiedIds.includes(item.productId) && (valuation.level || 0) >= 70) {
+        if (notifyEnabled && !isSelfScreenshot && !notifiedIds.includes(item.productId) && (valuation.level || 0) >= G().minLevel) {
           // 秒杀商品使用秒杀价计算差价和通知条件
           const notifyPrice = finalPrice;
           const notifyDiff = valuation.totalValue - notifyPrice;
@@ -4426,6 +4656,16 @@
           font-size: 11px;
           color: #8888aa;
         }
+        .mw-select {
+          padding: 2px 4px;
+          background: #1a1a2e;
+          border: 1px solid #2a2a4a;
+          color: #e9d5ff;
+          border-radius: 4px;
+          font-size: 11px;
+          cursor: pointer;
+        }
+        .mw-select:focus { outline: none; border-color: #e94560; }
         .mw-collapse-btn {
           padding: 3px 8px;
           cursor: pointer;
@@ -4605,6 +4845,7 @@
       <div class="mw-top-bar" id="mwTopBar">
         <span class="mw-status-text" id="mwStatusText">初始化中...</span>
         <div class="mw-buttons" id="mwButtons">
+          <select class="mw-select" id="mwGameSelector" title="切换监控游戏（配置、表格数据按游戏隔离）"></select>
           <button class="mw-btn" id="mwBtnMonitor">开始监控</button>
           <button class="mw-btn" id="mwBtnNotify">开启通知</button>
           <button class="mw-btn" id="mwBtnNotifySettings">通知设置</button>
@@ -4658,8 +4899,8 @@
               <th class="mw-sortable" data-col="price">标价</th>
               <th class="mw-sortable" data-col="yellow">有效/限定/总</th>
               <th class="mw-sortable" data-col="pulls">抽数</th>
-              <th>摩托</th>
-              <th>五星角色</th>
+              <th id="mwThMoto">摩托</th>
+              <th id="mwThChars">五星角色</th>
               <th>状态</th>
               <th style="width:30px;">删</th>
             </tr>
@@ -4706,6 +4947,23 @@
     // 初始化排序指示器
     updateSortIndicators();
 
+    // 游戏切换下拉框：填充选项并绑定切换事件
+    dom.gameSelector = document.getElementById('mwGameSelector');
+    for (const [key, g] of Object.entries(GAME_CONFIGS)) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = g.name;
+      dom.gameSelector.appendChild(opt);
+    }
+    dom.gameSelector.value = currentGame;
+    updateGameLabels();
+
+    // 切换游戏：保存当前状态并跳转到新游戏列表页（数据/配置按游戏前缀隔离存储）
+    dom.gameSelector.addEventListener('change', function () {
+      if (this.value === currentGame) return;
+      switchGame(this.value);
+    });
+
     // 拖拽、缩放、折叠功能
     const topBar = document.getElementById('mwTopBar');
     const resizeHandle = document.getElementById('mwResizeHandle');
@@ -4721,8 +4979,8 @@
     // 拖拽移动
     let isDragging = false, dragStartX = 0, dragStartY = 0, dragStartLeft = 0, dragStartTop = 0;
     topBar.addEventListener('mousedown', function (e) {
-      // 不在按钮和输入框上触发拖拽
-      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+      // 不在按钮、输入框和下拉框上触发拖拽
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       isDragging = true;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
@@ -4850,19 +5108,19 @@
         // 盼之平台监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-        '<input type="checkbox" id="mwPzdsEnabled" ' + (pzdsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控盼之平台（pzds.com鸣潮商品池）</label>' +
+        '<input type="checkbox" id="mwPzdsEnabled" ' + (pzdsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控盼之平台（pzds.com' + G().name + '商品池）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过SSR HTML抓取盼之平台商品列表，无需API token，扫描前2页</div>' +
         // 氪金兽平台监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-        '<input type="checkbox" id="mwKjsEnabled" ' + (kjsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控氪金兽平台（kejinshou.com鸣潮成品号）</label>' +
+        '<input type="checkbox" id="mwKjsEnabled" ' + (kjsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控氪金兽平台（kejinshou.com' + G().name + '成品号）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过MWP API按最新发布顺序获取氪金兽商品列表（含完整角色武器数据），扫描第1页</div>' +
         // 7881平台监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-        '<input type="checkbox" id="mwQyEnabled" ' + (qyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控7881平台（search.7881.com鸣潮成品号）</label>' +
+        '<input type="checkbox" id="mwQyEnabled" ' + (qyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控7881平台（search.7881.com' + G().name + '成品号）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取7881商品列表（MD5签名认证），按最新发布排序</div>' +
         // 通知阈值
@@ -5441,7 +5699,8 @@
         hasSig = checkHasSigWeapon(c.name, weaponNames, weaponText);
         // 改进3：fallback 时从武器列表获取精炼数
         if (hasSig) {
-          const sigName = (weights.sigWeaponsOverride && weights.sigWeaponsOverride[c.name]) || SIG_WEAPONS[c.name];
+          const sigOverride = weights ? weights.sigWeaponsOverride : null;
+          const sigName = (sigOverride && sigOverride[c.name]) || SIG_WEAPONS[c.name];
           if (sigName) {
             const sigW = (row.parsed.weapons || []).find(function (w) {
               return w.name === sigName || w.name.includes(sigName) || sigName.includes(w.name);
@@ -5477,7 +5736,7 @@
       const sigMark = c.hasSig ? '<span style="color:#10b981;font-weight:bold;">+' + (c.sigRefine || 1) + '</span>' : '';
       // title 完整信息
       const tierLabel = c.tier + '级';
-      const constLabel = c.const + '命';
+      const constLabel = c.const + G().constUnitDisplay;
       const sigLabel = c.hasSig ? '有专武(精' + (c.sigRefine || 1) + ')' : '无专武';
       const valLabel = c.value > 0 ? '估值' + c.value + '元' : '';
       const titleText = c.name + ' ' + constLabel + ' ' + sigLabel + ' ' + tierLabel + (valLabel ? ' ' + valLabel : '');
@@ -5880,7 +6139,7 @@
       charRowsHTML = breakdown.map(function (cb) {
         charTotal += cb.value;
         const constText = cb.const > 0
-          ? '<span style="color:#f59e0b">' + (cb.const === 6 ? '满命' : cb.const + '命') + '</span>'
+          ? '<span style="color:#f59e0b">' + (cb.const === 6 ? '满' + G().constUnitDisplay : cb.const + G().constUnitDisplay) + '</span>'
           : '<span style="color:#555">0命</span>';
         const tierTag = cb.isHot
           ? '<span style="color:#e94560;font-size:10px;font-weight:600">[' + cb.tier + ']</span>'
@@ -5916,7 +6175,7 @@
     const motoFrameVal = motoFrames.length * (w.motoFrame || 0);
 
     const resItems = [
-      { label: '抽数(星声/160+月相/160+珊瑚/8+浮金波纹+铸潮波纹)', val: pullInfo.pulls, unit: '抽', weight: pullInfo.perPull, total: pullInfo.baseTotal || pullInfo.total, tierLabel: pullInfo.tierLabel },
+      { label: '抽数(' + pullFormulaText() + ')', val: pullInfo.pulls, unit: '抽', weight: pullInfo.perPull, total: pullInfo.baseTotal || pullInfo.total, tierLabel: pullInfo.tierLabel },
     ];
     // 满命抽数加成明细
     if (pullInfo.c6Bonus > 0) {
@@ -5924,8 +6183,8 @@
       resItems.push({ label: pullC6Label, val: '-', unit: '', weight: '-', total: pullInfo.c6Bonus });
     }
     resItems.push(
-      { label: '服饰/皮肤', val: outfits.length, unit: '个', weight: w.outfit, total: outfitVal },
-      { label: '车架模组', val: motoFrames.length, unit: '个', weight: w.motoFrame, total: motoFrameVal },
+      { label: WEIGHT_LABELS.outfit ? WEIGHT_LABELS.outfit.label : '服饰/皮肤', val: outfits.length, unit: '个', weight: w.outfit, total: outfitVal },
+      { label: WEIGHT_LABELS.motoFrame ? WEIGHT_LABELS.motoFrame.label : '车架模组', val: motoFrames.length, unit: '个', weight: w.motoFrame, total: motoFrameVal },
     );
     if (teamBonus.value > 0) {
       const noteStr = teamBonus.notes.join('，');
@@ -5963,8 +6222,8 @@
       (weaponDetails.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#0f3460;color:#8ecdf5;">' + weaponDetails.length + '五星武器</span>' : '') +
       (hasSigWeapons.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#1a3b1d;color:#10b981;">' + hasSigWeapons.length + '专武</span>' : '') +
       (outfits.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#3b2d1a;color:#f59e0b;">' + outfits.length + '服饰</span>' : '') +
-      (motoAccessories.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#2d1a3b;color:#a78bfa;">' + motoAccessories.length + '摩托饰品</span>' : '') +
-      (motoFrames.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#2d1a3b;color:#a78bfa;">' + motoFrames.length + '车架</span>' : '') +
+      (motoAccessories.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#2d1a3b;color:#a78bfa;">' + motoAccessories.length + (G().motoAccessoryKeywords.length > 0 ? G().motoAccessoryKeywords[0] : '') + '</span>' : '') +
+      (motoFrames.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#2d1a3b;color:#a78bfa;">' + motoFrames.length + G().labels.motoColumn + '</span>' : '') +
       (paints.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#2d1a3b;color:#a78bfa;">' + paints.length + '涂装</span>' : '') +
       (matchedTeams.length > 0 ? '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#3b2d1a;color:#f59e0b;">' + matchedTeams.length + '配队</span>' : '');
 
@@ -6247,7 +6506,7 @@ function openSettings() {
     charSection.style.cssText = 'margin-bottom:20px;';
     const charTitle = document.createElement('div');
     charTitle.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:6px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
-    charTitle.textContent = '五星角色定价（角色名 + 专武 + 估值 + 命座溢价）';
+    charTitle.textContent = G().labels.charSettingTitle;
     charSection.appendChild(charTitle);
 
     const charDesc = document.createElement('p');
@@ -6603,7 +6862,7 @@ function openSettings() {
     pullSection.appendChild(pullTitle);
     var pullDesc = document.createElement('p');
     pullDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    pullDesc.innerHTML = '抽数 = 星声/160 + 月相/160 + 余波珊瑚/8 + 浮金波纹 + 铸潮波纹。每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动。';
+    pullDesc.innerHTML = '抽数 = ' + pullFormulaText().replace(/\+/g, ' + ').replace(/\//g, '/') + '。每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动。';
     pullSection.appendChild(pullDesc);
 
     var pullFormulaRow = document.createElement('div');
@@ -7995,7 +8254,7 @@ function openSettings() {
     console.log('[鸣潮监控] 自动抢购触发: ' + productId + ' 差价' + diff.toFixed(0) + '元');
     var buyUrl;
     if (productId.indexOf('pz_') === 0) {
-      buyUrl = PZDS_URLS.pay + (productUniqueNo || productId.replace(/^pz_/, ''));
+      buyUrl = pzdsUrls().pay + (productUniqueNo || productId.replace(/^pz_/, ''));
     } else if (productId.indexOf('kjs_') === 0) {
       // 氪金兽无自动付款链接，跳转商品详情页
       buyUrl = KJS_URLS.detail + (productUniqueNo || productId.replace(/^kjs_/, ''));
@@ -8130,7 +8389,7 @@ function openSettings() {
 
     // ===== 标题：差价 + 现价 + 估价 + 类型 + 平台 =====
     var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : '螃蟹网'));
-    var title = '差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估价¥' + value.toFixed(0) + ' ' + prefix + ' ' + platformName;
+    var title = '差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估价¥' + value.toFixed(0) + ' ' + prefix + ' ' + platformName + '·' + G().name;
     if (suffix) title += ' ' + suffix;
 
     // ===== 角色明细（按价值降序取前10）=====
@@ -8141,7 +8400,7 @@ function openSettings() {
         .sort(function(a, b) { return b.value - a.value; })
         .slice(0, 10);
       charDetailLines = topChars.map(function(cb) {
-        var constStr = cb.const > 0 ? (cb.const === 6 ? '满' : cb.const + '命') : '';
+        var constStr = cb.const > 0 ? (cb.const === 6 ? '满' : cb.const + G().constUnitDisplay) : '';
         var tier = cb.tier || '';
         return cb.name + constStr + ' ' + cb.value + '元' + (tier ? ' [' + tier + ']' : '');
       });
@@ -8266,7 +8525,7 @@ function openSettings() {
       if (pullCount > 0) hlParts.push(pullCount + '抽');
       if (hlParts.length > 0) lines.push(hlParts.join(' | '));
       if (outfitCount > 0) lines.push('皮肤: ' + outfitList.join('、'));
-      if (motoFrameCount > 0) lines.push('车架: ' + motoFrameList.join('、'));
+      if (motoFrameCount > 0) lines.push(G().labels.motoColumn + ': ' + motoFrameList.join('、'));
       lines.push('');
     }
     // 角色模块
@@ -8316,7 +8575,7 @@ function openSettings() {
       if (pullCount > 0) mdHlParts.push(pullCount + '抽');
       if (mdHlParts.length > 0) mdLines.push(mdHlParts.join(' | '));
       if (outfitCount > 0) mdLines.push('👗 **皮肤**: ' + outfitList.join('、'));
-      if (motoFrameCount > 0) mdLines.push('🏍️ **车架**: ' + motoFrameList.join('、'));
+      if (motoFrameCount > 0) mdLines.push('🏍️ **' + G().labels.motoColumn + '**: ' + motoFrameList.join('、'));
       mdLines.push('');
     }
     mdLines.push('---');
@@ -8492,9 +8751,9 @@ function openSettings() {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     const bannerLink = cleanId.indexOf('pz_') === 0
-      ? PZDS_URLS.detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
+      ? pzdsUrls().detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
       : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
-        : (cleanId.indexOf('qy_') === 0 ? QY_URLS.detail + cleanId.replace(/^qy_/, '') + '.html'
+        : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
         : 'https://www.pxb7.com/product/' + cleanId + '/1'));
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
@@ -8566,9 +8825,9 @@ function openSettings() {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     const productUrl = cleanId.indexOf('pz_') === 0
-      ? PZDS_URLS.detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
+      ? pzdsUrls().detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
       : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
-        : (cleanId.indexOf('qy_') === 0 ? QY_URLS.detail + cleanId.replace(/^qy_/, '') + '.html'
+        : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
         : 'https://www.pxb7.com/product/' + cleanId + '/1'));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
@@ -8896,13 +9155,13 @@ function openSettings() {
    * 导出CSV（UTF-8 BOM）
    */
   function exportCSV() {
-    // 改进1：移除"商品码"列
-    const headers = ['上架时间', '估值', '差价', '性价比', '标价', '原价', '累计降价', '有效金', '限定金', '总金数', '抽数', '摩托', '五星角色', '状态'];
+    // 改进1：移除"商品码"列（列名按当前游戏）
+    const headers = ['上架时间', '估值', '差价', '性价比', '标价', '原价', '累计降价', '有效金', '限定金', '总金数', '抽数', G().labels.motoColumn, G().labels.charColumn, '状态'];
 
     const rows = tableData.map(function (row) {
       const diff = row.value - row.price;
       const charsStr = row.parsed && row.parsed.characters ?
-        row.parsed.characters.map(function (c) { return c.name + c.const + '命'; }).join(' ') : '';
+        row.parsed.characters.map(function (c) { return c.name + c.const + G().constUnitDisplay; }).join(' ') : '';
       var origPrice = row.priceHistory && row.priceHistory.length > 0 ? row.priceHistory[0].price : row.price;
       return [
         formatDateTime(new Date(row.listTime)),
@@ -8930,7 +9189,7 @@ function openSettings() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '鸣潮监控_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.csv';
+    a.download = G().name + '监控_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -9265,6 +9524,21 @@ function openSettings() {
   // ============================================================
   // 启动
   // ============================================================
+
+  // 检测当前游戏：螃蟹网列表页URL优先（/buy/10302鸣潮、/buy/10312绝区零），否则用上次选择
+  (function detectGame() {
+    const m = window.location.pathname.match(/\/buy\/(\d+)/);
+    if (m) {
+      for (const [key, g] of Object.entries(GAME_CONFIGS)) {
+        if (g.platformIds.pxb7 === m[1]) { currentGame = key; break; }
+      }
+    } else {
+      const saved = localStorage.getItem(GLOBAL_STORAGE_KEYS.game);
+      if (saved && GAME_CONFIGS[saved]) currentGame = saved;
+    }
+    applyGameConfig();
+    console.log('[监控] 当前游戏: ' + G().name + ' (minLevel=' + G().minLevel + ')');
+  })();
 
   // 商品详情页：仅执行自动购买逻辑，不启动监控面板
   if (window.location.pathname.indexOf('/product/') !== -1) {

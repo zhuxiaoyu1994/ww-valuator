@@ -27,6 +27,10 @@ function getAdminPage() {
   .tab-btn { padding: 10px 24px; background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
   .tab-btn:hover { color: #ccc; }
   .tab-btn.active { color: #4ade80; border-bottom-color: #4ade80; font-weight: 600; }
+  .game-switch { display: flex; border: 1px solid #2a2a4a; border-radius: 6px; overflow: hidden; }
+  .game-btn { padding: 6px 16px; background: transparent; border: none; color: #888; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+  .game-btn:hover { color: #ccc; }
+  .game-btn.active { background: #4ade80; color: #0f0f23; font-weight: 600; }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
@@ -151,6 +155,10 @@ function getAdminPage() {
     <div class="header">
       <h1>管理后台</h1>
       <div style="display:flex;align-items:center;gap:16px;">
+        <div class="game-switch" title="切换监控游戏">
+          <button class="game-btn active" id="game-btn-wuwa" onclick="switchGame('wuwa')">鸣潮</button>
+          <button class="game-btn" id="game-btn-zzz" onclick="switchGame('zzz')">绝区零</button>
+        </div>
         <span class="logout" onclick="logout()">退出</span>
       </div>
     </div>
@@ -363,7 +371,8 @@ function getAdminPage() {
       <div class="mon-card">
         <h2>功能特性</h2>
         <ul class="mon-feature-list">
-          <li>自动监控螃蟹网鸣潮账号商品列表，实时发现新上架账号</li>
+          <li>自动监控螃蟹网账号商品列表，实时发现新上架账号</li>
+          <li>支持鸣潮、绝区零双游戏切换监控（面板顶部下拉框切换）</li>
           <li>智能估价引擎，自动计算每个账号的预估价值和性价比</li>
           <li>多渠道通知推送：企业微信、Server酱、Bark、钉钉机器人、飞书</li>
           <li>支持按角色、黄数、估值、性价比等条件筛选和排序</li>
@@ -378,7 +387,7 @@ function getAdminPage() {
         <ol class="mon-steps">
           <li>安装 <a class="mon-ext-link" href="https://www.tampermonkey.net/" target="_blank">Tampermonkey</a> 浏览器扩展（推荐 Chrome/Edge）</li>
           <li>点击下方"安装监控脚本"按钮，Tampermonkey 会自动弹出安装确认页</li>
-          <li>确认安装后，打开 <a class="mon-ext-link" href="https://www.pangxie100.com/game/wuwa" target="_blank">螃蟹网鸣潮账号页面</a></li>
+          <li>确认安装后，打开 <a class="mon-ext-link" href="https://www.pangxie100.com/game/wuwa" target="_blank">螃蟹网鸣潮账号页面</a>或<a class="mon-ext-link" href="https://www.pangxie100.com/game/zzz" target="_blank">绝区零账号页面</a></li>
           <li>页面右上角会出现监控面板，点击"开始监控"即可自动运行</li>
           <li>在监控面板的"通知设置"中配置你的通知渠道（如企业微信机器人 webhook）</li>
           <li>在"估值设置"中调整估值规则，让估价更符合你的预期</li>
@@ -403,10 +412,10 @@ function getAdminPage() {
     <!-- Tab 4: 配置管理 -->
     <div id="tab-config" class="tab-content">
       <div class="mon-card">
-        <h2>估值配置导入</h2>
+        <h2>估值配置导入 <span id="config-game-label" style="font-size:13px;color:#fbbf24;font-weight:normal;"></span></h2>
         <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
           从油猴脚本「导出配置」获取 JSON 文件，上传后网站将使用该配置作为默认估值规则。<br>
-          上传后<strong style="color:#4ade80;">立即生效</strong>，无需修改代码或重新部署。所有用户在未自定义配置时均使用此默认配置。
+          配置按游戏隔离：上传至当前选中游戏（右上角切换），上传后<strong style="color:#4ade80;">立即生效</strong>，无需修改代码或重新部署。所有用户在未自定义配置时均使用此默认配置。
         </p>
         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;">
           <input type="file" id="config-file-input" accept=".json" style="display:none;" onchange="handleConfigFile(event)">
@@ -427,10 +436,10 @@ function getAdminPage() {
         <div id="server-config-status" style="margin-top:12px;font-size:13px;max-height:500px;overflow-y:auto;"></div>
       </div>
       <div class="mon-card">
-        <h2>估值规则设置</h2>
+        <h2>估值规则设置 <span id="value-settings-game-label" style="font-size:13px;color:#fbbf24;font-weight:normal;"></span></h2>
         <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
           修改本地估值规则（角色定价、命座溢价、配队系数等），保存后<strong style="color:#4ade80;">立即生效</strong>。<br>
-          配置存储在浏览器本地，不影响其他用户。如需全站默认配置，请使用上方的「估值配置导入」。
+          配置存储在浏览器本地（按游戏隔离：鸣潮/绝区零各自独立），不影响其他用户。如需全站默认配置，请使用上方的「估值配置导入」。
         </p>
         <button onclick="safeOpenValueSettings()" style="padding:10px 24px;background:#fbbf24;color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">打开估值规则设置</button>
       </div>
@@ -460,8 +469,53 @@ function getAdminPage() {
   let dealsTotalRecords = 0; // 数据库模式下的总记录数
 
   // ============================================================
+  // 游戏上下文（鸣潮/绝区零切换）
+  // ============================================================
+  let currentGame = sessionStorage.getItem('admin_game') || 'wuwa';
+
+  const GAME_NAMES = { wuwa: '鸣潮', zzz: '绝区零' };
+
+  function updateGameSwitchUI() {
+    const btnWuwa = document.getElementById('game-btn-wuwa');
+    const btnZzz = document.getElementById('game-btn-zzz');
+    if (btnWuwa) btnWuwa.classList.toggle('active', currentGame === 'wuwa');
+    if (btnZzz) btnZzz.classList.toggle('active', currentGame === 'zzz');
+    document.title = '管理后台 - ' + GAME_NAMES[currentGame] + '估价助手';
+    const configLabel = document.getElementById('config-game-label');
+    if (configLabel) configLabel.textContent = '（当前：' + GAME_NAMES[currentGame] + '）';
+    const vsLabel = document.getElementById('value-settings-game-label');
+    if (vsLabel) vsLabel.textContent = '（当前：' + GAME_NAMES[currentGame] + '）';
+  }
+
+  function switchGame(game) {
+    if (game === currentGame) return;
+    currentGame = game;
+    sessionStorage.setItem('admin_game', game);
+    updateGameSwitchUI();
+    // 估值设置面板切换到对应游戏的存储键与默认配置
+    if (typeof setValueSettingsGame === 'function') setValueSettingsGame(game);
+    // 日志按新游戏重新加载
+    refreshLogs();
+    // 成交记录重置（已加载则清空，等待手动重新获取）
+    if (dealsLoaded) {
+      clearDeals();
+    }
+    // 配置管理状态重置（提示重新检查）
+    const configStatus = document.getElementById('server-config-status');
+    if (configStatus && configStatus.textContent && !configStatus.textContent.includes('检查中')) {
+      configStatus.innerHTML = '<span style="color:#888;">已切换到' + GAME_NAMES[game] + '，点击上方按钮查看该游戏的服务器配置</span>';
+    }
+  }
+
+  // ============================================================
   // 登录
   // ============================================================
+  // 页面加载时恢复游戏上下文（按钮状态 + 估值设置面板存储键）
+  updateGameSwitchUI();
+  if (currentGame !== 'wuwa' && typeof setValueSettingsGame === 'function') {
+    setValueSettingsGame(currentGame);
+  }
+
   const savedPw = sessionStorage.getItem('admin_pw');
   if (savedPw) {
     document.getElementById('password').value = savedPw;
@@ -475,7 +529,7 @@ function getAdminPage() {
       const resp = await fetch('/admin/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
+        body: JSON.stringify({ password: pw, game: currentGame }),
       });
       const result = await resp.json();
       if (result.success) {
@@ -546,7 +600,7 @@ function getAdminPage() {
       const resp = await fetch('/admin/api/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
+        body: JSON.stringify({ password: pw, game: currentGame }),
       });
       const result = await resp.json();
       if (result.success) {
@@ -637,16 +691,20 @@ function getAdminPage() {
     const pw = sessionStorage.getItem('admin_pw');
     if (!pw) { alert('请先登录'); return; }
 
-    // 读取本地自定义估值权重
+    // 读取当前游戏的自定义估值权重
     var customWeights = null;
     try {
-      var saved = localStorage.getItem('mw_eval_weights');
-      if (saved) customWeights = JSON.parse(saved);
+      if (typeof getSavedWeights === 'function') {
+        customWeights = getSavedWeights();
+      } else {
+        var saved = localStorage.getItem('mw_eval_weights');
+        if (saved) customWeights = JSON.parse(saved);
+      }
     } catch (e) { /* 忽略 */ }
 
     if (!confirm(customWeights
-      ? '将使用当前本地估值规则重算全部成交记录的统计数据，并上传到服务器缓存。算法准确性报告将使用此缓存数据。是否继续？'
-      : '未检测到本地估值规则，将使用服务器默认配置重算。是否继续？')) return;
+      ? '将使用当前' + GAME_NAMES[currentGame] + '本地估值规则重算全部成交记录的统计数据，并上传到服务器缓存。算法准确性报告将使用此缓存数据。是否继续？'
+      : '未检测到本地估值规则，将使用服务器默认配置重算' + GAME_NAMES[currentGame] + '成交记录。是否继续？')) return;
 
     var origText = btn.textContent;
     btn.textContent = '上传中...';
@@ -656,7 +714,7 @@ function getAdminPage() {
       const resp = await fetch('/api/admin/refresh-stats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, customWeights: customWeights }),
+        body: JSON.stringify({ password: pw, customWeights: customWeights, game: currentGame }),
       });
       const json = await resp.json();
       if (json.success) {
@@ -725,17 +783,21 @@ function getAdminPage() {
     }
 
     try {
-      // 读取 localStorage 中的自定义估值权重（与 /wuwa 页面共享）
+      // 读取当前游戏的自定义估值权重（value-settings 按游戏上下文读取对应存储键）
       let customWeights = null;
       try {
-        const saved = localStorage.getItem('mw_eval_weights');
-        if (saved) customWeights = JSON.parse(saved);
+        if (typeof getSavedWeights === 'function') {
+          customWeights = getSavedWeights();
+        } else {
+          const saved = localStorage.getItem('mw_eval_weights');
+          if (saved) customWeights = JSON.parse(saved);
+        }
       } catch (e) { /* 忽略 */ }
 
       const resp = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize, customWeights, source: dealsSource }),
+        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize, customWeights, source: dealsSource, game: currentGame }),
       });
       const json = await resp.json();
       if (!json.success) {
@@ -1709,11 +1771,11 @@ function getAdminPage() {
       const resp = await fetch('/api/config/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, config: pendingConfig }),
+        body: JSON.stringify({ password: pw, config: pendingConfig, game: currentGame }),
       });
       const json = await resp.json();
       if (json.success) {
-        status.innerHTML = '<span style="color:#4ade80;">✓ ' + (json.message || '配置已更新') + '</span>';
+        status.innerHTML = '<span style="color:#4ade80;">✓ ' + GAME_NAMES[currentGame] + '配置已更新，立即生效</span>';
         btn.textContent = '已上传';
         btn.style.background = '#4ade80';
       } else {
@@ -1730,9 +1792,9 @@ function getAdminPage() {
 
   async function checkServerConfig() {
     const status = document.getElementById('server-config-status');
-    status.innerHTML = '<span style="color:#fbbf24;">检查中...</span>';
+    status.innerHTML = '<span style="color:#fbbf24;">正在检查' + GAME_NAMES[currentGame] + '配置...</span>';
     try {
-      const resp = await fetch('/api/config/default');
+      const resp = await fetch('/api/config/default?game=' + currentGame);
       const json = await resp.json();
       if (json.success && json.data) {
         const config = json.data;

@@ -13,24 +13,40 @@
 (function () {
   'use strict';
 
-  // localStorage 存储键
+  // 游戏上下文（默认鸣潮 mw；绝区零 zzz 通过 setValueSettingsGame 切换）
+  var gameKey = 'mw';
+
+  // localStorage 存储键（随游戏上下文切换）
   var STORAGE_KEY = 'mw_eval_weights';
   var CONFIG_VERSION_KEY = 'mw_eval_config_version';
 
   // 缓存的默认配置（从 /api/defaults 获取）
   var cachedDefaults = null;
 
+  /**
+   * 切换游戏上下文：更新存储键并清空默认配置缓存
+   * @param {string} game - 游戏标识（wuwa/zzz）
+   */
+  function setValueSettingsGame(game) {
+    var newKey = game === 'zzz' ? 'zzz' : 'mw';
+    if (newKey === gameKey) return;
+    gameKey = newKey;
+    STORAGE_KEY = gameKey + '_eval_weights';
+    CONFIG_VERSION_KEY = gameKey + '_eval_config_version';
+    cachedDefaults = null;
+  }
+
   // ============================================================
   // 默认配置获取与缓存
   // ============================================================
 
   /**
-   * 从后端获取默认权重配置
+   * 从后端获取默认权重配置（按当前游戏上下文）
    * @returns {Promise<object|null>}
    */
   function fetchDefaults() {
     if (cachedDefaults) return Promise.resolve(cachedDefaults);
-    return fetch('/api/defaults')
+    return fetch('/api/defaults?game=' + (gameKey === 'zzz' ? 'zzz' : 'wuwa'))
       .then(function (r) { return r.json(); })
       .then(function (result) {
         if (result.success && result.data) {
@@ -2013,6 +2029,7 @@
   window.openValueSettings = openValueSettings;
   window.getSavedWeights = getSavedWeights;
   window.hasCustomWeights = hasCustomWeights;
+  window.setValueSettingsGame = setValueSettingsGame;
   window.checkNewRulesAvailable = checkNewRulesAvailable;
   window.loadLatestRules = loadLatestRules;
   window.dismissNewRules = dismissNewRules;

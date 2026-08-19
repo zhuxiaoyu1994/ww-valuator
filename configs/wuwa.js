@@ -5,6 +5,24 @@ const WUWA_CONFIG = {
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
+  // 多游戏解析参数（与油猴脚本 GAME_CONFIGS 保持一致）
+  levelKeywords: ['联觉等级', '冒险等级'],
+  yellowUnits: ['黄'],
+  constUnits: ['命'],
+  constUnitDisplay: '命',
+  charSectionKeywords: ['五星角色'],
+  weaponSectionKeywords: ['五星武器', '武器', '金色武器'],
+  resources: [
+    { key: 'starSound', name: '星声', div: 160 },
+    { key: 'moonPhase', name: '月相', div: 160 },
+    { key: 'aftermathCoral', name: '余波珊瑚', div: 8 },
+    { key: 'floatGoldRipple', name: '浮金波纹', div: 1 },
+    { key: 'castTideRipple', name: '铸潮波纹', div: 1 },
+  ],
+  outfitSectionKeywords: ['服饰', '皮肤'],
+  motoSectionKeywords: ['车架模组', '车架', '摩托'],
+  motoAccessoryKeywords: ['摩托饰品'],
+
   charTiers: {
     S: { price: 50, isHot: true, chars: ['爱弥斯', '绯雪', '秧秧玄翎', '卡提希娅'] },
     A: { price: 35, isHot: true, chars: ['琳奈', '千咲', '穗穗', '莫宁', '弗洛洛', '洛瑟菈'] },

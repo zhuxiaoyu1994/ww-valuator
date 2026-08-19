@@ -158,6 +158,7 @@ app.post('/api/x9k2-eval', (req, res) => {
     price: (priceInCents || 0) / 100,
     estimatedValue: result.details.finalValue,
     ratio: result.costPerformance,
+    game: game || 'wuwa',
     yellowCount: result.info.yellowCount,
     pulls: result.info.pulls,
     success: true,
@@ -218,9 +219,9 @@ app.post('/api/x9k2-find', async (req, res) => {
         productData = await fetchProductDetail(productId.trim());
       }
 
-      // 如果 detail API 没找到，用搜索 API 查找
+      // 如果 detail API 没找到，用搜索 API 查找（按游戏对应的商品池搜索）
       if (!productData) {
-        const searchResult = await fetchProductBySearch(productId.trim());
+        const searchResult = await fetchProductBySearch(productId.trim(), game);
         if (searchResult) {
           productData = searchResult;
           actualProductId = searchResult.productId || productId;
@@ -257,6 +258,7 @@ app.post('/api/x9k2-find', async (req, res) => {
       price: priceInCents / 100,
       estimatedValue: result.details.finalValue,
       ratio: result.costPerformance,
+      game: game || 'wuwa',
       yellowCount: result.info.yellowCount,
       pulls: result.info.pulls,
       success: true,
@@ -289,7 +291,7 @@ app.post('/api/x9k2-find', async (req, res) => {
           pulls: result.info.pulls,
         },
         shortDescription: engine.generateShortDescription(result),
-        url: `https://www.pxb7.com/buy/10302/detail?productId=${actualProductId}`,
+        url: `https://www.pxb7.com/buy/${(gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302'}/detail?productId=${actualProductId}`,
       },
     });
   } catch (err) {
@@ -302,6 +304,7 @@ app.post('/api/x9k2-find', async (req, res) => {
       input: String(productId),
       error: err.message.substring(0, 100),
       success: false,
+      game: game || 'wuwa',
     };
     queryLogs.unshift(failEntry);
     if (queryLogs.length > MAX_LOGS) queryLogs.pop();
@@ -409,12 +412,15 @@ function fetchProductDetail(productId) {
 /**
  * 通过搜索 API 查找商品（支持商品编号如 MEBNB9606）
  * 优先走 Cloudflare Worker 代理，无配置时直连
+ * @param {string} keyword - 商品编号或关键词
+ * @param {string} game - 游戏标识（wuwa/zzz），决定搜索的螃蟹网商品池gameId
  */
-function fetchProductBySearch(keyword) {
+function fetchProductBySearch(keyword, game) {
   return new Promise((resolve, reject) => {
+    const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
     const postData = JSON.stringify({
       query: String(keyword),
-      gameId: '10302',
+      gameId: gameId,
       pageIndex: 1,
       pageSize: 20,
       bizProd: 1,
@@ -511,12 +517,16 @@ function fetchProductBySearch(keyword) {
 /**
  * 获取昨日成交商品列表（螃蟹网 selectSelledList API）
  * 优先走 Cloudflare Worker 代理，代理失败时自动回退直连
+ * @param {number} pageIndex - 页码
+ * @param {number} pageSize - 每页数量
+ * @param {string} game - 游戏标识（wuwa/zzz），决定查询的螃蟹网商品池gameId
  * @returns {Promise<{products: Array, debug: Object}>}
  */
-function fetchSoldProducts(pageIndex, pageSize) {
+function fetchSoldProducts(pageIndex, pageSize, game) {
   return new Promise((resolve) => {
+    const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
     const postData = JSON.stringify({
-      gameId: '10302',
+      gameId: gameId,
       pageIndex: pageIndex || 1,
       pageSize: pageSize || 20,
     });
@@ -652,7 +662,7 @@ app.post('/api/deals', async (req, res) => {
   if (source === 'database') {
     try {
       const offset = (pageIndex - 1) * ps;
-      const { list, total } = await db.queryDeals(ps, offset);
+      const { list, total } = await db.queryDeals(ps, offset, game);
       const engine = getEngine(game);
 
       // 获取有效权重（与实时模式相同逻辑）
@@ -707,7 +717,7 @@ app.post('/api/deals', async (req, res) => {
 
   // ====== 实时模式：从API获取并存入数据库 ======
   try {
-    const { products, debug } = await fetchSoldProducts(pageIndex, ps);
+    const { products, debug } = await fetchSoldProducts(pageIndex, ps, game);
     if (!products || products.length === 0) {
       return res.json({ success: true, data: { list: [], summary: null, page: pageIndex, pageSize: ps, _debug: debug } });
     }
@@ -758,7 +768,8 @@ app.post('/api/deals', async (req, res) => {
         characters: valuation ? valuation.details.characters : [],
         attrNameList: item.attrNameList || [],
         mainImageUrl: item.mainImageUrl,
-        url: `https://www.pxb7.com/buy/10302/detail?productId=${item.productId}`,
+        game: game || 'wuwa',
+        url: `https://www.pxb7.com/buy/${(gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302'}/detail?productId=${item.productId}`,
         details: valuation ? valuation.details : null,
         costPerformance: valuation ? valuation.costPerformance : 0,
       };
@@ -888,17 +899,18 @@ app.get('/admin', (req, res) => {
   res.send(getAdminPage());
 });
 
-// 管理后台API - 获取日志
+// 管理后台API - 获取日志（按游戏筛选）
 app.post('/admin/api/logs', async (req, res) => {
-  const { password } = req.body;
+  const { password, game } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
+  const logGame = game || 'wuwa';
 
   // 优先从数据库读取（持久化），回退到内存
-  const dbStats = await db.getStats();
+  const dbStats = await db.getStats(logGame);
   if (dbStats) {
-    const logs = await db.queryLogs(500, 0, '');
+    const logs = await db.queryLogs(500, 0, '', logGame);
     return res.json({
       success: true,
       data: {
@@ -914,17 +926,18 @@ app.post('/admin/api/logs', async (req, res) => {
     });
   }
 
-  // 回退到内存
+  // 回退到内存（按游戏过滤）
+  const gameLogs = queryLogs.filter(l => (l.game || 'wuwa') === logGame);
   res.json({
     success: true,
     data: {
-      logs: queryLogs,
-      total: queryLogs.length,
+      logs: gameLogs,
+      total: gameLogs.length,
       stats: {
-        totalQueries: queryLogs.length,
-        successCount: queryLogs.filter(l => l.success).length,
-        lookupCount: queryLogs.filter(l => l.type === '编号查询').length,
-        evalCount: queryLogs.filter(l => l.type === '粘贴估价').length,
+        totalQueries: gameLogs.length,
+        successCount: gameLogs.filter(l => l.success).length,
+        lookupCount: gameLogs.filter(l => l.type === '编号查询').length,
+        evalCount: gameLogs.filter(l => l.type === '粘贴估价').length,
       },
     },
   });
@@ -1094,9 +1107,9 @@ app.post('/api/admin/refresh-stats', async (req, res) => {
     return res.json({ success: false, error: '密码错误' });
   }
   try {
-    const { list, total } = await db.queryAllDealsForStats();
+    const { list, total } = await db.queryAllDealsForStats(game);
     if (list.length === 0) {
-      await db.setConfig('stats_cache', { summary: null, scatter: [], total: 0, cachedAt: new Date().toISOString() });
+      await db.setConfig('stats_cache_' + game, { summary: null, scatter: [], total: 0, cachedAt: new Date().toISOString() });
       return res.json({ success: true, data: { summary: null, scatter: [], total: 0 }, message: '暂无成交记录，已清空缓存' });
     }
 
@@ -1116,9 +1129,9 @@ app.post('/api/admin/refresh-stats', async (req, res) => {
     // 计算统计指标
     const { summary, scatter } = computeStatsFromList(list, total);
 
-    // 缓存到数据库
+    // 缓存到数据库（按游戏隔离）
     const cacheData = { summary, scatter, cachedAt: new Date().toISOString() };
-    await db.setConfig('stats_cache', cacheData);
+    await db.setConfig('stats_cache_' + game, cacheData);
 
     console.log('[/api/admin/refresh-stats] 统计数据缓存已更新, valued=' + summary.valued);
     res.json({ success: true, data: cacheData, message: '统计仪表盘和散点图数据已更新（' + summary.valued + '条记录）' });
@@ -1134,14 +1147,14 @@ app.post('/api/admin/refresh-stats', async (req, res) => {
 async function handlePublicStats(req, res) {
   const game = (req.method === 'GET' ? req.query.game : req.body.game) || 'wuwa';
   try {
-    // 优先返回缓存的统计数据
-    const cached = await db.getConfig('stats_cache');
+    // 优先返回缓存的统计数据（按游戏隔离）
+    const cached = await db.getConfig('stats_cache_' + game);
     if (cached && cached.summary) {
       return res.json({ success: true, data: cached });
     }
 
     // 无缓存时实时计算（使用服务器默认配置重算）
-    const { list, total } = await db.queryAllDealsForStats();
+    const { list, total } = await db.queryAllDealsForStats(game);
     if (list.length === 0) {
       return res.json({ success: true, data: { summary: null, scatter: [], total: 0 } });
     }

@@ -66,6 +66,14 @@ async function ensureTable() {
     } catch (e) {
       // 列已存在，忽略
     }
+    // 兼容旧表：添加 game 列（多游戏支持，旧行回填为 wuwa）
+    try {
+      await dbClient.execute(`ALTER TABLE query_logs ADD COLUMN game TEXT DEFAULT 'wuwa'`);
+      await dbClient.execute(`UPDATE query_logs SET game = 'wuwa' WHERE game IS NULL`);
+      console.log('[DB] 日志表已添加 game 列，旧数据回填为 wuwa');
+    } catch (e) {
+      // 列已存在，忽略
+    }
     console.log('[DB] 日志表已就绪');
   } catch (e) {
     console.error('[DB] 建表失败:', e.message);
@@ -90,8 +98,8 @@ async function insertLog(log) {
       });
     }
     await dbClient.execute({
-      sql: `INSERT INTO query_logs (time, type, ip, input, price, estimated_value, ratio, yellow_count, pulls, success, error, details_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO query_logs (time, type, ip, input, price, estimated_value, ratio, yellow_count, pulls, success, error, details_json, game)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         log.time,
         log.type,
@@ -105,6 +113,7 @@ async function insertLog(log) {
         log.success ? 1 : 0,
         log.error || null,
         detailsJson,
+        log.game || 'wuwa',
       ],
     });
   } catch (e) {
@@ -113,17 +122,23 @@ async function insertLog(log) {
 }
 
 /**
- * 查询日志（分页）
+ * 查询日志（分页，按游戏筛选）
  */
-async function queryLogs(limit = 100, offset = 0, filterType = '') {
+async function queryLogs(limit = 100, offset = 0, filterType = '', game = '') {
   if (!dbClient) return [];
   try {
     let sql = 'SELECT * FROM query_logs';
+    const conds = [];
     const args = [];
     if (filterType) {
-      sql += ' WHERE type = ?';
+      conds.push('type = ?');
       args.push(filterType);
     }
+    if (game) {
+      conds.push("game = ?");
+      args.push(game);
+    }
+    if (conds.length > 0) sql += ' WHERE ' + conds.join(' AND ');
     sql += ' ORDER BY id DESC LIMIT ? OFFSET ?';
     args.push(limit, offset);
     const result = await dbClient.execute({ sql, args });
@@ -133,6 +148,7 @@ async function queryLogs(limit = 100, offset = 0, filterType = '') {
         type: r.type,
         ip: r.ip,
         input: r.input,
+        game: r.game || 'wuwa',
         price: r.price,
         estimatedValue: r.estimated_value,
         ratio: r.ratio,
@@ -158,15 +174,16 @@ async function queryLogs(limit = 100, offset = 0, filterType = '') {
 }
 
 /**
- * 获取统计数据
+ * 获取统计数据（按游戏筛选）
  */
-async function getStats() {
+async function getStats(game = '') {
   if (!dbClient) return null;
   try {
-    const total = await dbClient.execute('SELECT COUNT(*) as cnt FROM query_logs');
-    const success = await dbClient.execute('SELECT COUNT(*) as cnt FROM query_logs WHERE success = 1');
-    const lookup = await dbClient.execute("SELECT COUNT(*) as cnt FROM query_logs WHERE type = '编号查询'");
-    const evalCount = await dbClient.execute("SELECT COUNT(*) as cnt FROM query_logs WHERE type = '粘贴估价'");
+    const g = game || 'wuwa';
+    const total = await dbClient.execute({ sql: 'SELECT COUNT(*) as cnt FROM query_logs WHERE game = ?', args: [g] });
+    const success = await dbClient.execute({ sql: 'SELECT COUNT(*) as cnt FROM query_logs WHERE success = 1 AND game = ?', args: [g] });
+    const lookup = await dbClient.execute({ sql: "SELECT COUNT(*) as cnt FROM query_logs WHERE type = '编号查询' AND game = ?", args: [g] });
+    const evalCount = await dbClient.execute({ sql: "SELECT COUNT(*) as cnt FROM query_logs WHERE type = '粘贴估价' AND game = ?", args: [g] });
     return {
       total: total.rows[0].cnt,
       success: success.rows[0].cnt,
@@ -333,6 +350,14 @@ async function ensureDealsTable() {
         fetched_at TEXT NOT NULL
       )
     `);
+    // 兼容旧表：添加 game 列（多游戏支持，旧行回填为 wuwa——历史成交均来自鸣潮商品池）
+    try {
+      await dbClient.execute(`ALTER TABLE deals ADD COLUMN game TEXT DEFAULT 'wuwa'`);
+      await dbClient.execute(`UPDATE deals SET game = 'wuwa' WHERE game IS NULL`);
+      console.log('[DB] 成交记录表已添加 game 列，旧数据回填为 wuwa');
+    } catch (e) {
+      // 列已存在，忽略
+    }
     console.log('[DB] 成交记录表已就绪');
   } catch (e) {
     console.error('[DB] 建成交记录表失败:', e.message);
@@ -351,8 +376,8 @@ async function insertDealsBatch(deals) {
     stmts.push({
       sql: `INSERT INTO deals (product_id, product_unique_no, price, estimated_value, deviation, deviation_percent,
             pay_time, show_title, short_description, yellow_count, pulls, characters_json, attr_name_list_json,
-            main_image_url, url, details_json, cost_performance, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            main_image_url, url, details_json, cost_performance, game, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(product_id) DO NOTHING`,
       args: [
         deal.productId || '',
@@ -372,6 +397,7 @@ async function insertDealsBatch(deals) {
         deal.url || '',
         deal.details ? JSON.stringify(deal.details) : null,
         deal.costPerformance != null ? deal.costPerformance : null,
+        deal.game || 'wuwa',
         now,
       ],
     });
@@ -399,17 +425,18 @@ async function insertDealsBatch(deals) {
 }
 
 /**
- * 查询成交记录（分页）
+ * 查询成交记录（分页，按游戏筛选）
  */
-async function queryDeals(limit = 100, offset = 0) {
+async function queryDeals(limit = 100, offset = 0, game = '') {
   if (!dbClient) return { list: [], total: 0 };
   try {
-    const countResult = await dbClient.execute('SELECT COUNT(*) as cnt FROM deals');
+    const g = game || 'wuwa';
+    const countResult = await dbClient.execute({ sql: 'SELECT COUNT(*) as cnt FROM deals WHERE game = ?', args: [g] });
     const total = countResult.rows[0].cnt;
 
     const result = await dbClient.execute({
-      sql: 'SELECT * FROM deals ORDER BY pay_time DESC, id DESC LIMIT ? OFFSET ?',
-      args: [limit, offset],
+      sql: 'SELECT * FROM deals WHERE game = ? ORDER BY pay_time DESC, id DESC LIMIT ? OFFSET ?',
+      args: [g, limit, offset],
     });
 
     const list = result.rows.map(r => {
@@ -423,6 +450,7 @@ async function queryDeals(limit = 100, offset = 0) {
         payTime: r.pay_time,
         showTitle: r.show_title,
         shortDescription: r.short_description,
+        game: r.game || 'wuwa',
         yellowCount: r.yellow_count,
         pulls: r.pulls,
         attrNameList: r.attr_name_list_json ? JSON.parse(r.attr_name_list_json) : [],
@@ -452,17 +480,19 @@ async function queryDeals(limit = 100, offset = 0) {
 }
 
 /**
- * 查询所有成交记录的统计数据（精简字段，用于公开统计页面）
+ * 查询所有成交记录的统计数据（精简字段，用于公开统计页面，按游戏筛选）
  */
-async function queryAllDealsForStats() {
+async function queryAllDealsForStats(game = '') {
   if (!dbClient) return { list: [], total: 0 };
   try {
-    const countResult = await dbClient.execute('SELECT COUNT(*) as cnt FROM deals');
+    const g = game || 'wuwa';
+    const countResult = await dbClient.execute({ sql: 'SELECT COUNT(*) as cnt FROM deals WHERE game = ?', args: [g] });
     const total = countResult.rows[0].cnt;
 
-    const result = await dbClient.execute(
-      'SELECT estimated_value, price, deviation, deviation_percent, yellow_count, pulls, characters_json, show_title FROM deals WHERE estimated_value > 0 ORDER BY pay_time DESC'
-    );
+    const result = await dbClient.execute({
+      sql: 'SELECT estimated_value, price, deviation, deviation_percent, yellow_count, pulls, characters_json, show_title FROM deals WHERE estimated_value > 0 AND game = ? ORDER BY pay_time DESC',
+      args: [g],
+    });
 
     const list = result.rows.map(r => {
       const item = {

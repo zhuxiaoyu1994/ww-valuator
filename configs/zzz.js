@@ -5,9 +5,28 @@ const ZZZ_CONFIG = {
   gameName: '绝区零',
   gameSlug: 'zzz',
 
+  // 多游戏解析参数（与油猴脚本 GAME_CONFIGS 保持一致）
+  levelKeywords: ['绳网等级', '联觉等级', '冒险等级'],
+  yellowUnits: ['黄', '金'],
+  constUnits: ['命', '影'],                       // 影画=N命（"N影X"/"满影X"）
+  constUnitDisplay: '影',
+  charSectionKeywords: ['S级代理人', 'A级代理人', '限定代理人', '代理人', '五星角色'],
+  weaponSectionKeywords: ['S级音擎', 'A级音擎', '金色音擎', '音擎', '五星武器', '武器'],
+  resources: [
+    { key: 'starSound', name: '菲林', div: 160 },
+    { key: 'moonPhase', name: '母带', div: 1 },
+    { key: 'aftermathCoral', name: '丁尼', div: 0 },
+    { key: 'floatGoldRipple', name: '调查记录', div: 0 },
+    { key: 'castTideRipple', name: '活跃天数', div: 0 },
+  ],
+  outfitSectionKeywords: ['服饰', '皮肤'],
+  motoSectionKeywords: ['S级邦布', 'A级邦布', '邦布'],
+  motoAccessoryKeywords: [],
+
+  // 代理人分级（初版草稿定价，可在管理后台/估值设置中按行情调整）
   charTiers: {
-    S: { price: 50, isHot: true, chars: [] },
-    A: { price: 35, isHot: true, chars: [] },
+    S: { price: 50, isHot: true, chars: ['艾莲', '朱鸢', '青衣', '简', '凯撒', '伯尼斯', '星见雅', '薇薇安', '雨果', '仪玄'] },
+    A: { price: 35, isHot: true, chars: ['潘引壶', '浮波柚叶'] },
     B: { price: 25, isHot: true, chars: [] },
     C: { price: 5, isHot: false, chars: [] },
     D: { price: 3, isHot: false, chars: [] },
@@ -15,6 +34,9 @@ const ZZZ_CONFIG = {
   },
 
   sigWeapons: {},
+
+  // 常用简称别名（平台卖家常用"雅"指星见雅）
+  charAliases: { '雅': '星见雅' },
 
   fullConstWeight: { S: 1.0, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
 
@@ -50,12 +72,12 @@ const ZZZ_CONFIG = {
 
   defaultNeedSigWeapons: [],
 
-  charAliases: {},
-
   sectionKeywords: [
-    'S级邦布', 'A级邦布', '音擎', '驱动盘',
-    '菲林', '母带', '丁尼', '调查记录',
-    '联络人等级', '活跃天数',
+    'S级代理人', 'A级代理人', 'B级代理人', '限定代理人', '代理人',
+    'S级音擎', 'A级音擎', '金色音擎', '音擎', '驱动盘',
+    'S级邦布', 'A级邦布', '邦布',
+    '菲林', '母带', '丁尼', '调查记录', '活跃天数',
+    '绳网等级', '服饰', '皮肤',
   ],
 
   weightLabels: {
@@ -66,10 +88,10 @@ const ZZZ_CONFIG = {
   },
 
   platformIds: {
-    pxb7: '',
-    pzds: '',
-    kejinshou: '',
-    qy7881: '',
+    pxb7: '10312',
+    pzds: '275',
+    kejinshou: '2530',
+    qy7881: 'A5754',
   },
 };
 

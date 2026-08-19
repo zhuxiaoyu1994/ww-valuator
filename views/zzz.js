@@ -541,6 +541,9 @@ function getPageHTML() {
 
   <script src="/public/value-settings.js" onerror="window.__vsFailed=true"></script>
   <script>
+    // 切换估值设置面板到绝区零上下文（存储键 zzz_eval_weights，默认配置走 zzz 引擎）
+    if (typeof setValueSettingsGame === 'function') setValueSettingsGame('zzz');
+
     // ============================================================
     // 服务器端默认配置（从数据库加载，优先于源码内置默认值）
     // 检测配置更新时间戳，自动清除用户旧的自定义配置

@@ -30,6 +30,24 @@ function createEngine(config) {
   const SECTION_KEYWORDS = config.sectionKeywords;
   const WEIGHT_LABELS = config.weightLabels;
 
+  // 多游戏解析参数（缺省回退鸣潮值，保证旧配置兼容）
+  const LEVEL_KEYWORDS = config.levelKeywords || ['联觉等级', '冒险等级'];
+  const YELLOW_UNITS = config.yellowUnits || ['黄'];
+  const CONST_UNITS = config.constUnits || ['命'];
+  const CONST_UNIT_DISPLAY = config.constUnitDisplay || (config.constUnits ? config.constUnits[0] : '命');
+  const CHAR_SECTION_KEYWORDS = config.charSectionKeywords || ['五星角色'];
+  const WEAPON_SECTION_KEYWORDS = config.weaponSectionKeywords || ['五星武器', '武器', '金色武器'];
+  const RESOURCES = config.resources || [
+    { key: 'starSound', name: '星声', div: 160 },
+    { key: 'moonPhase', name: '月相', div: 160 },
+    { key: 'aftermathCoral', name: '余波珊瑚', div: 8 },
+    { key: 'floatGoldRipple', name: '浮金波纹', div: 1 },
+    { key: 'castTideRipple', name: '铸潮波纹', div: 1 },
+  ];
+  const OUTFIT_SECTION_KEYWORDS = config.outfitSectionKeywords || ['服饰', '皮肤'];
+  const MOTO_SECTION_KEYWORDS = config.motoSectionKeywords || ['车架模组', '车架', '摩托'];
+  const MOTO_ACCESSORY_KEYWORDS = config.motoAccessoryKeywords || ['摩托饰品'];
+
   const CHAR_LOOKUP = {};
   for (const [tier, info] of Object.entries(CHAR_TIERS)) {
     for (const name of info.chars) {
@@ -315,39 +333,23 @@ function parseCharacters(section) {
   const items = section.split(/[,，、\s;；]+/).map(s => s.replace(/[】\s]+$/, '').trim()).filter(s => s.length > 0 && !/^\d+个$/.test(s));
 
   for (const item of items) {
-    let constNum = 0;
+    let constNum = -1;
     let name = '';
 
-    // 尝试 "满命XXX"
-    let m = item.match(/^满命(.+)$/);
-    if (m) {
-      constNum = 6;
-      name = m[1];
-    } else {
-      // 尝试 "N命XXX"
-      m = item.match(/^(\d+)命(.+)$/);
-      if (m) {
-        constNum = parseInt(m[1]);
-        name = m[2];
-      } else {
-        // 尝试 "XXX(满命)"
-        m = item.match(/^(.+?)\(满命\)$/);
-        if (m) {
-          name = m[1];
-          constNum = 6;
-        } else {
-          // 尝试 "XXX(N命)"
-          m = item.match(/^(.+?)\((\d+)命\)$/);
-          if (m) {
-            name = m[1];
-            constNum = parseInt(m[2]);
-          } else {
-            // 仅名称
-            name = item;
-            constNum = 0;
-          }
-        }
-      }
+    // 命座单位按当前游戏配置（鸣潮"命"、绝区零"命/影"）
+    for (const unit of CONST_UNITS) {
+      let m = item.match(new RegExp('^满' + unit + '(.+)$'));
+      if (m) { constNum = 6; name = m[1]; break; }
+      m = item.match(new RegExp('^(\\d+)' + unit + '(.+)$'));
+      if (m) { constNum = parseInt(m[1]); name = m[2]; break; }
+      m = item.match(new RegExp('^(.+?)\\(满' + unit + '\\)$'));
+      if (m) { constNum = 6; name = m[1]; break; }
+      m = item.match(new RegExp('^(.+?)\\((\\d+)' + unit + '\\)$'));
+      if (m) { constNum = parseInt(m[2]); name = m[1]; break; }
+    }
+    if (constNum < 0) {
+      name = item;
+      constNum = 0;
     }
 
     // 验证是否为已知角色（别名归一化）
@@ -388,28 +390,28 @@ function findCharsInText(text) {
       }
       let found = false;
       for (const checkName of namesToCheck) {
-        // "满命" + name
-        if (text.includes('满命' + checkName)) {
-          chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-          found = true; break;
+        // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
+        for (const unit of CONST_UNITS) {
+          if (text.includes('满' + unit + checkName)) {
+            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          const m = text.match(new RegExp('(\\d+)' + unit + checkName));
+          if (m) {
+            chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          if (text.includes(checkName + '(满' + unit + ')')) {
+            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          const m2 = text.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
+          if (m2) {
+            chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
         }
-        // "N命" + name
-        const m = text.match(new RegExp('(\\d+)命' + checkName));
-        if (m) {
-          chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
-          found = true; break;
-        }
-        // name + "(满命)"
-        if (text.includes(checkName + '(满命)')) {
-          chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-          found = true; break;
-        }
-        // name + "(N命)"
-        const m2 = text.match(new RegExp(checkName + '\\((\\d+)命\\)'));
-        if (m2) {
-          chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
-          found = true; break;
-        }
+        if (found) break;
         // 仅出现名字
         if (text.includes(checkName)) {
           chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
@@ -452,18 +454,22 @@ function parseWeapons(section) {
 }
 
 /**
- * 提取黄数
+ * 提取黄数（限定金数量，单位按当前游戏配置：鸣潮"黄"、绝区零"黄/金"）
  */
 function extractYellowCount(text) {
-  // "黄数：N" 或 "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
-  let m = text.match(/黄[数]?[：:]\s*(\d+)/);
-  if (m) return parseInt(m[1]);
-  // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
-  m = text.match(/【黄[数]?】\s*[：:]?\s*(\d+)/);
-  if (m) return parseInt(m[1]);
-  // "N黄" 或 "N黄数"（放最后，避免误匹配前一个字段的数字）
-  m = text.match(/(\d+)\s*黄/);
-  if (m) return parseInt(m[1]);
+  for (const unit of YELLOW_UNITS) {
+    // "黄数：N" 或 "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
+    let m = text.match(new RegExp(unit + '[数]?[：:]\\s*(\\d+)'));
+    if (m) return parseInt(m[1]);
+    // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
+    m = text.match(new RegExp('【' + unit + '[数]?】\\s*[：:]?\\s*(\\d+)'));
+    if (m) return parseInt(m[1]);
+  }
+  // "N黄" 或 "N金"（放最后，避免误匹配前一个字段的数字）
+  for (const unit of YELLOW_UNITS) {
+    const m = text.match(new RegExp('(\\d+)\\s*' + unit));
+    if (m) return parseInt(m[1]);
+  }
   return 0;
 }
 
@@ -522,66 +528,62 @@ function parseAccountInfo(text) {
 
   if (!text) return result;
 
-  // 提取五星角色
-  const charSection = extractSection(text, '五星角色');
-  if (charSection) {
-    result.characters = parseCharacters(charSection);
+  // 提取角色（按当前游戏的角色段落关键词，多段落合并、同名取高命）
+  for (const kw of CHAR_SECTION_KEYWORDS) {
+    const sec = extractSection(text, kw);
+    if (!sec) continue;
+    for (const c of parseCharacters(sec)) {
+      const existing = result.characters.find(x => x.name === c.name);
+      if (!existing) result.characters.push(c);
+      else if (c.const > existing.const) existing.const = c.const;
+    }
   }
   // 回退：直接在全文中查找角色
   if (result.characters.length === 0) {
     result.characters = findCharsInText(text);
   }
 
-  // 提取五星武器
-  let weaponSection = extractSection(text, '五星武器');
-  if (weaponSection) {
-    result.weapons = parseWeapons(weaponSection);
-  }
-  // 回退1：螃蟹网手机端格式只有"武器（N）"标题
-  if (result.weapons.length === 0) {
-    weaponSection = extractSection(text, '武器');
+  // 提取武器（按当前游戏的武器段落关键词，按顺序回退）
+  for (const kw of WEAPON_SECTION_KEYWORDS) {
+    const weaponSection = extractSection(text, kw);
     if (weaponSection) {
       result.weapons = parseWeapons(weaponSection);
-    }
-  }
-  // 回退2：盼之手机端格式用"金色武器"
-  if (result.weapons.length === 0) {
-    weaponSection = extractSection(text, '金色武器');
-    if (weaponSection) {
-      result.weapons = parseWeapons(weaponSection);
+      if (result.weapons.length > 0) break;
     }
   }
 
-  // 提取资源数量
-  result.starSound = extractNumber(text, '星声');
-  result.moonPhase = extractNumber(text, '月相');
-  result.aftermathCoral = extractNumber(text, '余波珊瑚');
-  result.floatGoldRipple = extractNumber(text, '浮金波纹');
-  result.castTideRipple = extractNumber(text, '铸潮波纹');
+  // 提取资源数量（按当前游戏的资源关键词，key跨游戏一致）
+  for (const r of RESOURCES) {
+    result[r.key] = extractNumber(text, r.name);
+  }
 
   // 提取黄数
   result.yellowCount = extractYellowCount(text);
 
-  // 提取服饰、摩托、车架、涂装数量
-  result.outfitCount = extractListCount(text, '服饰');
-  // 回退：盼之格式用"皮肤"
-  if (result.outfitCount === 0) {
-    const skinSection = extractSection(text, '皮肤');
-    if (skinSection) {
-      const skinNum = parseInt(skinSection);
-      result.outfitCount = isNaN(skinNum) ? extractListCount(text, '皮肤') : skinNum;
+  // 提取服饰/皮肤数量（按当前游戏关键词；盼之格式段落可能是纯数字）
+  for (const kw of OUTFIT_SECTION_KEYWORDS) {
+    if (result.outfitCount > 0) break;
+    result.outfitCount = extractListCount(text, kw);
+    if (result.outfitCount === 0) {
+      const sec = extractSection(text, kw);
+      if (sec) {
+        const num = parseInt(sec);
+        result.outfitCount = isNaN(num) ? extractListCount(text, kw) : num;
+      }
     }
   }
-  // 摩托只算车架模组（摩托饰品不算摩托），检查所有可能的段落标题
-  result.motoCount = extractListCount(text, '车架模组') + extractListCount(text, '车架') + extractListCount(text, '摩托');
-  // 摩托饰品单独计数（不算摩托）
-  result.motoAccessoryCount = extractListCount(text, '摩托饰品');
+  // 摩托/邦布（按当前游戏段落关键词求和；鸣潮摩托饰品单独计数不算车架）
+  result.motoCount = MOTO_SECTION_KEYWORDS.reduce((sum, kw) => sum + extractListCount(text, kw), 0);
+  result.motoAccessoryCount = MOTO_ACCESSORY_KEYWORDS.reduce((sum, kw) => sum + extractListCount(text, kw), 0);
   result.vehicleFrameCount = extractListCount(text, '车架模组') + extractListCount(text, '车架');
   result.paintCount = extractListCount(text, '涂装');
 
-  // 计算总抽数
-  result.pulls = result.starSound / 160 + result.moonPhase / 160 +
-    result.aftermathCoral / 8 + result.floatGoldRipple + result.castTideRipple;
+  // 计算总抽数（按当前游戏资源关键词的换算除数，div=0的资源不计入）
+  result.pulls = 0;
+  for (const r of RESOURCES) {
+    if (r.div > 1) result.pulls += (result[r.key] || 0) / r.div;
+    else if (r.div === 1) result.pulls += (result[r.key] || 0);
+  }
 
   return result;
 }
@@ -1092,7 +1094,13 @@ function calculateValue(parsed, price) {
   const yellowCoeff = yellowInfo.coefficient;
 
   // 账号等级、四星角色数
-  const levelMatch = (parsed.rawText || '').match(/联觉等级[】：:\s]*(\d+)/) || (parsed.rawText || '').match(/等级[：:]\s*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
+  // 优先按当前游戏的等级关键词提取（如鸣潮"联觉等级"、绝区零"绳网等级"），避免误匹配其他含"级"的字段
+  let levelMatch = null;
+  for (const kw of LEVEL_KEYWORDS) {
+    levelMatch = (parsed.rawText || '').match(new RegExp(kw + '[】：:\\s]*(\\d+)'));
+    if (levelMatch) break;
+  }
+  if (!levelMatch) levelMatch = (parsed.rawText || '').match(/等级[：:]\s*(\d+)/) || (parsed.rawText || '').match(/(\d+)级/);
   const level = levelMatch ? parseInt(levelMatch[1]) : 1;
   const fourStarMatch = (parsed.rawText || '').match(/(\d+)个四星角色/);
   const fourStarChars = fourStarMatch ? parseInt(fourStarMatch[1]) : 0;
@@ -1111,8 +1119,8 @@ function calculateValue(parsed, price) {
       const allWithinLimit = tierChars.every(c => c.const <= rule.maxConst);
       if (allWithinLimit) {
         flatDiscount = Math.min(flatDiscount, rule.discount);
-        const charSummary = tierChars.map(c => c.name + c.const + '命').join('/');
-        flatDiscountNotes.push('低命折扣系数(' + rule.tiers.join('+') + '级全≤' + rule.maxConst + '命: ' + charSummary + ') ×' + rule.discount);
+        const charSummary = tierChars.map(c => c.name + c.const + CONST_UNIT_DISPLAY).join('/');
+        flatDiscountNotes.push('低命折扣系数(' + rule.tiers.join('+') + '级全≤' + rule.maxConst + CONST_UNIT_DISPLAY + ': ' + charSummary + ') ×' + rule.discount);
       }
     }
   }
@@ -1249,7 +1257,7 @@ function generateShortDescription(evaluation) {
   // 取价值最高的前5个角色
   const topChars = [...chars].sort((a, b) => b.value - a.value).slice(0, 5);
   const parts = topChars.map(c => {
-    const constStr = c.const >= 6 ? '满命' : `${c.const}命`;
+    const constStr = c.const >= 6 ? '满' + CONST_UNIT_DISPLAY : `${c.const}${CONST_UNIT_DISPLAY}`;
     const weaponStr = c.hasSig ? '+专武' : '';
     return `${constStr}${c.name}${weaponStr}`;
   });
@@ -1268,6 +1276,7 @@ function generateShortDescription(evaluation) {
     SECTION_KEYWORDS, DEFAULT_WEIGHTS, DEFAULT_TEAMS, DEFAULT_PULL_FORMULA,
     DEFAULT_TEAM_MATES, DEFAULT_CHAR_PRICES, DEFAULT_CONST_PREMIUMS,
     DEFAULT_NEED_SIG_WEAPONS,
+    LEVEL_KEYWORDS, YELLOW_UNITS, CONST_UNITS, CONST_UNIT_DISPLAY, RESOURCES,
     buildDefaultCharPrices, buildDefaultConstPrices, convertPremiumsToConstPrices,
     buildDefaultTeamPremiums, buildDefaultWeights, getDefaults,
     parseAccountInfo, extractSection, extractNumber, parseCharacters,
