@@ -284,8 +284,85 @@ let weights = buildDefaultWeights();
 let _sigWeaponsOverride = null;
 
 // ============================================================
-// 文本解析辅助函数（对应油猴脚本 extractSection 等）
+// 多平台文本归一化（对应油猴脚本 kjsNormalizeText）
+// 支持氪金兽(Format A/B/C)和7881格式，统一转为螃蟹网标准格式
 // ============================================================
+
+function normalizePlatformText(text) {
+  if (!text) return text;
+  const resourceNames = RESOURCES.map(r => r.name);
+  const allSectionKeywords = CHAR_SECTION_KEYWORDS.concat(WEAPON_SECTION_KEYWORDS);
+
+  // Format C: 资源值无冒号 → 补冒号（"星声15722" → "星声:15722"）
+  text = text.replace(new RegExp('(' + resourceNames.join('|') + ')(\\d+)', 'g'), '$1:$2');
+
+  // Format C: 清理无用段落
+  text = text.replace(/【绑定情况】[：:][\s\S]*?(?=【|$)/g, '');
+  text = text.replace(/皮肤[：:][^【]*/g, '');
+
+  // Format C: 合并命座分段到角色列表
+  const constSections = ['满命', '六命', '五命', '四命', '三命', '二命', '一命', '零命'];
+  let allCharsWithConst = [];
+  for (const cs of constSections) {
+    const csPat = '【' + cs + '角色】[：:]\\s*([^【]*)';
+    const csMatch = text.match(new RegExp(csPat));
+    if (csMatch) {
+      const csItems = csMatch[1].split(/[,，、\s]+/).filter(Boolean);
+      allCharsWithConst = allCharsWithConst.concat(csItems);
+    }
+  }
+  if (allCharsWithConst.length > 0) {
+    text = text.replace(/【按角色】[：:][\s\S]*?(?=【|$)/g, CHAR_SECTION_KEYWORDS[0] + ':' + allCharsWithConst.join(',') + ' ');
+    text = text.replace(/【[满六五四三二一零]命角色】[：:][\s\S]*?(?=【|$)/g, '');
+  }
+
+  // Format C: 合并精炼分段到武器列表
+  const refineSections = ['精五', '精四', '精三', '精二', '精一', '精0'];
+  let allWeaponsWithRefine = [];
+  for (const rs of refineSections) {
+    const rsPat = '【' + rs + '武器】[：:]\\s*([^【]*)';
+    const rsMatch = text.match(new RegExp(rsPat));
+    if (rsMatch) {
+      const rsItems = rsMatch[1].split(/[,，、\s]+/).filter(Boolean);
+      allWeaponsWithRefine = allWeaponsWithRefine.concat(rsItems);
+    }
+  }
+  if (allWeaponsWithRefine.length > 0) {
+    text = text.replace(/【按武器】[：:][\s\S]*?(?=【|$)/g, WEAPON_SECTION_KEYWORDS[0] + ':' + allWeaponsWithRefine.join(',') + ' ');
+    text = text.replace(/【精[五四三二一0]武器】[：:][\s\S]*?(?=【|$)/g, '');
+  }
+
+  // 通用转换
+  text = text
+    .replace(/[·・]/g, '')
+    // "星声数量:1434" → "星声:1434"（资源名按当前游戏）
+    .replace(new RegExp('(' + resourceNames.join('|') + ')数量', 'g'), '$1')
+    // 卖家格式B: "五星数量：34" → "总黄数:34"
+    .replace(/五星数量[：:]\s*(\d+)/g, '总黄数:$1')
+    // 卖家格式B: "__" → "，"
+    .replace(/__/g, '，')
+    // 截掉卖家备注
+    .replace(/卖家说[\s\S]*$/, '')
+    // "五星角色数:18 6鸣露西，..." → 按数量截取前N项，剔除四星
+    .replace(new RegExp('(' + allSectionKeywords.join('|') + ')数\\s*[:：]\\s*(\\d+)\\s*([^五]*?)(?=五星|$)', 'g'), function(m, kw, cnt, rest) {
+      const items = rest.split(/[,，、\s]+/).filter(Boolean);
+      return kw + ':' + items.slice(0, parseInt(cnt, 10)).join('，');
+    })
+    // 四星角色段落丢弃
+    .replace(new RegExp('四星角色数?\\s*[:：]\\s*(?:\\d+\\s*)?[\\s\\S]*?(?=' + CHAR_SECTION_KEYWORDS[0] + '|五星武器|' + LEVEL_KEYWORDS.join('|') + '|$)', 'g'), '')
+    // 氪金兽用"鸣"表示命座/精炼，先在武器段内把"N鸣武器名"→"精N武器名"
+    .replace(new RegExp('(' + WEAPON_SECTION_KEYWORDS.join('|') + ')[：:]\\s*[\\s\\S]*'), function(m) {
+      return m.replace(/(\d+)鸣([^,，、\s;；]+)/g, function(mm, num, name) { return '精' + num + name; });
+    })
+    // "N鸣角色名"→"N命角色名"（氪金兽用"鸣"表示命座）
+    .replace(/(\d+)鸣/g, '$1命')
+    // "维里奈 * 4命" → "维里奈(4命)"
+    .replace(new RegExp('([^,，、\\s;；*]+)\\s*\\*\\s*(\\d+)(' + CONST_UNITS.join('|') + ')', 'g'), '$1($2$3)')
+    // "相位涟漪 * 2精" → "精2相位涟漪"
+    .replace(/([^,，、\s;；*]+)\s*\*\s*(\d+)精/g, '精$2$1');
+
+  return text;
+}
 
 /**
  * 提取文本中某个关键词后的段落内容
@@ -1210,7 +1287,8 @@ function evaluateWithPrice(showTitle, priceInCents, customWeights) {
     _sigWeaponsOverride = weights.sigWeaponsOverride || null;
   }
   try {
-    const parsed = parseAccountInfo(showTitle);
+    const normalizedTitle = normalizePlatformText(showTitle);
+    const parsed = parseAccountInfo(normalizedTitle);
     const priceInYuan = priceInCents / 100;
     const cv = calculateValue(parsed, priceInYuan);
 
@@ -1301,7 +1379,7 @@ function generateShortDescription(evaluation) {
     findCharsInText, parseWeapons, extractYellowCount, extractListCount,
     extractListItems, checkHasSigWeapon, calcConstPremium, getCharValue,
     calculatePullValue, getYellowCoeff, getEffectiveYellowCoeff, calculateValue,
-    evaluateWithPrice, generateShortDescription,
+    evaluateWithPrice, generateShortDescription, normalizePlatformText,
   };
 }
 
