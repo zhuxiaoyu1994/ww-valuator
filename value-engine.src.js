@@ -240,10 +240,17 @@ function buildDefaultWeights(customWeights) {
   // 用户自定义角色级别覆盖
   w.charTierOverride = saved.charTierOverride || {};
   for (const ctoName in w.charTierOverride) {
+    const ctoTier = w.charTierOverride[ctoName];
     if (CHAR_LOOKUP[ctoName]) {
-      const ctoTier = w.charTierOverride[ctoName];
       CHAR_LOOKUP[ctoName].tier = ctoTier;
       CHAR_LOOKUP[ctoName].isHot = ctoTier === 'S' || ctoTier === 'A' || ctoTier === 'B';
+    } else {
+      const tierPrice = CHAR_TIERS[ctoTier] ? CHAR_TIERS[ctoTier].price : 0;
+      CHAR_LOOKUP[ctoName] = {
+        tier: ctoTier,
+        price: tierPrice,
+        isHot: ctoTier === 'S' || ctoTier === 'A' || ctoTier === 'B'
+      };
     }
   }
   return w;

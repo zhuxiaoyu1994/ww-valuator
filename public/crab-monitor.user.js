@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.0.2
+// @version      3.0.3
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -24,6 +24,15 @@
 
 (function () {
   'use strict';
+
+  // 螃蟹网改版后URL结构变更：旧 /buy/{gameId} → 新 /buy/{gameId}/1（1=账号商品类型）
+  // 访问旧URL会显示404页面，自动重定向到新URL
+  var _oldPath = window.location.pathname;
+  var _urlMatch = _oldPath.match(/^\/buy\/(\d+)$/);
+  if (_urlMatch) {
+    window.location.replace(window.location.origin + '/buy/' + _urlMatch[1] + '/1');
+    return;
+  }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
   const CONFIG_VERSION = 20;
@@ -381,7 +390,7 @@
     if (!GAME_CONFIGS[newGame] || newGame === currentGame) return;
     localStorage.setItem(GLOBAL_STORAGE_KEYS.game, newGame);
     saveState();
-    window.location.href = 'https://www.pxb7.com/buy/' + GAME_CONFIGS[newGame].platformIds.pxb7;
+    window.location.href = 'https://www.pxb7.com/buy/' + GAME_CONFIGS[newGame].platformIds.pxb7 + '/1';
   }
 
   // 资源名称列表（用于kjs归一化等正则构建）
@@ -1028,10 +1037,19 @@
     w.charTierOverride = saved.charTierOverride || {};
     for (var ctoName in w.charTierOverride) {
       if (!w.charTierOverride.hasOwnProperty(ctoName)) continue;
+      var ctoTier = w.charTierOverride[ctoName];
       if (CHAR_LOOKUP[ctoName]) {
-        var ctoTier = w.charTierOverride[ctoName];
         CHAR_LOOKUP[ctoName].tier = ctoTier;
         CHAR_LOOKUP[ctoName].isHot = ctoTier === 'S' || ctoTier === 'A' || ctoTier === 'B';
+      } else {
+        // 管理后台新增的角色不在charTiers中，需要动态添加到CHAR_LOOKUP
+        var tierPrice = 0;
+        if (CHAR_TIERS[ctoTier]) tierPrice = CHAR_TIERS[ctoTier].price;
+        CHAR_LOOKUP[ctoName] = {
+          tier: ctoTier,
+          price: tierPrice,
+          isHot: ctoTier === 'S' || ctoTier === 'A' || ctoTier === 'B'
+        };
       }
     }
     return w;
@@ -3934,10 +3952,15 @@
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
           saveStorage(STORAGE_KEYS.notified, notifiedIds);
         }
+        return;
       } else if (!existRow) {
-        // 行已被截断但 seenIds 保留：不再重新入队（详情已处理过，避免队列堆积）
+        // 已见过但不在表格中（之前被截断或估值过滤），移除后重新评估
+        const idx = seenIds.indexOf(productId);
+        if (idx > -1) seenIds.splice(idx, 1);
+        console.log('[鸣潮监控] 重新评估(已见但表格中不存在): ' + (item.productUniqueNo || productId) + ' ¥' + price);
+      } else {
+        return;
       }
-      return;
     }
     seenIds.push(productId);
     if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
@@ -3951,6 +3974,14 @@
     // 初步估值
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
+
+    console.log('[鸣潮监控] 解析结果: ' + (productUniqueNo || productId) +
+      ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
+      ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
+      ' | Lv.' + valuation.level +
+      ' | 估值¥' + valuation.totalValue.toFixed(0) +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
     // 估值低于300的垃圾数据不收录
     if (valuation.totalValue < 300) {
