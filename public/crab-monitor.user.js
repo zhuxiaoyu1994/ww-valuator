@@ -6539,8 +6539,23 @@ function openSettings() {
 
     // 收集所有角色名（按级别排序）
     const allCharNames = [];
+    const _addedNameSet = {};
     for (const tierKey of Object.keys(CHAR_TIERS)) {
-      for (const name of CHAR_TIERS[tierKey].chars) allCharNames.push(name);
+      for (const name of CHAR_TIERS[tierKey].chars) {
+        if (!_addedNameSet[name]) { allCharNames.push(name); _addedNameSet[name] = true; }
+      }
+    }
+    // 用户自定义角色级别覆盖中的新角色
+    if (weights && weights.charTierOverride) {
+      for (const ovrName of Object.keys(weights.charTierOverride)) {
+        if (!_addedNameSet[ovrName]) { allCharNames.push(ovrName); _addedNameSet[ovrName] = true; }
+      }
+    }
+    // charPrices中的自定义角色
+    if (weights && weights.charPrices) {
+      for (const cpName of Object.keys(weights.charPrices)) {
+        if (!_addedNameSet[cpName]) { allCharNames.push(cpName); _addedNameSet[cpName] = true; }
+      }
     }
     allCharNames.sort();
 

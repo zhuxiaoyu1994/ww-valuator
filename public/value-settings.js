@@ -241,11 +241,27 @@
 
     // 收集所有角色名（按级别排序）
     var allCharNames = [];
+    var _addedNameSet = {};
     var CHAR_TIERS = defaults.charTiers;
     for (var tierKey in CHAR_TIERS) {
       if (!CHAR_TIERS.hasOwnProperty(tierKey)) continue;
       for (var ni = 0; ni < CHAR_TIERS[tierKey].chars.length; ni++) {
-        allCharNames.push(CHAR_TIERS[tierKey].chars[ni]);
+        var _cn = CHAR_TIERS[tierKey].chars[ni];
+        if (!_addedNameSet[_cn]) { allCharNames.push(_cn); _addedNameSet[_cn] = true; }
+      }
+    }
+    // 用户自定义角色级别覆盖中的新角色
+    if (w.charTierOverride) {
+      for (var _ovrName in w.charTierOverride) {
+        if (!w.charTierOverride.hasOwnProperty(_ovrName)) continue;
+        if (!_addedNameSet[_ovrName]) { allCharNames.push(_ovrName); _addedNameSet[_ovrName] = true; }
+      }
+    }
+    // charPrices中的自定义角色
+    if (w.charPrices) {
+      for (var _cpName in w.charPrices) {
+        if (!w.charPrices.hasOwnProperty(_cpName)) continue;
+        if (!_addedNameSet[_cpName]) { allCharNames.push(_cpName); _addedNameSet[_cpName] = true; }
       }
     }
     allCharNames.sort();
