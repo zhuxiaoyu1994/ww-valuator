@@ -456,7 +456,7 @@ function getPageHTML() {
     <div class="header">
       <a class="back-home" href="/">← 返回首页</a>
       <h1>鸣潮账号估价助手</h1>
-      <div class="subtitle">输入螃蟹网商品编号，或粘贴商品描述进行估价</div>
+      <div class="subtitle">输入螃蟹网商品编号，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述进行估价</div>
     </div>
 
     <!-- 教学视频 -->
@@ -500,7 +500,7 @@ function getPageHTML() {
     <!-- 粘贴描述估价 -->
     <div class="input-card" id="panel-paste" style="display:none;">
       <div class="input-row" style="flex-direction:column;gap:12px;">
-        <textarea id="eval-text" placeholder="粘贴螃蟹网商品描述文本（包含角色、命座、武器、资源等信息）"></textarea>
+        <textarea id="eval-text" placeholder="粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述文本（包含角色、命座、武器、资源等信息）"></textarea>
         <div class="input-row">
           <input type="number" class="price-input" id="eval-price" placeholder="标价(元)" min="0" />
           <button class="eval-btn" id="eval-btn" onclick="doEvaluate()">估价</button>
@@ -780,7 +780,7 @@ function getPageHTML() {
         const diffText = diff >= 0 ? '+' + diff : diff;
         summaryHtml += '<div class="ratio ' + ratioClass + '">性价比 ' + ratioText + ' (标价' + d.price + '元 · 差价' + diffText + '元)</div>';
       }
-      summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="openStatsModal()">估值不准？查看算法准确性报告</button>';
+      summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="openStatsModal()">估值准不准？查看算法准确性报告</button>';
       document.getElementById('result-summary').innerHTML = summaryHtml;
 
       const det = d.details;
