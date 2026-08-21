@@ -46,7 +46,7 @@
    */
   function fetchDefaults() {
     if (cachedDefaults) return Promise.resolve(cachedDefaults);
-    return fetch('/api/defaults?game=' + (gameKey === 'zzz' ? 'zzz' : 'wuwa'))
+    return fetch('/api/defaults?game=' + (gameKey === 'zzz' ? 'zzz' : 'wuwa') + '&_t=' + Date.now())
       .then(function (r) { return r.json(); })
       .then(function (result) {
         if (result.success && result.data) {
@@ -157,8 +157,8 @@
       }
     }
     w.needSigWeapons = (s.needSigWeapons && s.needSigWeapons.length > 0) ? s.needSigWeapons : (DEFAULT_WEIGHTS.needSigWeapons || defaults.needSigWeapons || []);
-    w.deletedChars = s.deletedChars || [];
-    w.charTierOverride = s.charTierOverride || {};
+    w.deletedChars = (s.deletedChars && s.deletedChars.length > 0) ? s.deletedChars : (DEFAULT_WEIGHTS.deletedChars || []);
+    w.charTierOverride = (s.charTierOverride && Object.keys(s.charTierOverride).length > 0) ? s.charTierOverride : (DEFAULT_WEIGHTS.charTierOverride || {});
     return w;
   }
 

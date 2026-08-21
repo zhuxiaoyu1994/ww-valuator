@@ -656,7 +656,7 @@ function getPageHTML() {
     <img src="/public/qq-group.jpg" alt="QQ群二维码" />
   </div>
 
-  <script src="/public/value-settings.js?v=20260819" onerror="window.__vsFailed=true"></script>
+  <script src="/public/value-settings.js?v=20260821" onerror="window.__vsFailed=true"></script>
   <script>
     // ============================================================
     // 服务器端默认配置（从数据库加载，优先于源码内置默认值）
