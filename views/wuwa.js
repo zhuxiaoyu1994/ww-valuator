@@ -9,69 +9,99 @@ function getPageHTML() {
   <title>鸣潮账号估价 - 游戏账号估价平台</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #08080f;
+      --bg-soft: #0d0d1a;
+      --card: #101020;
+      --card-glass: rgba(15, 15, 29, 0.78);
+      --line: #1e1e33;
+      --line-soft: #171729;
+      --text: #e8e8f0;
+      --text-dim: #8a8aa0;
+      --text-faint: #55556b;
+      --accent: #e94560;
+      --accent-deep: #c73852;
+      --accent-soft: rgba(233, 69, 96, 0.12);
+      --accent-glow: rgba(233, 69, 96, 0.35);
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+      --sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', -apple-system, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
     body {
-      background: #0a0a1a;
-      color: #e0e0e0;
-      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
       min-height: 100vh;
-      padding: 20px;
-    }
-    .container { max-width: 800px; margin: 0 auto; }
-
-    /* Top Nav */
-    .top-nav {
-      display: flex; justify-content: center; gap: 0;
-      margin-bottom: 8px; padding: 10px 16px;
-      background: #12122a; border-radius: 12px; border: 1px solid #1f1f3a;
-    }
-    .nav-link {
-      padding: 8px 24px; font-size: 14px; color: #888;
-      text-decoration: none; border-radius: 8px; transition: all 0.2s;
-      border: 1px solid transparent;
-    }
-    .nav-link:hover { color: #ccc; background: rgba(255,255,255,0.04); }
-    .nav-link.active { color: #4ade80; border-color: #2a4a2a; background: rgba(74,222,128,0.06); font-weight: 600; }
-
-    /* Header */
-    .header {
-      text-align: center;
-      margin-bottom: 24px;
-      padding: 20px 24px 16px;
+      overflow-x: hidden;
       position: relative;
     }
+    .container { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 0 20px 44px; }
+
+    /* ===== 背景氛围 ===== */
+    .bg-atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .bg-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 44px 44px;
+      -webkit-mask-image: radial-gradient(ellipse 90% 62% at 50% 0%, #000 30%, transparent 74%);
+      mask-image: radial-gradient(ellipse 90% 62% at 50% 0%, #000 30%, transparent 74%);
+    }
+    .bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.5; animation: orbDrift 18s ease-in-out infinite alternate; }
+    .bg-orb.a { width: 540px; height: 540px; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); top: -170px; left: -150px; }
+    @keyframes orbDrift { from { transform: translate(0, 0); } to { transform: translate(50px, 30px); } }
+
+    /* ===== Hero 封面头部 ===== */
+    .hero { position: relative; height: 330px; margin: 0 -20px; overflow: hidden; }
+    .hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 28%; }
+    .hero-shade {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(180deg, rgba(8,8,15,0.38) 0%, rgba(8,8,15,0.1) 32%, rgba(8,8,15,0.6) 70%, var(--bg) 100%),
+        linear-gradient(100deg, rgba(8,8,15,0.5) 0%, transparent 48%);
+    }
+    .hud-corner { position: absolute; width: 26px; height: 26px; opacity: 0.5; }
+    .hud-corner.tl { top: 16px; left: 16px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+    .hud-corner.br { bottom: 16px; right: 16px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
     .back-home {
-      position: absolute;
-      top: 16px;
-      left: 0;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 6px 14px;
-      border: 1px solid #2a2a4a;
-      border-radius: 20px;
-      color: #aaa;
-      font-size: 13px;
-      text-decoration: none;
-      transition: all 0.2s;
+      position: absolute; top: 18px; left: 20px; z-index: 3;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 15px; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px;
+      background: rgba(8,8,15,0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      color: #d8d8e4; font-size: 13px; text-decoration: none; transition: all 0.2s;
     }
-    .back-home:hover { color: #e94560; border-color: rgba(233,69,96,0.5); background: rgba(233,69,96,0.06); }
-    .header h1 {
-      font-size: 28px;
-      color: #e94560;
-      margin-bottom: 8px;
+    .back-home:hover { color: var(--accent); border-color: var(--accent); }
+    .cover-badge {
+      position: absolute; top: 18px; right: 20px; z-index: 3;
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 6px 13px; border-radius: 999px;
+      background: rgba(8,8,15,0.5); border: 1px solid rgba(74,222,128,0.38);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      color: var(--good); font-size: 11px; letter-spacing: 2px;
     }
-    .header .subtitle {
-      color: #888;
-      font-size: 14px;
-    }
+    .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .hero-body { position: absolute; left: 0; right: 0; bottom: 26px; z-index: 2; padding: 0 30px; }
+    .hero-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 4px; color: var(--accent); margin-bottom: 10px; }
+    .hero-title { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    .hero-title h1 { font-size: 34px; font-weight: 800; letter-spacing: 2px; color: #fff; text-shadow: 0 2px 24px rgba(0,0,0,0.65); }
+    .hero-title .en { font-family: var(--mono); font-size: 12px; letter-spacing: 3px; color: rgba(255,255,255,0.75); }
+    .subtitle { margin-top: 9px; font-size: 13px; color: rgba(255,255,255,0.8); text-shadow: 0 1px 12px rgba(0,0,0,0.8); max-width: 620px; line-height: 1.65; }
 
     /* 教学视频 */
     .tutorial-section {
-      background: rgba(15, 52, 96, 0.3);
-      border: 1px solid rgba(142, 205, 245, 0.15);
-      border-radius: 10px;
+      background: var(--card-glass);
+      border: 1px solid var(--line);
+      border-radius: 14px;
       padding: 14px 18px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     }
     .tutorial-header {
       display: flex;
@@ -81,46 +111,57 @@ function getPageHTML() {
       user-select: none;
     }
     .tutorial-icon {
-      color: #e94560;
+      color: var(--accent);
       font-size: 14px;
     }
     .tutorial-title {
       font-size: 14px;
       font-weight: 600;
-      color: #e0e0e0;
+      color: var(--text);
     }
 
     /* Tabs */
     .tabs {
       display: flex;
-      gap: 8px;
-      margin-bottom: 20px;
+      gap: 6px;
+      margin-bottom: 14px;
+      padding: 5px;
+      background: var(--card-glass);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     }
     .tab-btn {
       flex: 1;
-      padding: 12px 16px;
-      border: 1px solid #2a2a4a;
-      border-radius: 8px;
-      background: #12122a;
-      color: #888;
+      padding: 11px 16px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text-dim);
       font-size: 14px;
+      font-family: inherit;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.22s;
       text-align: center;
+      letter-spacing: 0.5px;
     }
+    .tab-btn:hover { color: var(--text); }
     .tab-btn.active {
-      background: #e94560;
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
       color: #fff;
-      border-color: #e94560;
+      font-weight: 600;
+      box-shadow: 0 4px 18px var(--accent-glow);
     }
 
     /* Input area */
     .input-card {
-      background: #12122a;
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 20px;
+      background: var(--card-glass);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px;
+      margin-bottom: 18px;
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
     }
     .input-row {
       display: flex;
@@ -130,53 +171,62 @@ function getPageHTML() {
     .input-row input,
     .input-row textarea {
       flex: 1;
-      padding: 12px 16px;
-      border: 1px solid #2a2a4a;
-      border-radius: 8px;
-      background: #0a0a1a;
-      color: #e0e0e0;
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(8,8,15,0.62);
+      color: var(--text);
       font-size: 14px;
       font-family: inherit;
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
     .input-row input:focus,
     .input-row textarea:focus {
-      border-color: #e94560;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
     .input-row textarea {
       resize: vertical;
-      min-height: 120px;
+      min-height: 130px;
+      line-height: 1.6;
     }
+    #product-id { font-family: var(--mono); letter-spacing: 1.5px; text-transform: uppercase; }
     .eval-btn {
-      padding: 12px 28px;
+      padding: 13px 30px;
       border: none;
-      border-radius: 8px;
-      background: #e94560;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
       color: #fff;
       font-size: 14px;
       font-weight: 600;
+      font-family: inherit;
       cursor: pointer;
       white-space: nowrap;
-      transition: background 0.2s;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px var(--accent-glow);
+      letter-spacing: 2px;
     }
-    .eval-btn:hover { background: #ff5577; }
-    .eval-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .eval-btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+    .eval-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
     .price-input {
-      width: 120px !important;
+      width: 130px !important;
       flex: none !important;
     }
 
     /* Result */
     .result-card {
-      background: #12122a;
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
-      padding: 24px;
+      background: var(--card-glass);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 26px;
       display: none;
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
     }
-    .result-card.show { display: block; }
+    .result-card.show { display: block; animation: cardIn 0.4s cubic-bezier(0.22,1,0.36,1); }
+    @keyframes cardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     .result-row {
       display: flex;
       justify-content: space-between;
@@ -186,125 +236,139 @@ function getPageHTML() {
       padding: 6px 0;
       font-size: 14px;
     }
-    .result-row .key { color: #888; flex-shrink: 0; }
-    .result-row .val { font-weight: 600; text-align: right; word-break: break-word; }
+    .result-row .key { color: var(--text-dim); flex-shrink: 0; }
+    .result-row .val { font-weight: 600; text-align: right; word-break: break-word; font-variant-numeric: tabular-nums; }
     .result-divider {
-      border-top: 1px solid #2a2a4a;
-      margin: 10px 0;
+      height: 1px; border: none; margin: 13px 0;
+      background: linear-gradient(90deg, transparent, var(--line) 12%, var(--line) 88%, transparent);
     }
     .result-summary {
       text-align: center;
-      padding: 20px 0;
+      padding: 16px 0;
       position: relative;
     }
     .result-summary .big-value {
-      font-size: 36px;
-      font-weight: bold;
-      color: #4ade80;
+      font-family: var(--mono);
+      font-size: 46px;
+      font-weight: 700;
+      color: var(--good);
+      text-shadow: 0 0 36px rgba(74,222,128,0.35);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -1px;
     }
     .result-summary .label {
-      color: #888;
+      color: var(--text-dim);
       font-size: 13px;
-      margin-top: 4px;
+      margin-top: 6px;
+      letter-spacing: 3px;
     }
     .result-summary .ratio {
       display: inline-block;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 14px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 13px;
       font-weight: 600;
-      margin-top: 8px;
+      margin-top: 10px;
+      font-variant-numeric: tabular-nums;
     }
-    .ratio.good { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-    .ratio.ok { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-    .ratio.bad { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    .ratio.good { background: rgba(74, 222, 128, 0.14); color: var(--good); border: 1px solid rgba(74,222,128,0.3); }
+    .ratio.ok { background: rgba(251, 191, 36, 0.14); color: var(--warn); border: 1px solid rgba(251,191,36,0.3); }
+    .ratio.bad { background: rgba(248, 113, 113, 0.14); color: var(--bad); border: 1px solid rgba(248,113,113,0.3); }
 
     .char-tags {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 7px;
       margin-top: 8px;
     }
     .char-tag {
       display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
+      padding: 3px 10px;
+      border-radius: 6px;
       font-size: 12px;
+      border: 1px solid transparent;
+      font-variant-numeric: tabular-nums;
     }
-    .char-tag.S { background: rgba(233, 69, 96, 0.2); color: #e94560; }
-    .char-tag.A { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-    .char-tag.B { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
-    .char-tag.C { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-    .char-tag.D { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
-    .char-tag.E { background: rgba(156, 163, 175, 0.1); color: #666; }
-    .char-tag .const { color: #aaa; margin-left: 2px; }
-    .char-tag .sig { color: #4ade80; }
+    .char-tag.S { background: rgba(233, 69, 96, 0.12); color: #ff6b83; border-color: rgba(233,69,96,0.4); }
+    .char-tag.A { background: rgba(251, 191, 36, 0.12); color: var(--warn); border-color: rgba(251,191,36,0.35); }
+    .char-tag.B { background: rgba(96, 165, 250, 0.12); color: #60a5fa; border-color: rgba(96,165,250,0.35); }
+    .char-tag.C { background: rgba(74, 222, 128, 0.1); color: var(--good); border-color: rgba(74,222,128,0.3); }
+    .char-tag.D { background: rgba(156, 163, 175, 0.1); color: #9ca3af; border-color: rgba(156,163,175,0.28); }
+    .char-tag.E { background: rgba(156, 163, 175, 0.07); color: #6b6b80; border-color: rgba(156,163,175,0.18); }
+    .char-tag .const { color: var(--text-dim); margin-left: 2px; }
+    .char-tag .sig { color: var(--good); }
 
     /* History */
     .history {
-      margin-top: 20px;
+      margin-top: 22px;
     }
     .history-title {
-      color: #666;
+      color: var(--text-faint);
       font-size: 12px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+      letter-spacing: 2px;
     }
     .history-tags {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 8px;
     }
     .history-tag {
       display: inline-block;
-      padding: 4px 10px;
-      border-radius: 16px;
-      background: #12122a;
-      border: 1px solid #2a2a4a;
-      color: #888;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      color: var(--text-dim);
       font-size: 12px;
+      font-family: var(--mono);
       cursor: pointer;
       transition: all 0.2s;
     }
-    .history-tag:hover { border-color: #e94560; color: #e0e0e0; }
+    .history-tag:hover { border-color: var(--accent); color: var(--text); }
 
     .loading {
       text-align: center;
-      padding: 20px;
-      color: #888;
+      padding: 22px;
+      color: var(--text-dim);
+      font-size: 14px;
+      letter-spacing: 1px;
     }
     .error-msg {
       text-align: center;
-      padding: 16px;
-      color: #f87171;
+      padding: 18px;
+      color: var(--bad);
       font-size: 14px;
     }
 
     /* QQ群 & 合规声明 */
     .footer-section {
-      margin-top: 40px;
+      margin-top: 44px;
     }
     .qq-group-card {
-      background: linear-gradient(135deg, #12122a 0%, #1a1a3a 100%);
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
+      background: var(--card-glass);
+      border: 1px solid var(--line);
+      border-radius: 16px;
       padding: 24px;
       display: flex;
       align-items: center;
       gap: 24px;
       margin-bottom: 16px;
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     }
     .qq-group-card .qr-wrapper {
       flex-shrink: 0;
       width: 140px;
       height: 140px;
-      border-radius: 10px;
+      border-radius: 12px;
       overflow: hidden;
-      border: 2px solid #2a2a4a;
+      border: 1px solid var(--line);
       cursor: pointer;
-      transition: transform 0.2s;
+      transition: transform 0.2s, border-color 0.2s;
     }
     .qq-group-card .qr-wrapper:hover {
-      transform: scale(1.05);
+      transform: scale(1.04);
+      border-color: var(--accent);
     }
     .qq-group-card .qr-wrapper img {
       width: 100%;
@@ -316,11 +380,12 @@ function getPageHTML() {
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.85);
+      background: rgba(4,4,10,0.88);
       z-index: 9999;
       justify-content: center;
       align-items: center;
       cursor: zoom-out;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     }
     .img-overlay.show { display: flex; }
     .img-overlay img {
@@ -331,100 +396,96 @@ function getPageHTML() {
     }
     .qq-group-card .info h3 {
       font-size: 18px;
-      color: #4ade80;
+      color: var(--good);
       margin-bottom: 8px;
     }
     .qq-group-card .info .group-id {
-      font-size: 16px;
-      color: #e0e0e0;
+      font-size: 15px;
+      color: var(--text);
       margin-bottom: 6px;
     }
     .qq-group-card .info .group-id .num {
-      font-weight: bold;
+      font-weight: 700;
       color: #60a5fa;
       font-size: 18px;
       letter-spacing: 1px;
+      font-family: var(--mono);
     }
     .qq-group-card .info .desc {
       font-size: 13px;
-      color: #888;
-      line-height: 1.6;
+      color: var(--text-dim);
+      line-height: 1.7;
     }
     .disclaimer {
-      background: rgba(233, 69, 96, 0.05);
-      border: 1px solid rgba(233, 69, 96, 0.2);
-      border-radius: 10px;
-      padding: 16px 20px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(233, 69, 96, 0.22);
+      border-radius: 14px;
+      padding: 18px 22px;
       font-size: 12px;
-      color: #999;
-      line-height: 1.8;
+      color: var(--text-dim);
+      line-height: 1.9;
     }
     .disclaimer .title {
-      color: #e94560;
-      font-weight: bold;
+      color: var(--accent);
+      font-weight: 700;
       font-size: 13px;
-      margin-bottom: 6px;
+      margin-bottom: 7px;
+      letter-spacing: 1px;
     }
     .disclaimer p { margin: 0; }
     .disclaimer p + p { margin-top: 4px; }
 
     @media (max-width: 600px) {
-      body { padding: 10px; }
-      .container { max-width: 100%; }
+      .container { padding: 0 12px 32px; }
+      .hero { height: 250px; margin: 0 -12px; }
+      .hero-body { padding: 0 18px; bottom: 20px; }
+      .hero-title h1 { font-size: 25px; }
+      .hero-title .en { font-size: 10px; }
+      .subtitle { font-size: 11.5px; }
+      .hud-corner { width: 18px; height: 18px; }
+      .back-home { top: 14px; left: 14px; font-size: 12px; padding: 5px 12px; }
+      .cover-badge { top: 14px; right: 14px; font-size: 10px; padding: 5px 10px; }
       .input-row { flex-direction: column; }
       .price-input { width: 100% !important; }
       .qq-group-card { flex-direction: column; text-align: center; }
-      /* 头部：防止返回按钮与标题重叠 */
-      .header { padding: 8px 0 12px; margin-bottom: 16px; }
-      .header h1 { font-size: 20px; }
-      .header .subtitle { font-size: 12px; }
-      .back-home { font-size: 12px; padding: 4px 10px; top: 8px; }
-      /* 导航和标签 */
-      .top-nav { padding: 6px 8px; }
-      .nav-link { padding: 6px 14px; font-size: 13px; }
       .tab-btn { padding: 10px 8px; font-size: 13px; }
-      /* 卡片内边距 */
-      .input-card, .result-card { padding: 14px; }
-      /* 估价结果行：允许换行 */
+      .input-card, .result-card { padding: 16px; }
       .result-row { flex-wrap: wrap; gap: 2px 8px; font-size: 13px; }
       .result-row .key { min-width: 60px; }
       .result-row .val { flex: 1; text-align: right; word-break: break-word; }
-      /* 最终估值 */
-      .result-summary .big-value { font-size: 28px; }
-      /* 角色标签 */
-      .char-tags { gap: 4px; }
-      .char-tag { font-size: 11px; padding: 2px 6px; }
-      /* 弹窗 */
+      .result-summary .big-value { font-size: 34px; }
+      .char-tags { gap: 5px; }
+      .char-tag { font-size: 11px; padding: 2px 8px; }
       #stats-modal > div { max-width: 95% !important; margin: 10px auto !important; padding: 14px !important; }
       #stats-modal-content > div[style*="grid"] { grid-template-columns: repeat(2, 1fr) !important; }
     }
     /* 估值规则设置入口 */
     .settings-bar {
-      display: flex; justify-content: flex-end; margin-bottom: 10px;
+      display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px;
     }
     .settings-btn {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 14px; border: 1px solid #2a2a4a; border-radius: 8px;
-      background: transparent; color: #fbbf24; font-size: 13px; cursor: pointer;
+      padding: 7px 14px; border: 1px solid var(--line); border-radius: 10px;
+      background: transparent; color: var(--warn); font-size: 13px; cursor: pointer;
       transition: all 0.2s; font-family: inherit;
     }
-    .settings-btn:hover { border-color: #fbbf24; background: rgba(251,191,36,0.08); }
-    .settings-btn.customized { color: #4ade80; border-color: #4ade80; }
+    .settings-btn:hover { border-color: var(--warn); background: rgba(251,191,36,0.08); }
+    .settings-btn.customized { color: var(--good); border-color: rgba(74,222,128,0.5); }
     .settings-btn.customized:hover { background: rgba(74,222,128,0.08); }
     /* "估值不准"按钮 - 显示在估值结果下方 */
     .adjust-link {
       display: none;
-      margin-top: 12px;
-      padding: 6px 14px; border: 1px solid #fbbf24; border-radius: 8px;
-      background: rgba(15,15,35,0.9); color: #fbbf24; font-size: 12px;
+      margin-top: 14px;
+      padding: 6px 14px; border: 1px solid rgba(251,191,36,0.5); border-radius: 10px;
+      background: rgba(15,15,29,0.9); color: var(--warn); font-size: 12px;
       cursor: pointer; transition: all 0.2s; font-family: inherit;
     }
-    .adjust-link:hover { background: rgba(251,191,36,0.15); }
+    .adjust-link:hover { background: rgba(251,191,36,0.14); }
     /* 新规则通知横幅 */
     .rules-banner {
-      background: rgba(251,191,36,0.1);
+      background: rgba(251,191,36,0.08);
       border: 1px solid rgba(251,191,36,0.3);
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 12px 16px;
       margin-bottom: 10px;
       display: flex;
@@ -437,60 +498,83 @@ function getPageHTML() {
       to { opacity: 1; transform: translateY(0); }
     }
     .rules-banner-text {
-      color: #fbbf24; font-size: 13px; flex: 1;
+      color: var(--warn); font-size: 13px; flex: 1;
     }
     .rules-banner-btns { display: flex; gap: 8px; }
     .rules-banner-btn {
-      padding: 6px 14px; border: none; border-radius: 6px;
+      padding: 6px 14px; border: none; border-radius: 8px;
       font-size: 12px; font-weight: 600; cursor: pointer;
       transition: opacity 0.2s; font-family: inherit;
     }
     .rules-banner-btn:hover { opacity: 0.85; }
-    .rules-banner-btn.load { background: #fbbf24; color: #0f0f23; }
-    .rules-banner-btn.dismiss { background: #2a2a4a; color: #888; }
+    .rules-banner-btn.load { background: var(--warn); color: #0f0f1e; }
+    .rules-banner-btn.dismiss { background: var(--line); color: var(--text-dim); }
+
+    /* ===== 入场动画 & 补充 ===== */
+    @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    .rise { animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .d1 { animation-delay: 0.08s; }
+    .d2 { animation-delay: 0.16s; }
+    .d3 { animation-delay: 0.24s; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
+  <div class="bg-atmos">
+    <div class="bg-grid"></div>
+    <div class="bg-orb a"></div>
+  </div>
   <div class="container">
-    <!-- Header -->
-    <div class="header">
+    <!-- Hero 封面头部 -->
+    <div class="hero">
+      <img class="hero-img" src="/public/covers/wuwa-cover.jpg" alt="鸣潮" loading="eager">
+      <div class="hero-shade"></div>
+      <div class="hud-corner tl"></div>
+      <div class="hud-corner br"></div>
       <a class="back-home" href="/">← 返回首页</a>
-      <h1>鸣潮账号估价助手</h1>
-      <div class="subtitle">输入螃蟹网商品编号，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述进行估价</div>
+      <span class="cover-badge"><span class="pulse-dot"></span>正常开放</span>
+      <div class="hero-body">
+        <div class="hero-kicker">ACCOUNT VALUATOR · 01</div>
+        <div class="hero-title">
+          <h1>鸣潮账号估价</h1>
+          <span class="en">WUTHERING WAVES</span>
+        </div>
+        <div class="subtitle">输入螃蟹网商品编号，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述进行估价</div>
+      </div>
     </div>
 
     <!-- 教学视频 -->
-    <div class="tutorial-section">
+    <div class="tutorial-section rise d1">
       <div class="tutorial-header" onclick="var f=document.getElementById('tutorial-frame');var a=this.querySelector('.tutorial-arrow');if(f.style.display==='none'){f.style.display='block';a.textContent='▲';this.querySelector('.tutorial-label').textContent='收起教程';}else{f.style.display='none';a.textContent='▼';this.querySelector('.tutorial-label').textContent='展开教程';}">
         <span class="tutorial-icon">▶</span>
         <span class="tutorial-title">新手必看：鸣潮估价工具使用教程</span>
-        <span class="tutorial-label" style="margin-left:auto;font-size:12px;color:#8ecdf5;cursor:pointer;">展开教程</span>
-        <span class="tutorial-arrow" style="font-size:10px;color:#8ecdf5;">▼</span>
+        <span class="tutorial-label" style="margin-left:auto;font-size:12px;color:#ff8296;cursor:pointer;">展开教程</span>
+        <span class="tutorial-arrow" style="font-size:10px;color:#ff8296;">▼</span>
       </div>
       <div id="tutorial-frame" style="display:none;margin-top:12px;">
         <div style="position:relative;padding:56.25% 0 0 0;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
           <iframe src="//player.bilibili.com/player.html?bvid=BV1ueKq6TEgV&autoplay=0&high_quality=1&danmaku=1" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>
         </div>
         <div style="margin-top:8px;font-size:12px;color:#666;text-align:center;">
-          <a href="https://www.bilibili.com/video/BV1ueKq6TEgV/" target="_blank" style="color:#8ecdf5;text-decoration:none;">在B站观看完整视频 →</a>
+          <a href="https://www.bilibili.com/video/BV1ueKq6TEgV/" target="_blank" style="color:#ff8296;text-decoration:none;">在B站观看完整视频 →</a>
         </div>
       </div>
     </div>
 
     <!-- Tabs -->
-    <div class="tabs">
+    <div class="tabs rise d1">
       <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">按编号查询</button>
       <button class="tab-btn" id="tab-paste" onclick="switchTab('paste')">粘贴描述估价</button>
     </div>
 
     <!-- 估值规则设置入口 -->
-    <div class="settings-bar">
+    <div class="settings-bar rise d2">
       <button class="settings-btn" id="settings-btn" onclick="safeOpenValueSettings()" style="display:none;">估值规则设置</button>
       <button class="settings-btn" id="stats-btn" onclick="openStatsModal()">算法准确性报告</button>
     </div>
 
     <!-- 按编号查询 -->
-    <div class="input-card" id="panel-lookup">
+    <div class="input-card rise d2" id="panel-lookup">
       <div class="input-row">
         <input type="text" id="product-id" placeholder="输入商品编号，如 MEBNB9606" onkeydown="if(event.key==='Enter')doLookup()" />
         <button class="eval-btn" id="lookup-btn" onclick="doLookup()">估价</button>
@@ -533,7 +617,7 @@ function getPageHTML() {
     </div>
 
     <!-- QQ群 & 合规声明 -->
-    <div class="footer-section">
+    <div class="footer-section rise d3">
       <div class="qq-group-card">
         <div class="qr-wrapper">
           <img src="/public/qq-group.jpg" alt="QQ群二维码" />
@@ -555,7 +639,7 @@ function getPageHTML() {
 
   <!-- 算法准确性报告弹窗 -->
   <div id="stats-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeStatsModal()">
-    <div style="max-width:1080px;margin:20px auto;background:#0f0f2a;border:1px solid #2a2a4a;border-radius:12px;padding:24px;min-height:400px;">
+    <div style="max-width:1080px;margin:20px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:12px;padding:24px;min-height:400px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div>
           <div style="font-size:20px;font-weight:700;color:#fff;">算法准确性报告</div>
@@ -794,7 +878,7 @@ function getPageHTML() {
       const c6Count = (det.characters || []).filter(c => c.const >= 6).length;
       const sTierCount = (det.characters || []).filter(c => c.tier === 'S').length;
       if (charCount > 0) {
-        hlHtml += '<span style="background:#1a1a3e;border:1px solid #444;border-radius:4px;padding:2px 8px;font-size:11px;color:#ccc;">五星角色 ' + charCount + ' 个</span>';
+        hlHtml += '<span style="background:#16162a;border:1px solid #2c2c48;border-radius:4px;padding:2px 8px;font-size:11px;color:#ccc;">五星角色 ' + charCount + ' 个</span>';
       }
       if (c6Count > 0) {
         hlHtml += '<span style="background:#1a2e1a;border:1px solid #4ade80;border-radius:4px;padding:2px 8px;font-size:11px;color:#4ade80;">满命角色 ' + c6Count + ' 个</span>';
@@ -804,7 +888,7 @@ function getPageHTML() {
       }
       // 配队
       if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
-        hlHtml += '<span style="background:#1a1a2e;border:1px solid #818cf8;border-radius:4px;padding:2px 8px;font-size:11px;color:#818cf8;max-width:100%;word-break:break-word;">配队 ' + det.satisfiedTeams.length + ' 组(' + det.satisfiedTeams.join('/') + ')</span>';
+        hlHtml += '<span style="background:#12121f;border:1px solid #818cf8;border-radius:4px;padding:2px 8px;font-size:11px;color:#818cf8;max-width:100%;word-break:break-word;">配队 ' + det.satisfiedTeams.length + ' 组(' + det.satisfiedTeams.join('/') + ')</span>';
       }
       // 专武
       const sigCount = (det.characters || []).filter(c => c.hasSig).length;
@@ -888,7 +972,7 @@ function getPageHTML() {
         detailHtml += resultRow('有效金系数', goldDisplay + ' [' + (yi.tierLabel || '') + '] × ' + yi.coefficient, '#f59e0b');
       }
       // 最终价值
-      detailHtml += '<div class="result-row" style="border-top:1px solid #333;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
+      detailHtml += '<div class="result-row" style="border-top:1px solid #1e1e33;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
       document.getElementById('result-details').innerHTML = detailHtml;
 
       // ===== 角色明细（按估值从大到小排序） =====
@@ -964,7 +1048,7 @@ function getPageHTML() {
       var modal = document.getElementById('stats-modal');
       var content = document.getElementById('stats-modal-content');
       modal.style.display = 'block';
-      content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#888;"><div style="display:inline-block;width:32px;height:32px;border:3px solid #1a1a3e;border-top-color:#8ecdf5;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;"></div><div>正在加载统计数据...</div></div>';
+      content.innerHTML = '<div style="text-align:center;padding:60px 0;color:#888;"><div style="display:inline-block;width:32px;height:32px;border:3px solid #1e1e33;border-top-color:#ff8296;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;"></div><div>正在加载统计数据...</div></div>';
       document.body.style.overflow = 'hidden';
 
       fetch('/api/public-stats').then(function(r) { return r.json(); }).then(function(result) {
@@ -1010,19 +1094,19 @@ function getPageHTML() {
       html += '</div>';
 
       // ===== 误差说明 =====
-      html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
+      html += '<div style="background:#101020;border:1px solid #1e1e33;border-radius:10px;padding:16px;margin-bottom:16px;">';
       html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">为什么会有误差？</div>';
       html += '<div style="font-size:13px;color:#999;line-height:1.8;">';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">市场供需波动：</span>账号价格受市场供需关系影响，热门角色在特定时期可能溢价，冷门角色则可能折价，估价引擎基于历史均价计算，无法实时反映短期市场波动。</div>';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">账号组合差异：</span>每个账号的角色组合、命座、武器配置各不相同，部分稀有组合在市场上缺乏足够的成交样本，导致估值偏差较大。</div>';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">主观价值因素：</span>账号的视觉效果（皮肤、服饰）、ID稀有度、服务器热度等主观因素难以量化，这些因素可能导致实际成交价偏离估值。</div>';
-      html += '<div style="margin-bottom:8px;"><span style="color:#8ecdf5;font-weight:600;">定价模型迭代：</span>估值引擎基于可配置的角色定价和系数公式，随着市场数据积累和参数调优，准确率会持续提升。当前R²=' + s.r2.toFixed(3) + '表明模型' + (s.r2 >= 0.8 ? '已具有较强解释力' : '仍有优化空间') + '。</div>';
-      html += '<div><span style="color:#8ecdf5;font-weight:600;">如何理解这些指标：</span>R²越接近1表示估值越准确；相关系数(r)反映估值与成交价的线性相关程度；中位数偏差率排除极端值后反映系统性偏置；P90表示90%的账号偏差都在此范围内。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#ff8296;font-weight:600;">市场供需波动：</span>账号价格受市场供需关系影响，热门角色在特定时期可能溢价，冷门角色则可能折价，估价引擎基于历史均价计算，无法实时反映短期市场波动。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#ff8296;font-weight:600;">账号组合差异：</span>每个账号的角色组合、命座、武器配置各不相同，部分稀有组合在市场上缺乏足够的成交样本，导致估值偏差较大。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#ff8296;font-weight:600;">主观价值因素：</span>账号的视觉效果（皮肤、服饰）、ID稀有度、服务器热度等主观因素难以量化，这些因素可能导致实际成交价偏离估值。</div>';
+      html += '<div style="margin-bottom:8px;"><span style="color:#ff8296;font-weight:600;">定价模型迭代：</span>估值引擎基于可配置的角色定价和系数公式，随着市场数据积累和参数调优，准确率会持续提升。当前R²=' + s.r2.toFixed(3) + '表明模型' + (s.r2 >= 0.8 ? '已具有较强解释力' : '仍有优化空间') + '。</div>';
+      html += '<div><span style="color:#ff8296;font-weight:600;">如何理解这些指标：</span>R²越接近1表示估值越准确；相关系数(r)反映估值与成交价的线性相关程度；中位数偏差率排除极端值后反映系统性偏置；P90表示90%的账号偏差都在此范围内。</div>';
       html += '</div>';
       html += '</div>';
 
       // ===== 准确率分布条 =====
-      html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:16px;">';
+      html += '<div style="background:#101020;border:1px solid #1e1e33;border-radius:10px;padding:16px;margin-bottom:16px;">';
       html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">准确率分布</div>';
       var total = s.valued;
       var c10 = s.hit10, c20 = s.hit20 - s.hit10, c30 = s.hit30 - s.hit20, cOut = total - s.hit30;
@@ -1030,11 +1114,11 @@ function getPageHTML() {
       var p20 = total > 0 ? (c20 / total * 100) : 0;
       var p30 = total > 0 ? (c30 / total * 100) : 0;
       var pOut = total > 0 ? (cOut / total * 100) : 0;
-      html += '<div style="display:flex;height:28px;border-radius:6px;overflow:hidden;background:#1a1a2e;">';
-      if (p10 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p10 + '%;background:#4ade80;color:#0a0a1a;font-size:11px;font-weight:600;">±10% ' + c10 + '</div>';
-      if (p20 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p20 + '%;background:#fbbf24;color:#0a0a1a;font-size:11px;font-weight:600;">±20% ' + c20 + '</div>';
-      if (p30 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p30 + '%;background:#fb923c;color:#0a0a1a;font-size:11px;font-weight:600;">±30% ' + c30 + '</div>';
-      if (pOut > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + pOut + '%;background:#f87171;color:#0a0a1a;font-size:11px;font-weight:600;">>30% ' + cOut + '</div>';
+      html += '<div style="display:flex;height:28px;border-radius:6px;overflow:hidden;background:#12121f;">';
+      if (p10 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p10 + '%;background:#4ade80;color:#08080f;font-size:11px;font-weight:600;">±10% ' + c10 + '</div>';
+      if (p20 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p20 + '%;background:#fbbf24;color:#08080f;font-size:11px;font-weight:600;">±20% ' + c20 + '</div>';
+      if (p30 > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + p30 + '%;background:#fb923c;color:#08080f;font-size:11px;font-weight:600;">±30% ' + c30 + '</div>';
+      if (pOut > 0) html += '<div style="display:flex;align-items:center;justify-content:center;width:' + pOut + '%;background:#f87171;color:#08080f;font-size:11px;font-weight:600;">>30% ' + cOut + '</div>';
       html += '</div>';
       html += '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#888;">';
       html += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4ade80;margin-right:4px;"></span>±10%: ' + c10 + '条 (' + p10.toFixed(1) + '%)</span>';
@@ -1046,7 +1130,7 @@ function getPageHTML() {
 
       // ===== 散点图 =====
       if (scatter.length > 0) {
-        html += '<div style="background:#12122a;border:1px solid #2a2a4a;border-radius:10px;padding:16px;">';
+        html += '<div style="background:#101020;border:1px solid #1e1e33;border-radius:10px;padding:16px;">';
         html += '<div style="font-size:14px;font-weight:600;color:#ccc;margin-bottom:12px;">估值 vs 成交价 散点图（' + scatter.length + ' 个数据点）</div>';
         html += '<div style="display:flex;justify-content:center;">' + renderStatsScatter(scatter) + '</div>';
         html += '</div>';
@@ -1056,9 +1140,9 @@ function getPageHTML() {
     }
 
     function statsCard(label, value, sub, color) {
-      var borderColor = { green: '#1a3a1a', red: '#3a1a1a', blue: '#1a2a3a', purple: '#2a1a3a', yellow: '#3a3a1a' }[color] || '#2a2a4a';
+      var borderColor = { green: '#1a3a1a', red: '#3a1a1a', blue: '#1a2a3a', purple: '#2a1a3a', yellow: '#3e3a1a' }[color] || '#1e1e33';
       var valueColor = { green: '#4ade80', red: '#f87171', blue: '#60a5fa', purple: '#c084fc', yellow: '#fbbf24' }[color] || '#fff';
-      return '<div style="background:#12122a;border:1px solid ' + borderColor + ';border-radius:10px;padding:14px 12px;text-align:center;">' +
+      return '<div style="background:#101020;border:1px solid ' + borderColor + ';border-radius:10px;padding:14px 12px;text-align:center;">' +
         '<div style="font-size:12px;color:#888;margin-bottom:4px;">' + label + '</div>' +
         '<div style="font-size:20px;font-weight:700;color:' + valueColor + ';">' + value + '</div>' +
         '<div style="font-size:11px;color:#666;margin-top:3px;">' + sub + '</div></div>';
@@ -1083,8 +1167,8 @@ function getPageHTML() {
       sp.push('<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:560px;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">');
       for (var g = 0; g <= 4; g++) {
         var gv = (maxVal / 4) * g, gx = sX(gv), gy = sY(gv);
-        sp.push('<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (svgW - padR) + '" y2="' + gy.toFixed(1) + '" stroke="#1f1f3a" stroke-width="1"/>');
-        sp.push('<line x1="' + gx.toFixed(1) + '" y1="' + padT + '" x2="' + gx.toFixed(1) + '" y2="' + (svgH - padB) + '" stroke="#1f1f3a" stroke-width="1"/>');
+        sp.push('<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (svgW - padR) + '" y2="' + gy.toFixed(1) + '" stroke="#1a1a2e" stroke-width="1"/>');
+        sp.push('<line x1="' + gx.toFixed(1) + '" y1="' + padT + '" x2="' + gx.toFixed(1) + '" y2="' + (svgH - padB) + '" stroke="#1a1a2e" stroke-width="1"/>');
         sp.push('<text x="' + (padL - 8) + '" y="' + (gy + 4).toFixed(1) + '" fill="#666" font-size="10" text-anchor="end">' + Math.round(gv) + '</text>');
         sp.push('<text x="' + gx.toFixed(1) + '" y="' + (svgH - padB + 15) + '" fill="#666" font-size="10" text-anchor="middle">' + Math.round(gv) + '</text>');
       }
@@ -1097,7 +1181,7 @@ function getPageHTML() {
       }
       sp.push('<text x="' + (padL + plotW / 2) + '" y="' + (svgH - 5) + '" fill="#aaa" font-size="11" text-anchor="middle">估值 (元)</text>');
       sp.push('<text x="15" y="' + (padT + plotH / 2) + '" fill="#aaa" font-size="11" text-anchor="middle" transform="rotate(-90 15 ' + (padT + plotH / 2) + ')">成交价 (元)</text>');
-      sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0d0d22" stroke="#2a2a4a" rx="4"/>');
+      sp.push('<rect x="' + (svgW - 145) + '" y="8" width="135" height="36" fill="#0d0d1a" stroke="#1e1e33" rx="4"/>');
       sp.push('<circle cx="' + (svgW - 135) + '" cy="20" r="2.5" fill="#4ade80" opacity="0.55"/>');
       sp.push('<text x="' + (svgW - 125) + '" y="24" fill="#888" font-size="10">估值偏低(买赚)</text>');
       sp.push('<circle cx="' + (svgW - 135) + '" cy="35" r="2.5" fill="#f87171" opacity="0.55"/>');

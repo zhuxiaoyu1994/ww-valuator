@@ -396,8 +396,8 @@ function getPlatformPage() {
     }
     .soon-icon.huan { background: linear-gradient(135deg, #7c5cff, #5b8cff); }
     .soon-icon.endfield { background: linear-gradient(135deg, #4ade80, #22c55e); }
-    .soon-icon.delta { background: linear-gradient(135deg, #3b82f6, #2563eb); }
-    .soon-icon.honor { background: linear-gradient(135deg, #f0c040, #eab308); }
+    .soon-icon.genshin { background: linear-gradient(135deg, #f5d76e, #d4a017); }
+    .soon-icon.starrail { background: linear-gradient(135deg, #a78bfa, #6d5bd0); }
     .soon-name {
       font-size: 14px;
       font-weight: 600;
@@ -590,16 +590,16 @@ function getPlatformPage() {
         </div>
       </div>
       <div class="soon-chip">
-        <div class="soon-icon delta">三</div>
+        <div class="soon-icon genshin">原</div>
         <div>
-          <div class="soon-name">三角洲行动</div>
+          <div class="soon-name">原神</div>
           <div class="soon-label">开发中</div>
         </div>
       </div>
       <div class="soon-chip">
-        <div class="soon-icon honor">王</div>
+        <div class="soon-icon starrail">星</div>
         <div>
-          <div class="soon-name">王者荣耀</div>
+          <div class="soon-name">崩坏：星穹铁道</div>
           <div class="soon-label">开发中</div>
         </div>
       </div>
