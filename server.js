@@ -42,8 +42,47 @@ const PORT = process.env.PORT || 3000;
 // 管理后台密码（可通过环境变量配置）
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'guga2024';
 
-// IP黑名单（初始从环境变量加载，运行时可动态增删）
+// IP黑名单（初始从环境变量加载，运行时增删时同步到数据库）
+const BLOCKLIST_KEY = 'blocked_ips';
 let blockedIps = (process.env.BLOCKED_IPS || '216.195.201.153').split(',').map(s => s.trim()).filter(Boolean);
+
+// 启动时从数据库加载封禁列表（覆盖环境变量初始值）
+(async () => {
+  try {
+    const saved = await db.getConfig(BLOCKLIST_KEY);
+    if (Array.isArray(saved) && saved.length >= 0) {
+      blockedIps = saved;
+      console.log('[Blocklist] 已从数据库加载封禁列表:', blockedIps.length, '条');
+    }
+  } catch (e) {
+    console.log('[Blocklist] 加载数据库封禁列表失败，使用环境变量初始值:', e.message);
+  }
+})();
+
+/**
+ * 将封禁列表持久化到数据库
+ */
+async function saveBlockedIps() {
+  try {
+    await db.setConfig(BLOCKLIST_KEY, blockedIps);
+  } catch (e) {
+    console.error('[Blocklist] 保存封禁列表到数据库失败:', e.message);
+  }
+}
+
+/**
+ * 规范化客户端 IP 地址
+ * 将 ::ffff:127.0.0.1 格式的 IPv4-mapped IPv6 地址还原为 IPv4
+ */
+function normalizeIp(ip) {
+  if (!ip) return '';
+  // 去除 IPv4-mapped IPv6 前缀 (::ffff:)
+  var match = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (match) return match[1];
+  // IPv6 loopback 统一为 IPv4 loopback
+  if (ip === '::1') return '127.0.0.1';
+  return ip;
+}
 
 // 查询日志（内存存储，最多保留1000条）
 const queryLogs = [];
@@ -97,7 +136,8 @@ app.use((req, res, next) => {
   if (req.path === '/blocklist' || req.path.startsWith('/blocklist/api/')) {
     return next();
   }
-  const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const rawIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const clientIp = normalizeIp(rawIp);
   // 支持精确匹配、后缀匹配（.xxx）、前缀匹配（xxx.）
   const isBlocked = blockedIps.some(blocked => {
     if (clientIp === blocked) return true;
@@ -864,7 +904,7 @@ app.post('/blocklist/api/list', (req, res) => {
 });
 
 // 添加封禁IP
-app.post('/blocklist/api/add', (req, res) => {
+app.post('/blocklist/api/add', async (req, res) => {
   const { password, ip } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
@@ -879,18 +919,20 @@ app.post('/blocklist/api/add', (req, res) => {
     return res.json({ success: false, error: '该IP已在封禁列表中' });
   }
   blockedIps.push(trimIp);
+  await saveBlockedIps();
   console.log('[Blocklist] 添加封禁IP:', trimIp);
   res.json({ success: true, data: blockedIps });
 });
 
 // 移除封禁IP
-app.post('/blocklist/api/remove', (req, res) => {
+app.post('/blocklist/api/remove', async (req, res) => {
   const { password, ip } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
   const trimIp = (ip || '').trim();
   blockedIps = blockedIps.filter(b => b !== trimIp);
+  await saveBlockedIps();
   console.log('[Blocklist] 移除封禁IP:', trimIp);
   res.json({ success: true, data: blockedIps });
 });
