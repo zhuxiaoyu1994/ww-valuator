@@ -48,7 +48,7 @@ function getPlatformPage() {
     .bg-orb {
       position: absolute;
       border-radius: 50%;
-      filter: blur(120px);
+      filter: blur(60px);
       opacity: 0.55;
       animation: orbDrift 16s ease-in-out infinite alternate;
     }
@@ -250,13 +250,24 @@ function getPlatformPage() {
       height: 100%;
       object-fit: cover;
       object-position: center 28%;
-      transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1), filter 0.85s;
-      filter: brightness(0.82) saturate(0.92);
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: scale(1.02);
+      will-change: transform;
       z-index: -2;
     }
     .game-card:hover .cover-img {
       transform: scale(1.06);
-      filter: brightness(0.95) saturate(1.05);
+    }
+    .cover-tint {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: rgba(8, 8, 15, 0.22);
+      transition: opacity 0.4s;
+      opacity: 1;
+    }
+    .game-card:hover .cover-tint {
+      opacity: 0;
     }
     .cover-shade {
       position: absolute;
@@ -296,8 +307,7 @@ function getPlatformPage() {
       font-size: 11px;
       font-weight: 700;
       letter-spacing: 2px;
-      backdrop-filter: blur(10px);
-      background: rgba(8, 8, 15, 0.55);
+      background: rgba(8, 8, 15, 0.72);
     }
     .cover-badge .pulse-dot {
       width: 6px; height: 6px;
@@ -535,6 +545,7 @@ function getPlatformPage() {
       <!-- 鸣潮 -->
       <a class="game-card wuwa rise d2" href="/wuwa">
         <img class="cover-img" src="/public/covers/wuwa-cover.jpg" alt="鸣潮" loading="eager">
+        <div class="cover-tint"></div>
         <div class="cover-shade"></div>
         <div class="hud-corner tl"></div>
         <div class="hud-corner br"></div>
@@ -552,6 +563,7 @@ function getPlatformPage() {
       <!-- 绝区零 -->
       <a class="game-card zzz rise d3" href="/zzz">
         <img class="cover-img" src="/public/covers/zzz-cover.jpg" alt="绝区零" loading="eager">
+        <div class="cover-tint"></div>
         <div class="cover-shade"></div>
         <div class="hud-corner tl"></div>
         <div class="hud-corner br"></div>
