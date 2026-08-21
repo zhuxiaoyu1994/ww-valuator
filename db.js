@@ -14,6 +14,9 @@
 
 let dbClient = null;
 
+// 内存配置存储（当未配置数据库时作为降级方案，重启后丢失）
+const memoryConfigStore = new Map();
+
 /**
  * 初始化数据库连接
  */
@@ -22,7 +25,7 @@ function initDb() {
   const token = process.env.TURSO_TOKEN;
 
   if (!url || !token) {
-    console.log('[DB] 未配置TURSO_URL/TURSO_TOKEN，日志将仅存内存');
+    console.log('[DB] 未配置TURSO_URL/TURSO_TOKEN，日志和配置将仅存内存');
     return null;
   }
 
@@ -259,7 +262,9 @@ async function ensureConfigTable() {
  * 获取配置
  */
 async function getConfig(key) {
-  if (!dbClient) return null;
+  if (!dbClient) {
+    return memoryConfigStore.has(key) ? memoryConfigStore.get(key).value : null;
+  }
   try {
     const result = await dbClient.execute({
       sql: 'SELECT value FROM app_config WHERE key = ?',
@@ -280,7 +285,12 @@ async function getConfig(key) {
  * 用于客户端检测服务器端配置是否已更新
  */
 async function getConfigWithMeta(key) {
-  if (!dbClient) return { value: null, updatedAt: null };
+  if (!dbClient) {
+    if (memoryConfigStore.has(key)) {
+      return memoryConfigStore.get(key);
+    }
+    return { value: null, updatedAt: null };
+  }
   try {
     const result = await dbClient.execute({
       sql: 'SELECT value, updated_at FROM app_config WHERE key = ?',
@@ -303,7 +313,10 @@ async function getConfigWithMeta(key) {
  * 设置配置
  */
 async function setConfig(key, value) {
-  if (!dbClient) return false;
+  if (!dbClient) {
+    memoryConfigStore.set(key, { value, updatedAt: new Date().toISOString() });
+    return true;
+  }
   try {
     await dbClient.execute({
       sql: `INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?)
