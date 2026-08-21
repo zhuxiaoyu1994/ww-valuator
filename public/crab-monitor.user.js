@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.0.4
+// @version      3.0.5
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -8182,6 +8182,16 @@ function openSettings() {
             if (imported.flatDiscountRules) merged.flatDiscountRules = imported.flatDiscountRules;
             if (imported.c6MultiBonus) merged.c6MultiBonus = imported.c6MultiBonus;
             if (imported.yellowSegments) merged.yellowSegments = imported.yellowSegments;
+            // 角色级别覆盖、已删除角色、专武映射：合并导入（导入的覆盖当前的）
+            if (imported.charTierOverride) {
+              merged.charTierOverride = Object.assign({}, current.charTierOverride || {}, imported.charTierOverride);
+            }
+            if (imported.deletedChars) {
+              merged.deletedChars = imported.deletedChars;
+            }
+            if (imported.sigWeaponsOverride) {
+              merged.sigWeaponsOverride = Object.assign({}, current.sigWeaponsOverride || {}, imported.sigWeaponsOverride);
+            }
 
             // 保存合并后的配置
             if (saveWeights(merged)) {
