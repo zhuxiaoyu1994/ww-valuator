@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.0.3
+// @version      3.0.4
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -791,8 +791,8 @@
     delete slim.parsed;           // 可从 showTitle 重新解析
     delete slim.searchResult;     // 搜索结果缓存
     delete slim.detailResult;     // 详情结果缓存
-    if (slim.showTitle && slim.showTitle.length > 1000) {
-      slim.showTitle = slim.showTitle.substring(0, 1000);
+    if (slim.showTitle && slim.showTitle.length > 500) {
+      slim.showTitle = slim.showTitle.substring(0, 500);
     }
     return slim;
   }
@@ -4379,12 +4379,14 @@
    * 添加表格行
    */
   function addTableRow(row) {
+    // 入表时立即精简：移除 valuation/parsed 等可从 showTitle 重建的大字段，避免 localStorage 配额浪费
+    const slim = slimRow(row);
     // 检查是否已存在
-    const existIdx = tableData.findIndex(r => r.productId === row.productId);
+    const existIdx = tableData.findIndex(r => r.productId === slim.productId);
     if (existIdx >= 0) {
-      tableData[existIdx] = Object.assign(tableData[existIdx], row);
+      tableData[existIdx] = Object.assign(tableData[existIdx], slim);
     } else {
-      tableData.push(row);
+      tableData.push(slim);
     }
 
     // 批量模式下跳过截断、保存和刷新，由调用方统一处理
@@ -4411,19 +4413,18 @@
   function updateTableRow(productId, updates) {
     const row = tableData.find(r => r.productId === productId);
     if (row) {
-      Object.assign(row, updates);
-      // 先排序再保存：确保更新后的行处于正确位置，缩减时高价值行不会被误删
+      Object.assign(row, slimRow(updates));
       sortTableData();
       saveTableData();
       refreshTableDisplay();
     } else {
       // 行不存在（可能被挤出），重新创建
       console.log('[鸣潮监控] 行不存在，重新创建:', productId);
-      tableData.push(Object.assign({
+      tableData.push(slimRow(Object.assign({
         productId: productId,
         listTime: Date.now(),
         firstSeen: Date.now(),
-      }, updates));
+      }, updates)));
       trimTableData();
       sortTableData();
       saveTableData();
