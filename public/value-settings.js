@@ -1667,10 +1667,8 @@
             newCharTierOverride[entName] = entTier;
           }
         } else {
-          // 自定义角色：级别不是默认C时保存
-          if (entTier !== 'C') {
-            newCharTierOverride[entName] = entTier;
-          }
+          // 自定义角色：始终保存到charTierOverride（确保导出后监控脚本能识别新角色）
+          newCharTierOverride[entName] = entTier;
         }
       }
       newW.charTierOverride = newCharTierOverride;

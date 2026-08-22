@@ -446,7 +446,7 @@ function getAdminPage() {
     </div>
   </div>
 
-<script src="/public/value-settings.js?v=20260822" onerror="window.__vsFailed=true"></script>
+<script src="/public/value-settings.js?v=20260823" onerror="window.__vsFailed=true"></script>
 <script>
   // ============================================================
   // 通用变量
