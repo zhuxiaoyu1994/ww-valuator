@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.0.11
+// @version      3.0.12
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -831,16 +831,8 @@
     // 第一次：尝试完整写入
     if (saveStorage(STORAGE_KEYS.table, tableData, true)) return true;
 
-    // 第一次失败：移除200条差价最低的数据后重试
-    console.warn('[鸣潮监控] 表格数据写入失败，移除低差价数据后重试...');
-    removeLowDiffRows();
-    if (saveStorage(STORAGE_KEYS.table, tableData, true)) {
-      console.log('[鸣潮监控] 移除低差价数据后写入成功');
-      return true;
-    }
-
-    // 第二次失败：清理其他存储释放空间，再重试
-    console.warn('[鸣潮监控] 仍失败，清理冗余存储后重试...');
+    // 第一次失败：先清理其他存储释放空间，不删表格数据
+    console.warn('[鸣潮监控] 表格数据写入失败，清理冗余存储后重试...');
     cleanupSeenIds();
     cleanupNotifiedIds();
     if (saveStorage(STORAGE_KEYS.table, tableData, true)) {
@@ -848,16 +840,25 @@
       return true;
     }
 
-    // 第三次失败：精简每行数据（移除 valuation / parsed 等大字段）
-    console.warn('[鸣潮监控] 仍失败，尝试精简数据...');
+    // 第二次失败：精简每行数据（移除 valuation / parsed 等大字段），不删行
+    console.warn('[鸣潮监控] 仍失败，尝试精简数据（不删行）...');
     const slimmed = tableData.map(slimRow);
     if (saveStorage(STORAGE_KEYS.table, slimmed, true)) {
       tableData = slimmed;
-      console.log('[鸣潮监控] 精简数据后写入成功');
+      console.log('[鸣潮监控] 精简数据后写入成功，保留' + tableData.length + '条');
       return true;
     }
 
-    // 第四次失败：按重要性排序后减少行数重试
+    // 第三次失败：超精简（截断 showTitle + 移除更多字段），仍不删行
+    console.warn('[鸣潮监控] 仍失败，尝试超精简模式（不删行）...');
+    const ultraed = tableData.map(ultraSlimRow);
+    if (saveStorage(STORAGE_KEYS.table, ultraed, true)) {
+      tableData = ultraed;
+      console.log('[鸣潮监控] 超精简后写入成功，保留' + tableData.length + '条');
+      return true;
+    }
+
+    // 第四次失败：按重要性排序后渐进式减少行数（每次删50条）
     const importanceSorted = tableData.slice().sort((a, b) => {
       const timeA = a.firstSeen || a.listTime || 0;
       const timeB = b.firstSeen || b.listTime || 0;
@@ -869,26 +870,12 @@
       if (valA !== valB) return valB - valA;
       return timeB - timeA;
     });
-    for (let limit = 1000; limit >= 100; limit -= 100) {
-      const trimmed = importanceSorted.slice(0, limit).map(slimRow);
+    for (let limit = tableData.length - 50; limit >= 100; limit -= 50) {
+      const trimmed = importanceSorted.slice(0, limit).map(ultraSlimRow);
       if (saveStorage(STORAGE_KEYS.table, trimmed, true)) {
         console.warn('[鸣潮监控] 表格数据缩减至' + limit + '条写入成功');
         tableData = trimmed;
         const keptIds = new Set(trimmed.map(r => r.productId));
-        seenIds = seenIds.filter(id => keptIds.has(id));
-        saveStorage(STORAGE_KEYS.seen, seenIds, true);
-        return true;
-      }
-    }
-
-    // 第五次失败：超精简（截断 showTitle 至 500 + 移除 parsed/fingerprint）
-    console.warn('[鸣潮监控] 常规精简仍失败，尝试超精简模式...');
-    for (let limit = 800; limit >= 100; limit -= 100) {
-      const ultraTrimmed = importanceSorted.slice(0, limit).map(ultraSlimRow);
-      if (saveStorage(STORAGE_KEYS.table, ultraTrimmed, true)) {
-        console.warn('[鸣潮监控] 表格数据超精简至' + limit + '条写入成功');
-        tableData = ultraTrimmed;
-        const keptIds = new Set(ultraTrimmed.map(r => r.productId));
         seenIds = seenIds.filter(id => keptIds.has(id));
         saveStorage(STORAGE_KEYS.seen, seenIds, true);
         return true;
@@ -4511,7 +4498,7 @@
     }
   }
 
-  const TRIM_BATCH = 200; // 达到上限或写入失败时一次清理的行数
+  const TRIM_BATCH = 50; // 达到上限时一次清理的行数（小批量渐进式，避免数据骤减）
 
   /**
    * 综合排序移除 TRIM_BATCH 条数据（差价低 + 时间旧优先删除，近30分钟新增保护）
