@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.0.12
+// @version      3.1.0
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -10,6 +10,9 @@
 // @match        https://www.pxb7.com/product/*
 // @grant        GM_notification
 // @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_deleteValue
 // @connect      api.day.app
 // @connect      sctapi.ftqq.com
 // @connect      www.pushplus.plus
@@ -711,13 +714,36 @@
   let dom = {};
 
   // ============================================================
-  // 存储工具
+  // 存储工具（优先使用 Tampermonkey GM 存储，无 5MB 限制；localStorage 作为回退和迁移源）
   // ============================================================
+  var _gmReady = (typeof GM_setValue !== 'undefined' && typeof GM_getValue !== 'undefined');
+
   function loadStorage(key, defaultVal) {
+    // 优先从 GM 存储读取
+    if (_gmReady) {
+      try {
+        var raw = GM_getValue(key);
+        if (raw !== undefined && raw !== null) {
+          return JSON.parse(raw);
+        }
+      } catch (e) {
+        console.warn('[鸣潮监控] GM读取失败，回退localStorage:', key, e);
+      }
+    }
+    // 回退到 localStorage（同时作为旧数据迁移源）
     try {
       const raw = localStorage.getItem(key);
       if (raw === null) return defaultVal;
-      return JSON.parse(raw);
+      var parsed = JSON.parse(raw);
+      // 自动迁移：找到 localStorage 旧数据，写入 GM 存储并清除 localStorage
+      if (_gmReady) {
+        try {
+          GM_setValue(key, raw);
+          localStorage.removeItem(key);
+          console.log('[鸣潮监控] 自动迁移存储到GM:', key, '(' + (raw.length / 1024).toFixed(1) + 'KB)');
+        } catch (e) {}
+      }
+      return parsed;
     } catch (e) {
       console.error('[鸣潮监控] 读取存储失败:', key, e);
       return defaultVal;
@@ -725,6 +751,16 @@
   }
 
   function saveStorage(key, val, silent) {
+    // 优先写入 GM 存储
+    if (_gmReady) {
+      try {
+        GM_setValue(key, JSON.stringify(val));
+        return true;
+      } catch (e) {
+        console.warn('[鸣潮监控] GM写入失败，回退localStorage:', key, e);
+      }
+    }
+    // 回退到 localStorage
     try {
       localStorage.setItem(key, JSON.stringify(val));
       return true;
@@ -742,12 +778,25 @@
   function diagnoseStorage() {
     let total = 0;
     Object.keys(STORAGE_KEYS).forEach(k => {
-      const raw = localStorage.getItem(STORAGE_KEYS[k]);
-      const size = raw ? raw.length : 0;
+      var size = 0;
+      var loc = 'N/A';
+      if (_gmReady) {
+        try {
+          var raw = GM_getValue(STORAGE_KEYS[k]);
+          if (raw !== undefined && raw !== null) {
+            size = raw.length;
+            loc = 'GM';
+          }
+        } catch(e) {}
+      }
+      if (size === 0) {
+        var lsRaw = localStorage.getItem(STORAGE_KEYS[k]);
+        if (lsRaw) { size = lsRaw.length; loc = 'LS'; }
+      }
       total += size;
-      console.log('[鸣潮监控] 存储[' + k + '] ' + (size / 1024).toFixed(1) + 'KB');
+      console.log('[鸣潮监控] 存储[' + k + '] ' + (size / 1024).toFixed(1) + 'KB (' + loc + ')');
     });
-    console.log('[鸣潮监控] 脚本存储总计: ' + (total / 1024).toFixed(1) + 'KB / 5120KB');
+    console.log('[鸣潮监控] 脚本存储总计: ' + (total / 1024).toFixed(1) + 'KB' + (_gmReady ? ' (GM存储，无5MB限制)' : ' / 5120KB (localStorage)'));
     return total;
   }
 
