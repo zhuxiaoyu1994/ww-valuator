@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.1.1
+// @version      3.1.2
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2223,7 +2223,6 @@
           combineFilterList: [],
         }),
         credentials: 'include',
-        referrerPolicy: 'no-referrer',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -2269,7 +2268,6 @@
           combineFilterList: [],
         }),
         credentials: 'include',
-        referrerPolicy: 'no-referrer',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -3850,7 +3848,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ productId: productId }),
         credentials: 'include',
-        referrerPolicy: 'no-referrer',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
