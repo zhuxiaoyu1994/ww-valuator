@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.1.2
+// @version      3.1.3
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2227,7 +2227,40 @@
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var ct = response.headers.get('content-type') || '';
-      if (ct.indexOf('json') < 0) throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
+      if (ct.indexOf('json') < 0) {
+        // WAF验证：返回的是HTML验证页面而非JSON
+        // 检查是否是阿里云WAF验证页，等待浏览器完成验证后重试
+        var text = await response.text();
+        if (text.indexOf('aliyun_waf') >= 0 || text.indexOf('_waf_') >= 0) {
+          console.warn('[鸣潮监控] 检测到阿里云WAF验证，等待页面验证完成后重试...');
+          // 等待3秒让浏览器执行WAF JS验证并设置cookie
+          await new Promise(r => setTimeout(r, 3000));
+          // 重试请求
+          const retryResp = await fetch(API_URLS.list, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: '',
+              gameId: G().platformIds.pxb7,
+              pageIndex: page,
+              pageSize: 20,
+              bizProd: 1,
+              type: '1',
+              posType: 1,
+              sortType: 2,
+              filterDTOList: [],
+              combineFilterList: [],
+            }),
+            credentials: 'include',
+          });
+          var retryCt = retryResp.headers.get('content-type') || '';
+          if (retryCt.indexOf('json') >= 0) {
+            return await retryResp.json();
+          }
+          throw new Error('WAF验证后仍返回非JSON响应');
+        }
+        throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
+      }
       return await response.json();
     } finally {
       clearTimeout(timeoutId);
@@ -2272,7 +2305,26 @@
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var ct = response.headers.get('content-type') || '';
-      if (ct.indexOf('json') < 0) throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
+      if (ct.indexOf('json') < 0) {
+        var fsText = await response.text();
+        if (fsText.indexOf('aliyun_waf') >= 0 || fsText.indexOf('_waf_') >= 0) {
+          console.warn('[鸣潮监控] 秒杀库检测到WAF验证，等待3秒后重试...');
+          await new Promise(r => setTimeout(r, 3000));
+          var retryBody = JSON.stringify({
+            query: '', gameId: G().platformIds.pxb7, pageIndex: page, pageSize: 16,
+            bizProd: 1, type: '1', sortType: 2, posType: 1,
+            filterDTOList: [{ attrId: '128593869357091', attrType: 2, attrValList: [-1, ''] }],
+            sortAttrId: '', mineFav: false, zoneJumpType: 2, bargainZoneJump: false, combineFilterList: [],
+          });
+          const retryResp = await fetch(API_URLS.list, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: retryBody, credentials: 'include',
+          });
+          var retryCt = retryResp.headers.get('content-type') || '';
+          if (retryCt.indexOf('json') >= 0) return await retryResp.json();
+        }
+        throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
+      }
       return await response.json();
     } finally {
       clearTimeout(timeoutId);
@@ -3852,7 +3904,22 @@
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var ct = response.headers.get('content-type') || '';
-      if (ct.indexOf('json') < 0) throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
+      if (ct.indexOf('json') < 0) {
+        var detText = await response.text();
+        if (detText.indexOf('aliyun_waf') >= 0 || detText.indexOf('_waf_') >= 0) {
+          console.warn('[鸣潮监控] 详情API检测到WAF验证，等待3秒后重试...');
+          await new Promise(r => setTimeout(r, 3000));
+          const retryResp = await fetch(API_URLS.detail, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productId: productId }),
+            credentials: 'include',
+          });
+          var retryCt = retryResp.headers.get('content-type') || '';
+          if (retryCt.indexOf('json') >= 0) return await retryResp.json();
+        }
+        throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
+      }
       return await response.json();
     } finally {
       clearTimeout(timeoutId);
