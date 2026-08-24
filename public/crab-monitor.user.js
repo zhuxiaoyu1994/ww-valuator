@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.0.10
+// @version      3.0.11
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -7115,9 +7115,12 @@ function openSettings() {
     pullC6FormulaRow.appendChild(pc6StepBonusInp);
     pullC6FormulaRow.appendChild(pc6Label('%'));
     pullC6FormulaRow.appendChild(pc6Label('阈值'));
-    var pc6ThresholdInp = pc6Input(weights.pullC6Threshold != null ? weights.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400), '1', '#f59e0b', '加权满命数低于此值时不加成');
+    var pc6ThresholdInp = pc6Input(weights.pullC6Threshold != null ? weights.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400), '1', '#f59e0b', '抽数低于此值时不加成');
     pullC6FormulaRow.appendChild(pc6ThresholdInp);
     pullC6FormulaRow.appendChild(pc6Label('抽'));
+    pullC6FormulaRow.appendChild(pc6Label('加权上限'));
+    var pc6MaxWCInp = pc6Input(weights.pullC6MaxWeightedConst != null ? weights.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20), '1', '#f59e0b', '加权满命数超过此值后加成不再增加');
+    pullC6FormulaRow.appendChild(pc6MaxWCInp);
     pullSection.appendChild(pullC6FormulaRow);
 
     // 预览
@@ -7130,19 +7133,24 @@ function openSettings() {
       var stepBonus = (parseFloat(pc6StepBonusInp.value) || 0) / 100;
       var threshold = parseFloat(pc6ThresholdInp.value);
       if (isNaN(threshold)) threshold = 400;
+      var maxWC = parseFloat(pc6MaxWCInp.value);
+      if (isNaN(maxWC) || maxWC <= 0) maxWC = 0;
       var samples = [0, 1, 2, 3, 4, base, base + step, base + step * 2, base + step * 5, base + step * 10, base + step * 20];
+      if (maxWC > 0) samples.push(maxWC, maxWC + 5);
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var c = samples[si];
-        var bonus = baseBonus + (c - base) / step * stepBonus;
+        var effC = (maxWC > 0 && c > maxWC) ? maxWC : c;
+        var bonus = baseBonus + (effC - base) / step * stepBonus;
         if (bonus < 0) bonus = 0;
-        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
+        var capped = (maxWC > 0 && c > maxWC);
+        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%' + (capped ? ' (封顶)' : '') + '　';
       }
-      html += '<br><span style="color:#f59e0b">注：抽数 ≥ ' + threshold + '时才生效，低于此值无加成</span>';
+      html += '<br><span style="color:#f59e0b">注：抽数 ≥ ' + threshold + '时才生效，低于此值无加成' + (maxWC > 0 ? '；加权满命数超过' + maxWC + '后加成封顶' : '') + '</span>';
       pullC6Preview.innerHTML = html;
     }
-    [pc6BaseInp, pc6BaseBonusInp, pc6StepInp, pc6StepBonusInp, pc6ThresholdInp].forEach(function(inp) {
+    [pc6BaseInp, pc6BaseBonusInp, pc6StepInp, pc6StepBonusInp, pc6ThresholdInp, pc6MaxWCInp].forEach(function(inp) {
       inp.oninput = updatePullC6Preview;
     });
     updatePullC6Preview();
@@ -7160,6 +7168,7 @@ function openSettings() {
       pc6StepInp.value = DEFAULT_WEIGHTS.pullC6Step;
       pc6StepBonusInp.value = DEFAULT_WEIGHTS.pullC6StepBonus * 100;
       pc6ThresholdInp.value = DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400;
+      pc6MaxWCInp.value = DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20;
       updatePullC6Preview();
     };
     pullC6DefaultRow.appendChild(loadPullC6DefaultBtn);
@@ -7972,6 +7981,7 @@ function openSettings() {
       pc6StepInp.value = DEFAULT_WEIGHTS.pullC6Step;
       pc6StepBonusInp.value = DEFAULT_WEIGHTS.pullC6StepBonus * 100;
       pc6ThresholdInp.value = DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400;
+      pc6MaxWCInp.value = DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20;
       updatePullC6Preview();
       // 重置满命权重
       for (var tw = 0; tw < c6TierList.length; tw++) {
@@ -8156,6 +8166,7 @@ function openSettings() {
       var _pc6s = parseFloat(pc6StepInp.value); newW.pullC6Step = (!isNaN(_pc6s) && _pc6s > 0) ? _pc6s : DEFAULT_WEIGHTS.pullC6Step;
       newW.pullC6StepBonus = (parseFloat(pc6StepBonusInp.value) || 0) / 100;
       var _pc6t = parseFloat(pc6ThresholdInp.value); newW.pullC6Threshold = !isNaN(_pc6t) ? _pc6t : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
+      var _pc6mwc = parseFloat(pc6MaxWCInp.value); newW.pullC6MaxWeightedConst = !isNaN(_pc6mwc) ? _pc6mwc : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
 
       // 收集满命溢价公式参数
       var _c6b = parseFloat(c6BaseInp.value); newW.c6Base = !isNaN(_c6b) ? _c6b : DEFAULT_WEIGHTS.c6Base;
