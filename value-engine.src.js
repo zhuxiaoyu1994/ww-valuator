@@ -150,6 +150,7 @@ function buildDefaultWeights(customWeights) {
   w.pullC6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
   w.pullC6Step = (saved.pullC6Step != null) ? saved.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
   w.pullC6StepBonus = (saved.pullC6StepBonus != null) ? saved.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
+  w.pullC6Threshold = (saved.pullC6Threshold != null) ? saved.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
   w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
   w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
   w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
@@ -163,36 +164,51 @@ function buildDefaultWeights(customWeights) {
   w.yellowBaseCoeff = (saved.yellowBaseCoeff != null) ? saved.yellowBaseCoeff : 1.0;
   w.yellowStepCoeff = (saved.yellowStepCoeff != null) ? saved.yellowStepCoeff : 0.01;
   w.yellowMaxCoeff = (saved.yellowMaxCoeff != null) ? saved.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
-  // 有效金系数参数（每段独立基准系数，互不影响）
-  w.effYellowSeg1Threshold = (saved.effYellowSeg1Threshold != null) ? saved.effYellowSeg1Threshold : DEFAULT_WEIGHTS.effYellowSeg1Threshold;
-  w.effYellowSeg1Step = (saved.effYellowSeg1Step != null) ? saved.effYellowSeg1Step : DEFAULT_WEIGHTS.effYellowSeg1Step;
-  w.effYellowSeg2Threshold = (saved.effYellowSeg2Threshold != null) ? saved.effYellowSeg2Threshold : DEFAULT_WEIGHTS.effYellowSeg2Threshold;
-  w.effYellowSeg2Step = (saved.effYellowSeg2Step != null) ? saved.effYellowSeg2Step : DEFAULT_WEIGHTS.effYellowSeg2Step;
-  w.effYellowSeg3Step = (saved.effYellowSeg3Step != null) ? saved.effYellowSeg3Step : DEFAULT_WEIGHTS.effYellowSeg3Step;
+  // 有效金系数参数（动态分段数组，每段独立基准系数，互不影响）
   w.effYellowMaxCoeff = (saved.effYellowMaxCoeff != null) ? saved.effYellowMaxCoeff : DEFAULT_WEIGHTS.effYellowMaxCoeff;
-  // 向后兼容：旧配置只有effYellowBaseCoeff，自动计算各段基准系数
-  if (saved.effYellowSeg1BaseCoeff != null) {
-    w.effYellowSeg1BaseCoeff = saved.effYellowSeg1BaseCoeff;
-  } else if (saved.effYellowBaseCoeff != null) {
-    w.effYellowSeg1BaseCoeff = saved.effYellowBaseCoeff;
+  if (saved.effYellowSegments && Array.isArray(saved.effYellowSegments) && saved.effYellowSegments.length > 0) {
+    w.effYellowSegments = saved.effYellowSegments.map(function(s) {
+      return { baseCoeff: s.baseCoeff, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+    });
+  } else if (DEFAULT_WEIGHTS.effYellowSegments && Array.isArray(DEFAULT_WEIGHTS.effYellowSegments) && DEFAULT_WEIGHTS.effYellowSegments.length > 0) {
+    // 使用配置文件中的分段数组（支持3段以上）
+    w.effYellowSegments = DEFAULT_WEIGHTS.effYellowSegments.map(function(s) {
+      return { baseCoeff: s.baseCoeff, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+    });
   } else {
-    w.effYellowSeg1BaseCoeff = DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
-  }
-  if (saved.effYellowSeg2BaseCoeff != null) {
-    w.effYellowSeg2BaseCoeff = saved.effYellowSeg2BaseCoeff;
-  } else {
-    // 旧累积式→新绝对式：seg2Base(新) = oldBase + T1*(step1-step2)
-    var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
-    w.effYellowSeg2BaseCoeff = _oldBase + w.effYellowSeg1Threshold * (w.effYellowSeg1Step - w.effYellowSeg2Step);
-  }
-  if (saved.effYellowSeg3BaseCoeff != null) {
-    w.effYellowSeg3BaseCoeff = saved.effYellowSeg3BaseCoeff;
-  } else {
-    // 旧累积式→新绝对式：seg3Base(新) = (oldBase + T1*step1 + (T2-T1)*step2) - T2*step3
-    var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
-    var _seg2Val = _oldBase + w.effYellowSeg1Threshold * w.effYellowSeg1Step;
-    var _seg3Val = _seg2Val + (w.effYellowSeg2Threshold - w.effYellowSeg1Threshold) * w.effYellowSeg2Step;
-    w.effYellowSeg3BaseCoeff = _seg3Val - w.effYellowSeg2Threshold * w.effYellowSeg3Step;
+    // 向后兼容：从旧的固定3段字段构建数组
+    var _s1T = (saved.effYellowSeg1Threshold != null) ? saved.effYellowSeg1Threshold : DEFAULT_WEIGHTS.effYellowSeg1Threshold;
+    var _s1S = (saved.effYellowSeg1Step != null) ? saved.effYellowSeg1Step : DEFAULT_WEIGHTS.effYellowSeg1Step;
+    var _s2T = (saved.effYellowSeg2Threshold != null) ? saved.effYellowSeg2Threshold : DEFAULT_WEIGHTS.effYellowSeg2Threshold;
+    var _s2S = (saved.effYellowSeg2Step != null) ? saved.effYellowSeg2Step : DEFAULT_WEIGHTS.effYellowSeg2Step;
+    var _s3S = (saved.effYellowSeg3Step != null) ? saved.effYellowSeg3Step : DEFAULT_WEIGHTS.effYellowSeg3Step;
+    var _s1B, _s2B, _s3B;
+    if (saved.effYellowSeg1BaseCoeff != null) {
+      _s1B = saved.effYellowSeg1BaseCoeff;
+    } else if (saved.effYellowBaseCoeff != null) {
+      _s1B = saved.effYellowBaseCoeff;
+    } else {
+      _s1B = DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+    }
+    if (saved.effYellowSeg2BaseCoeff != null) {
+      _s2B = saved.effYellowSeg2BaseCoeff;
+    } else {
+      var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+      _s2B = _oldBase + _s1T * (_s1S - _s2S);
+    }
+    if (saved.effYellowSeg3BaseCoeff != null) {
+      _s3B = saved.effYellowSeg3BaseCoeff;
+    } else {
+      var _oldBase2 = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
+      var _seg2Val = _oldBase2 + _s1T * _s1S;
+      var _seg3Val = _seg2Val + (_s2T - _s1T) * _s2S;
+      _s3B = _seg3Val - _s2T * _s3S;
+    }
+    w.effYellowSegments = [
+      { baseCoeff: _s1B, threshold: _s1T, step: _s1S },
+      { baseCoeff: _s2B, threshold: _s2T, step: _s2S },
+      { baseCoeff: _s3B, threshold: null, step: _s3S }
+    ];
   }
   w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
   // 数据迁移：旧的'秧秧'是五星角色，现已改名为'秧秧玄翎'，四星'秧秧'价格应为0
@@ -868,32 +884,66 @@ function getYellowCoeff(yellowCount) {
  */
 function getEffectiveYellowCoeff(effectiveYellow) {
   var w = weights || DEFAULT_WEIGHTS;
-  var seg1Base = (w.effYellowSeg1BaseCoeff != null) ? w.effYellowSeg1BaseCoeff : 0.3;
-  var seg1Threshold = (w.effYellowSeg1Threshold != null) ? w.effYellowSeg1Threshold : 10;
-  var seg1Step = (w.effYellowSeg1Step != null) ? w.effYellowSeg1Step : 0.03;
-  var seg2Base = (w.effYellowSeg2BaseCoeff != null) ? w.effYellowSeg2BaseCoeff : 0.4;
-  var seg2Threshold = (w.effYellowSeg2Threshold != null) ? w.effYellowSeg2Threshold : 40;
-  var seg2Step = (w.effYellowSeg2Step != null) ? w.effYellowSeg2Step : 0.02;
-  var seg3Base = (w.effYellowSeg3BaseCoeff != null) ? w.effYellowSeg3BaseCoeff : 0.88;
-  var seg3Step = (w.effYellowSeg3Step != null) ? w.effYellowSeg3Step : 0.008;
+  var segs = w.effYellowSegments || [
+    { baseCoeff: 0.3, threshold: 10, step: 0.03 },
+    { baseCoeff: 0.4, threshold: 40, step: 0.02 },
+    { baseCoeff: 0.88, threshold: null, step: 0.008 }
+  ];
   var maxCoeff = (w.effYellowMaxCoeff != null) ? w.effYellowMaxCoeff : 2.5;
 
   var coeff;
-  var segIdx;
+  var segIdx = 0;
   var segLabel;
 
-  if (effectiveYellow <= seg1Threshold) {
-    coeff = seg1Base + effectiveYellow * seg1Step;
-    segIdx = 0;
-    segLabel = '0~' + seg1Threshold + '有效金';
-  } else if (effectiveYellow <= seg2Threshold) {
-    coeff = seg2Base + effectiveYellow * seg2Step;
-    segIdx = 1;
-    segLabel = seg1Threshold + '~' + seg2Threshold + '有效金';
-  } else {
-    coeff = seg3Base + effectiveYellow * seg3Step;
-    segIdx = 2;
-    segLabel = seg2Threshold + '+有效金';
+  // 递推计算各分段起点的系数值，确保分段之间始终连贯
+  // segStartCoeff[i] = 分段i起点处的系数值
+  var segStartCoeff = [];
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    var segBase = (seg.baseCoeff != null) ? seg.baseCoeff : 0.3;
+    var segStep = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
+
+    if (i === 0) {
+      segStartCoeff[i] = segBase; // 第一段起点 = baseCoeff
+    } else {
+      // 后续段起点 = 前一段在阈值处的系数值（递推，使用段内相对距离）
+      var prevT = segs[i - 1].threshold;
+      var prevPrevT = (i >= 2) ? segs[i - 2].threshold : 0;
+      var prevStep = (segs[i - 1].step != null && segs[i - 1].step !== 0) ? segs[i - 1].step : (segs[i - 1].step === 0 ? 0 : 0.01);
+      segStartCoeff[i] = segStartCoeff[i - 1] + (prevT - prevPrevT) * prevStep;
+    }
+  }
+
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    var segStep = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
+    var segThreshold = seg.threshold;
+
+    if (segThreshold == null || effectiveYellow <= segThreshold) {
+      if (i === 0) {
+        coeff = segStartCoeff[0] + effectiveYellow * segStep;
+      } else {
+        var prevT = segs[i - 1].threshold;
+        coeff = segStartCoeff[i] + (effectiveYellow - prevT) * segStep;
+      }
+      segIdx = i;
+      if (i === 0) {
+        segLabel = (segThreshold != null ? '0~' + segThreshold : '0+') + '有效金';
+      } else {
+        segLabel = prevT + (segThreshold != null ? '~' + segThreshold : '+') + '有效金';
+      }
+      break;
+    }
+  }
+
+  if (coeff == null) {
+    var lastIdx = segs.length - 1;
+    var lastSeg = segs[lastIdx];
+    var lastStep = (lastSeg.step != null && lastSeg.step !== 0) ? lastSeg.step : (lastSeg.step === 0 ? 0 : 0.001);
+    var prevT = lastIdx > 0 ? segs[lastIdx - 1].threshold : 0;
+    coeff = segStartCoeff[lastIdx] + (effectiveYellow - prevT) * lastStep;
+    segIdx = lastIdx;
+    segLabel = prevT + '+有效金';
   }
 
   if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
@@ -1044,8 +1094,9 @@ function calculateValue(parsed, price) {
   var pc6BaseBonus = (w.pullC6BaseBonus != null) ? w.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
   var pc6Step = (w.pullC6Step != null) ? w.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
   var pc6StepBonus = (w.pullC6StepBonus != null) ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
+  var pc6Threshold = (w.pullC6Threshold != null) ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
 
-  var pullC6Multiplier = weightedFullConst > 0
+  var pullC6Multiplier = (parsed.pulls >= pc6Threshold && weightedFullConst > 0)
     ? pc6BaseBonus + (weightedFullConst - pc6Base) / pc6Step * pc6StepBonus
     : 0;
   if (pullC6Multiplier < 0) pullC6Multiplier = 0;

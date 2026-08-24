@@ -99,14 +99,28 @@
     w.yellowMaxCoeff = (s.yellowMaxCoeff != null) ? s.yellowMaxCoeff : (DEFAULT_WEIGHTS.yellowMaxCoeff != null ? DEFAULT_WEIGHTS.yellowMaxCoeff : 3.0);
   // 限定金分段系数：优先使用保存的分段配置，否则为null（单公式模式）
   w.yellowSegments = (s.yellowSegments && s.yellowSegments.length > 0) ? s.yellowSegments : (DEFAULT_WEIGHTS.yellowSegments || null);
-    // 有效金系数参数（基于有效金数分段）
-    w.effYellowBaseCoeff = (s.effYellowBaseCoeff != null) ? s.effYellowBaseCoeff : (DEFAULT_WEIGHTS.effYellowBaseCoeff != null ? DEFAULT_WEIGHTS.effYellowBaseCoeff : 0.3);
-    w.effYellowSeg1Threshold = (s.effYellowSeg1Threshold != null) ? s.effYellowSeg1Threshold : (DEFAULT_WEIGHTS.effYellowSeg1Threshold != null ? DEFAULT_WEIGHTS.effYellowSeg1Threshold : 10);
-    w.effYellowSeg1Step = (s.effYellowSeg1Step != null) ? s.effYellowSeg1Step : (DEFAULT_WEIGHTS.effYellowSeg1Step != null ? DEFAULT_WEIGHTS.effYellowSeg1Step : 0.03);
-    w.effYellowSeg2Threshold = (s.effYellowSeg2Threshold != null) ? s.effYellowSeg2Threshold : (DEFAULT_WEIGHTS.effYellowSeg2Threshold != null ? DEFAULT_WEIGHTS.effYellowSeg2Threshold : 40);
-    w.effYellowSeg2Step = (s.effYellowSeg2Step != null) ? s.effYellowSeg2Step : (DEFAULT_WEIGHTS.effYellowSeg2Step != null ? DEFAULT_WEIGHTS.effYellowSeg2Step : 0.02);
-    w.effYellowSeg3Step = (s.effYellowSeg3Step != null) ? s.effYellowSeg3Step : (DEFAULT_WEIGHTS.effYellowSeg3Step != null ? DEFAULT_WEIGHTS.effYellowSeg3Step : 0.008);
+    // 有效金系数参数（动态分段数组）
     w.effYellowMaxCoeff = (s.effYellowMaxCoeff != null) ? s.effYellowMaxCoeff : (DEFAULT_WEIGHTS.effYellowMaxCoeff != null ? DEFAULT_WEIGHTS.effYellowMaxCoeff : 2.5);
+    if (s.effYellowSegments && Array.isArray(s.effYellowSegments) && s.effYellowSegments.length > 0) {
+      w.effYellowSegments = s.effYellowSegments.map(function(seg) {
+        return { baseCoeff: seg.baseCoeff, threshold: seg.threshold != null ? seg.threshold : null, step: seg.step };
+      });
+    } else {
+      // 向后兼容：从旧的固定3段字段构建数组
+      var _s1B = (s.effYellowSeg1BaseCoeff != null) ? s.effYellowSeg1BaseCoeff : (s.effYellowBaseCoeff != null ? s.effYellowBaseCoeff : 0.3);
+      var _s1T = (s.effYellowSeg1Threshold != null) ? s.effYellowSeg1Threshold : 10;
+      var _s1S = (s.effYellowSeg1Step != null) ? s.effYellowSeg1Step : 0.03;
+      var _s2B = (s.effYellowSeg2BaseCoeff != null) ? s.effYellowSeg2BaseCoeff : 0.4;
+      var _s2T = (s.effYellowSeg2Threshold != null) ? s.effYellowSeg2Threshold : 40;
+      var _s2S = (s.effYellowSeg2Step != null) ? s.effYellowSeg2Step : 0.02;
+      var _s3B = (s.effYellowSeg3BaseCoeff != null) ? s.effYellowSeg3BaseCoeff : 0.88;
+      var _s3S = (s.effYellowSeg3Step != null) ? s.effYellowSeg3Step : 0.008;
+      w.effYellowSegments = [
+        { baseCoeff: _s1B, threshold: _s1T, step: _s1S },
+        { baseCoeff: _s2B, threshold: _s2T, step: _s2S },
+        { baseCoeff: _s3B, threshold: null, step: _s3S }
+      ];
+    }
     w.needSigDiscount = (s.needSigDiscount != null) ? s.needSigDiscount : (DEFAULT_WEIGHTS.needSigDiscount != null ? DEFAULT_WEIGHTS.needSigDiscount : 0.3);
     w.teamDepDiscount = (s.teamDepDiscount != null) ? s.teamDepDiscount : (DEFAULT_WEIGHTS.teamDepDiscount != null ? DEFAULT_WEIGHTS.teamDepDiscount : 0.7);
     w.c6Base = (s.c6Base != null) ? s.c6Base : (DEFAULT_WEIGHTS.c6Base != null ? DEFAULT_WEIGHTS.c6Base : 3);
@@ -117,6 +131,7 @@
     w.pullC6BaseBonus = (s.pullC6BaseBonus != null) ? s.pullC6BaseBonus : (DEFAULT_WEIGHTS.pullC6BaseBonus != null ? DEFAULT_WEIGHTS.pullC6BaseBonus : 0.5);
     w.pullC6Step = (s.pullC6Step != null) ? s.pullC6Step : (DEFAULT_WEIGHTS.pullC6Step != null ? DEFAULT_WEIGHTS.pullC6Step : 0.1);
     w.pullC6StepBonus = (s.pullC6StepBonus != null) ? s.pullC6StepBonus : (DEFAULT_WEIGHTS.pullC6StepBonus != null ? DEFAULT_WEIGHTS.pullC6StepBonus : 0.005);
+    w.pullC6Threshold = (s.pullC6Threshold != null) ? s.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
     w.teamMates = (s.teamMates && Object.keys(s.teamMates).length > 0) ? s.teamMates : (DEFAULT_WEIGHTS.teamMates || defaults.teamMates || {});
     w.charPrices = Object.assign({}, defaults.charPrices, DEFAULT_WEIGHTS.charPrices || {}, s.charPrices || {});
     w.constPremiums = Object.assign({}, defaults.constPremiums, DEFAULT_WEIGHTS.constPremiums || {}, s.constPremiums || {});
@@ -839,6 +854,10 @@
     var pullC6StepBonusInput = pc6Input((w.pullC6StepBonus != null ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus) * 100, '0.1', '#4ade80', '每档浮动百分比');
     pullC6FormRow.appendChild(pullC6StepBonusInput);
     pullC6FormRow.appendChild(pc6Label('%'));
+    pullC6FormRow.appendChild(pc6Label('阈值'));
+    var pullC6ThresholdInput = pc6Input(w.pullC6Threshold != null ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400), '1', '#fbbf24', '加权满命数低于此值时不加成');
+    pullC6FormRow.appendChild(pullC6ThresholdInput);
+    pullC6FormRow.appendChild(pc6Label('抽'));
     pullSection.appendChild(pullC6FormRow);
 
     // 预览
@@ -849,6 +868,8 @@
       var baseBonus = (parseFloat(pullC6BaseBonusInput.value) || 0) / 100;
       var step = parseFloat(pullC6StepInput.value) || 1;
       var stepBonus = (parseFloat(pullC6StepBonusInput.value) || 0) / 100;
+      var threshold = parseFloat(pullC6ThresholdInput.value);
+      if (isNaN(threshold)) threshold = 400;
       var samples = [0, 1, 2, 3, 4, base, base + step, base + step * 2, base + step * 5, base + step * 10, base + step * 20];
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
@@ -858,9 +879,10 @@
         if (bonus < 0) bonus = 0;
         html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
       }
+      html += '<br><span style="color:#fbbf24">注：抽数 ≥ ' + threshold + '时才生效，低于此值无加成</span>';
       pullC6Preview.innerHTML = html;
     }
-    [pullC6BaseInput, pullC6BaseBonusInput, pullC6StepInput, pullC6StepBonusInput].forEach(function(inp) {
+    [pullC6BaseInput, pullC6BaseBonusInput, pullC6StepInput, pullC6StepBonusInput, pullC6ThresholdInput].forEach(function(inp) {
       inp.oninput = updatePullC6Preview;
     });
     updatePullC6Preview();
@@ -877,6 +899,7 @@
       pullC6BaseBonusInput.value = DEFAULT_WEIGHTS.pullC6BaseBonus * 100;
       pullC6StepInput.value = DEFAULT_WEIGHTS.pullC6Step;
       pullC6StepBonusInput.value = DEFAULT_WEIGHTS.pullC6StepBonus * 100;
+      pullC6ThresholdInput.value = DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400;
       updatePullC6Preview();
     };
     pullC6DefaultRow.appendChild(loadPullC6DefaultBtn);
@@ -999,7 +1022,7 @@
     c6Section.appendChild(c6DefaultRow);
     dialog.appendChild(c6Section);
 
-    // ===== 5. 有效金系数（按有效金数分段） =====
+    // ===== 5. 有效金系数（按有效金数分段，动态分段） =====
     var yellowSection = document.createElement('div');
     yellowSection.style.cssText = 'margin-bottom:20px;';
     var yellowTitle = document.createElement('div');
@@ -1008,7 +1031,7 @@
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分3段，每段不同步长：第1段快速上升，第2段中速，第3段缓慢。';
+    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分段，每段独立基准系数，调整一段不影响其他段。可自由添加/删除分段。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {
@@ -1024,85 +1047,118 @@
       return i;
     }
 
-    // 基准系数 + 上限
+    var segColors = ['#22c55e', '#f59e0b', '#e94560', '#3b82f6', '#a855f7', '#ec4899'];
+    var effSegInputs = []; // [{baseInp, thresholdInp, stepInp}, ...]
+    var effSegRows = []; // row DOM elements
+
+    // 系数上限
     var baseRow = document.createElement('div');
     baseRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
-    baseRow.appendChild(yfLabel('第1段基准系数(有效金=0)'));
-    var effBaseCoeffInp = yfInput(w.effYellowSeg1BaseCoeff != null ? w.effYellowSeg1BaseCoeff : (w.effYellowBaseCoeff != null ? w.effYellowBaseCoeff : 0.3), '0.01', '#f59e0b', '第1段基准系数（有效金=0时的系数）', 48);
-    effBaseCoeffInp.style.textAlign = 'right';
-    baseRow.appendChild(effBaseCoeffInp);
-    baseRow.appendChild(yfLabel('| 系数上限'));
+    baseRow.appendChild(yfLabel('系数上限'));
     var effMaxCoeffInp = yfInput(w.effYellowMaxCoeff != null ? w.effYellowMaxCoeff : 2.5, '0.1', '#e94560', '系数最大值', 48);
     effMaxCoeffInp.style.textAlign = 'right';
     baseRow.appendChild(effMaxCoeffInp);
     yellowSection.appendChild(baseRow);
 
-    // 第1段
-    var seg1Row = document.createElement('div');
-    seg1Row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(34,197,94,0.06);border-radius:6px;border:1px solid rgba(34,197,94,0.2);';
-    var seg1Title = document.createElement('span');
-    seg1Title.textContent = '第1段(0~T1)';
-    seg1Title.style.cssText = 'color:#22c55e;font-size:11px;font-weight:600;margin-right:8px;';
-    seg1Row.appendChild(seg1Title);
-    seg1Row.appendChild(yfLabel('边界T1'));
-    var effSeg1TInp = yfInput(w.effYellowSeg1Threshold != null ? w.effYellowSeg1Threshold : 10, '1', '#f59e0b', '第1段有效金上界', 42);
-    effSeg1TInp.style.textAlign = 'right';
-    seg1Row.appendChild(effSeg1TInp);
-    seg1Row.appendChild(yfLabel('|每金浮动'));
-    var effSeg1StepInp = yfInput(w.effYellowSeg1Step != null ? w.effYellowSeg1Step : 0.03, '0.001', '#10b981', '第1段每金浮动系数', 52);
-    effSeg1StepInp.style.textAlign = 'right';
-    seg1Row.appendChild(effSeg1StepInp);
-    yellowSection.appendChild(seg1Row);
+    var segsContainer = document.createElement('div');
+    yellowSection.appendChild(segsContainer);
 
-    // 第2段
-    var seg2Row = document.createElement('div');
-    seg2Row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(245,158,11,0.06);border-radius:6px;border:1px solid rgba(245,158,11,0.2);';
-    var seg2Title = document.createElement('span');
-    seg2Title.textContent = '第2段(T1~T2)';
-    seg2Title.style.cssText = 'color:#f59e0b;font-size:11px;font-weight:600;margin-right:8px;';
-    seg2Row.appendChild(seg2Title);
-    seg2Row.appendChild(yfLabel('基准'));
-    var effSeg2BaseInp = yfInput(w.effYellowSeg2BaseCoeff != null ? w.effYellowSeg2BaseCoeff : 0.4, '0.01', '#f59e0b', '第2段基准系数（独立计算）', 48);
-    effSeg2BaseInp.style.textAlign = 'right';
-    seg2Row.appendChild(effSeg2BaseInp);
-    seg2Row.appendChild(yfLabel('| 边界T2'));
-    var effSeg2TInp = yfInput(w.effYellowSeg2Threshold != null ? w.effYellowSeg2Threshold : 40, '1', '#f59e0b', '第2段有效金上界', 42);
-    effSeg2TInp.style.textAlign = 'right';
-    seg2Row.appendChild(effSeg2TInp);
-    seg2Row.appendChild(yfLabel('|每金浮动'));
-    var effSeg2StepInp = yfInput(w.effYellowSeg2Step != null ? w.effYellowSeg2Step : 0.02, '0.001', '#10b981', '第2段每金浮动系数', 52);
-    effSeg2StepInp.style.textAlign = 'right';
-    seg2Row.appendChild(effSeg2StepInp);
-    yellowSection.appendChild(seg2Row);
+    function renderSegRows() {
+      segsContainer.innerHTML = '';
+      effSegInputs.length = 0;
+      effSegRows.length = 0;
+      var segs = w.effYellowSegments || [];
+      for (var si = 0; si < segs.length; si++) {
+        (function(si) {
+          var seg = segs[si];
+          var color = segColors[si % segColors.length];
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:' + color + '11;border-radius:6px;border:1px solid ' + color + '33;';
+          var title = document.createElement('span');
+          var isLast = (si === segs.length - 1);
+          var prevT = si > 0 ? segs[si-1].threshold : 0;
+          var label = isLast ? '第' + (si+1) + '段(' + prevT + '+)' : '第' + (si+1) + '段(' + prevT + '~T' + (si+1) + ')';
+          title.textContent = label;
+          title.style.cssText = 'color:' + color + ';font-size:11px;font-weight:600;margin-right:6px;min-width:90px;';
+          row.appendChild(title);
 
-    // 第3段
-    var seg3Row = document.createElement('div');
-    seg3Row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:rgba(233,69,96,0.06);border-radius:6px;border:1px solid rgba(233,69,96,0.2);';
-    var seg3Title = document.createElement('span');
-    seg3Title.textContent = '第3段(T2+)';
-    seg3Title.style.cssText = 'color:#e94560;font-size:11px;font-weight:600;margin-right:8px;';
-    seg3Row.appendChild(seg3Title);
-    seg3Row.appendChild(yfLabel('基准'));
-    var effSeg3BaseInp = yfInput(w.effYellowSeg3BaseCoeff != null ? w.effYellowSeg3BaseCoeff : 0.88, '0.01', '#f59e0b', '第3段基准系数（独立计算）', 48);
-    effSeg3BaseInp.style.textAlign = 'right';
-    seg3Row.appendChild(effSeg3BaseInp);
-    seg3Row.appendChild(yfLabel('| 每金浮动'));
-    var effSeg3StepInp = yfInput(w.effYellowSeg3Step != null ? w.effYellowSeg3Step : 0.008, '0.001', '#10b981', '第3段每金浮动系数', 52);
-    effSeg3StepInp.style.textAlign = 'right';
-    seg3Row.appendChild(effSeg3StepInp);
-    yellowSection.appendChild(seg3Row);
+          // 基准系数
+          row.appendChild(yfLabel('基准'));
+          var baseInp = yfInput(seg.baseCoeff != null ? seg.baseCoeff : 0.3, '0.01', '#f59e0b', '基准系数', 44);
+          baseInp.style.textAlign = 'right';
+          row.appendChild(baseInp);
 
-    // 载入默认按钮
+          // 边界（最后一段无边界）
+          var thresholdInp = null;
+          if (!isLast) {
+            row.appendChild(yfLabel('|边界'));
+            thresholdInp = yfInput(seg.threshold != null ? seg.threshold : 10, '1', color, '有效金上界', 42);
+            thresholdInp.style.textAlign = 'right';
+            row.appendChild(thresholdInp);
+          }
+
+          // 每金浮动
+          row.appendChild(yfLabel('|每金浮动'));
+          var stepInp = yfInput(seg.step != null ? seg.step : 0.01, '0.001', '#10b981', '每金浮动系数', 52);
+          stepInp.style.textAlign = 'right';
+          row.appendChild(stepInp);
+
+          // 删除按钮（至少保留1段）
+          if (segs.length > 1) {
+            var delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'margin-left:4px;padding:1px 6px;border:1px solid #444;border-radius:3px;background:#1a1a2e;color:#f87171;font-size:10px;cursor:pointer;line-height:1.4;';
+            delBtn.title = '删除此段';
+            delBtn.onclick = function() {
+              w.effYellowSegments.splice(si, 1);
+              renderSegRows();
+              updateYellowPreview();
+            };
+            row.appendChild(delBtn);
+          }
+
+          baseInp.onchange = updateYellowPreview;
+          if (thresholdInp) thresholdInp.onchange = updateYellowPreview;
+          stepInp.onchange = updateYellowPreview;
+
+          effSegInputs.push({ baseInp: baseInp, thresholdInp: thresholdInp, stepInp: stepInp });
+          effSegRows.push(row);
+          segsContainer.appendChild(row);
+        })(si);
+      }
+    }
+    renderSegRows();
+
+    // 添加分段 + 载入默认按钮
     var yellowBtnRow = document.createElement('div');
     yellowBtnRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;';
+    var addSegBtn = document.createElement('button');
+    addSegBtn.textContent = '+ 添加分段';
+    addSegBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#22c55e;font-size:11px;cursor:pointer;';
+    addSegBtn.onclick = function() {
+      var segs = w.effYellowSegments || [];
+      var prevT = segs.length > 0 ? (segs[segs.length-1].threshold || 50) : 50;
+      // 前一段变为有边界，新段为最后一段
+      if (segs.length > 0 && segs[segs.length-1].threshold == null) {
+        segs[segs.length-1].threshold = prevT;
+      }
+      segs.push({ baseCoeff: 1.0, threshold: null, step: 0.005 });
+      w.effYellowSegments = segs;
+      renderSegRows();
+      updateYellowPreview();
+    };
+    yellowBtnRow.appendChild(addSegBtn);
     var yellowDefaultBtn = document.createElement('button');
     yellowDefaultBtn.textContent = '载入默认';
     yellowDefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#f59e0b;font-size:11px;cursor:pointer;';
     yellowDefaultBtn.onclick = function() {
-      effBaseCoeffInp.value = 0.3; effMaxCoeffInp.value = 2.5;
-      effSeg1TInp.value = 10; effSeg1StepInp.value = 0.03;
-      effSeg2BaseInp.value = 0.4; effSeg2TInp.value = 40; effSeg2StepInp.value = 0.02;
-      effSeg3BaseInp.value = 0.88; effSeg3StepInp.value = 0.008;
+      w.effYellowSegments = [
+        { baseCoeff: 0.3, threshold: 10, step: 0.03 },
+        { baseCoeff: 0.4, threshold: 40, step: 0.02 },
+        { baseCoeff: 0.88, threshold: null, step: 0.008 }
+      ];
+      effMaxCoeffInp.value = 2.5;
+      renderSegRows();
       updateYellowPreview();
     };
     yellowBtnRow.appendChild(yellowDefaultBtn);
@@ -1114,45 +1170,41 @@
     yellowSection.appendChild(yellowPreview);
 
     function updateYellowPreview() {
-      var b1 = parseFloat(effBaseCoeffInp.value) || 0.3;
       var mc = parseFloat(effMaxCoeffInp.value) || 2.5;
-      var t1 = parseFloat(effSeg1TInp.value) || 10;
-      var t2 = parseFloat(effSeg2TInp.value) || 40;
-      var s1 = parseFloat(effSeg1StepInp.value) || 0.03;
-      var b2 = parseFloat(effSeg2BaseInp.value) || 0.4;
-      var s2 = parseFloat(effSeg2StepInp.value) || 0.02;
-      var b3 = parseFloat(effSeg3BaseInp.value) || 0.88;
-      var s3 = parseFloat(effSeg3StepInp.value) || 0.008;
+      var segs = [];
+      for (var si = 0; si < effSegInputs.length; si++) {
+        var inp = effSegInputs[si];
+        segs.push({
+          baseCoeff: parseFloat(inp.baseInp.value) || 0,
+          threshold: inp.thresholdInp ? (parseFloat(inp.thresholdInp.value) || 0) : null,
+          step: parseFloat(inp.stepInp.value) || 0
+        });
+      }
       var samples = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100];
       var html = '';
-      for (var si = 0; si < samples.length; si++) {
-        var y = samples[si];
-        // 与引擎一致：每段完全独立 coeff = segBase + gold × segStep
+      for (var si2 = 0; si2 < samples.length; si2++) {
+        var y = samples[si2];
         var coeff;
-        if (y <= t1) {
-          coeff = b1 + y * s1;
-        } else if (y <= t2) {
-          coeff = b2 + y * s2;
-        } else {
-          coeff = b3 + y * s3;
+        var segColor = '#888';
+        for (var sj = 0; sj < segs.length; sj++) {
+          if (segs[sj].threshold == null || y <= segs[sj].threshold) {
+            coeff = segs[sj].baseCoeff + y * segs[sj].step;
+            segColor = segColors[sj % segColors.length];
+            break;
+          }
+        }
+        if (coeff == null && segs.length > 0) {
+          var last = segs[segs.length - 1];
+          coeff = (last.baseCoeff || 0) + y * (last.step || 0);
+          segColor = segColors[(segs.length-1) % segColors.length];
         }
         if (mc > 0 && coeff > mc) coeff = mc;
         if (coeff < 0.1) coeff = 0.1;
-        var color = y <= t1 ? '#22c55e' : (y <= t2 ? '#f59e0b' : '#e94560');
-        html += '<span style="color:' + color + ';">' + y + '金→×' + (Math.round(coeff * 1000) / 1000) + '</span>　';
+        html += '<span style="color:' + segColor + ';">' + y + '金→×' + (Math.round(coeff * 1000) / 1000) + '</span>　';
       }
       yellowPreview.innerHTML = html;
     }
-    // 绑定onchange
-    effBaseCoeffInp.onchange = updateYellowPreview;
     effMaxCoeffInp.onchange = updateYellowPreview;
-    effSeg1TInp.onchange = updateYellowPreview;
-    effSeg1StepInp.onchange = updateYellowPreview;
-    effSeg2BaseInp.onchange = updateYellowPreview;
-    effSeg2TInp.onchange = updateYellowPreview;
-    effSeg2StepInp.onchange = updateYellowPreview;
-    effSeg3BaseInp.onchange = updateYellowPreview;
-    effSeg3StepInp.onchange = updateYellowPreview;
     updateYellowPreview();
 
     dialog.appendChild(yellowSection);
@@ -1574,7 +1626,7 @@
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowBaseCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, effYellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -1747,6 +1799,8 @@
       var _pullC6StepVal = parseFloat(pullC6StepInput.value);
       newW.pullC6Step = isNaN(_pullC6StepVal) ? DEFAULT_WEIGHTS.pullC6Step : _pullC6StepVal;
       newW.pullC6StepBonus = (parseFloat(pullC6StepBonusInput.value) || 0) / 100;
+      var _pullC6ThresholdVal = parseFloat(pullC6ThresholdInput.value);
+      newW.pullC6Threshold = isNaN(_pullC6ThresholdVal) ? (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400) : _pullC6ThresholdVal;
 
       // 收集满命溢价公式参数
       var _c6BaseVal = parseFloat(c6BaseInp.value);
@@ -1767,26 +1821,22 @@
       }
       newW.c6TierWeights = newC6Weights;
 
-      // 收集有效金系数参数（每段独立基准系数，与引擎公式一致）
-      var _effBaseCoeffVal = parseFloat(effBaseCoeffInp.value);
-      newW.effYellowBaseCoeff = isNaN(_effBaseCoeffVal) ? 0.3 : _effBaseCoeffVal;
-      newW.effYellowSeg1BaseCoeff = isNaN(_effBaseCoeffVal) ? 0.3 : _effBaseCoeffVal;
+      // 收集有效金系数参数（动态分段数组）
       var _effMaxCoeffVal = parseFloat(effMaxCoeffInp.value);
       newW.effYellowMaxCoeff = isNaN(_effMaxCoeffVal) ? 2.5 : _effMaxCoeffVal;
-      var _effSeg1TVal = parseFloat(effSeg1TInp.value);
-      newW.effYellowSeg1Threshold = isNaN(_effSeg1TVal) ? 10 : _effSeg1TVal;
-      var _effSeg1StepVal = parseFloat(effSeg1StepInp.value);
-      newW.effYellowSeg1Step = isNaN(_effSeg1StepVal) ? 0.03 : _effSeg1StepVal;
-      var _effSeg2BaseVal = parseFloat(effSeg2BaseInp.value);
-      newW.effYellowSeg2BaseCoeff = isNaN(_effSeg2BaseVal) ? 0.4 : _effSeg2BaseVal;
-      var _effSeg2TVal = parseFloat(effSeg2TInp.value);
-      newW.effYellowSeg2Threshold = isNaN(_effSeg2TVal) ? 40 : _effSeg2TVal;
-      var _effSeg2StepVal = parseFloat(effSeg2StepInp.value);
-      newW.effYellowSeg2Step = isNaN(_effSeg2StepVal) ? 0.02 : _effSeg2StepVal;
-      var _effSeg3BaseVal = parseFloat(effSeg3BaseInp.value);
-      newW.effYellowSeg3BaseCoeff = isNaN(_effSeg3BaseVal) ? 0.88 : _effSeg3BaseVal;
-      var _effSeg3StepVal = parseFloat(effSeg3StepInp.value);
-      newW.effYellowSeg3Step = isNaN(_effSeg3StepVal) ? 0.008 : _effSeg3StepVal;
+      var newSegs = [];
+      for (var si3 = 0; si3 < effSegInputs.length; si3++) {
+        var inp3 = effSegInputs[si3];
+        var _b = parseFloat(inp3.baseInp.value);
+        var _t = inp3.thresholdInp ? parseFloat(inp3.thresholdInp.value) : null;
+        var _s = parseFloat(inp3.stepInp.value);
+        newSegs.push({
+          baseCoeff: isNaN(_b) ? 0 : _b,
+          threshold: isNaN(_t) ? null : _t,
+          step: isNaN(_s) ? 0.001 : _s
+        });
+      }
+      newW.effYellowSegments = newSegs;
 
       // 收集低命折扣系数规则
       var newFlatDiscountRules = [];

@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 20,
+  configVersion: 21,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
@@ -52,7 +52,7 @@ const WUWA_CONFIG = {
     c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
     c6Base: 3, c6BaseBonus: 1.0, c6Step: 0.1, c6StepBonus: 0.05,
     outfit: 0, motoFrame: 0,
-    pullC6Base: 5, pullC6BaseBonus: 0.5, pullC6Step: 0.1, pullC6StepBonus: 0.005,
+    pullC6Base: 5, pullC6BaseBonus: 0.5, pullC6Step: 0.1, pullC6StepBonus: 0.005, pullC6Threshold: 400,
     teamMultiBonus: [
       { count: 2, coef: 1.05 }, { count: 3, coef: 1.1 }, { count: 4, coef: 1.15 },
       { count: 5, coef: 1.2 }, { count: 6, coef: 1.25 }, { count: 7, coef: 1.3 },
@@ -66,9 +66,15 @@ const WUWA_CONFIG = {
     },
     needSigDiscount: 0.3, teamDepDiscount: 0.7, yellowMaxCoeff: 3.0,
     yellowSegments: null,
-    effYellowSeg1BaseCoeff: 0.3, effYellowSeg1Threshold: 10, effYellowSeg1Step: 0.03,
-    effYellowSeg2BaseCoeff: 0.4, effYellowSeg2Threshold: 40, effYellowSeg2Step: 0.02,
-    effYellowSeg3BaseCoeff: 0.88, effYellowSeg3Step: 0.008, effYellowMaxCoeff: 2.5,
+    effYellowSeg1BaseCoeff: 0.15, effYellowSeg1Threshold: 15, effYellowSeg1Step: 0.03,
+    effYellowSeg2BaseCoeff: 0.6, effYellowSeg2Threshold: 50, effYellowSeg2Step: 0.02,
+    effYellowSeg3BaseCoeff: 1.3, effYellowSeg3Step: 0.014, effYellowMaxCoeff: 3.0,
+    effYellowSegments: [
+      { baseCoeff: 0.15, threshold: 15, step: 0.03 },
+      { baseCoeff: 0.6, threshold: 50, step: 0.02 },
+      { baseCoeff: 1.3, threshold: 100, step: 0.014 },
+      { baseCoeff: 2.0, threshold: null, step: 0.008 }
+    ],
   },
 
   defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002 },
