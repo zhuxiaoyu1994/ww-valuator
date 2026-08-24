@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.1.0
+// @version      3.1.1
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -4611,8 +4611,8 @@
    * 截断表格数据：达到上限时综合排序移除 TRIM_BATCH 条（差价低+时间旧优先，30分钟内保护）
    */
   function trimTableData() {
-    if (tableData.length < CONFIG.maxTableRows) return;
-    removeLowDiffRows();
+    // 无上限模式：不再主动删除数据，仅在 saveTableData 写入失败时由降级链处理
+    return;
   }
 
   // 排序状态：默认按差价降序
