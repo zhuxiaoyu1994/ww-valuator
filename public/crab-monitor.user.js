@@ -438,7 +438,8 @@
       pullC6BaseBonus: 0.5,   // 基准加成（50%）
       pullC6Step: 0.1,        // 每档满命数
       pullC6StepBonus: 0.005, // 每档浮动（0.5%）
-      pullC6Threshold: 400,   // 加权满命数阈值，低于此值不加成
+      pullC6Threshold: 400,   // 抽数阈值，低于此值不加成
+      pullC6MaxWeightedConst: 20, // 加权满命数上限，超过此值不再增加加成
       // 多配队额外系数
       teamMultiBonus: [
         { count: 2, coef: 1.05 },
@@ -942,6 +943,7 @@
     w.pullC6Step = (saved.pullC6Step != null) ? saved.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
     w.pullC6StepBonus = (saved.pullC6StepBonus != null) ? saved.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
     w.pullC6Threshold = (saved.pullC6Threshold != null) ? saved.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
+    w.pullC6MaxWeightedConst = (saved.pullC6MaxWeightedConst != null) ? saved.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
     w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
     w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
@@ -1900,9 +1902,11 @@
     var pc6Step = (w.pullC6Step != null) ? w.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
     var pc6StepBonus = (w.pullC6StepBonus != null) ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
     var pc6Threshold = (w.pullC6Threshold != null) ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
+    var pc6MaxWC = (w.pullC6MaxWeightedConst != null) ? w.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
 
+    var effWeightedConst = (pc6MaxWC > 0 && weightedFullConst > pc6MaxWC) ? pc6MaxWC : weightedFullConst;
     var pullC6Multiplier = (parsed.pulls >= pc6Threshold && weightedFullConst > 0)
-      ? pc6BaseBonus + (weightedFullConst - pc6Base) / pc6Step * pc6StepBonus
+      ? pc6BaseBonus + (effWeightedConst - pc6Base) / pc6Step * pc6StepBonus
       : 0;
     if (pullC6Multiplier < 0) pullC6Multiplier = 0;
 
@@ -7879,7 +7883,7 @@ function openSettings() {
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
     for (var wk of Object.keys(DEFAULT_WEIGHTS)) {
       if (skipKeys[wk]) continue;
       var meta = WEIGHT_LABELS[wk] || { label: wk, desc: '' };
