@@ -1893,21 +1893,62 @@
       try {
         var parsed = JSON.parse(config);
         delete parsed.constPrices;
+        delete parsed.deletedChars;
+        delete parsed.charTierOverride;
+        delete parsed.sigWeaponsOverride;
         config = JSON.stringify(parsed, null, 2);
       } catch (e) { /* 解析失败则导出原始配置 */ }
       var blob = new Blob([config], { type: 'application/json' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'mw_value_config_' + new Date().toISOString().slice(0, 10) + '.json';
+      a.download = gameKey + '_value_config_' + new Date().toISOString().slice(0, 10) + '.json';
       a.click();
       URL.revokeObjectURL(url);
+    };
+
+    // 导入配置按钮
+    var importBtn = document.createElement('button');
+    importBtn.textContent = '导入配置';
+    importBtn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;background:#1a3a1a;color:#4ade80;font-size:14px;font-weight:600;cursor:pointer;';
+    importBtn.onclick = function () {
+      var fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.json';
+      fileInput.onchange = function (e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+          try {
+            var imported = JSON.parse(ev.target.result);
+            // 去除内部派生字段
+            delete imported.constPrices;
+            delete imported.deletedChars;
+            delete imported.charTierOverride;
+            delete imported.sigWeaponsOverride;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
+            alert('配置导入成功！面板将刷新以显示导入的配置。');
+            overlay.remove();
+            if (typeof onSave === 'function') {
+              try { onSave(imported); } catch (e) { console.error('[value-settings] onSave 回调出错:', e); }
+            }
+            // 重新打开面板以加载导入的配置
+            setTimeout(function () { openValueSettings(onSave); }, 100);
+          } catch (err) {
+            alert('导入失败：文件不是有效的 JSON 配置。\n' + err.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+      fileInput.click();
     };
 
     btnArea.appendChild(resetBtn);
     btnArea.appendChild(cancelBtn);
     btnArea.appendChild(saveBtn);
     btnArea.appendChild(exportBtn);
+    btnArea.appendChild(importBtn);
     dialog.appendChild(btnArea);
 
     overlay.appendChild(dialog);
