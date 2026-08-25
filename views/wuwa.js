@@ -539,7 +539,7 @@ function getPageHTML() {
           <h1>鸣潮账号估价</h1>
           <span class="en">WUTHERING WAVES</span>
         </div>
-        <div class="subtitle">粘贴螃蟹网商品链接，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述进行估价</div>
+        <div class="subtitle">粘贴螃蟹网/盼之商品链接，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述进行估价</div>
       </div>
     </div>
 
@@ -576,7 +576,7 @@ function getPageHTML() {
     <!-- 按编号查询 -->
     <div class="input-card rise d2" id="panel-lookup">
       <div class="input-row">
-        <input type="text" id="product-id" placeholder="粘贴螃蟹网商品链接，如 https://www.pxb7.com/product/2353711688582091796/1" onkeydown="if(event.key==='Enter')doLookup()" />
+        <input type="text" id="product-id" placeholder="粘贴商品链接（螃蟹网/盼之），如 https://www.pxb7.com/product/..." onkeydown="if(event.key==='Enter')doLookup()" />
         <button class="eval-btn" id="lookup-btn" onclick="doLookup()">估价</button>
       </div>
     </div>

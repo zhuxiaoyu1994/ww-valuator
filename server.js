@@ -315,8 +315,54 @@ app.get('/api/debug-proxy', async (req, res) => {
 });
 
 /**
+ * 从盼之商品详情页SSR HTML中提取商品描述和价格
+ */
+function fetchPzdsDetail(productUniqueNo) {
+  return new Promise((resolve, reject) => {
+    const url = 'https://www.pzds.com/goodsDetails/' + encodeURIComponent(productUniqueNo) + '/6';
+    https.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    }, (resp) => {
+      let data = '';
+      resp.setEncoding('utf8');
+      resp.on('data', (chunk) => { data += chunk; });
+      resp.on('end', () => {
+        try {
+          if (data.includes('errors.aliyun.com') || data.includes('window.ACS')) {
+            reject(new Error('盼之WAF拦截'));
+            return;
+          }
+          // 提取商品描述：text-overflow span
+          let desc = '';
+          const spanMatch = data.match(/text-overflow"[^>]*><span[^>]*>([\s\S]*?)<\/span>/);
+          if (spanMatch) {
+            desc = spanMatch[1].replace(/<[^>]+>/g, '').trim();
+          }
+          // 提取价格：price-text 元素
+          let price = 0;
+          const priceMatch = data.match(/class="price-text"[^>]*>\s*([0-9]+)\s*</);
+          if (priceMatch) {
+            price = parseInt(priceMatch[1]) * 100; // 转为分
+          }
+          if (desc && desc.length > 20) {
+            resolve({ showTitle: desc, price: price, productId: 'pz_' + productUniqueNo });
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          reject(new Error('盼之详情页解析失败'));
+        }
+      });
+    }).on('error', (err) => reject(err));
+  });
+}
+
+/**
  * 按商品编号查询 - 先搜索获取商品信息，再估价
- * 支持商品编号（如 MEBNB9606）和数字 productId
+ * 支持螃蟹网商品链接、盼之商品链接
  */
 app.post('/api/x9k2-find', async (req, res) => {
   let { productId, customWeights, game } = req.body;
@@ -326,53 +372,69 @@ app.post('/api/x9k2-find', async (req, res) => {
 
   productId = String(productId).trim();
 
-  // 支持从螃蟹网商品链接中提取数字 productId
-  // URL 格式: https://www.pxb7.com/product/{productId}/1 或 /buy/{gameId}/detail?productUniqueNo=XXX
-  const urlMatch = productId.match(/\/product\/(\d+)/) || productId.match(/productId[=:](\d+)/);
-  if (urlMatch) {
-    productId = urlMatch[1];
+  // 平台检测
+  let platform = null;
+  let productData = null;
+
+  // 螃蟹网链接: https://www.pxb7.com/product/{productId}/1
+  const pxb7Match = productId.match(/pxb7\.com\/product\/(\d+)/) || productId.match(/\/product\/(\d+)/);
+  if (pxb7Match) {
+    platform = 'pxb7';
+    productId = pxb7Match[1];
+  }
+
+  // 盼之链接: https://www.pzds.com/goodsDetails/{productUniqueNo}/6
+  const pzdsMatch = productId.match(/pzds\.com\/goodsDetails\/([^/?]+)/);
+  if (pzdsMatch) {
+    platform = 'pzds';
+    productId = pzdsMatch[1];
   }
 
   try {
-    // 检查缓存（按商品ID缓存商品数据，5分钟内不重复请求螃蟹网API）
+    // 检查缓存
     const cacheKey = 'product:' + productId;
-    let productData = cacheGet(cacheKey);
+    productData = cacheGet(cacheKey);
     let actualProductId = productId;
 
     if (productData) {
-      // 缓存命中，跳过API请求
       actualProductId = productData.productId || productId;
     } else {
-      const isNumeric = /^\d+$/.test(productId);
-
-      if (isNumeric) {
-        // 数字 productId：直接调 detailPost API（不受WAF拦截）
+      if (platform === 'pzds') {
+        // 盼之：从SSR HTML提取
         try {
-          productData = await fetchProductDetail(productId);
+          productData = await fetchPzdsDetail(productId);
         } catch (err) {
           throw err;
         }
-
-        // 如果 detail API 没找到，尝试搜索 API
-        if (!productData) {
-          try {
-            const searchResult = await fetchProductBySearch(productId, game);
-            if (searchResult) {
-              productData = searchResult;
-              actualProductId = searchResult.productId || productId;
-            }
-          } catch (searchErr) {
-            if (searchErr.message.indexOf('WAF') >= 0) {
-              throw new Error('编号查询暂时不可用（螃蟹网WAF限制），请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。');
-            }
-            throw searchErr;
-          }
-        }
       } else {
-        // 字母数字混合编号（如 MEKUO6756）：搜索 API 被 WAF 拦截，无法服务端查询
-        const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
-        const pxb7Url = `https://www.pxb7.com/buy/${gameId}/detail?productUniqueNo=${encodeURIComponent(productId)}`;
-        throw new Error('ALPHANUMERIC_ID_NOT_SUPPORTED:' + pxb7Url);
+        // 螃蟹网
+        const isNumeric = /^\d+$/.test(productId);
+
+        if (isNumeric) {
+          try {
+            productData = await fetchProductDetail(productId);
+          } catch (err) {
+            throw err;
+          }
+          if (!productData) {
+            try {
+              const searchResult = await fetchProductBySearch(productId, game);
+              if (searchResult) {
+                productData = searchResult;
+                actualProductId = searchResult.productId || productId;
+              }
+            } catch (searchErr) {
+              if (searchErr.message.indexOf('WAF') >= 0) {
+                throw new Error('编号查询暂时不可用（螃蟹网WAF限制），请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。');
+              }
+              throw searchErr;
+            }
+          }
+        } else {
+          const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
+          const pxb7Url = `https://www.pxb7.com/buy/${gameId}/detail?productUniqueNo=${encodeURIComponent(productId)}`;
+          throw new Error('ALPHANUMERIC_ID_NOT_SUPPORTED:' + pxb7Url);
+        }
       }
 
       if (productData) {
