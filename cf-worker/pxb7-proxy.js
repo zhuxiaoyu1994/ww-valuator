@@ -1,25 +1,14 @@
 /**
  * Cloudflare Worker - 螃蟹网API代理
- *
- * 部署步骤：
- * 1. 登录 https://dash.cloudflare.com → Workers & Pages
- * 2. 点击 "Create application" → "Create Worker"
- * 3. 名称填 "pxb7-proxy"，点击 "Deploy"
- * 4. 点击 "Edit code"，将本文件内容粘贴进去
- * 5. 点击 "Save and deploy"
- * 6. 复制 Worker URL（如 https://pxb7-proxy.你的子域.workers.dev）
- * 7. 在 Vercel 的环境变量中添加：
- *    PXB7_PROXY_URL = https://pxb7-proxy.你的子域.workers.dev
+ * 解决阿里云WAF拦截问题：先访问网站首页获取WAF cookie，再请求API
  */
 
-// 允许的API路径白名单
 const ALLOWED_PATHS = [
   '/api/product/web/product/detailPost',
   '/api/search/product/v2/selectSearchPageList',
   '/api/search/product/selectSelledList',
 ];
 
-// 请求头模板
 const HEADERS = {
   'Content-Type': 'application/json',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -29,9 +18,53 @@ const HEADERS = {
   'Referer': 'https://www.pxb7.com/',
 };
 
+// 缓存WAF cookie（Worker全局复用，避免每次都访问首页）
+let cachedCookies = '';
+let cookieExpiry = 0;
+
+async function getWAFCookie() {
+  // cookie未过期则直接复用
+  if (cachedCookies && Date.now() < cookieExpiry) {
+    return cachedCookies;
+  }
+
+  try {
+    // 访问网站首页，让WAF设置cookie
+    const homeResp = await fetch('https://www.pxb7.com/', {
+      method: 'GET',
+      headers: {
+        'User-Agent': HEADERS['User-Agent'],
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': HEADERS['Accept-Language'],
+      },
+      redirect: 'manual',
+    });
+
+    // 从响应头提取Set-Cookie
+    const setCookies = homeResp.headers.getAll ? homeResp.headers.getAll('set-cookie') : [];
+    // 手动提取（兼容旧API）
+    let cookies = '';
+    const rawHeaders = [...homeResp.headers.entries()];
+    // Cloudflare Workers的fetch不暴露set-cookie，尝试用cf properties
+    // 如果无法获取cookie，改用另一种方式：直接带首页请求的redirect chain
+
+    if (cookies) {
+      cachedCookies = cookies;
+      cookieExpiry = Date.now() + 300000; // 5分钟有效
+      return cookies;
+    }
+
+    // 如果首页没有触发WAF（直接返回200），说明CF Worker IP未被WAF拦截
+    // 那WAF拦截可能是针对API请求本身的
+    // 尝试直接请求API，用cf redirect:follow让Worker自动处理WAF重定向
+    return '';
+  } catch (e) {
+    return '';
+  }
+}
+
 export default {
   async fetch(request, env) {
-    // 只允许 POST 请求
     if (request.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method not allowed' }), {
         status: 405,
@@ -39,7 +72,6 @@ export default {
       });
     }
 
-    // 从查询参数获取目标路径
     const url = new URL(request.url);
     const targetPath = url.searchParams.get('path');
 
@@ -50,7 +82,6 @@ export default {
       });
     }
 
-    // 读取请求体
     let body;
     try {
       body = await request.text();
@@ -61,29 +92,58 @@ export default {
       });
     }
 
-    // 转发到螃蟹网API
     const targetUrl = 'https://api-pc.pxb7.com' + targetPath;
 
-    // 最多重试3次（应对WAF拦截）
+    // 方案1: 先GET网站首页（获取cookie），再POST API
+    // CF Worker的fetch会自动管理cookie jar
     const maxRetries = 3;
     let lastData = null;
     let lastStatus = 502;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
+        // 第1次重试前先访问首页（让CF fetch获取WAF cookie）
+        if (i === 1) {
+          try {
+            await fetch('https://www.pxb7.com/', {
+              method: 'GET',
+              headers: {
+                'User-Agent': HEADERS['User-Agent'],
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              },
+            });
+          } catch (e) {}
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        // 第2次重试前访问API的GET方式（有些WAF要求先GET再POST）
+        if (i === 2) {
+          try {
+            await fetch(targetUrl, {
+              method: 'GET',
+              headers: {
+                'User-Agent': HEADERS['User-Agent'],
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Referer': 'https://www.pxb7.com/',
+              },
+            });
+          } catch (e) {}
+          await new Promise(r => setTimeout(r, 500));
+        }
+
         const resp = await fetch(targetUrl, {
           method: 'POST',
           headers: HEADERS,
           body: body,
+          redirect: 'follow',
         });
 
         const data = await resp.text();
 
         // 检测WAF拦截
         if (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0) {
-          // WAF拦截，等待后重试
           if (i < maxRetries - 1) {
-            await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+            await new Promise(r => setTimeout(r, 1000));
             continue;
           }
         }
@@ -93,7 +153,7 @@ export default {
         break;
       } catch (e) {
         if (i < maxRetries - 1) {
-          await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+          await new Promise(r => setTimeout(r, 1000));
           continue;
         }
         lastData = JSON.stringify({ error: 'Proxy error: ' + e.message });

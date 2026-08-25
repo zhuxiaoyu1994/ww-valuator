@@ -311,6 +311,37 @@ app.get('/api/debug-proxy', async (req, res) => {
     });
   } catch (err) { result.tests.searchList = { error: err.message }; }
 
+  // 测试3: detailPost API 用 productUniqueNo 查询（字母数字混合编号）
+  try {
+    const testUrl3 = proxyUrl.replace(/\/$/, '') + '?path=' + encodeURIComponent('/api/product/web/product/detailPost');
+    const startTime3 = Date.now();
+    const testData3 = JSON.stringify({ productUniqueNo: 'MEBNB9606' });
+
+    await new Promise((resolve) => {
+      const proxyReq = https.request(testUrl3, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(testData3) },
+      }, (proxyRes) => {
+        let data = '';
+        proxyRes.setEncoding('utf8');
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          result.tests.detailByUniqueNo = {
+            status: proxyRes.statusCode,
+            elapsed: (Date.now() - startTime3) + 'ms',
+            isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
+            preview: data.substring(0, 300),
+          };
+          resolve();
+        });
+      });
+      proxyReq.on('error', (err) => { result.tests.detailByUniqueNo = { error: err.message }; resolve(); });
+      proxyReq.setTimeout(8000, () => { proxyReq.destroy(); result.tests.detailByUniqueNo = { error: 'timeout 8s' }; resolve(); });
+      proxyReq.write(testData3);
+      proxyReq.end();
+    });
+  } catch (err) { result.tests.detailByUniqueNo = { error: err.message }; }
+
   res.json(result);
 });
 
@@ -335,21 +366,28 @@ app.post('/api/x9k2-find', async (req, res) => {
       actualProductId = productData.productId || productId;
     } else {
       // 缓存未命中，请求螃蟹网API（带WAF重试，控制在Vercel 15s限制内）
+      const isNumeric = /^\d+$/.test(String(productId).trim());
       const maxRetries = 2;
       var lastError = null;
       for (var attempt = 0; attempt < maxRetries; attempt++) {
         try {
-          // 如果是纯数字，直接调 detail API
-          if (/^\d+$/.test(String(productId).trim())) {
-            productData = await fetchProductDetail(productId.trim());
-          }
+          // 先调 detail API（detailPost 不受WAF拦截）
+          // 数字ID用 productId，字母数字混合ID用 productUniqueNo
+          productData = await fetchProductDetail(productId.trim(), !isNumeric);
 
-          // 如果 detail API 没找到，用搜索 API 查找
+          // 如果 detail API 没找到，用搜索 API 查找（可能被WAF拦截）
           if (!productData) {
-            const searchResult = await fetchProductBySearch(productId.trim(), game);
-            if (searchResult) {
-              productData = searchResult;
-              actualProductId = searchResult.productId || productId;
+            try {
+              const searchResult = await fetchProductBySearch(productId.trim(), game);
+              if (searchResult) {
+                productData = searchResult;
+                actualProductId = searchResult.productId || productId;
+              }
+            } catch (searchErr) {
+              if (searchErr.message.indexOf('WAF') >= 0) {
+                throw new Error('编号查询暂时不可用（螃蟹网WAF限制），请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。');
+              }
+              throw searchErr;
             }
           }
 
@@ -360,7 +398,8 @@ app.post('/api/x9k2-find', async (req, res) => {
           break;
         } catch (err) {
           lastError = err;
-          if (err.message.indexOf('WAF') >= 0 && attempt < maxRetries - 1) {
+          // 只对detail API的WAF错误重试，搜索API的WAF错误已在上方处理
+          if (err.message.indexOf('WAF') >= 0 && !err.message.includes('粘贴描述') && attempt < maxRetries - 1) {
             console.warn('[编号查询] 第' + (attempt + 1) + '次被WAF拦截，等待1秒后重试...');
             await new Promise(r => setTimeout(r, 1000));
             continue;
@@ -456,13 +495,16 @@ app.post('/api/x9k2-find', async (req, res) => {
     db.insertLog(failEntry);
     const isTimeout = err.message.includes('超时') || err.code === 'ECONNRESET';
     const isWAF = err.message.includes('WAF');
+    const hasUserHint = err.message.includes('粘贴描述');
     res.json({
       success: false,
-      error: isWAF
-        ? '螃蟹网WAF拦截，服务器无法直接访问API。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
-        : isTimeout
-          ? '查询超时，螃蟹网可能限制了服务器访问。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
-          : '查询失败: ' + err.message,
+      error: hasUserHint
+        ? err.message
+        : isWAF
+          ? '螃蟹网WAF拦截，服务器无法直接访问API。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
+          : isTimeout
+            ? '查询超时，螃蟹网可能限制了服务器访问。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
+            : '查询失败: ' + err.message,
     });
   }
 });
@@ -473,10 +515,30 @@ app.post('/api/x9k2-find', async (req, res) => {
  */
 const PXB7_PROXY_URL = (process.env.PXB7_PROXY_URL || '').replace(/[`\s'"]/g, '').trim();
 
-function fetchProductDetail(productId) {
+function fetchProductDetail(productId, useUniqueNo) {
   return new Promise((resolve, reject) => {
-    const postData = JSON.stringify({ productId: String(productId) });
+    const body = useUniqueNo
+      ? { productUniqueNo: String(productId) }
+      : { productId: String(productId) };
+    const postData = JSON.stringify(body);
     const apiPath = '/api/product/web/product/detailPost';
+
+    function parseDetailResponse(data) {
+      try {
+        const json = JSON.parse(data);
+        if ((json.code === 200 || json.success === true) && json.data) {
+          resolve(json.data);
+        } else {
+          resolve(null);
+        }
+      } catch (e) {
+        if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
+          reject(new Error('螃蟹网WAF拦截'));
+        } else {
+          reject(new Error('解析商品数据失败'));
+        }
+      }
+    }
 
     // 走 CF Worker 代理
     if (PXB7_PROXY_URL) {
@@ -491,22 +553,7 @@ function fetchProductDetail(productId) {
         res.setEncoding('utf8');
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(data);
-            if (json.code === 200 && json.data) {
-              resolve(json.data);
-            } else {
-              resolve(null);
-            }
-          } catch (e) {
-            if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
-              reject(new Error('螃蟹网WAF拦截'));
-            } else {
-              reject(new Error('解析商品数据失败'));
-            }
-          }
-        });
+        res.on('end', () => parseDetailResponse(data));
       });
       proxyReq.on('error', (err) => reject(err));
       proxyReq.setTimeout(7000, () => {
@@ -538,22 +585,7 @@ function fetchProductDetail(productId) {
       res.setEncoding('utf8');
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          if (json.code === 200 && json.data) {
-            resolve(json.data);
-          } else {
-            resolve(null);
-          }
-        } catch (e) {
-          if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
-            reject(new Error('螃蟹网WAF拦截'));
-          } else {
-            reject(new Error('解析商品数据失败'));
-          }
-        }
-      });
+      res.on('end', () => parseDetailResponse(data));
     });
 
     req.on('error', (err) => reject(err));
