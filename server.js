@@ -239,6 +239,65 @@ app.post('/api/x9k2-eval', (req, res) => {
 });
 
 /**
+ * 调试接口 - 检查代理配置和连通性
+ */
+app.get('/api/debug-proxy', async (req, res) => {
+  const proxyUrl = process.env.PXB7_PROXY_URL || '';
+  const result = { proxyConfigured: !!proxyUrl, proxyUrl: proxyUrl ? proxyUrl.substring(0, 50) + '...' : '(empty)', testResult: null, error: null };
+
+  if (!proxyUrl) {
+    return res.json({ ...result, error: 'PXB7_PROXY_URL not set' });
+  }
+
+  // 测试Worker是否可达
+  try {
+    const testUrl = proxyUrl.replace(/\/$/, '') + '?path=' + encodeURIComponent('/api/product/web/product/detailPost');
+    const startTime = Date.now();
+    const testData = JSON.stringify({ productId: '1' });
+
+    await new Promise((resolve, reject) => {
+      const proxyReq = https.request(testUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(testData),
+        },
+      }, (proxyRes) => {
+        let data = '';
+        proxyRes.setEncoding('utf8');
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          const elapsed = Date.now() - startTime;
+          const ct = proxyRes.headers['content-type'] || '';
+          const isWAF = data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0;
+          result.testResult = {
+            status: proxyRes.statusCode,
+            contentType: ct,
+            elapsed: elapsed + 'ms',
+            isWAFBlocked: isWAF,
+            responsePreview: data.substring(0, 200),
+          };
+          resolve();
+        });
+      });
+      proxyReq.on('error', (err) => {
+        result.error = err.message;
+        reject(err);
+      });
+      proxyReq.setTimeout(12000, () => {
+        proxyReq.destroy(new Error('Worker请求超时(12s)'));
+      });
+      proxyReq.write(testData);
+      proxyReq.end();
+    });
+  } catch (err) {
+    result.error = err.message;
+  }
+
+  res.json(result);
+});
+
+/**
  * 按商品编号查询 - 先搜索获取商品信息，再估价
  * 支持商品编号（如 MEBNB9606）和数字 productId
  */
