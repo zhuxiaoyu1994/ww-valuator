@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.1.7
+// @version      3.1.8
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -885,7 +885,7 @@
   let detailTimer = null;        // 详情队列定时器
   let detailCallsThisMinute = 0; // 本分钟详情API调用数
   let detailMinuteStart = Date.now();
-  let charFilter = null;         // 角色筛选
+  let charFilter = [];         // 角色筛选（多角色+命座条件）[{name, minConst}]
   let priceFilter = { min: null, max: null };       // 标价筛选
   let valueFilter = { min: null, max: null };       // 估值筛选
   let diffFilter = { min: null, max: null };        // 差价筛选
@@ -5320,7 +5320,7 @@
         </div>
       </div>
       <div class="mw-filter-bar" id="mwFilterBar" style="display:none;">
-        <span>筛选角色: <strong id="mwFilterChar"></strong></span>
+        <span>筛选角色: </span><span id="mwFilterCharTags" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;"></span>
         <span class="mw-filter-clear" id="mwFilterClear">重置</span>
       </div>
       <div class="mw-filter-bar" id="mwNumFilterBar" style="display:flex;">
@@ -5392,7 +5392,7 @@
     dom.inputThreshold = document.getElementById('mwInputThreshold');
     dom.tableBody = document.getElementById('mwTableBody');
     dom.filterBar = document.getElementById('mwFilterBar');
-    dom.filterChar = document.getElementById('mwFilterChar');
+    dom.filterCharTags = document.getElementById('mwFilterCharTags');
     dom.filterClear = document.getElementById('mwFilterClear');
     dom.bottomLeft = document.getElementById('mwBottomLeft');
     dom.bottomRight = document.getElementById('mwBottomRight');
@@ -6051,7 +6051,7 @@
     });
 
     dom.filterClear.addEventListener('click', function () {
-      charFilter = null;
+      charFilter = [];
       dom.filterBar.style.display = 'none';
       refreshTableDisplay();
     });
@@ -6197,7 +6197,7 @@
 
     let tagsHtml = shown.map(function (c) {
       const abbr = CHAR_ABBR[c.name] || c.name.substring(0, 1);
-      const active = charFilter === c.name ? 'mw-char-tag-active' : '';
+      const active = charFilter.some(function (cf) { return cf.name === c.name; }) ? 'mw-char-tag-active' : '';
       // 颜色：S红 A金 其他默认
       let colorStyle = '';
       if (c.tier === 'S') colorStyle = 'color:#e94560;border-color:#e94560;';
@@ -6209,7 +6209,7 @@
       const constLabel = c.const + G().constUnitDisplay;
       const sigLabel = c.hasSig ? '有专武(精' + (c.sigRefine || 1) + ')' : '无专武';
       const valLabel = c.value > 0 ? '估值' + c.value + '元' : '';
-      const titleText = c.name + ' ' + constLabel + ' ' + sigLabel + ' ' + tierLabel + (valLabel ? ' ' + valLabel : '');
+      const titleText = c.name + ' ' + constLabel + ' ' + sigLabel + ' ' + tierLabel + (valLabel ? ' ' + valLabel : '') + '（单击筛选/取消，右键切换命座条件）';
       return '<span class="mw-char-tag ' + active + '" data-char="' + c.name + '" style="' + colorStyle +
         '" title="' + titleText.replace(/"/g, '&quot;') + '">' + abbr + c.const + sigMark + '</span>';
     }).join('');
@@ -6218,6 +6218,33 @@
       tagsHtml += '<span class="mw-char-tag" style="color:#8888aa;cursor:default;" title="还有' + rest + '个角色">+' + rest + '</span>';
     }
     return tagsHtml;
+  }
+
+  /**
+   * 更新角色筛选栏显示
+   */
+  function updateFilterBar() {
+    if (!dom.filterBar || !dom.filterCharTags) return;
+    if (charFilter.length === 0) {
+      dom.filterBar.style.display = 'none';
+      return;
+    }
+    dom.filterBar.style.display = 'flex';
+    const constUnit = G().constUnitDisplay;
+    dom.filterCharTags.innerHTML = charFilter.map(function (cond) {
+      const label = cond.name + (cond.minConst > 0 ? cond.minConst + constUnit + '+' : '');
+      return '<span class="mw-char-filter-tag" data-char="' + cond.name + '" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid #e94560;border-radius:999px;background:rgba(233,69,96,0.15);color:#e94560;font-size:11px;cursor:pointer;" title="点击移除">' + label + ' ×</span>';
+    }).join('');
+    var filterTags = dom.filterCharTags.querySelectorAll('.mw-char-filter-tag');
+    filterTags.forEach(function (t) {
+      t.addEventListener('click', function () {
+        var name = t.getAttribute('data-char');
+        var idx = charFilter.findIndex(function (c) { return c.name === name; });
+        if (idx >= 0) charFilter.splice(idx, 1);
+        updateFilterBar();
+        refreshTableDisplay();
+      });
+    });
   }
 
   /**
@@ -6246,11 +6273,15 @@
         return false;
       });
     }
-    // 角色筛选
-    if (charFilter) {
-      displayData = displayData.filter(row =>
-        row.parsed && row.parsed.characters && row.parsed.characters.some(c => c.name === charFilter)
-      );
+    // 角色筛选（多角色+命座条件，全部满足才显示）
+    if (charFilter && charFilter.length > 0) {
+      displayData = displayData.filter(row => {
+        if (!row.parsed || !row.parsed.characters) return false;
+        return charFilter.every(cond => {
+          const char = row.parsed.characters.find(c => c.name === cond.name);
+          return char && char.const >= (cond.minConst || 0);
+        });
+      });
     }
     // 隐藏已售
     // 只显示已售
@@ -6280,7 +6311,7 @@
 
     if (displayData.length === 0) {
       dom.tableBody.innerHTML = '<tr><td colspan="11" class="mw-empty">' +
-        (charFilter ? '当前筛选无数据' : '暂无数据，等待监控...') + '</td></tr>';
+        (charFilter && charFilter.length > 0 ? '当前筛选无数据' : '暂无数据，等待监控...') + '</td></tr>';
       return;
     }
 
@@ -6368,21 +6399,34 @@
 
     dom.tableBody.innerHTML = html;
 
-    // 绑定角色标签点击筛选
+    // 绑定角色标签点击筛选（单击切换选中，右键切换命座条件）
     const tags = dom.tableBody.querySelectorAll('.mw-char-tag');
     tags.forEach(function (tag) {
       tag.addEventListener('click', function (e) {
         e.stopPropagation();
         const charName = tag.getAttribute('data-char');
-        if (!charName) return; // "+N" 标签无 data-char，不响应
-        if (charFilter === charName) {
-          charFilter = null;
-          dom.filterBar.style.display = 'none';
+        if (!charName) return;
+        const idx = charFilter.findIndex(c => c.name === charName);
+        if (idx >= 0) {
+          charFilter.splice(idx, 1);
         } else {
-          charFilter = charName;
-          dom.filterBar.style.display = 'flex';
-          dom.filterChar.textContent = charName;
+          charFilter.push({ name: charName, minConst: 0 });
         }
+        updateFilterBar();
+        refreshTableDisplay();
+      });
+      tag.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const charName = tag.getAttribute('data-char');
+        if (!charName) return;
+        const cond = charFilter.find(c => c.name === charName);
+        if (cond) {
+          cond.minConst = (cond.minConst || 0) >= 6 ? 0 : (cond.minConst || 0) + 1;
+        } else {
+          charFilter.push({ name: charName, minConst: 1 });
+        }
+        updateFilterBar();
         refreshTableDisplay();
       });
     });
