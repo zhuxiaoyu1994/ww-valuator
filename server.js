@@ -311,37 +311,6 @@ app.get('/api/debug-proxy', async (req, res) => {
     });
   } catch (err) { result.tests.searchList = { error: err.message }; }
 
-  // 测试3: detailPost API 用 productUniqueNo 查询（字母数字混合编号）
-  try {
-    const testUrl3 = proxyUrl.replace(/\/$/, '') + '?path=' + encodeURIComponent('/api/product/web/product/detailPost');
-    const startTime3 = Date.now();
-    const testData3 = JSON.stringify({ productUniqueNo: 'MEBNB9606' });
-
-    await new Promise((resolve) => {
-      const proxyReq = https.request(testUrl3, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(testData3) },
-      }, (proxyRes) => {
-        let data = '';
-        proxyRes.setEncoding('utf8');
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          result.tests.detailByUniqueNo = {
-            status: proxyRes.statusCode,
-            elapsed: (Date.now() - startTime3) + 'ms',
-            isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
-            preview: data.substring(0, 300),
-          };
-          resolve();
-        });
-      });
-      proxyReq.on('error', (err) => { result.tests.detailByUniqueNo = { error: err.message }; resolve(); });
-      proxyReq.setTimeout(8000, () => { proxyReq.destroy(); result.tests.detailByUniqueNo = { error: 'timeout 8s' }; resolve(); });
-      proxyReq.write(testData3);
-      proxyReq.end();
-    });
-  } catch (err) { result.tests.detailByUniqueNo = { error: err.message }; }
-
   res.json(result);
 });
 
@@ -365,54 +334,38 @@ app.post('/api/x9k2-find', async (req, res) => {
       // 缓存命中，跳过API请求
       actualProductId = productData.productId || productId;
     } else {
-      // 缓存未命中，请求螃蟹网API（带WAF重试，控制在Vercel 15s限制内）
       const isNumeric = /^\d+$/.test(String(productId).trim());
-      const maxRetries = 2;
-      var lastError = null;
-      for (var attempt = 0; attempt < maxRetries; attempt++) {
+
+      if (isNumeric) {
+        // 数字 productId：直接调 detailPost API（不受WAF拦截）
         try {
-          // 先调 detail API（detailPost 不受WAF拦截）
-          // 数字ID用 productId，字母数字混合ID用 productUniqueNo
-          productData = await fetchProductDetail(productId.trim(), !isNumeric);
-
-          // 如果 detail API 没找到，用搜索 API 查找（可能被WAF拦截）
-          if (!productData) {
-            try {
-              const searchResult = await fetchProductBySearch(productId.trim(), game);
-              if (searchResult) {
-                productData = searchResult;
-                actualProductId = searchResult.productId || productId;
-              }
-            } catch (searchErr) {
-              if (searchErr.message.indexOf('WAF') >= 0) {
-                throw new Error('编号查询暂时不可用（螃蟹网WAF限制），请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。');
-              }
-              throw searchErr;
-            }
-          }
-
-          if (productData) break;
-
-          // productData为null但没报错，说明商品不存在
-          lastError = null;
-          break;
+          productData = await fetchProductDetail(productId.trim());
         } catch (err) {
-          lastError = err;
-          // 只对detail API的WAF错误重试，搜索API的WAF错误已在上方处理
-          if (err.message.indexOf('WAF') >= 0 && !err.message.includes('粘贴描述') && attempt < maxRetries - 1) {
-            console.warn('[编号查询] 第' + (attempt + 1) + '次被WAF拦截，等待1秒后重试...');
-            await new Promise(r => setTimeout(r, 1000));
-            continue;
-          }
-          break;
+          throw err;
         }
+
+        // 如果 detail API 没找到，尝试搜索 API
+        if (!productData) {
+          try {
+            const searchResult = await fetchProductBySearch(productId.trim(), game);
+            if (searchResult) {
+              productData = searchResult;
+              actualProductId = searchResult.productId || productId;
+            }
+          } catch (searchErr) {
+            if (searchErr.message.indexOf('WAF') >= 0) {
+              throw new Error('编号查询暂时不可用（螃蟹网WAF限制），请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。');
+            }
+            throw searchErr;
+          }
+        }
+      } else {
+        // 字母数字混合编号（如 MEKUO6756）：搜索 API 被 WAF 拦截，无法服务端查询
+        const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
+        const pxb7Url = `https://www.pxb7.com/buy/${gameId}/detail?productUniqueNo=${encodeURIComponent(productId.trim())}`;
+        throw new Error('ALPHANUMERIC_ID_NOT_SUPPORTED:' + pxb7Url);
       }
 
-      if (lastError) {
-        throw lastError;
-      }
-
-      // 缓存商品数据（即使为null也缓存，避免重复查询失败的商品）
       if (productData) {
         cacheSet(cacheKey, productData);
       }
@@ -496,16 +449,28 @@ app.post('/api/x9k2-find', async (req, res) => {
     const isTimeout = err.message.includes('超时') || err.code === 'ECONNRESET';
     const isWAF = err.message.includes('WAF');
     const hasUserHint = err.message.includes('粘贴描述');
-    res.json({
-      success: false,
-      error: hasUserHint
-        ? err.message
-        : isWAF
-          ? '螃蟹网WAF拦截，服务器无法直接访问API。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
-          : isTimeout
-            ? '查询超时，螃蟹网可能限制了服务器访问。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
-            : '查询失败: ' + err.message,
-    });
+    const isAlphanumeric = err.message.startsWith('ALPHANUMERIC_ID_NOT_SUPPORTED:');
+
+    if (isAlphanumeric) {
+      const pxb7Url = err.message.replace('ALPHANUMERIC_ID_NOT_SUPPORTED:', '');
+      res.json({
+        success: false,
+        error: '螃蟹网已启用WAF防护，字母编号无法在服务端查询。请打开商品页面复制描述文本，粘贴到「粘贴描述估价」中即可。',
+        pxb7Url: pxb7Url,
+        switchToPaste: true,
+      });
+    } else {
+      res.json({
+        success: false,
+        error: hasUserHint
+          ? err.message
+          : isWAF
+            ? '螃蟹网WAF拦截，服务器无法直接访问API。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
+            : isTimeout
+              ? '查询超时，螃蟹网可能限制了服务器访问。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
+              : '查询失败: ' + err.message,
+      });
+    }
   }
 });
 
@@ -515,12 +480,9 @@ app.post('/api/x9k2-find', async (req, res) => {
  */
 const PXB7_PROXY_URL = (process.env.PXB7_PROXY_URL || '').replace(/[`\s'"]/g, '').trim();
 
-function fetchProductDetail(productId, useUniqueNo) {
+function fetchProductDetail(productId) {
   return new Promise((resolve, reject) => {
-    const body = useUniqueNo
-      ? { productUniqueNo: String(productId) }
-      : { productId: String(productId) };
-    const postData = JSON.stringify(body);
+    const postData = JSON.stringify({ productId: String(productId) });
     const apiPath = '/api/product/web/product/detailPost';
 
     function parseDetailResponse(data) {

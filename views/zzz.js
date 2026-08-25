@@ -764,13 +764,17 @@ function getPageHTML() {
 
         if (!result.success) {
           const isTimeout = result.error && result.error.includes('超时');
-          const errorHtml = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
-          if (isTimeout) {
-            document.getElementById('status-msg').innerHTML = errorHtml +
-              '<div style="text-align:center;margin-top:8px;"><button class="eval-btn" onclick="switchTab(\\'paste\\')">切换到粘贴描述估价</button></div>';
-          } else {
-            document.getElementById('status-msg').innerHTML = errorHtml;
+          const switchToPaste = result.switchToPaste || isTimeout;
+          let errorHtml = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
+          if (switchToPaste) {
+            errorHtml += '<div style="text-align:center;margin-top:8px;">' +
+              '<button class="eval-btn" onclick="switchTab(\\'paste\\')">切换到粘贴描述估价</button></div>';
           }
+          if (result.pxb7Url) {
+            errorHtml += '<div style="text-align:center;margin-top:8px;">' +
+              '<a href="' + result.pxb7Url + '" target="_blank" style="color:#4a90d9;font-size:14px;">打开螃蟹网商品页面 →</a></div>';
+          }
+          document.getElementById('status-msg').innerHTML = errorHtml;
           return;
         }
 
