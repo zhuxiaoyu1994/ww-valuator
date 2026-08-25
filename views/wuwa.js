@@ -591,7 +591,7 @@ function getPageHTML() {
     <!-- 按编号查询 -->
     <div class="input-card rise d2" id="panel-lookup">
       <div class="input-row" style="flex-direction:column;gap:12px;">
-        <textarea id="product-id" placeholder="粘贴商品链接（螃蟹网/盼之），如 https://www.pxb7.com/product/..." style="min-height:80px;resize:vertical;"></textarea>
+        <textarea id="product-id" placeholder="粘贴商品链接（螃蟹网/盼之网），如 https://www.pxb7.com/product/2353711688582091796/1 或 https://www.pzds.com/goodsDetails/MC2VGU/6" style="min-height:80px;resize:vertical;"></textarea>
         <div class="input-row">
           <button class="eval-btn" id="lookup-btn" onclick="doLookup()" style="width:100%;">估价</button>
         </div>
