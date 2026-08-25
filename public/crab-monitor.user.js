@@ -445,7 +445,8 @@
       pullC6StepBonus: 0.005, // 每档浮动（0.5%）
       pullC6Threshold: 400,   // 抽数阈值，低于此值不加成
       pullC6MaxWeightedConst: 20, // 加权满命数上限，超过此值不再增加加成
-      pullPerWeightedConst: 450,  // 每N抽折算1个加权满命（0=不折算）
+      pullPerWeightedConst: 450,  // 每N抽折算一次加权满命（0=不折算）
+      pullPerWeightedConstCount: 1,  // 每次折算多少个加权满命
       // 多配队额外系数
       teamMultiBonus: [
         { count: 2, coef: 1.05 },
@@ -1173,6 +1174,7 @@
     w.pullC6Threshold = (saved.pullC6Threshold != null) ? saved.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
     w.pullC6MaxWeightedConst = (saved.pullC6MaxWeightedConst != null) ? saved.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
     w.pullPerWeightedConst = (saved.pullPerWeightedConst != null) ? saved.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
+    w.pullPerWeightedConstCount = (saved.pullPerWeightedConstCount != null) ? saved.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1);
     w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
     w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
@@ -2133,9 +2135,10 @@
     var pc6Threshold = (w.pullC6Threshold != null) ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
     var pc6MaxWC = (w.pullC6MaxWeightedConst != null) ? w.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
     var pc6PullPerWC = (w.pullPerWeightedConst != null && w.pullPerWeightedConst > 0) ? w.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
+    var pc6PullPerWCCount = (w.pullPerWeightedConstCount != null) ? w.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1);
 
-    // 加权满命数 = 实际加权满命数 + 抽数折算的额外加权满命数（每N抽+1）
-    var pullBonusWeightedConst = Math.floor((parsed.pulls || 0) / pc6PullPerWC);
+    // 加权满命数 = 实际加权满命数 + 抽数折算的额外加权满命数（每N抽+M命）
+    var pullBonusWeightedConst = Math.floor((parsed.pulls || 0) / pc6PullPerWC) * pc6PullPerWCCount;
     var adjustedWeightedConst = weightedFullConst + pullBonusWeightedConst;
 
     var effWeightedConst = (pc6MaxWC > 0 && adjustedWeightedConst > pc6MaxWC) ? pc6MaxWC : adjustedWeightedConst;
@@ -7520,9 +7523,12 @@ function openSettings() {
     var pc6MaxWCInp = pc6Input(weights.pullC6MaxWeightedConst != null ? weights.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20), '1', '#f59e0b', '加权满命数超过此值后加成不再增加');
     pullC6FormulaRow.appendChild(pc6MaxWCInp);
     pullC6FormulaRow.appendChild(pc6Label('每'));
-    var pc6PullPerWCInp = pc6Input(weights.pullPerWeightedConst != null ? weights.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450), '1', '#f59e0b', '每N抽折算1个加权满命（0=不折算）');
+    var pc6PullPerWCInp = pc6Input(weights.pullPerWeightedConst != null ? weights.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450), '1', '#f59e0b', '每N抽折算一次加权满命（0=不折算）');
     pullC6FormulaRow.appendChild(pc6PullPerWCInp);
-    pullC6FormulaRow.appendChild(pc6Label('抽+1命'));
+    pullC6FormulaRow.appendChild(pc6Label('抽+'));
+    var pc6PullPerWCCountInp = pc6Input(weights.pullPerWeightedConstCount != null ? weights.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1), '1', '#4ade80', '每次折算多少个加权满命');
+    pullC6FormulaRow.appendChild(pc6PullPerWCCountInp);
+    pullC6FormulaRow.appendChild(pc6Label('命'));
     pullSection.appendChild(pullC6FormulaRow);
 
     // 预览
@@ -7551,13 +7557,14 @@ function openSettings() {
       }
       html += '<br><span style="color:#f59e0b">注：抽数 ≥ ' + threshold + '时才生效，低于此值无加成' + (maxWC > 0 ? '；加权满命数超过' + maxWC + '后加成封顶' : '');
       var pullPerWC = parseFloat(pc6PullPerWCInp.value);
-      if (!isNaN(pullPerWC) && pullPerWC > 0) {
-        html += '；每' + pullPerWC + '抽折算1个加权满命';
+      var pullPerWCCount = parseFloat(pc6PullPerWCCountInp.value);
+      if (!isNaN(pullPerWC) && pullPerWC > 0 && !isNaN(pullPerWCCount)) {
+        html += '；每' + pullPerWC + '抽+' + pullPerWCCount + '加权满命';
       }
       html += '</span>';
       pullC6Preview.innerHTML = html;
     }
-    [pc6BaseInp, pc6BaseBonusInp, pc6StepInp, pc6StepBonusInp, pc6ThresholdInp, pc6MaxWCInp, pc6PullPerWCInp].forEach(function(inp) {
+    [pc6BaseInp, pc6BaseBonusInp, pc6StepInp, pc6StepBonusInp, pc6ThresholdInp, pc6MaxWCInp, pc6PullPerWCInp, pc6PullPerWCCountInp].forEach(function(inp) {
       inp.oninput = updatePullC6Preview;
     });
     updatePullC6Preview();
@@ -7577,6 +7584,7 @@ function openSettings() {
       pc6ThresholdInp.value = DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400;
       pc6MaxWCInp.value = DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20;
       pc6PullPerWCInp.value = DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450;
+      pc6PullPerWCCountInp.value = DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1;
       updatePullC6Preview();
     };
     pullC6DefaultRow.appendChild(loadPullC6DefaultBtn);
@@ -8300,7 +8308,7 @@ function openSettings() {
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
+    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
     for (var wk of Object.keys(DEFAULT_WEIGHTS)) {
       if (skipKeys[wk]) continue;
       var meta = WEIGHT_LABELS[wk] || { label: wk, desc: '' };
@@ -8391,6 +8399,7 @@ function openSettings() {
       pc6ThresholdInp.value = DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400;
       pc6MaxWCInp.value = DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20;
       pc6PullPerWCInp.value = DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450;
+      pc6PullPerWCCountInp.value = DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1;
       updatePullC6Preview();
       // 重置满命权重
       for (var tw = 0; tw < c6TierList.length; tw++) {
@@ -8577,6 +8586,7 @@ function openSettings() {
       var _pc6t = parseFloat(pc6ThresholdInp.value); newW.pullC6Threshold = !isNaN(_pc6t) ? _pc6t : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
       var _pc6mwc = parseFloat(pc6MaxWCInp.value); newW.pullC6MaxWeightedConst = !isNaN(_pc6mwc) ? _pc6mwc : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
       var _pc6ppwc = parseFloat(pc6PullPerWCInp.value); newW.pullPerWeightedConst = !isNaN(_pc6ppwc) ? _pc6ppwc : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
+      var _pc6ppwcc = parseFloat(pc6PullPerWCCountInp.value); newW.pullPerWeightedConstCount = !isNaN(_pc6ppwcc) ? _pc6ppwcc : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1);
 
       // 收集满命溢价公式参数
       var _c6b = parseFloat(c6BaseInp.value); newW.c6Base = !isNaN(_c6b) ? _c6b : DEFAULT_WEIGHTS.c6Base;
