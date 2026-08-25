@@ -539,13 +539,13 @@ function getPageHTML() {
           <h1>绝区零账号估价</h1>
           <span class="en">ZENLESS ZONE ZERO</span>
         </div>
-        <div class="subtitle">角色定价数据持续完善中，估值仅供参考 · 输入商品编号或商品链接，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）描述估价</div>
+        <div class="subtitle">角色定价数据持续完善中，估值仅供参考 · 粘贴螃蟹网商品链接，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）描述估价</div>
       </div>
     </div>
 
     <!-- Tabs -->
     <div class="tabs rise d1">
-      <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">按编号查询</button>
+      <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">链接查询</button>
       <button class="tab-btn" id="tab-paste" onclick="switchTab('paste')">粘贴描述估价</button>
     </div>
 
@@ -558,7 +558,7 @@ function getPageHTML() {
     <!-- 按编号查询 -->
     <div class="input-card rise d2" id="panel-lookup">
       <div class="input-row">
-        <input type="text" id="product-id" placeholder="输入商品编号（如 MEBNB9606）或粘贴商品链接" onkeydown="if(event.key==='Enter')doLookup()" />
+        <input type="text" id="product-id" placeholder="粘贴螃蟹网商品链接，如 https://www.pxb7.com/product/..." onkeydown="if(event.key==='Enter')doLookup()" />
         <button class="eval-btn" id="lookup-btn" onclick="doLookup()">估价</button>
       </div>
     </div>
