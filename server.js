@@ -316,9 +316,8 @@ app.get('/api/debug-proxy', async (req, res) => {
 
 /**
  * 从盼之商品详情页SSR HTML中提取完整商品描述和价格
- * 详情页有两个 text-overflow 元素：
- *   1. 摘要标题（角色列表被截断）
- *   2. 完整描述（包含【五星角色】【金色武器】等段落）
+ * 优先从 NUXT 数据的 description 字段提取完整描述（含角色/武器完整列表）
+ * 价格从 price-text 元素提取
  */
 function fetchPzdsDetail(productUniqueNo) {
   return new Promise((resolve, reject) => {
@@ -339,15 +338,28 @@ function fetchPzdsDetail(productUniqueNo) {
             return;
           }
 
-          // 提取完整商品描述：查找包含【】段落的 text-overflow span
+          // 优先从 NUXT description 字段提取完整描述
           let desc = '';
-          const spans = data.match(/text-overflow"[^>]*><span[^>]*>([\s\S]*?)<\/span>/g) || [];
-          for (const spanHtml of spans) {
-            const text = spanHtml.replace(/<[^>]+>/g, '').trim();
-            // 完整描述包含 【】 段落标记且长度足够
-            if (text.includes('【') && text.length > 50) {
-              desc = text;
-              break;
+          const descStart = data.indexOf('description:"');
+          if (descStart >= 0) {
+            const contentStart = descStart + 12;
+            let end = contentStart;
+            while (end < data.length) {
+              if (data[end] === '"' && data[end - 1] !== '\\') break;
+              end++;
+            }
+            desc = data.substring(contentStart, end).replace(/\\n/g, '\n').trim();
+          }
+
+          // 回退：从 text-overflow span 提取（包含【】段落的那个）
+          if (!desc || desc.length < 50) {
+            const spans = data.match(/text-overflow"[^>]*><span[^>]*>([\s\S]*?)<\/span>/g) || [];
+            for (const spanHtml of spans) {
+              const text = spanHtml.replace(/<[^>]+>/g, '').trim();
+              if (text.includes('【') && text.length > 50) {
+                desc = text;
+                break;
+              }
             }
           }
 
