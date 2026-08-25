@@ -40,22 +40,36 @@ function getPageHTML() {
       overflow-x: hidden;
       position: relative;
     }
-    .container { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 0 20px 44px; }
+    .container { position: relative; z-index: 2; max-width: 880px; margin: 0 auto; padding: 0 20px 44px; }
 
     /* ===== 背景氛围 ===== */
     .bg-atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .bg-orb {
+      position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.55;
+      animation: orbDrift 16s ease-in-out infinite alternate;
+    }
+    .bg-orb.a {
+      width: 560px; height: 560px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      top: -180px; left: -120px;
+    }
     .bg-grid {
       position: absolute; inset: 0;
       background-image:
-        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-      background-size: 44px 44px;
-      -webkit-mask-image: radial-gradient(ellipse 90% 62% at 50% 0%, #000 30%, transparent 74%);
-      mask-image: radial-gradient(ellipse 90% 62% at 50% 0%, #000 30%, transparent 74%);
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, black 0%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, black 0%, transparent 100%);
     }
-    .bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.5; animation: orbDrift 18s ease-in-out infinite alternate; }
-    .bg-orb.a { width: 540px; height: 540px; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); top: -170px; left: -150px; }
-    @keyframes orbDrift { from { transform: translate(0, 0); } to { transform: translate(50px, 30px); } }
+    .bg-noise {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.05;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    @keyframes orbDrift {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 40px) scale(1.12); }
+    }
 
     /* ===== Hero 封面头部 ===== */
     .hero { position: relative; height: 330px; margin: 0 -20px; overflow: hidden; }
@@ -524,6 +538,7 @@ function getPageHTML() {
     <div class="bg-grid"></div>
     <div class="bg-orb a"></div>
   </div>
+  <div class="bg-noise"></div>
   <div class="container">
     <!-- Hero 封面头部 -->
     <div class="hero">
@@ -555,11 +570,13 @@ function getPageHTML() {
       <button class="settings-btn" id="stats-btn" onclick="openStatsModal()">算法准确性报告</button>
     </div>
 
-    <!-- 按编号查询 -->
+    <!-- 链接查询 -->
     <div class="input-card rise d2" id="panel-lookup">
-      <div class="input-row">
-        <input type="text" id="product-id" placeholder="粘贴商品链接（螃蟹网/盼之），如 https://www.pxb7.com/product/..." onkeydown="if(event.key==='Enter')doLookup()" />
-        <button class="eval-btn" id="lookup-btn" onclick="doLookup()">估价</button>
+      <div class="input-row" style="flex-direction:column;gap:12px;">
+        <textarea id="product-id" placeholder="粘贴商品链接（螃蟹网/盼之），如 https://www.pxb7.com/product/..." style="min-height:80px;resize:vertical;"></textarea>
+        <div class="input-row">
+          <button class="eval-btn" id="lookup-btn" onclick="doLookup()" style="width:100%;">估价</button>
+        </div>
       </div>
     </div>
 
