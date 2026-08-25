@@ -315,7 +315,10 @@ app.get('/api/debug-proxy', async (req, res) => {
 });
 
 /**
- * 从盼之商品详情页SSR HTML中提取商品描述和价格
+ * 从盼之商品详情页SSR HTML中提取完整商品描述和价格
+ * 详情页有两个 text-overflow 元素：
+ *   1. 摘要标题（角色列表被截断）
+ *   2. 完整描述（包含【五星角色】【金色武器】等段落）
  */
 function fetchPzdsDetail(productUniqueNo) {
   return new Promise((resolve, reject) => {
@@ -335,18 +338,26 @@ function fetchPzdsDetail(productUniqueNo) {
             reject(new Error('盼之WAF拦截'));
             return;
           }
-          // 提取商品描述：text-overflow span
+
+          // 提取完整商品描述：查找包含【】段落的 text-overflow span
           let desc = '';
-          const spanMatch = data.match(/text-overflow"[^>]*><span[^>]*>([\s\S]*?)<\/span>/);
-          if (spanMatch) {
-            desc = spanMatch[1].replace(/<[^>]+>/g, '').trim();
+          const spans = data.match(/text-overflow"[^>]*><span[^>]*>([\s\S]*?)<\/span>/g) || [];
+          for (const spanHtml of spans) {
+            const text = spanHtml.replace(/<[^>]+>/g, '').trim();
+            // 完整描述包含 【】 段落标记且长度足够
+            if (text.includes('【') && text.length > 50) {
+              desc = text;
+              break;
+            }
           }
+
           // 提取价格：price-text 元素
           let price = 0;
           const priceMatch = data.match(/class="price-text"[^>]*>\s*([0-9]+)\s*</);
           if (priceMatch) {
             price = parseInt(priceMatch[1]) * 100; // 转为分
           }
+
           if (desc && desc.length > 20) {
             resolve({ showTitle: desc, price: price, productId: 'pz_' + productUniqueNo });
           } else {
