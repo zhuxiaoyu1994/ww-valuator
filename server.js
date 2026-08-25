@@ -317,8 +317,8 @@ app.post('/api/x9k2-find', async (req, res) => {
       // 缓存命中，跳过API请求
       actualProductId = productData.productId || productId;
     } else {
-      // 缓存未命中，请求螃蟹网API（带WAF重试）
-      const maxRetries = 3;
+      // 缓存未命中，请求螃蟹网API（带WAF重试，控制在Vercel 15s限制内）
+      const maxRetries = 2;
       var lastError = null;
       for (var attempt = 0; attempt < maxRetries; attempt++) {
         try {
@@ -344,8 +344,8 @@ app.post('/api/x9k2-find', async (req, res) => {
         } catch (err) {
           lastError = err;
           if (err.message.indexOf('WAF') >= 0 && attempt < maxRetries - 1) {
-            console.warn('[编号查询] 第' + (attempt + 1) + '次被WAF拦截，等待重试...');
-            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            console.warn('[编号查询] 第' + (attempt + 1) + '次被WAF拦截，等待1秒后重试...');
+            await new Promise(r => setTimeout(r, 1000));
             continue;
           }
           break;
@@ -454,7 +454,7 @@ app.post('/api/x9k2-find', async (req, res) => {
  * 从螃蟹网 API 获取商品详情（数字 productId）
  * 优先走 Cloudflare Worker 代理（避免服务器IP被封），无配置时直连
  */
-const PXB7_PROXY_URL = process.env.PXB7_PROXY_URL || '';
+const PXB7_PROXY_URL = (process.env.PXB7_PROXY_URL || '').replace(/[`\s'"]/g, '').trim();
 
 function fetchProductDetail(productId) {
   return new Promise((resolve, reject) => {
@@ -492,7 +492,7 @@ function fetchProductDetail(productId) {
         });
       });
       proxyReq.on('error', (err) => reject(err));
-      proxyReq.setTimeout(10000, () => {
+      proxyReq.setTimeout(7000, () => {
         proxyReq.destroy(new Error('请求超时'));
       });
       proxyReq.write(postData);
@@ -540,7 +540,7 @@ function fetchProductDetail(productId) {
     });
 
     req.on('error', (err) => reject(err));
-    req.setTimeout(10000, () => {
+    req.setTimeout(7000, () => {
       req.destroy(new Error('请求超时'));
     });
     req.write(postData);
@@ -617,7 +617,7 @@ function fetchProductBySearch(keyword, game) {
         res.on('end', () => handleSearchResult(data));
       });
       proxyReq.on('error', (err) => reject(err));
-      proxyReq.setTimeout(10000, () => {
+      proxyReq.setTimeout(7000, () => {
         proxyReq.destroy(new Error('请求超时'));
       });
       proxyReq.write(postData);
@@ -650,7 +650,7 @@ function fetchProductBySearch(keyword, game) {
     });
 
     req.on('error', (err) => reject(err));
-    req.setTimeout(10000, () => {
+    req.setTimeout(7000, () => {
       req.destroy(new Error('请求超时'));
     });
     req.write(postData);
