@@ -399,8 +399,8 @@ app.post('/api/x9k2-find', async (req, res) => {
   let platform = null;
   let productData = null;
 
-  // 螃蟹网链接: https://www.pxb7.com/product/{productId}/1
-  const pxb7Match = productId.match(/pxb7\.com\/product\/(\d+)/) || productId.match(/\/product\/(\d+)/);
+  // 螃蟹网链接: PC端 https://www.pxb7.com/product/{productId}/1 或手机端 https://m1.pxb7.com/pages-buy/ProductDetail/index?id={productId}
+  const pxb7Match = productId.match(/pxb7\.com\/product\/(\d+)/) || productId.match(/\/product\/(\d+)/) || productId.match(/m1\.pxb7\.com.*[?&]id=(\d+)/);
   if (pxb7Match) {
     platform = 'pxb7';
     productId = pxb7Match[1];
