@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.1.6
+// @version      3.1.7
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -867,6 +867,8 @@
     pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt, priority}]
     syncPassword: '',    // 云端同步密码（管理后台密码）
     secondaryDelay: 10,    // 从通知延迟秒数
+    skipHighDiffSecondary: false, // 从通知过滤高差价（开启后差价>阈值的账号不推送给从通知用户）
+    highDiffThreshold: 400,      // 从通知差价过滤阈值(元)
     soundAlert: true,      // 声音提醒
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
     repeatAlert: false,    // 重复提醒（每30秒直到确认）
@@ -5683,6 +5685,12 @@
           '<label style="font-size:10px;color:#888;">从通知延迟（秒）</label>' +
           '<input type="number" id="mwSecondaryDelay" value="' + (pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20) + '" min="0" max="300" style="width:60px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
           '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">' +
+          '<label style="font-size:10px;color:#888;cursor:pointer;">从通知过滤高差价（差价＞</label>' +
+          '<input type="number" id="mwHighDiffThreshold" value="' + (pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400) + '" min="0" max="99999" style="width:55px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
+          '<label style="font-size:10px;color:#888;">元不推送）</label>' +
+          '<input type="checkbox" id="mwSkipHighDiffSecondary" ' + (pushConfig.skipHighDiffSecondary ? 'checked' : '') + ' style="cursor:pointer;" />' +
+          '</div>' +
           '<div id="mwPushPlusList" style="margin-bottom:8px;"></div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">' +
           '<div style="flex:1;min-width:60px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">备注</label>' +
@@ -5941,6 +5949,8 @@
             renderPpList();
             box.querySelector('#mwServerChanKey').value = pushConfig.serverChanKey || '';
             box.querySelector('#mwSecondaryDelay').value = pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20;
+            box.querySelector('#mwSkipHighDiffSecondary').checked = !!pushConfig.skipHighDiffSecondary;
+            box.querySelector('#mwHighDiffThreshold').value = pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400;
           } else {
             alert('服务器暂无推送配置或恢复失败');
           }
@@ -5975,6 +5985,8 @@
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
         pushConfig.serverChanKey = box.querySelector('#mwServerChanKey').value.trim();
         pushConfig.secondaryDelay = parseInt(box.querySelector('#mwSecondaryDelay').value) || 0;
+        pushConfig.skipHighDiffSecondary = box.querySelector('#mwSkipHighDiffSecondary').checked;
+        pushConfig.highDiffThreshold = parseFloat(box.querySelector('#mwHighDiffThreshold').value) || 0;
         pushConfig.syncPassword = box.querySelector('#mwSyncPassword').value.trim();
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
         saveState();
@@ -9417,6 +9429,18 @@ function openSettings() {
     // 分为主通知（立即）和从通知（延迟）
     var primarySubs = activeSubs.filter(function (s) { return (s.priority || 'secondary') === 'primary'; });
     var secondarySubs = activeSubs.filter(function (s) { return (s.priority || 'secondary') !== 'primary'; });
+
+    // 从通知高差价过滤：开启后差价超过阈值的账号不推送给从通知用户
+    if (pushConfig.skipHighDiffSecondary && secondarySubs.length > 0) {
+      var diffMatch = title.match(/差价¥([\d.]+)/);
+      var notifyDiffVal = diffMatch ? parseFloat(diffMatch[1]) : 0;
+      var threshold = pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400;
+      if (notifyDiffVal > threshold) {
+        console.log('[鸣潮监控] 从通知过滤：差价¥' + notifyDiffVal + ' > 阈值¥' + threshold + '，跳过从通知推送');
+        secondarySubs = [];
+      }
+    }
+
     // 主通知立即发送
     primarySubs.forEach(function (sub) { sendPushPlus(sub, title, pushBody); });
     // 从通知延迟发送
@@ -9442,6 +9466,8 @@ function openSettings() {
       serverChanKey: pushConfig.serverChanKey || '',
       pushPlusSubscribers: pushConfig.pushPlusSubscribers || [],
       secondaryDelay: pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20,
+      skipHighDiffSecondary: pushConfig.skipHighDiffSecondary || false,
+      highDiffThreshold: pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400,
     };
     GM_xmlhttpRequest({
       method: 'POST',
@@ -9485,6 +9511,8 @@ function openSettings() {
             pushConfig.serverChanKey = remote.serverChanKey || pushConfig.serverChanKey || '';
             pushConfig.pushPlusSubscribers = Array.isArray(remote.pushPlusSubscribers) ? remote.pushPlusSubscribers : pushConfig.pushPlusSubscribers;
             pushConfig.secondaryDelay = remote.secondaryDelay != null ? remote.secondaryDelay : pushConfig.secondaryDelay;
+            pushConfig.skipHighDiffSecondary = remote.skipHighDiffSecondary != null ? remote.skipHighDiffSecondary : pushConfig.skipHighDiffSecondary;
+            pushConfig.highDiffThreshold = remote.highDiffThreshold != null ? remote.highDiffThreshold : pushConfig.highDiffThreshold;
             saveState();
             console.log('[鸣潮监控] 推送配置已从服务器恢复 (' + (json.syncedAt || '未知时间') + ')');
             if (onDone) onDone(true);
