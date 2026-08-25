@@ -558,7 +558,7 @@ function getPageHTML() {
     <!-- 按编号查询 -->
     <div class="input-card rise d2" id="panel-lookup">
       <div class="input-row">
-        <input type="text" id="product-id" placeholder="粘贴螃蟹网商品链接，如 https://www.pxb7.com/product/..." onkeydown="if(event.key==='Enter')doLookup()" />
+        <input type="text" id="product-id" placeholder="粘贴螃蟹网商品链接，如 https://www.pxb7.com/product/2353711688582091796/1" onkeydown="if(event.key==='Enter')doLookup()" />
         <button class="eval-btn" id="lookup-btn" onclick="doLookup()">估价</button>
       </div>
     </div>
