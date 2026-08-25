@@ -64,28 +64,49 @@ export default {
     // 转发到螃蟹网API
     const targetUrl = 'https://api-pc.pxb7.com' + targetPath;
 
-    try {
-      const resp = await fetch(targetUrl, {
-        method: 'POST',
-        headers: HEADERS,
-        body: body,
-      });
+    // 最多重试3次（应对WAF拦截）
+    const maxRetries = 3;
+    let lastData = null;
+    let lastStatus = 502;
 
-      const data = await resp.text();
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const resp = await fetch(targetUrl, {
+          method: 'POST',
+          headers: HEADERS,
+          body: body,
+        });
 
-      // 返回结果，添加CORS头（允许你的服务器访问）
-      return new Response(data, {
-        status: resp.status,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
-    } catch (e) {
-      return new Response(JSON.stringify({ error: 'Proxy error: ' + e.message }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' },
-      });
+        const data = await resp.text();
+
+        // 检测WAF拦截
+        if (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0) {
+          // WAF拦截，等待后重试
+          if (i < maxRetries - 1) {
+            await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+            continue;
+          }
+        }
+
+        lastData = data;
+        lastStatus = resp.status;
+        break;
+      } catch (e) {
+        if (i < maxRetries - 1) {
+          await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+          continue;
+        }
+        lastData = JSON.stringify({ error: 'Proxy error: ' + e.message });
+        lastStatus = 502;
+      }
     }
+
+    return new Response(lastData, {
+      status: lastStatus,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
   },
 };

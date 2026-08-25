@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.1.3
+// @version      3.1.6
 // @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -13,6 +13,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
+// @grant        GM_openInTab
 // @connect      api.day.app
 // @connect      sctapi.ftqq.com
 // @connect      www.pushplus.plus
@@ -22,6 +23,7 @@
 // @connect      search.7881.com
 // @connect      gw.7881.com
 // @connect      www.youxigujia.cn
+// @connect      api-pc.pxb7.com
 // @run-at       document-start
 // ==/UserScript==
 
@@ -591,6 +593,193 @@
     detail: 'https://api-pc.pxb7.com/api/product/web/product/detailPost',
     options: 'https://api-pc.pxb7.com/api/product/web/gameBizProd/selectSearchOption',
   };
+
+  /**
+   * 使用 XMLHttpRequest 发起请求（与网站自身请求方式一致，避免WAF差异对待fetch）
+   */
+  function xhrPost(url, body, timeoutMs) {
+    timeoutMs = timeoutMs || 15000;
+    return new Promise((resolve, reject) => {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
+      xhr.withCredentials = true;
+      xhr.timeout = timeoutMs;
+
+      xhr.onload = function() {
+        var ct = xhr.getResponseHeader('content-type') || '';
+        if (ct.indexOf('json') >= 0) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('XHR JSON解析失败'));
+          }
+        } else {
+          var preview = xhr.responseText ? xhr.responseText.substring(0, 300) : '(empty)';
+          console.warn('[鸣潮监控] XHR返回非JSON, ct:', ct, 'status:', xhr.status, '前300字:', preview);
+          // 检测WAF
+          if (xhr.responseText && (xhr.responseText.indexOf('aliyun_waf') >= 0 || xhr.responseText.indexOf('_waf_') >= 0)) {
+            reject(new Error('WAF_CHALLENGE'));
+          } else {
+            reject(new Error('XHR返回非JSON(ct:' + ct + ')'));
+          }
+        }
+      };
+
+      xhr.onerror = function() {
+        reject(new Error('XHR网络错误'));
+      };
+
+      xhr.ontimeout = function() {
+        reject(new Error('XHR超时'));
+      };
+
+      xhr.send(JSON.stringify(body));
+    });
+  }
+
+  /**
+   * 使用 GM_xmlhttpRequest 发起请求（绕过CORS，携带浏览器cookie）
+   * 当普通 fetch 返回非JSON时作为备选方案
+   */
+  function gmFetch(url, body) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url: url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Referer': window.location.href,
+          'Origin': window.location.origin,
+        },
+        data: JSON.stringify(body),
+        anonymous: false,
+        onload: function(resp) {
+          try {
+            var data = JSON.parse(resp.responseText);
+            resolve(data);
+          } catch (e) {
+            // 记录响应前500字符用于诊断
+            var preview = resp.responseText ? resp.responseText.substring(0, 500) : '(empty)';
+            console.error('[鸣潮监控] GM_xmlhttpRequest响应非JSON:', resp.status, preview);
+            reject(new Error('GM请求返回非JSON (HTTP ' + resp.status + '): ' + preview.substring(0, 200)));
+          }
+        },
+        onerror: function(err) {
+          console.error('[鸣潮监控] GM_xmlhttpRequest网络错误:', err);
+          reject(new Error('GM请求网络错误'));
+        },
+        ontimeout: function() {
+          reject(new Error('GM请求超时'));
+        },
+        timeout: 15000,
+      });
+    });
+  }
+
+  /**
+   * 通过window.open解决阿里云WAF验证
+   * popup加载API域名 → WAF返回含JS的挑战页 → 浏览器在popup中执行JS → 设置cookie → 重载通过
+   * 与iframe不同，window.open不受X-Frame-Options限制
+   */
+  var _wafSolving = false;
+
+  async function solveWAFChallenge() {
+    if (_wafSolving) {
+      console.log('[鸣潮监控] WAF解决中，等待完成...');
+      var waited = 0;
+      while (_wafSolving && waited < 20000) {
+        await new Promise(r => setTimeout(r, 500));
+        waited += 500;
+      }
+      return;
+    }
+
+    _wafSolving = true;
+    console.log('[鸣潮监控] 启动WAF验证解决器（popup方式）...');
+
+    var wafUrl = 'https://api-pc.pxb7.com/api/product/web/gameBizProd/selectSearchOption';
+
+    try {
+      // 方案1: GM_openInTab（不受popup blocker限制，cookie在同浏览器中共享）
+      if (typeof GM_openInTab !== 'undefined') {
+        console.log('[鸣潮监控] 使用GM_openInTab打开WAF页面...');
+        var tab = GM_openInTab(wafUrl, { active: false, insert: true, setParent: true });
+        if (tab) {
+          // 等待WAF JS执行并设置cookie
+          await new Promise(r => setTimeout(r, 6000));
+          try { tab.close(); } catch(e) {}
+          console.log('[鸣潮监控] GM_openInTab已关闭，WAF cookie应已设置');
+        } else {
+          console.warn('[鸣潮监控] GM_openInTab失败，尝试window.open...');
+          var popup = window.open(wafUrl, '_blank', 'width=100,height=100');
+          if (popup) {
+            await new Promise(r => setTimeout(r, 6000));
+            try { popup.close(); } catch(e) {}
+            console.log('[鸣潮监控] popup已关闭，WAF cookie应已设置');
+          } else {
+            console.warn('[鸣潮监控] popup也被拦截，尝试iframe...');
+            await solveWAFViaIframe(wafUrl);
+          }
+        }
+      } else {
+        // 方案2: window.open
+        var popup2 = window.open(wafUrl, '_blank', 'width=100,height=100');
+        if (popup2) {
+          await new Promise(r => setTimeout(r, 6000));
+          try { popup2.close(); } catch(e) {}
+          console.log('[鸣潮监控] popup已关闭，WAF cookie应已设置');
+        } else {
+          // 方案3: iframe
+          console.warn('[鸣潮监控] popup被拦截，尝试iframe...');
+          await solveWAFViaIframe(wafUrl);
+        }
+      }
+    } finally {
+      _wafSolving = false;
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  async function solveWAFViaIframe(wafUrl) {
+    await new Promise((resolve) => {
+      var iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;width:300px;height:200px;left:10px;top:10px;border:1px solid red;z-index:99999;';
+      iframe.src = wafUrl;
+
+      var loadCount = 0;
+      var done = false;
+
+      var timeout = setTimeout(() => {
+        if (!done) {
+          done = true;
+          try { document.body.removeChild(iframe); } catch(e) {}
+          console.warn('[鸣潮监控] WAF iframe超时(' + loadCount + '次加载)');
+          resolve();
+        }
+      }, 12000);
+
+      iframe.onload = function() {
+        loadCount++;
+        console.log('[鸣潮监控] WAF iframe 第' + loadCount + '次加载');
+        if (loadCount >= 2) {
+          if (!done) {
+            done = true;
+            clearTimeout(timeout);
+            console.log('[鸣潮监控] WAF验证已解决(iframe)');
+            setTimeout(() => {
+              try { document.body.removeChild(iframe); } catch(e) {}
+              resolve();
+            }, 1000);
+          }
+        }
+      };
+
+      document.body.appendChild(iframe);
+    });
+  }
 
   // 盼之平台URL（SSR HTML抓取，无需API token；gameId按当前游戏动态生成）
   function pzdsUrls() {
@@ -2204,67 +2393,103 @@
    *   posType: 位置类型（1=FILTER_PRODUCT_LIST）
    */
   async function fetchList(page) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    var listBody = {
+      query: '',
+      gameId: G().platformIds.pxb7,
+      pageIndex: page,
+      pageSize: 20,
+      bizProd: 1,
+      type: '1',
+      posType: 1,
+      sortType: 2,
+      filterDTOList: [],
+      combineFilterList: [],
+    };
+
+    // 优先使用XMLHttpRequest（与网站自身请求方式一致）
     try {
+      var data = await xhrPost(API_URLS.list, listBody);
+      if (data) return data;
+    } catch (e) {
+      if (e.message === 'WAF_CHALLENGE') {
+        console.warn('[鸣潮监控] XHR检测到WAF验证');
+      } else {
+        console.warn('[鸣潮监控] XHR请求失败:', e.message);
+      }
+    }
+
+    // XHR失败，尝试fetch
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(API_URLS.list, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: '',
-          gameId: G().platformIds.pxb7,
-          pageIndex: page,
-          pageSize: 20,
-          bizProd: 1,
-          type: '1',        // 1=最新发布（按上架时间降序），4=综合排序
-          posType: 1,
-          sortType: 2,      // 2=降序（最新优先）
-          filterDTOList: [],
-          combineFilterList: [],
-        }),
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
+        body: JSON.stringify(listBody),
         credentials: 'include',
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      var ct = response.headers.get('content-type') || '';
-      if (ct.indexOf('json') < 0) {
-        // WAF验证：返回的是HTML验证页面而非JSON
-        // 检查是否是阿里云WAF验证页，等待浏览器完成验证后重试
-        var text = await response.text();
-        if (text.indexOf('aliyun_waf') >= 0 || text.indexOf('_waf_') >= 0) {
-          console.warn('[鸣潮监控] 检测到阿里云WAF验证，等待页面验证完成后重试...');
-          // 等待3秒让浏览器执行WAF JS验证并设置cookie
-          await new Promise(r => setTimeout(r, 3000));
-          // 重试请求
-          const retryResp = await fetch(API_URLS.list, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: '',
-              gameId: G().platformIds.pxb7,
-              pageIndex: page,
-              pageSize: 20,
-              bizProd: 1,
-              type: '1',
-              posType: 1,
-              sortType: 2,
-              filterDTOList: [],
-              combineFilterList: [],
-            }),
-            credentials: 'include',
-          });
-          var retryCt = retryResp.headers.get('content-type') || '';
-          if (retryCt.indexOf('json') >= 0) {
-            return await retryResp.json();
-          }
-          throw new Error('WAF验证后仍返回非JSON响应');
-        }
-        throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
-      }
-      return await response.json();
-    } finally {
       clearTimeout(timeoutId);
+      if (response.ok) {
+        var ct = response.headers.get('content-type') || '';
+        if (ct.indexOf('json') >= 0) return await response.json();
+      }
+    } catch (e) {
+      console.warn('[鸣潮监控] fetch请求失败:', e.message);
     }
+
+    // 所有方式都失败，检测是否WAF并尝试解决
+    var wafDetected = false;
+    try {
+      var gmData = await gmFetch(API_URLS.list, listBody);
+      if (gmData) return gmData;
+    } catch (gmErr) {
+      if (gmErr.message.indexOf('aliyun_waf') >= 0 || gmErr.message.indexOf('_waf_') >= 0) {
+        wafDetected = true;
+      }
+      console.error('[鸣潮监控] GM请求也失败:', gmErr.message);
+    }
+
+    if (wafDetected || true) {
+      console.warn('[鸣潮监控] 检测到WAF验证，启动popup解决器...');
+      await solveWAFChallenge();
+
+      // WAF解决后重试XHR
+      try {
+        var retryData = await xhrPost(API_URLS.list, listBody);
+        if (retryData) {
+          console.log('[鸣潮监控] WAF解决后XHR重试成功');
+          return retryData;
+        }
+      } catch (e) {
+        console.warn('[鸣潮监控] WAF解决后XHR重试失败:', e.message);
+      }
+
+      // WAF解决后重试fetch
+      try {
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), 15000);
+        const response2 = await fetch(API_URLS.list, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
+          body: JSON.stringify(listBody),
+          credentials: 'include',
+          signal: controller2.signal,
+        });
+        clearTimeout(timeoutId2);
+        if (response2.ok) {
+          var ct2 = response2.headers.get('content-type') || '';
+          if (ct2.indexOf('json') >= 0) {
+            console.log('[鸣潮监控] WAF解决后fetch重试成功');
+            return await response2.json();
+          }
+        }
+      } catch (e) {
+        console.warn('[鸣潮监控] WAF解决后fetch重试失败:', e.message);
+      }
+    }
+
+    throw new Error('所有请求方式均失败(列表API)');
   }
 
   /**
@@ -2272,63 +2497,58 @@
    * 与普通列表的区别：type=4，filterDTOList带限时秒杀筛选条件
    */
   async function fetchFlashSaleList(page) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    var fsBody = {
+      query: '', gameId: G().platformIds.pxb7, pageIndex: page, pageSize: 16,
+      bizProd: 1, type: '1', sortType: 2, posType: 1,
+      filterDTOList: [{ attrId: '128593869357091', attrType: 2, attrValList: [-1, ''] }],
+      sortAttrId: '', mineFav: false, zoneJumpType: 2, bargainZoneJump: false, combineFilterList: [],
+    };
+
+    // XHR优先
     try {
+      var data = await xhrPost(API_URLS.list, fsBody);
+      if (data) return data;
+    } catch (e) {
+      console.warn('[鸣潮监控] 秒杀库XHR失败:', e.message);
+    }
+
+    // fetch备选
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(API_URLS.list, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: '',
-          gameId: G().platformIds.pxb7,
-          pageIndex: page,
-          pageSize: 16,
-          bizProd: 1,
-          type: '1',
-          sortType: 2,
-          posType: 1,
-          filterDTOList: [
-            {
-              attrId: '128593869357091',
-              attrType: 2,
-              attrValList: [-1, ''],
-            },
-          ],
-          sortAttrId: '',
-          mineFav: false,
-          zoneJumpType: 2,
-          bargainZoneJump: false,
-          combineFilterList: [],
-        }),
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
+        body: JSON.stringify(fsBody),
         credentials: 'include',
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      var ct = response.headers.get('content-type') || '';
-      if (ct.indexOf('json') < 0) {
-        var fsText = await response.text();
-        if (fsText.indexOf('aliyun_waf') >= 0 || fsText.indexOf('_waf_') >= 0) {
-          console.warn('[鸣潮监控] 秒杀库检测到WAF验证，等待3秒后重试...');
-          await new Promise(r => setTimeout(r, 3000));
-          var retryBody = JSON.stringify({
-            query: '', gameId: G().platformIds.pxb7, pageIndex: page, pageSize: 16,
-            bizProd: 1, type: '1', sortType: 2, posType: 1,
-            filterDTOList: [{ attrId: '128593869357091', attrType: 2, attrValList: [-1, ''] }],
-            sortAttrId: '', mineFav: false, zoneJumpType: 2, bargainZoneJump: false, combineFilterList: [],
-          });
-          const retryResp = await fetch(API_URLS.list, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: retryBody, credentials: 'include',
-          });
-          var retryCt = retryResp.headers.get('content-type') || '';
-          if (retryCt.indexOf('json') >= 0) return await retryResp.json();
-        }
-        throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
-      }
-      return await response.json();
-    } finally {
       clearTimeout(timeoutId);
+      if (response.ok) {
+        var ct = response.headers.get('content-type') || '';
+        if (ct.indexOf('json') >= 0) return await response.json();
+      }
+    } catch (e) {
+      console.warn('[鸣潮监控] 秒杀库fetch失败:', e.message);
     }
+
+    // GM备选
+    try {
+      var gmFsData = await gmFetch(API_URLS.list, fsBody);
+      if (gmFsData) return gmFsData;
+    } catch (e) {
+      console.error('[鸣潮监控] 秒杀库GM也失败:', e.message);
+    }
+
+    // WAF解决后重试
+    console.warn('[鸣潮监控] 秒杀库启动WAF解决器...');
+    await solveWAFChallenge();
+    try {
+      var fsRetry = await xhrPost(API_URLS.list, fsBody);
+      if (fsRetry) return fsRetry;
+    } catch (e) {}
+
+    throw new Error('所有请求方式均失败(秒杀库API)');
   }
 
   /**
@@ -2358,7 +2578,7 @@
   /**
    * 带重试的列表API调用
    */
-  async function fetchListWithRetry(page, retries = 1) {
+  async function fetchListWithRetry(page, retries = 2) {
     for (let i = 0; i <= retries; i++) {
       try {
         const data = await fetchList(page);
@@ -3892,38 +4112,53 @@
    * 调用详情API
    */
   async function fetchDetail(productId) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    var detBody = { productId: productId };
+
+    // XHR优先
     try {
+      var data = await xhrPost(API_URLS.detail, detBody);
+      if (data) return data;
+    } catch (e) {
+      console.warn('[鸣潮监控] 详情XHR失败:', e.message);
+    }
+
+    // fetch备选
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(API_URLS.detail, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: productId }),
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
+        body: JSON.stringify(detBody),
         credentials: 'include',
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      var ct = response.headers.get('content-type') || '';
-      if (ct.indexOf('json') < 0) {
-        var detText = await response.text();
-        if (detText.indexOf('aliyun_waf') >= 0 || detText.indexOf('_waf_') >= 0) {
-          console.warn('[鸣潮监控] 详情API检测到WAF验证，等待3秒后重试...');
-          await new Promise(r => setTimeout(r, 3000));
-          const retryResp = await fetch(API_URLS.detail, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productId: productId }),
-            credentials: 'include',
-          });
-          var retryCt = retryResp.headers.get('content-type') || '';
-          if (retryCt.indexOf('json') >= 0) return await retryResp.json();
-        }
-        throw new Error('服务器返回非JSON响应(可能登录过期或被WAF拦截)');
-      }
-      return await response.json();
-    } finally {
       clearTimeout(timeoutId);
+      if (response.ok) {
+        var ct = response.headers.get('content-type') || '';
+        if (ct.indexOf('json') >= 0) return await response.json();
+      }
+    } catch (e) {
+      console.warn('[鸣潮监控] 详情fetch失败:', e.message);
     }
+
+    // GM备选
+    try {
+      var gmDetData = await gmFetch(API_URLS.detail, detBody);
+      if (gmDetData) return gmDetData;
+    } catch (e) {
+      console.error('[鸣潮监控] 详情GM也失败:', e.message);
+    }
+
+    // WAF解决后重试
+    console.warn('[鸣潮监控] 详情启动WAF解决器...');
+    await solveWAFChallenge();
+    try {
+      var detRetry = await xhrPost(API_URLS.detail, detBody);
+      if (detRetry) return detRetry;
+    } catch (e) {}
+
+    throw new Error('所有请求方式均失败(详情API)');
   }
 
   // ============================================================

@@ -258,19 +258,43 @@ app.post('/api/x9k2-find', async (req, res) => {
       // 缓存命中，跳过API请求
       actualProductId = productData.productId || productId;
     } else {
-      // 缓存未命中，请求螃蟹网API
-      // 如果是纯数字，直接调 detail API
-      if (/^\d+$/.test(String(productId).trim())) {
-        productData = await fetchProductDetail(productId.trim());
+      // 缓存未命中，请求螃蟹网API（带WAF重试）
+      const maxRetries = 3;
+      var lastError = null;
+      for (var attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          // 如果是纯数字，直接调 detail API
+          if (/^\d+$/.test(String(productId).trim())) {
+            productData = await fetchProductDetail(productId.trim());
+          }
+
+          // 如果 detail API 没找到，用搜索 API 查找
+          if (!productData) {
+            const searchResult = await fetchProductBySearch(productId.trim(), game);
+            if (searchResult) {
+              productData = searchResult;
+              actualProductId = searchResult.productId || productId;
+            }
+          }
+
+          if (productData) break;
+
+          // productData为null但没报错，说明商品不存在
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
+          if (err.message.indexOf('WAF') >= 0 && attempt < maxRetries - 1) {
+            console.warn('[编号查询] 第' + (attempt + 1) + '次被WAF拦截，等待重试...');
+            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            continue;
+          }
+          break;
+        }
       }
 
-      // 如果 detail API 没找到，用搜索 API 查找（按游戏对应的商品池搜索）
-      if (!productData) {
-        const searchResult = await fetchProductBySearch(productId.trim(), game);
-        if (searchResult) {
-          productData = searchResult;
-          actualProductId = searchResult.productId || productId;
-        }
+      if (lastError) {
+        throw lastError;
       }
 
       // 缓存商品数据（即使为null也缓存，避免重复查询失败的商品）
@@ -355,11 +379,14 @@ app.post('/api/x9k2-find', async (req, res) => {
     if (queryLogs.length > MAX_LOGS) queryLogs.pop();
     db.insertLog(failEntry);
     const isTimeout = err.message.includes('超时') || err.code === 'ECONNRESET';
+    const isWAF = err.message.includes('WAF');
     res.json({
       success: false,
-      error: isTimeout
-        ? '查询超时，螃蟹网可能限制了服务器访问。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
-        : '查询失败: ' + err.message,
+      error: isWAF
+        ? '螃蟹网WAF拦截，服务器无法直接访问API。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
+        : isTimeout
+          ? '查询超时，螃蟹网可能限制了服务器访问。请改用「粘贴描述估价」：在商品页复制描述文本，粘贴到估价框中即可。'
+          : '查询失败: ' + err.message,
     });
   }
 });
@@ -397,7 +424,11 @@ function fetchProductDetail(productId) {
               resolve(null);
             }
           } catch (e) {
-            reject(new Error('解析商品数据失败'));
+            if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
+              reject(new Error('螃蟹网WAF拦截'));
+            } else {
+              reject(new Error('解析商品数据失败'));
+            }
           }
         });
       });
@@ -440,7 +471,11 @@ function fetchProductDetail(productId) {
             resolve(null);
           }
         } catch (e) {
-          reject(new Error('解析商品数据失败'));
+          if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
+            reject(new Error('螃蟹网WAF拦截'));
+          } else {
+            reject(new Error('解析商品数据失败'));
+          }
         }
       });
     });
@@ -498,7 +533,12 @@ function fetchProductBySearch(keyword, game) {
           resolve(null);
         }
       } catch (e) {
-        reject(new Error('解析搜索结果失败'));
+        // WAF拦截检测：返回的是HTML而非JSON
+        if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
+          reject(new Error('螃蟹网WAF拦截，请稍后重试或配置PXB7_PROXY_URL代理'));
+        } else {
+          reject(new Error('解析搜索结果失败'));
+        }
       }
     }
 
