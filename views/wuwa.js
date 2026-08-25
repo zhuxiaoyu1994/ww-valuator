@@ -792,6 +792,7 @@ function getPageHTML() {
     async function doLookup() {
       const productId = document.getElementById('product-id').value.trim();
       if (!productId) { alert('请输入商品编号或商品链接'); return; }
+      if (!/^https?:\/\//.test(productId)) { alert('请粘贴商品链接，不要输入纯编号。\\n\\n链接查询支持螃蟹网和盼之网的商品链接。'); return; }
       lastLookupId = productId;
 
       const btn = document.getElementById('lookup-btn');
