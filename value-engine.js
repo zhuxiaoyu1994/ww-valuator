@@ -152,7 +152,8 @@ function buildDefaultWeights(customWeights) {
   w.pullC6StepBonus = (saved.pullC6StepBonus != null) ? saved.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
   w.pullC6Threshold = (saved.pullC6Threshold != null) ? saved.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
   w.pullC6MaxWeightedConst = (saved.pullC6MaxWeightedConst != null) ? saved.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
-  w.pullPerWeightedConst = (saved.pullPerWeightedConst != null) ? saved.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
+  w.pullPerBonus = (saved.pullPerBonus != null) ? saved.pullPerBonus : (DEFAULT_WEIGHTS.pullPerBonus != null ? DEFAULT_WEIGHTS.pullPerBonus : 450);
+  w.pullPerBonusAmount = (saved.pullPerBonusAmount != null) ? saved.pullPerBonusAmount : (DEFAULT_WEIGHTS.pullPerBonusAmount != null ? DEFAULT_WEIGHTS.pullPerBonusAmount : 500);
   w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
   w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
   w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
@@ -1098,17 +1099,18 @@ function calculateValue(parsed, price) {
   var pc6StepBonus = (w.pullC6StepBonus != null) ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
   var pc6Threshold = (w.pullC6Threshold != null) ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
   var pc6MaxWC = (w.pullC6MaxWeightedConst != null) ? w.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
-  var pc6PullPerWC = (w.pullPerWeightedConst != null && w.pullPerWeightedConst > 0) ? w.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
+  var pc6PullPerBonus = (w.pullPerBonus != null && w.pullPerBonus > 0) ? w.pullPerBonus : (DEFAULT_WEIGHTS.pullPerBonus != null ? DEFAULT_WEIGHTS.pullPerBonus : 450);
+  var pc6PullBonusAmount = (w.pullPerBonusAmount != null) ? w.pullPerBonusAmount : (DEFAULT_WEIGHTS.pullPerBonusAmount != null ? DEFAULT_WEIGHTS.pullPerBonusAmount : 500);
 
-  // 加权满命数 = 实际加权满命数 + 抽数折算的额外加权满命数（每N抽+1）
-  var pullBonusWeightedConst = Math.floor((parsed.pulls || 0) / pc6PullPerWC);
-  var adjustedWeightedConst = weightedFullConst + pullBonusWeightedConst;
-
-  var effWeightedConst = (pc6MaxWC > 0 && adjustedWeightedConst > pc6MaxWC) ? pc6MaxWC : adjustedWeightedConst;
-  var pullC6Multiplier = (parsed.pulls >= pc6Threshold && adjustedWeightedConst > 0)
+  // 满命抽数加成系数：仅基于实际加权满命数（不受抽数影响）
+  var effWeightedConst = (pc6MaxWC > 0 && weightedFullConst > pc6MaxWC) ? pc6MaxWC : weightedFullConst;
+  var pullC6Multiplier = (parsed.pulls >= pc6Threshold && weightedFullConst > 0)
     ? pc6BaseBonus + (effWeightedConst - pc6Base) / pc6Step * pc6StepBonus
     : 0;
   if (pullC6Multiplier < 0) pullC6Multiplier = 0;
+
+  // 抽数直接加成：每N抽+M元
+  var pullFlatBonus = (pc6PullPerBonus > 0) ? Math.floor((parsed.pulls || 0) / pc6PullPerBonus) * pc6PullBonusAmount : 0;
 
   // 3. 配队溢价（使用 weights.teams 和 teamMultiBonus）
   let teamPremium = 0;
@@ -1158,7 +1160,7 @@ function calculateValue(parsed, price) {
   const pullInfo = calculatePullValue(parsed.pulls);
   const basePullValue = pullInfo.total;
   const pullC6Bonus = Math.round(basePullValue * pullC6Multiplier);
-  const pullValue = basePullValue + pullC6Bonus;
+  const pullValue = basePullValue + pullC6Bonus + pullFlatBonus;
 
   // 5. 其他资源
   const outfits = extractListItems(parsed.rawText, '服饰');
@@ -1315,6 +1317,7 @@ function calculateValue(parsed, price) {
       baseTotal: Math.round(basePullValue * 100) / 100,
       c6Bonus: pullC6Bonus,
       c6Multiplier: pullC6Multiplier,
+      flatBonus: pullFlatBonus,
       total: pullValue,
     },
     yellowInfo: yellowInfo,
