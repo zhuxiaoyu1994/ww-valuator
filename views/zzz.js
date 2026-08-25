@@ -539,7 +539,7 @@ function getPageHTML() {
           <h1>绝区零账号估价</h1>
           <span class="en">ZENLESS ZONE ZERO</span>
         </div>
-        <div class="subtitle">角色定价数据持续完善中，估值仅供参考 · 输入商品编号或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）描述估价</div>
+        <div class="subtitle">角色定价数据持续完善中，估值仅供参考 · 输入商品编号或商品链接，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）描述估价</div>
       </div>
     </div>
 
@@ -558,7 +558,7 @@ function getPageHTML() {
     <!-- 按编号查询 -->
     <div class="input-card rise d2" id="panel-lookup">
       <div class="input-row">
-        <input type="text" id="product-id" placeholder="输入商品编号，如 MEBNB9606" onkeydown="if(event.key==='Enter')doLookup()" />
+        <input type="text" id="product-id" placeholder="输入商品编号（如 MEBNB9606）或粘贴商品链接" onkeydown="if(event.key==='Enter')doLookup()" />
         <button class="eval-btn" id="lookup-btn" onclick="doLookup()">估价</button>
       </div>
     </div>
@@ -744,7 +744,7 @@ function getPageHTML() {
     // ============================================================
     async function doLookup() {
       const productId = document.getElementById('product-id').value.trim();
-      if (!productId) { alert('请输入商品编号'); return; }
+      if (!productId) { alert('请输入商品编号或商品链接'); return; }
       lastLookupId = productId;
 
       const btn = document.getElementById('lookup-btn');

@@ -319,14 +319,23 @@ app.get('/api/debug-proxy', async (req, res) => {
  * 支持商品编号（如 MEBNB9606）和数字 productId
  */
 app.post('/api/x9k2-find', async (req, res) => {
-  const { productId, customWeights, game } = req.body;
+  let { productId, customWeights, game } = req.body;
   if (!productId) {
-    return res.status(400).json({ success: false, error: '请输入商品编号' });
+    return res.status(400).json({ success: false, error: '请输入商品编号或商品链接' });
+  }
+
+  productId = String(productId).trim();
+
+  // 支持从螃蟹网商品链接中提取数字 productId
+  // URL 格式: https://www.pxb7.com/product/{productId}/1 或 /buy/{gameId}/detail?productUniqueNo=XXX
+  const urlMatch = productId.match(/\/product\/(\d+)/) || productId.match(/productId[=:](\d+)/);
+  if (urlMatch) {
+    productId = urlMatch[1];
   }
 
   try {
     // 检查缓存（按商品ID缓存商品数据，5分钟内不重复请求螃蟹网API）
-    const cacheKey = 'product:' + productId.trim();
+    const cacheKey = 'product:' + productId;
     let productData = cacheGet(cacheKey);
     let actualProductId = productId;
 
@@ -334,12 +343,12 @@ app.post('/api/x9k2-find', async (req, res) => {
       // 缓存命中，跳过API请求
       actualProductId = productData.productId || productId;
     } else {
-      const isNumeric = /^\d+$/.test(String(productId).trim());
+      const isNumeric = /^\d+$/.test(productId);
 
       if (isNumeric) {
         // 数字 productId：直接调 detailPost API（不受WAF拦截）
         try {
-          productData = await fetchProductDetail(productId.trim());
+          productData = await fetchProductDetail(productId);
         } catch (err) {
           throw err;
         }
@@ -347,7 +356,7 @@ app.post('/api/x9k2-find', async (req, res) => {
         // 如果 detail API 没找到，尝试搜索 API
         if (!productData) {
           try {
-            const searchResult = await fetchProductBySearch(productId.trim(), game);
+            const searchResult = await fetchProductBySearch(productId, game);
             if (searchResult) {
               productData = searchResult;
               actualProductId = searchResult.productId || productId;
@@ -362,7 +371,7 @@ app.post('/api/x9k2-find', async (req, res) => {
       } else {
         // 字母数字混合编号（如 MEKUO6756）：搜索 API 被 WAF 拦截，无法服务端查询
         const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
-        const pxb7Url = `https://www.pxb7.com/buy/${gameId}/detail?productUniqueNo=${encodeURIComponent(productId.trim())}`;
+        const pxb7Url = `https://www.pxb7.com/buy/${gameId}/detail?productUniqueNo=${encodeURIComponent(productId)}`;
         throw new Error('ALPHANUMERIC_ID_NOT_SUPPORTED:' + pxb7Url);
       }
 
@@ -372,7 +381,7 @@ app.post('/api/x9k2-find', async (req, res) => {
     }
 
     if (!productData) {
-      return res.json({ success: false, error: '未找到该商品，请检查编号是否正确' });
+      return res.json({ success: false, error: '未找到该商品，请检查编号或链接是否正确' });
     }
 
     const showTitle = productData.showTitle || productData.title || '';
