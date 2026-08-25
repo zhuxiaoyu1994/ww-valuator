@@ -242,57 +242,74 @@ app.post('/api/x9k2-eval', (req, res) => {
  * 调试接口 - 检查代理配置和连通性
  */
 app.get('/api/debug-proxy', async (req, res) => {
-  const proxyUrl = process.env.PXB7_PROXY_URL || '';
-  const result = { proxyConfigured: !!proxyUrl, proxyUrl: proxyUrl ? proxyUrl.substring(0, 50) + '...' : '(empty)', testResult: null, error: null };
+  const proxyUrl = (process.env.PXB7_PROXY_URL || '').replace(/[`\s'"]/g, '').trim();
+  const result = { proxyConfigured: !!proxyUrl, proxyUrl: proxyUrl || '(empty)', tests: {} };
 
   if (!proxyUrl) {
     return res.json({ ...result, error: 'PXB7_PROXY_URL not set' });
   }
 
-  // 测试Worker是否可达
+  // 测试1: detailPost API
   try {
     const testUrl = proxyUrl.replace(/\/$/, '') + '?path=' + encodeURIComponent('/api/product/web/product/detailPost');
     const startTime = Date.now();
     const testData = JSON.stringify({ productId: '1' });
 
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve) => {
       const proxyReq = https.request(testUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(testData),
-        },
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(testData) },
       }, (proxyRes) => {
         let data = '';
         proxyRes.setEncoding('utf8');
         proxyRes.on('data', (chunk) => { data += chunk; });
         proxyRes.on('end', () => {
-          const elapsed = Date.now() - startTime;
-          const ct = proxyRes.headers['content-type'] || '';
-          const isWAF = data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0;
-          result.testResult = {
+          result.tests.detailPost = {
             status: proxyRes.statusCode,
-            contentType: ct,
-            elapsed: elapsed + 'ms',
-            isWAFBlocked: isWAF,
-            responsePreview: data.substring(0, 200),
+            elapsed: (Date.now() - startTime) + 'ms',
+            isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
+            preview: data.substring(0, 200),
           };
           resolve();
         });
       });
-      proxyReq.on('error', (err) => {
-        result.error = err.message;
-        reject(err);
-      });
-      proxyReq.setTimeout(12000, () => {
-        proxyReq.destroy(new Error('Worker请求超时(12s)'));
-      });
+      proxyReq.on('error', (err) => { result.tests.detailPost = { error: err.message }; resolve(); });
+      proxyReq.setTimeout(8000, () => { proxyReq.destroy(); result.tests.detailPost = { error: 'timeout 8s' }; resolve(); });
       proxyReq.write(testData);
       proxyReq.end();
     });
-  } catch (err) {
-    result.error = err.message;
-  }
+  } catch (err) { result.tests.detailPost = { error: err.message }; }
+
+  // 测试2: searchPageList API
+  try {
+    const testUrl2 = proxyUrl.replace(/\/$/, '') + '?path=' + encodeURIComponent('/api/search/product/v2/selectSearchPageList');
+    const startTime2 = Date.now();
+    const testData2 = JSON.stringify({ query: 'test', gameId: '10302', pageIndex: 1, pageSize: 1, bizProd: 1, type: '4', posType: 1 });
+
+    await new Promise((resolve) => {
+      const proxyReq = https.request(testUrl2, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(testData2) },
+      }, (proxyRes) => {
+        let data = '';
+        proxyRes.setEncoding('utf8');
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          result.tests.searchList = {
+            status: proxyRes.statusCode,
+            elapsed: (Date.now() - startTime2) + 'ms',
+            isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
+            preview: data.substring(0, 300),
+          };
+          resolve();
+        });
+      });
+      proxyReq.on('error', (err) => { result.tests.searchList = { error: err.message }; resolve(); });
+      proxyReq.setTimeout(8000, () => { proxyReq.destroy(); result.tests.searchList = { error: 'timeout 8s' }; resolve(); });
+      proxyReq.write(testData2);
+      proxyReq.end();
+    });
+  } catch (err) { result.tests.searchList = { error: err.message }; }
 
   res.json(result);
 });
