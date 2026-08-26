@@ -574,25 +574,8 @@ function getAdminPage() {
   // ============================================================
   function safeOpenValueSettings() {
     if (typeof openValueSettings === 'function') {
-      openValueSettings(function(newW) {
-        var pw = sessionStorage.getItem('admin_pw');
-        if (pw && newW) {
-          fetch('/api/config/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: pw, config: newW, game: currentGame }),
-          }).then(function(r) { return r.json(); }).then(function(json) {
-            if (json.success) {
-              console.log('[admin] 估值规则已同步到服务器');
-            } else {
-              console.error('[admin] 估值规则同步失败:', json.error);
-              alert('估值规则保存成功，但同步到服务器失败：' + (json.error || '未知错误'));
-            }
-          }).catch(function(e) {
-            console.error('[admin] 估值规则同步出错:', e);
-            alert('估值规则保存成功，但同步到服务器出错：' + e.message);
-          });
-        }
+      openValueSettings(function() {
+        // 保存后如果成交记录已加载，重新获取以刷新估值
         if (dealsLoaded) {
           fetchDeals(true);
         }
