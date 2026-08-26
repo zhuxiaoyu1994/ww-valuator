@@ -2242,19 +2242,24 @@
     var effectiveYellow = 0;
     var effectiveCountedWeapons = {};
     var effectiveCountedChars = {};
+    var effectiveYellowBreakdown = [];
     for (var eci = 0; eci < parsed.characters.length; eci++) {
       var eChar = parsed.characters[eci];
       if (EFFECTIVE_TIERS.indexOf(eChar.tier) < 0) continue;
-      effectiveYellow += 1 + (eChar.const || 0);
+      var eContrib = 1 + (eChar.const || 0);
+      effectiveYellow += eContrib;
       effectiveCountedChars[eChar.name] = true;
       var eSigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[eChar.name]) || SIG_WEAPONS[eChar.name];
+      var eSigRefine = 0;
       if (eSigName && hasSignatureWeapons.indexOf(eChar.name) >= 0 && !effectiveCountedWeapons[eSigName]) {
         var eSigWeapon = parsed.weapons.find(function(wp) { return wp.name === eSigName; });
         if (eSigWeapon) {
-          effectiveYellow += eSigWeapon.refine || 1;
+          eSigRefine = eSigWeapon.refine || 1;
+          effectiveYellow += eSigRefine;
           effectiveCountedWeapons[eSigName] = true;
         }
       }
+      effectiveYellowBreakdown.push({ name: eChar.name, tier: eChar.tier, const: eChar.const || 0, contrib: eContrib, sigName: eSigRefine > 0 ? eSigName : null, sigRefine: eSigRefine, source: 'S/A级' });
     }
     var teamCharNames = {};
     for (var ti = 0; ti < satisfiedTeams.length; ti++) {
@@ -2267,16 +2272,20 @@
       var tChar = parsed.characters[tci];
       if (!teamCharNames[tChar.name]) continue;
       if (effectiveCountedChars[tChar.name]) continue;
-      effectiveYellow += 1 + (tChar.const || 0);
+      var tContrib = 1 + (tChar.const || 0);
+      effectiveYellow += tContrib;
       effectiveCountedChars[tChar.name] = true;
       var tSigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[tChar.name]) || SIG_WEAPONS[tChar.name];
+      var tSigRefine = 0;
       if (tSigName && hasSignatureWeapons.indexOf(tChar.name) >= 0 && !effectiveCountedWeapons[tSigName]) {
         var tSigWeapon = parsed.weapons.find(function(wp) { return wp.name === tSigName; });
         if (tSigWeapon) {
-          effectiveYellow += tSigWeapon.refine || 1;
+          tSigRefine = tSigWeapon.refine || 1;
+          effectiveYellow += tSigRefine;
           effectiveCountedWeapons[tSigName] = true;
         }
       }
+      effectiveYellowBreakdown.push({ name: tChar.name, tier: tChar.tier, const: tChar.const || 0, contrib: tContrib, sigName: tSigRefine > 0 ? tSigName : null, sigRefine: tSigRefine, source: '配队' });
     }
 
     // 6. 有效金系数（基于有效金数分段计算，不同段使用不同步长）
@@ -2365,6 +2374,7 @@
       },
       yellowInfo: yellowInfo,              // 黄数信息
       effectiveYellow: effectiveYellow,    // 有效金数(S/A级+配队角色+专武)
+      effectiveYellowBreakdown: effectiveYellowBreakdown, // 有效金贡献角色列表
       outfits: outfits,                    // 服饰列表
       motoAccessories: motoAccessories,    // 摩托饰品列表
       motoFrames: motoFrames,              // 车架列表
@@ -5322,6 +5332,7 @@
           <button class="mw-btn" id="mwBtnRefresh">立即刷新</button>
           <button class="mw-btn" id="mwBtnSettings">估值设置</button>
           <button class="mw-btn" id="mwBtnClearTable">清空表格</button>
+          <button class="mw-btn" id="mwBtnCleanDiff">清理差价</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
           <button class="mw-btn" id="mwBtnExportCSV">导出CSV</button>
           <span class="mw-input-label">≥</span>
@@ -5397,6 +5408,7 @@
     dom.btnRefresh = document.getElementById('mwBtnRefresh');
     dom.btnSettings = document.getElementById('mwBtnSettings');
     dom.btnClearTable = document.getElementById('mwBtnClearTable');
+    dom.btnCleanDiff = document.getElementById('mwBtnCleanDiff');
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
     dom.btnExportCSV = document.getElementById('mwBtnExportCSV');
     dom.inputThreshold = document.getElementById('mwInputThreshold');
@@ -6046,6 +6058,25 @@
         refreshTableDisplay();
         updateStatusText();
       }
+    });
+
+    dom.btnCleanDiff.addEventListener('click', function () {
+      var input = prompt('清理差价小于该值的账号（负数表示估值低于标价）\n例如输入 -1000，将删除差价 < -1000 元的账号', '-1000');
+      if (input === null) return;
+      var threshold = parseFloat(input);
+      if (isNaN(threshold)) { alert('请输入有效数字'); return; }
+      var before = tableData.length;
+      tableData = tableData.filter(function (row) {
+        var diff = (row.value || 0) - (row.price || 0);
+        return diff >= threshold;
+      });
+      var removed = before - tableData.length;
+      if (removed > 0) {
+        saveTableData();
+        refreshTableDisplay();
+        updateStatusText();
+      }
+      alert('已清理差价 < ' + threshold + ' 元的账号\n删除 ' + removed + ' 条，剩余 ' + tableData.length + ' 条');
     });
 
     dom.btnExportCSV.addEventListener('click', exportCSV);
@@ -6763,7 +6794,19 @@
     const yellowHTML = (!flatActive && yellowInfo.yellowCount > 0) ?
       '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">' +
       '<div style="font-size:12px;color:#f59e0b;font-weight:600;">有效金系数：' + (yellowInfo.effectiveYellow != null ? yellowInfo.effectiveYellow : yellowInfo.yellowCount) + '有效金 [' + yellowInfo.tierLabel + '] × ' + yellowInfo.coefficient + '</div>' +
-      '<div style="font-size:11px;color:#888;margin-top:2px;">有效金/限定金/总金: ' + (yellowInfo.effectiveYellow != null ? yellowInfo.effectiveYellow : '-') + '/' + (yellowInfo.limitedYellow != null ? yellowInfo.limitedYellow : yellowInfo.yellowCount) + '/' + (yellowInfo.totalYellow != null ? yellowInfo.totalYellow : (yellowInfo.rawYellowCount || 0)) + '</div></div>' : '';
+      '<div style="font-size:11px;color:#888;margin-top:2px;">有效金/限定金/总金: ' + (yellowInfo.effectiveYellow != null ? yellowInfo.effectiveYellow : '-') + '/' + (yellowInfo.limitedYellow != null ? yellowInfo.limitedYellow : yellowInfo.yellowCount) + '/' + (yellowInfo.totalYellow != null ? yellowInfo.totalYellow : (yellowInfo.rawYellowCount || 0)) + '</div>' +
+      (function() {
+        var bd = v.effectiveYellowBreakdown || [];
+        if (bd.length === 0) return '';
+        var items = bd.map(function(b) {
+          var constText = b.const > 0 ? (b.const === 6 ? '满' + G().constUnitDisplay : b.const + G().constUnitDisplay) : '0命';
+          var sigText = b.sigName ? ' +精' + b.sigRefine + ' ' + esc(b.sigName) : '';
+          var totalContrib = b.contrib + b.sigRefine;
+          return '<span style="display:inline-block;font-size:10px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 6px;border-radius:3px;margin:2px 3px 2px 0;">' + esc(b.name) + ' ' + constText + sigText + ' (+' + totalContrib + ')</span>';
+        });
+        return '<div style="margin-top:4px;">' + items.join('') + '</div>';
+      })() +
+      '</div>' : '';
 
     const flatDiscountHTML = (flatActive) ?
       '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(167,139,250,0.1);border-radius:6px;border-left:3px solid #a78bfa;">' +
