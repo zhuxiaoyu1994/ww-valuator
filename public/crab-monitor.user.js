@@ -2251,15 +2251,17 @@
       effectiveCountedChars[eChar.name] = true;
       var eSigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[eChar.name]) || SIG_WEAPONS[eChar.name];
       var eSigRefine = 0;
+      var eSigContrib = 0;
       if (eSigName && hasSignatureWeapons.indexOf(eChar.name) >= 0 && !effectiveCountedWeapons[eSigName]) {
         var eSigWeapon = parsed.weapons.find(function(wp) { return wp.name === eSigName; });
         if (eSigWeapon) {
           eSigRefine = eSigWeapon.refine || 1;
-          effectiveYellow += eSigRefine;
+          eSigContrib = 1 + (eSigRefine - 1) * 0.5;
+          effectiveYellow += eSigContrib;
           effectiveCountedWeapons[eSigName] = true;
         }
       }
-      effectiveYellowBreakdown.push({ name: eChar.name, tier: eChar.tier, const: eChar.const || 0, contrib: eContrib, sigName: eSigRefine > 0 ? eSigName : null, sigRefine: eSigRefine, source: 'S/A级' });
+      effectiveYellowBreakdown.push({ name: eChar.name, tier: eChar.tier, const: eChar.const || 0, contrib: eContrib, sigName: eSigRefine > 0 ? eSigName : null, sigRefine: eSigRefine, sigContrib: eSigContrib, source: 'S/A级' });
     }
     var teamCharNames = {};
     for (var ti = 0; ti < satisfiedTeams.length; ti++) {
@@ -2277,15 +2279,17 @@
       effectiveCountedChars[tChar.name] = true;
       var tSigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[tChar.name]) || SIG_WEAPONS[tChar.name];
       var tSigRefine = 0;
+      var tSigContrib = 0;
       if (tSigName && hasSignatureWeapons.indexOf(tChar.name) >= 0 && !effectiveCountedWeapons[tSigName]) {
         var tSigWeapon = parsed.weapons.find(function(wp) { return wp.name === tSigName; });
         if (tSigWeapon) {
           tSigRefine = tSigWeapon.refine || 1;
-          effectiveYellow += tSigRefine;
+          tSigContrib = 1 + (tSigRefine - 1) * 0.5;
+          effectiveYellow += tSigContrib;
           effectiveCountedWeapons[tSigName] = true;
         }
       }
-      effectiveYellowBreakdown.push({ name: tChar.name, tier: tChar.tier, const: tChar.const || 0, contrib: tContrib, sigName: tSigRefine > 0 ? tSigName : null, sigRefine: tSigRefine, source: '配队' });
+      effectiveYellowBreakdown.push({ name: tChar.name, tier: tChar.tier, const: tChar.const || 0, contrib: tContrib, sigName: tSigRefine > 0 ? tSigName : null, sigRefine: tSigRefine, sigContrib: tSigContrib, source: '配队' });
     }
 
     // 6. 有效金系数（基于有效金数分段计算，不同段使用不同步长）
@@ -6801,8 +6805,9 @@
         var items = bd.map(function(b) {
           var constText = b.const > 0 ? (b.const === 6 ? '满' + G().constUnitDisplay : b.const + G().constUnitDisplay) : '0命';
           var sigText = b.sigName ? ' +精' + b.sigRefine + ' ' + esc(b.sigName) : '';
-          var totalContrib = b.contrib + b.sigRefine;
-          return '<span style="display:inline-block;font-size:10px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 6px;border-radius:3px;margin:2px 3px 2px 0;">' + esc(b.name) + ' ' + constText + sigText + ' (+' + totalContrib + ')</span>';
+          var totalContrib = b.contrib + (b.sigContrib || 0);
+          var contribStr = totalContrib % 1 === 0 ? totalContrib : Math.round(totalContrib * 10) / 10;
+          return '<span style="display:inline-block;font-size:10px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 6px;border-radius:3px;margin:2px 3px 2px 0;">' + esc(b.name) + ' ' + constText + sigText + ' (+' + contribStr + ')</span>';
         });
         return '<div style="margin-top:4px;">' + items.join('') + '</div>';
       })() +
