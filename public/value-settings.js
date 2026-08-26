@@ -1926,7 +1926,6 @@
         var parsed = JSON.parse(config);
         delete parsed.constPrices;
         delete parsed.deletedChars;
-        delete parsed.charTierOverride;
         delete parsed.sigWeaponsOverride;
         config = JSON.stringify(parsed, null, 2);
       } catch (e) { /* 解析失败则导出原始配置 */ }
@@ -1957,9 +1956,8 @@
             // 去除内部派生字段
             delete imported.constPrices;
             delete imported.deletedChars;
-            delete imported.charTierOverride;
             delete imported.sigWeaponsOverride;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
+            saveWeights(imported);
             alert('配置导入成功！面板将刷新以显示导入的配置。');
             overlay.remove();
             if (typeof onSave === 'function') {

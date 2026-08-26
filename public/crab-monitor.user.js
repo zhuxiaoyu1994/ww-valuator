@@ -8722,7 +8722,6 @@ function openSettings() {
       var exportData = JSON.parse(JSON.stringify(config));
       delete exportData.constPrices;
       delete exportData.deletedChars;
-      delete exportData.charTierOverride;
       delete exportData.sigWeaponsOverride;
       var blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       var url = URL.createObjectURL(blob);
