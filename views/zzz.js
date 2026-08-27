@@ -681,7 +681,10 @@ function getPageHTML() {
       updateConfigInfo();
     }).catch(() => {});
 
-    // 立即显示已存储的加载时间（不等fetch完成）
+    // 记录本次页面加载时间（用户刷新浏览器即更新）
+    var pageLoadTime = new Date().toISOString();
+    localStorage.setItem('zzz_page_loaded_at', pageLoadTime);
+
     updateConfigInfo();
 
     function clearLookupInput() {
@@ -692,7 +695,7 @@ function getPageHTML() {
     function updateConfigInfo() {
       var el = document.getElementById('config-info');
       if (!el) return;
-      var storedAt = localStorage.getItem('zzz_config_updated_at');
+      var storedAt = localStorage.getItem('zzz_page_loaded_at');
       if (!storedAt) { el.innerHTML = ''; return; }
       var date = new Date(storedAt);
       if (isNaN(date.getTime())) { el.innerHTML = ''; return; }
