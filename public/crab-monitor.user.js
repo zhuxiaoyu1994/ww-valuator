@@ -2237,8 +2237,8 @@
       }
     }
 
-    // 有效金数：S/A级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
-    const EFFECTIVE_TIERS = ['S', 'A'];
+    // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
+    const EFFECTIVE_TIERS = ['S'];
     var effectiveYellow = 0;
     var effectiveCountedWeapons = {};
     var effectiveCountedChars = {};
@@ -2261,7 +2261,7 @@
           effectiveCountedWeapons[eSigName] = true;
         }
       }
-      effectiveYellowBreakdown.push({ name: eChar.name, tier: eChar.tier, const: eChar.const || 0, contrib: eContrib, sigName: eSigRefine > 0 ? eSigName : null, sigRefine: eSigRefine, sigContrib: eSigContrib, source: 'S/A级' });
+      effectiveYellowBreakdown.push({ name: eChar.name, tier: eChar.tier, const: eChar.const || 0, contrib: eContrib, sigName: eSigRefine > 0 ? eSigName : null, sigRefine: eSigRefine, sigContrib: eSigContrib, source: 'S级' });
     }
     var teamCharNames = {};
     for (var ti = 0; ti < satisfiedTeams.length; ti++) {
@@ -2377,7 +2377,7 @@
         total: pullValue,
       },
       yellowInfo: yellowInfo,              // 黄数信息
-      effectiveYellow: effectiveYellow,    // 有效金数(S/A级+配队角色+专武)
+      effectiveYellow: effectiveYellow,    // 有效金数(S级+配队角色+专武)
       effectiveYellowBreakdown: effectiveYellowBreakdown, // 有效金贡献角色列表
       outfits: outfits,                    // 服饰列表
       motoAccessories: motoAccessories,    // 摩托饰品列表
@@ -7763,7 +7763,7 @@ function openSettings() {
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分段，每段独立基准系数，调整一段不影响其他段。可自由添加/删除分段。';
+    yellowDesc.innerHTML = '有效金 = S级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分段，每段独立基准系数，调整一段不影响其他段。可自由添加/删除分段。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {

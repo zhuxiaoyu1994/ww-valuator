@@ -1197,13 +1197,13 @@ function calculateValue(parsed, price) {
     }
   }
 
-  // 有效金数：S/A级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
+  // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
   // 专武有效金：精1=1, 精N=1+(N-1)×0.5（精2=1.5, 精3=2, 精5=3）
-  const EFFECTIVE_TIERS = ['S', 'A'];
+  const EFFECTIVE_TIERS = ['S'];
   var effectiveYellow = 0;
   var effectiveCountedWeapons = {};
   var effectiveCountedChars = {};
-  // S/A级角色
+  // S级角色
   for (var eci = 0; eci < parsed.characters.length; eci++) {
     var eChar = parsed.characters[eci];
     if (EFFECTIVE_TIERS.indexOf(eChar.tier) < 0) continue;
@@ -1219,7 +1219,7 @@ function calculateValue(parsed, price) {
       }
     }
   }
-  // 完整配队角色（排除已计入的S/A级角色）
+  // 完整配队角色（排除已计入的S级角色）
   var teamCharNames = {};
   for (var ti = 0; ti < satisfiedTeams.length; ti++) {
     var team = satisfiedTeams[ti];
