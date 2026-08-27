@@ -574,9 +574,11 @@ function getPageHTML() {
     <div class="input-card rise d2" id="panel-lookup">
       <div class="input-row" style="flex-direction:column;gap:12px;">
         <textarea id="product-id" placeholder="粘贴商品链接（螃蟹网/盼之网），如 https://www.pxb7.com/product/2353711688582091796/1 或 https://www.pzds.com/goodsDetails/MC2VGU/6" style="min-height:80px;resize:vertical;"></textarea>
-        <div class="input-row">
-          <button class="eval-btn" id="lookup-btn" onclick="doLookup()" style="width:100%;">估价</button>
+        <div class="input-row" style="gap:8px;">
+          <button class="eval-btn" id="lookup-btn" onclick="doLookup()" style="flex:1;">估价</button>
+          <button class="clear-btn" id="clear-lookup-btn" onclick="clearLookupInput()" style="flex-shrink:0;width:60px;padding:0;border:1px solid #ddd;background:#f9f9f9;color:#666;border-radius:8px;cursor:pointer;font-size:14px;">清空</button>
         </div>
+        <div id="config-info" style="font-size:12px;color:#888;margin-top:4px;"></div>
       </div>
     </div>
 
@@ -676,7 +678,34 @@ function getPageHTML() {
           localStorage.setItem('zzz_config_updated_at', serverUpdatedAt);
         }
       }
+      updateConfigInfo();
     }).catch(() => {});
+
+    // 立即显示已存储的加载时间（不等fetch完成）
+    updateConfigInfo();
+
+    function clearLookupInput() {
+      document.getElementById('product-id').value = '';
+      document.getElementById('product-id').focus();
+    }
+
+    function updateConfigInfo() {
+      var el = document.getElementById('config-info');
+      if (!el) return;
+      var storedAt = localStorage.getItem('zzz_config_updated_at');
+      if (!storedAt) { el.innerHTML = ''; return; }
+      var date = new Date(storedAt);
+      if (isNaN(date.getTime())) { el.innerHTML = ''; return; }
+      var now = new Date();
+      var diffMs = now - date;
+      var diffDays = Math.floor(diffMs / (86400000));
+      var dateStr = date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      var html = '算法规则加载时间：' + dateStr;
+      if (diffDays >= 3) {
+        html += ' <span style="color:#e65100;font-weight:600;">已超' + diffDays + '天未刷新，建议定期刷新页面获取最新规则</span>';
+      }
+      el.innerHTML = html;
+    }
 
     // ============================================================
     // 估值规则设置按钮状态更新
