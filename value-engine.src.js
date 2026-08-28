@@ -463,7 +463,8 @@ function parseCharacters(section) {
       constNum = 0;
     }
 
-    // 验证是否为已知角色（别名归一化）
+    // 验证是否为已知角色（别名归一化，去除间隔号·・）
+    name = name.replace(/[·・]/g, '');
     const canonicalName = CHAR_ALIASES[name] || name;
     const info = CHAR_LOOKUP[canonicalName];
     if (info) {
@@ -491,6 +492,7 @@ function parseCharacters(section) {
  * 从完整文本中查找角色（无明确段落时的回退方案）
  */
 function findCharsInText(text) {
+  text = text.replace(/[·・]/g, '');
   const chars = [];
   for (const [tier, info] of Object.entries(CHAR_TIERS)) {
     for (const name of info.chars) {
