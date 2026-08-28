@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.1.8
-// @description  监控螃蟹网+盼之+氪金兽+7881鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
+// @version      3.2.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -23,6 +23,7 @@
 // @connect      search.7881.com
 // @connect      gw.7881.com
 // @connect      www.youxigujia.cn
+// @connect      www.swcbg.com
 // @connect      api-pc.pxb7.com
 // @run-at       document-start
 // ==/UserScript==
@@ -62,6 +63,7 @@
         kjsCateId: 7996,
         qy: 'A5752',
         qyGtid: '100003',
+        ysy: 152,
       },
       keywords: {
         charSections: ['五星角色', '按角色', '满命角色', '三命角色', '二命角色', '一命角色'],                     // 角色段落关键词（多段落合并解析）
@@ -247,6 +249,7 @@
         kjsCateId: 2299,
         qy: 'A5754',
         qyGtid: '100003',
+        ysy: 0,
       },
       keywords: {
         charSections: ['S级代理人', 'A级代理人', '限定代理人', '代理人', '五星角色'],
@@ -809,6 +812,15 @@
     };
   }
 
+  // 易手游平台URL（结构化API，返回faction/baoshi字段）
+  function ysyUrls() {
+    return {
+      api: 'https://www.swcbg.com/api/Index/shopList',
+      detailApi: 'https://www.swcbg.com/api/Index/shopDetail',
+      detail: 'https://pc.swcbg.com/',
+    };
+  }
+
   // 服务器同步URL（推送配置云端同步）
   const SYNC_URLS = {
     sync: 'https://www.youxigujia.cn/api/push-config/sync',
@@ -855,6 +867,7 @@
   let pzdsEnabled = false;      // 盼之平台监控开关
   let kjsEnabled = false;       // 氪金兽平台监控开关
   let qyEnabled = false;        // 7881平台监控开关
+  let ysyEnabled = false;       // 易手游平台监控开关
   // 检查已售设置
   let soldCheckRatio = 40;       // 检查已售的性价比阈值(%)
   let soldCheckDiff = 0;         // 检查已售的差价阈值(元)
@@ -2644,6 +2657,9 @@
     if (row.platform === 'qy') {
       return qyUrls().detail + row.productId.replace(/^qy_/, '') + '.html';
     }
+    if (row.platform === 'ysy') {
+      return ysyUrls().detail + 'detail/' + row.productId.replace(/^ysy_/, '');
+    }
     return 'https://www.pxb7.com/product/' + row.productId + '/1';
   }
 
@@ -4136,6 +4152,373 @@
     console.log('[鸣潮监控-7881] 批量处理完成，表格共' + tableData.length + '行');
   }
 
+  // ============================================================
+  // 易手游平台监控（结构化API，faction/baoshi字段 → 标准文本）
+  // ============================================================
+
+  /**
+   * 归一化易手游角色/武器名（去除分隔符，修正错别字）
+   * 易手游用"秧秧-玄翎"格式，需转为"秧秧玄翎"；"陆・赫斯"→"陆赫斯"；"掣愧之手"→"掣傀之手"
+   */
+  function ysyNormalizeName(name) {
+    return name.replace(/[-·・]/g, '').replace(/愧/g, '傀');
+  }
+
+  /**
+   * 从faction/baoshi字段值中提取命座/精炼数字
+   * 支持 "0命"/"3命" → 3; {"value":"0","name":"0命"} → 0; "精1" → 1
+   */
+  function ysyExtractNum(val) {
+    if (val == null) return 0;
+    if (typeof val === 'string') {
+      var m = val.match(/(\d+)/);
+      return m ? parseInt(m[1], 10) : 0;
+    }
+    if (typeof val === 'object') {
+      var s = val.name || val.value || '';
+      var m = s.match(/(\d+)/);
+      return m ? parseInt(m[1], 10) : 0;
+    }
+    return 0;
+  }
+
+  /**
+   * 将易手游详情数据转换为标准文本（供parseAccountInfo解析）
+   * faction: {"秧秧-玄翎":"0命","绯雪":"3命"} → "五星角色:0命秧秧玄翎,3命绯雪"
+   * baoshi: {"天之苍苍":"精1","灼霜":"精5"} → "五星武器:精1天之苍苍,精5灼霜"
+   */
+  function ysyBuildTitle(detail) {
+    var parts = [];
+
+    // 等级
+    if (detail.grade) parts.push(G().levelKeywords[0] + ':' + detail.grade);
+
+    // 角色（faction字段）
+    if (detail.faction) {
+      var factionData = detail.faction;
+      if (typeof factionData === 'string') { try { factionData = JSON.parse(factionData); } catch (e) { factionData = {}; } }
+      var charParts = [];
+      for (var name in factionData) {
+        if (!factionData.hasOwnProperty(name)) continue;
+        var normName = ysyNormalizeName(name);
+        var constNum = ysyExtractNum(factionData[name]);
+        var constStr = constNum > 0 ? constNum + G().constUnitDisplay : '0' + G().constUnitDisplay;
+        charParts.push(constStr + normName);
+      }
+      if (charParts.length > 0) parts.push(G().keywords.charSections[0] + ':' + charParts.join(','));
+    }
+
+    // 武器（baoshi字段）
+    if (detail.baoshi) {
+      var baoshiData = detail.baoshi;
+      if (typeof baoshiData === 'string') { try { baoshiData = JSON.parse(baoshiData); } catch (e) { baoshiData = {}; } }
+      var weaponParts = [];
+      for (var wname in baoshiData) {
+        if (!baoshiData.hasOwnProperty(wname)) continue;
+        var normWName = ysyNormalizeName(wname);
+        var refineNum = ysyExtractNum(baoshiData[wname]);
+        weaponParts.push('精' + (refineNum || 1) + normWName);
+      }
+      if (weaponParts.length > 0) parts.push(G().keywords.weaponSections[0] + ':' + weaponParts.join(','));
+    }
+
+    // 资源（content字段映射）
+    var resMap = { content6: '星声', content8: '月相', content9: '余波珊瑚', content4: '浮金波纹', content5: '铸潮波纹' };
+    var resNames = resourceNames();
+    var resParts = [];
+    for (var ck in resMap) {
+      if (detail[ck] && resNames.indexOf(resMap[ck]) >= 0) resParts.push(resMap[ck] + '数量:' + detail[ck]);
+    }
+    // 绝区零资源映射
+    if (G().key === 'zzz') {
+      var zzzMap = { content6: '菲林', content8: '母带', content9: '丁尼', content4: '调查记录' };
+      for (var zk in zzzMap) {
+        if (detail[zk] && resNames.indexOf(zzzMap[zk]) >= 0) resParts.push(zzzMap[zk] + '数量:' + detail[zk]);
+      }
+    }
+    if (resParts.length > 0) parts.push(resParts.join(' '));
+
+    // 黄数
+    if (detail.content7) parts.push('黄数:' + detail.content7);
+
+    // 服饰
+    if (detail.content10) {
+      var outfitData = detail.content10;
+      if (typeof outfitData === 'string') { try { outfitData = JSON.parse(outfitData); } catch (e) { outfitData = []; } }
+      if (Array.isArray(outfitData) && outfitData.length > 0) parts.push('服饰:' + outfitData.join(','));
+    }
+
+    return parts.join(' ');
+  }
+
+  /**
+   * 通过易手游API抓取商品列表（按最新发布排序）
+   * @param {number} page - 页码（从1开始）
+   * @returns {Promise<Array>} 商品数组
+   */
+  function fetchYSYList(page) {
+    return new Promise(function(resolve) {
+      var body = {
+        oaid: 0, token: '', game_id: G().platformIds.ysy, page: page,
+        search_order: '4', serach_title: '', search_price_min: '', search_price_max: '',
+        search_client: '', search_server: '', drawer_more: [],
+        version: '3.0.1', serach_gd_screen: [], serach_hot_screen: [],
+        channel: '', shop_type: -1, shop_type_2: '', prop_type: 1,
+      };
+      console.log('[监控-易手游] API请求: ' + ysyUrls().api + ' (page=' + page + ')');
+      GM_xmlhttpRequest({
+        method: 'POST', url: ysyUrls().api, timeout: 15000,
+        headers: { 'Content-Type': 'application/json', 'Origin': 'https://pc.swcbg.com', 'Referer': 'https://pc.swcbg.com/' },
+        data: JSON.stringify(body),
+        onload: function(response) {
+          if (response.status !== 200) { console.warn('[监控-易手游] HTTP ' + response.status); resolve([]); return; }
+          try {
+            var json = JSON.parse(response.responseText);
+            var list = [];
+            if (json.data && Array.isArray(json.data)) list = json.data;
+            else if (json.data && json.data.data && Array.isArray(json.data.data)) list = json.data.data;
+            else if (json.data && json.data.list && Array.isArray(json.data.list)) list = json.data.list;
+            else if (Array.isArray(json.list)) list = json.list;
+            resolve(extractYSYProducts(list));
+          } catch (e) { console.error('[监控-易手游] JSON解析失败:', e); resolve([]); }
+        },
+        onerror: function(err) { console.error('[监控-易手游] 请求失败:', err); resolve([]); },
+        ontimeout: function() { console.error('[监控-易手游] 请求超时'); resolve([]); }
+      });
+    });
+  }
+
+  /**
+   * 抓取易手游商品详情（获取faction/baoshi结构化数据）
+   * @param {string} id - 商品ID
+   * @returns {Promise<object|null>} 详情数据
+   */
+  function fetchYSYDetail(id) {
+    return new Promise(function(resolve) {
+      var body = { oaid: 0, token: '', id: String(id), is_search: '', statistics_id: 0,
+        is_off_list: 0, o_type: 3, is_blind_box: 0, shop_source: '2', cut_id: 0, order_id: '' };
+      GM_xmlhttpRequest({
+        method: 'POST', url: ysyUrls().detailApi, timeout: 10000,
+        headers: { 'Content-Type': 'application/json', 'Origin': 'https://pc.swcbg.com', 'Referer': 'https://pc.swcbg.com/' },
+        data: JSON.stringify(body),
+        onload: function(response) {
+          if (response.status !== 200) { resolve(null); return; }
+          try { var json = JSON.parse(response.responseText); resolve(json.data || json); } catch (e) { resolve(null); }
+        },
+        onerror: function() { resolve(null); },
+        ontimeout: function() { resolve(null); }
+      });
+    });
+  }
+
+  /**
+   * 从易手游API响应中提取商品列表
+   * @param {Array} list - API返回的商品数组
+   * @returns {Array} 商品数组
+   */
+  function extractYSYProducts(list) {
+    var products = [];
+    if (!list || !Array.isArray(list)) { console.log('[监控-易手游] 解析到0条商品'); return products; }
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var id = item.id || item.shop_id || item.shopId;
+      var price = parseFloat(item.price || item.shop_price || item.shopPrice) || 0;
+      if (!id || price <= 0) continue;
+
+      var title = item.title || item.shop_title || item.shopTitle || '';
+      var serverStr = item.server_name || item.serverName || item.game_name || item.gameName || '';
+      var timeStr = '';
+      var ct = item.create_time || item.createdAt || item.update_time || item.updatedAt;
+      if (ct) {
+        var d = new Date(ct.replace(/-/g, '/'));
+        if (!isNaN(d)) timeStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      }
+
+      products.push({
+        productId: 'ysy_' + id,
+        productUniqueNo: String(id),
+        price: price,
+        showTitle: title,
+        onStandTimeStr: timeStr,
+        server: serverStr,
+        platform: 'ysy',
+        rawItem: item,
+      });
+    }
+    console.log('[监控-易手游] 解析到' + products.length + '条商品');
+    return products;
+  }
+
+  /**
+   * 处理易手游平台单个商品
+   */
+  function processYSYProduct(product) {
+    var productId = product.productId;
+    if (!productId) return;
+
+    var showTitle = product.showTitle || '';
+    var price = product.price || 0;
+
+    // 去重：已见商品检查价格变化
+    if (seenIds.indexOf(productId) >= 0) {
+      var existRow = tableData.find(function(r) { return r.productId === productId; });
+      if (!existRow) {
+        var idx = seenIds.indexOf(productId);
+        if (idx > -1) seenIds.splice(idx, 1);
+      } else {
+        if (price < existRow.price) {
+          if (!existRow.priceHistory) existRow.priceHistory = [];
+          existRow.priceHistory.push({ price: existRow.price, time: Date.now() });
+          var oldPrice = existRow.price;
+          existRow.price = price;
+          if (existRow.value && existRow.value > 0) existRow.ratio = ((existRow.value - price) / price) * 100;
+          existRow.priceDrop = (existRow.priceDrop || 0) + (oldPrice - price);
+          existRow.status = '降价';
+          if (!batchMode) { sortTableData(); saveTableData(); refreshTableDisplay(); }
+          console.log('[监控-易手游] 降价: ' + product.productUniqueNo + ' ¥' + oldPrice + ' → ¥' + price);
+          if (notifyEnabled && (getRowValuation(existRow).level || 0) >= G().minLevel && existRow.value >= notifyMinValue && price >= notifyMinPrice &&
+              (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+              (existRow.value - price) > getNotifyDiffThreshold(existRow.value) && !notifiedIds.includes(productId + '_drop')) {
+            var dropResult = buildNotifyContent('降价', existRow, oldPrice, price);
+            notify(productId + '_drop', dropResult.title, dropResult.body, dropResult.mdBody);
+            notifiedIds.push(productId + '_drop');
+            if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          }
+        }
+        return;
+      }
+    }
+    seenIds.push(productId);
+    if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    // 解析和估值
+    var parsed = parseAccountInfo(showTitle);
+    var valuation = calculateValue(parsed, price);
+
+    console.log('[监控-易手游] 解析结果: ' + product.productUniqueNo +
+      ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
+      ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
+      ' | Lv.' + valuation.level +
+      ' | 估值¥' + valuation.totalValue.toFixed(0) +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
+
+    if (valuation.totalValue < 300) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
+    if (valuation.levelFound && valuation.level < G().minLevel) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
+
+    // 内容指纹去重
+    var fingerprint = generateFingerprint(parsed);
+    var dupRow = tableData.find(function(r) { return r.fingerprint === fingerprint && r.productId !== productId; });
+    if (dupRow) {
+      console.log('[监控-易手游] 重复(指纹匹配): ' + product.productUniqueNo + ' ¥' + price + ' → 已有:' + dupRow.productId + ' ¥' + dupRow.price);
+      if (price < dupRow.price) {
+        if (!dupRow.priceHistory) dupRow.priceHistory = [];
+        dupRow.priceHistory.push({ price: dupRow.price, time: Date.now() });
+        var dupOldPrice = dupRow.price;
+        dupRow.price = price;
+        dupRow.productId = productId;
+        if (product.productUniqueNo) dupRow.productUniqueNo = product.productUniqueNo;
+        dupRow.platform = 'ysy';
+        dupRow.ratio = ((dupRow.value - price) / price) * 100;
+        dupRow.priceDrop = (dupRow.priceDrop || 0) + (dupOldPrice - price);
+        dupRow.status = '降价';
+        if (!batchMode) { sortTableData(); saveTableData(); refreshTableDisplay(); }
+        console.log('[监控-易手游] 指纹重复更新低价: ¥' + dupOldPrice + ' → ¥' + price);
+        if (notifyEnabled && (getRowValuation(dupRow).level || 0) >= G().minLevel && dupRow.value >= notifyMinValue && price >= notifyMinPrice &&
+            (notifyMaxPrice <= 0 || price <= notifyMaxPrice) &&
+            (dupRow.value - price) > getNotifyDiffThreshold(dupRow.value) && !notifiedIds.includes(productId + '_drop')) {
+          var dupDropResult = buildNotifyContent('降价', dupRow, dupOldPrice, price);
+          notify(productId + '_drop', dupDropResult.title, dupDropResult.body, dupDropResult.mdBody);
+          notifiedIds.push(productId + '_drop');
+          if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+        }
+      }
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
+
+    addTableRow({
+      productId: productId,
+      productUniqueNo: product.productUniqueNo || '',
+      fingerprint: fingerprint,
+      showTitle: showTitle,
+      price: price,
+      value: valuation.totalValue,
+      ratio: valuation.ratio,
+      status: '初估',
+      platform: 'ysy',
+      effectiveYellow: valuation.effectiveYellow || 0,
+      parsed: {
+        yellowCount: parsed.yellowCount,
+        pulls: Math.round(parsed.pulls * 10) / 10,
+        motoCount: parsed.motoCount,
+        characters: parsed.characters.map(function(c) { return { name: c.name, const: c.const, tier: c.tier, isHot: c.isHot, price: c.price }; }),
+        weapons: parsed.weapons.map(function(w) { return { name: w.name, refine: w.refine }; }),
+      },
+      valuation: valuation,
+      listTime: Date.now(),
+      firstSeen: Date.now(),
+    });
+
+    console.log('[监控-易手游] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
+    tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, product.productUniqueNo || '', 'ysy');
+  }
+
+  /**
+   * 处理易手游商品列表（批量模式）
+   */
+  async function handleYSYListResponse(list) {
+    if (!Array.isArray(list)) return;
+    console.log('[监控-易手游] handleYSYListResponse: 收到' + list.length + '条商品，当前表格' + tableData.length + '行');
+    list.forEach(function(p) {
+      console.log('  - ' + (p.productUniqueNo || '') + ' ¥' + (p.price || 0).toFixed(0) + ' [' + (p.onStandTimeStr || '') + '] ' + (p.showTitle || '').substring(0, 60));
+    });
+
+    // 为新商品批量获取详情数据（faction/baoshi结构化数据）
+    var newProducts = list.filter(function(p) { return !seenIds.includes(p.productId); });
+    if (newProducts.length > 0) {
+      console.log('[监控-易手游] 为' + newProducts.length + '个新商品获取详情数据');
+      var concurrency = 5;
+      for (var i = 0; i < newProducts.length; i += concurrency) {
+        var batch = newProducts.slice(i, i + concurrency);
+        await Promise.all(batch.map(async function(p) {
+          var detail = await fetchYSYDetail(p.productUniqueNo);
+          if (!detail) return;
+
+          // 用结构化数据构建标准文本
+          var builtTitle = ysyBuildTitle(detail);
+          if (builtTitle) {
+            // 如果列表API返回了title且不含角色信息，用构建的文本替换
+            if (p.showTitle && p.showTitle.length > 20) {
+              p.showTitle = p.showTitle + ' ' + builtTitle;
+            } else {
+              p.showTitle = builtTitle;
+            }
+            console.log('[监控-易手游] 详情补充: ' + p.productUniqueNo + ' → ' + builtTitle.substring(0, 80));
+          }
+        }));
+      }
+    }
+
+    batchMode = true;
+    try {
+      for (var j = 0; j < list.length; j++) {
+        try { processYSYProduct(list[j]); } catch (e) {
+          console.error('[监控-易手游] 处理商品失败: ' + (list[j].productUniqueNo || list[j].productId), e);
+        }
+      }
+    } finally { batchMode = false; }
+    trimTableData();
+    sortTableData();
+    saveTableData();
+    saveStorage(STORAGE_KEYS.seen, seenIds);
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[监控-易手游] 批量处理完成，表格共' + tableData.length + '行');
+  }
+
   /**
    * 调用详情API
    */
@@ -4586,7 +4969,7 @@
       valuation: valuation,
       showTitle: showTitle,
       productUniqueNo: productUniqueNo,
-      platform: platform === '秒杀' ? '' : (productId.indexOf('pz_') === 0 ? 'pzds' : (productId.indexOf('kjs_') === 0 ? 'kjs' : (productId.indexOf('qy_') === 0 ? 'qy' : ''))),
+      platform: platform === '秒杀' ? '' : (productId.indexOf('pz_') === 0 ? 'pzds' : (productId.indexOf('kjs_') === 0 ? 'kjs' : (productId.indexOf('qy_') === 0 ? 'qy' : (productId.indexOf('ysy_') === 0 ? 'ysy' : '')))),
     };
     const { title, body, mdBody } = buildNotifyContent(prefix, notifyRow, null, price, matchedCharNames || undefined);
     notify(productId, title, body, mdBody);
@@ -4661,7 +5044,7 @@
     updateBottomBar();
 
     // 盼之/氪金兽平台商品跳过详情API（使用列表页数据的初估结果）
-    if (item.productId && (item.productId.indexOf('pz_') === 0 || item.productId.indexOf('kjs_') === 0 || item.productId.indexOf('qy_') === 0)) {
+    if (item.productId && (item.productId.indexOf('pz_') === 0 || item.productId.indexOf('kjs_') === 0 || item.productId.indexOf('qy_') === 0 || item.productId.indexOf('ysy_') === 0)) {
       processNextDetail();
       return;
     }
@@ -4779,7 +5162,7 @@
               valuation: valuation,
               showTitle: showTitle,
               productUniqueNo: productUniqueNo,
-              platform: item.productId.indexOf('pz_') === 0 ? 'pzds' : (item.productId.indexOf('kjs_') === 0 ? 'kjs' : (item.productId.indexOf('qy_') === 0 ? 'qy' : '')),
+              platform: item.productId.indexOf('pz_') === 0 ? 'pzds' : (item.productId.indexOf('kjs_') === 0 ? 'kjs' : (item.productId.indexOf('qy_') === 0 ? 'qy' : (item.productId.indexOf('ysy_') === 0 ? 'ysy' : ''))),
             };
             const { title: notifyTitle, body: notifyBody, mdBody: notifyMd } = buildNotifyContent(prefix, notifyRow, null, notifyPrice, matchedCharNames || undefined);
             notify(item.productId, notifyTitle, notifyBody, notifyMd);
@@ -5611,6 +5994,12 @@
         '<input type="checkbox" id="mwQyEnabled" ' + (qyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控7881平台（search.7881.com' + G().name + '成品号）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取7881商品列表（MD5签名认证），按最新发布排序</div>' +
+        // 易手游平台监控
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwYsyEnabled" ' + (ysyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控易手游平台（swcbg.com' + G().name + '成品号）</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取易手游商品列表（结构化角色武器数据），按最新发布排序</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -6003,6 +6392,7 @@
         pzdsEnabled = box.querySelector('#mwPzdsEnabled').checked;
         kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
         qyEnabled = box.querySelector('#mwQyEnabled').checked;
+        ysyEnabled = box.querySelector('#mwYsyEnabled').checked;
         soldCheckRatio = parseFloat(box.querySelector('#mwSoldCheckRatio').value) || 0;
         soldCheckDiff = parseFloat(box.querySelector('#mwSoldCheckDiff').value) || 0;
         soldCheckMinValue = parseFloat(box.querySelector('#mwSoldCheckMinValue').value) || 0;
@@ -6423,6 +6813,8 @@
         ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#a855f7;background:rgba(168,85,247,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="氪金兽">兽</span>'
         : row.platform === 'qy'
         ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#3b82f6;background:rgba(59,130,246,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="7881">78</span>'
+        : row.platform === 'ysy'
+        ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#14b8a6;background:rgba(20,184,166,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="易手游">易</span>'
         : '<span style="display:inline-block;font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="螃蟹网">蟹</span>';
 
       html += '<tr class="' + rowClass + '" data-product-id="' + row.productId + '" title="' + tooltip + '">' +
@@ -6831,6 +7223,8 @@
           ? '<span style="font-size:10px;font-weight:600;color:#a855f7;background:rgba(168,85,247,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">氪金兽</span>'
           : row.platform === 'qy'
           ? '<span style="font-size:10px;font-weight:600;color:#3b82f6;background:rgba(59,130,246,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">7881</span>'
+          : row.platform === 'ysy'
+          ? '<span style="font-size:10px;font-weight:600;color:#14b8a6;background:rgba(20,184,166,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">易手游</span>'
           : '<span style="font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 5px;border-radius:3px;margin-right:6px;">螃蟹</span>')
         + '<a href="' + productLink + '" target="_blank" style="font-size:11px;color:#6a9fff;text-decoration:none;cursor:pointer;" title="点击查看账号详情">' + (row.productUniqueNo || String(row.productId).slice(-6)) + ' 🔗</a>' +
         '<span id="mw-hover-close" style="font-size:18px;color:#666;cursor:pointer;line-height:1;padding:2px 6px;margin-left:8px;border-radius:4px;">✕</span></div>' +
@@ -8930,6 +9324,9 @@ function openSettings() {
     } else if (productId.indexOf('kjs_') === 0) {
       // 氪金兽无自动付款链接，跳转商品详情页
       buyUrl = KJS_URLS.detail + (productUniqueNo || productId.replace(/^kjs_/, ''));
+    } else if (productId.indexOf('ysy_') === 0) {
+      // 易手游无自动付款链接，跳转商品详情页
+      buyUrl = ysyUrls().detail + 'detail/' + (productUniqueNo || productId.replace(/^ysy_/, ''));
     } else {
       buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
     }
@@ -9060,7 +9457,7 @@ function openSettings() {
     }
 
     // ===== 标题：差价 + 现价 + 估价 + 类型 + 平台 =====
-    var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : '螃蟹网'));
+    var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : (row.platform === 'ysy' ? '易手游' : '螃蟹网')));
     var title = '差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估价¥' + value.toFixed(0) + ' ' + prefix + ' ' + platformName + '·' + G().name;
     if (suffix) title += ' ' + suffix;
 
@@ -9179,7 +9576,7 @@ function openSettings() {
     // ===== 纯文本版（桌面通知用）=====
     var lines = [];
     lines.push('💰 价格信息');
-    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : '螃蟹网') + ')');
+    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : '螃蟹网') + ')');
     lines.push(priceInfo);
     lines.push('估值¥' + value.toFixed(0) + ' 差价¥' + diff.toFixed(0) + ' 性价比' + ratio.toFixed(1) + '%');
     lines.push('');
@@ -9228,7 +9625,7 @@ function openSettings() {
     // 价格模块
     mdLines.push('**💰 价格信息**');
     mdLines.push('');
-    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : '螃蟹网') + ')');
+    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : '螃蟹网') + ')');
     if (oldPrice != null && oldPrice !== newPrice) {
       mdLines.push('原价 ~~¥' + oldPrice.toFixed(0) + '~~ → <font color="#e94560">**现价 ¥' + newPrice.toFixed(0) + '**</font>' + (dropAmtStr ? ' 🔥**' + dropAmtStr + '**' : ''));
     } else {
@@ -9426,7 +9823,8 @@ function openSettings() {
       ? pzdsUrls().detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
       : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
         : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
-        : 'https://www.pxb7.com/product/' + cleanId + '/1'));
+        : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + 'detail/' + cleanId.replace(/^ysy_/, '')
+        : 'https://www.pxb7.com/product/' + cleanId + '/1')));
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
 
@@ -9500,7 +9898,8 @@ function openSettings() {
       ? pzdsUrls().detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
       : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
         : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
-        : 'https://www.pxb7.com/product/' + cleanId + '/1'));
+        : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + 'detail/' + cleanId.replace(/^ysy_/, '')
+        : 'https://www.pxb7.com/product/' + cleanId + '/1')));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
     // Server酱推送（微信）- 支持多个SendKey
@@ -9910,6 +10309,7 @@ function openSettings() {
       pzdsEnabled: pzdsEnabled,
       kjsEnabled: kjsEnabled,
       qyEnabled: qyEnabled,
+      ysyEnabled: ysyEnabled,
       soldCheckRatio: soldCheckRatio,
       soldCheckDiff: soldCheckDiff,
       soldCheckMinValue: soldCheckMinValue,
@@ -10087,6 +10487,19 @@ function openSettings() {
           console.error('[鸣潮监控-7881] 扫描失败:', e);
         }
       }
+
+      // 易手游平台扫描（结构化API，按最新发布排序）
+      if (ysyEnabled && G().platformIds.ysy > 0) {
+        try {
+          const ysyProducts = await fetchYSYList(1);
+          if (ysyProducts.length > 0) {
+            await handleYSYListResponse(ysyProducts);
+            console.log('[鸣潮监控-易手游] 扫描完成，获取' + ysyProducts.length + '条');
+          }
+        } catch (e) {
+          console.error('[鸣潮监控-易手游] 扫描失败:', e);
+        }
+      }
     } catch (e) {
       lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
       console.error('[鸣潮监控] 列表刷新失败:', e);
@@ -10150,6 +10563,7 @@ function openSettings() {
     pzdsEnabled = savedState.pzdsEnabled != null ? savedState.pzdsEnabled : false;
     kjsEnabled = savedState.kjsEnabled != null ? savedState.kjsEnabled : false;
     qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
+      ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
     soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 40;
     soldCheckDiff = savedState.soldCheckDiff != null ? savedState.soldCheckDiff : 0;
     soldCheckMinValue = savedState.soldCheckMinValue != null ? savedState.soldCheckMinValue : 0;
