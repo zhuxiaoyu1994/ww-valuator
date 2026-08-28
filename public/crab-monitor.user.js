@@ -817,7 +817,7 @@
     return {
       api: 'https://www.swcbg.com/api/Index/shopList',
       detailApi: 'https://www.swcbg.com/api/Index/shopDetail',
-      detail: 'https://pc.swcbg.com/',
+      detail: 'https://pc.swcbg.com/pages/index/newShopDetail?shop_id=',
     };
   }
 
@@ -2658,7 +2658,7 @@
       return qyUrls().detail + row.productId.replace(/^qy_/, '') + '.html';
     }
     if (row.platform === 'ysy') {
-      return ysyUrls().detail + 'detail/' + row.productId.replace(/^ysy_/, '');
+      return ysyUrls().detail + row.productId.replace(/^ysy_/, '') + '&shop_source=2';
     }
     return 'https://www.pxb7.com/product/' + row.productId + '/1';
   }
@@ -9306,7 +9306,7 @@ function openSettings() {
       buyUrl = KJS_URLS.detail + (productUniqueNo || productId.replace(/^kjs_/, ''));
     } else if (productId.indexOf('ysy_') === 0) {
       // 易手游无自动付款链接，跳转商品详情页
-      buyUrl = ysyUrls().detail + 'detail/' + (productUniqueNo || productId.replace(/^ysy_/, ''));
+      buyUrl = ysyUrls().detail + (productUniqueNo || productId.replace(/^ysy_/, '')) + '&shop_source=2';
     } else {
       buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
     }
@@ -9803,7 +9803,7 @@ function openSettings() {
       ? pzdsUrls().detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
       : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
         : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
-        : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + 'detail/' + cleanId.replace(/^ysy_/, '')
+        : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + cleanId.replace(/^ysy_/, '') + '&shop_source=2'
         : 'https://www.pxb7.com/product/' + cleanId + '/1')));
     // 移除旧横幅
     if (alertBannerEl) alertBannerEl.remove();
@@ -9878,7 +9878,7 @@ function openSettings() {
       ? pzdsUrls().detail + '/' + cleanId.replace(/^pz_/, '') + '/6'
       : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
         : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
-        : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + 'detail/' + cleanId.replace(/^ysy_/, '')
+        : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + cleanId.replace(/^ysy_/, '') + '&shop_source=2'
         : 'https://www.pxb7.com/product/' + cleanId + '/1')));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
