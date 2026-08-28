@@ -4166,10 +4166,11 @@
 
   /**
    * 从faction/baoshi字段值中提取命座/精炼数字
-   * 支持 "0命"/"3命" → 3; {"value":"0","name":"0命"} → 0; "精1" → 1
+   * 支持 6(number) → 6; "0命"/"3"(string) → 3; {"value":"0","name":"0命"} → 0
    */
   function ysyExtractNum(val) {
     if (val == null) return 0;
+    if (typeof val === 'number') return val;
     if (typeof val === 'string') {
       var m = val.match(/(\d+)/);
       return m ? parseInt(m[1], 10) : 0;
@@ -4274,11 +4275,8 @@
           if (response.status !== 200) { console.warn('[监控-易手游] HTTP ' + response.status); resolve([]); return; }
           try {
             var json = JSON.parse(response.responseText);
-            var list = [];
-            if (json.data && Array.isArray(json.data)) list = json.data;
-            else if (json.data && json.data.data && Array.isArray(json.data.data)) list = json.data.data;
-            else if (json.data && json.data.list && Array.isArray(json.data.list)) list = json.data.list;
-            else if (Array.isArray(json.list)) list = json.list;
+            if (json.status !== 1) { console.warn('[监控-易手游] API返回异常: status=' + json.status + ' info=' + (json.info || '')); resolve([]); return; }
+            var list = Array.isArray(json.data) ? json.data : [];
             resolve(extractYSYProducts(list));
           } catch (e) { console.error('[监控-易手游] JSON解析失败:', e); resolve([]); }
         },
@@ -4326,19 +4324,25 @@
       if (!id || price <= 0) continue;
 
       var title = item.title || item.shop_title || item.shopTitle || '';
-      var serverStr = item.server_name || item.serverName || item.game_name || item.gameName || '';
+      var serverStr = item.server || item.server_name || item.serverName || item.game_name || item.gameName || '';
       var timeStr = '';
-      var ct = item.create_time || item.createdAt || item.update_time || item.updatedAt;
+      var ct = item.publist_time || item.create_time;
       if (ct) {
-        var d = new Date(ct.replace(/-/g, '/'));
-        if (!isNaN(d)) timeStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        var ts = parseInt(ct, 10);
+        if (!isNaN(ts)) {
+          var d = new Date(ts * 1000);
+          if (!isNaN(d)) timeStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        }
       }
+
+      // 列表API已包含faction/baoshi结构化数据，直接构建标准文本
+      var builtTitle = ysyBuildTitle(item);
 
       products.push({
         productId: 'ysy_' + id,
         productUniqueNo: String(id),
         price: price,
-        showTitle: title,
+        showTitle: builtTitle || title,
         onStandTimeStr: timeStr,
         server: serverStr,
         platform: 'ysy',
@@ -4476,31 +4480,7 @@
       console.log('  - ' + (p.productUniqueNo || '') + ' ¥' + (p.price || 0).toFixed(0) + ' [' + (p.onStandTimeStr || '') + '] ' + (p.showTitle || '').substring(0, 60));
     });
 
-    // 为新商品批量获取详情数据（faction/baoshi结构化数据）
-    var newProducts = list.filter(function(p) { return !seenIds.includes(p.productId); });
-    if (newProducts.length > 0) {
-      console.log('[监控-易手游] 为' + newProducts.length + '个新商品获取详情数据');
-      var concurrency = 5;
-      for (var i = 0; i < newProducts.length; i += concurrency) {
-        var batch = newProducts.slice(i, i + concurrency);
-        await Promise.all(batch.map(async function(p) {
-          var detail = await fetchYSYDetail(p.productUniqueNo);
-          if (!detail) return;
-
-          // 用结构化数据构建标准文本
-          var builtTitle = ysyBuildTitle(detail);
-          if (builtTitle) {
-            // 如果列表API返回了title且不含角色信息，用构建的文本替换
-            if (p.showTitle && p.showTitle.length > 20) {
-              p.showTitle = p.showTitle + ' ' + builtTitle;
-            } else {
-              p.showTitle = builtTitle;
-            }
-            console.log('[监控-易手游] 详情补充: ' + p.productUniqueNo + ' → ' + builtTitle.substring(0, 80));
-          }
-        }));
-      }
-    }
+    // 列表API已含faction/baoshi结构化数据（extractYSYProducts中已构建showTitle），无需调用详情API
 
     batchMode = true;
     try {
