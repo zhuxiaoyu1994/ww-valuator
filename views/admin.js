@@ -466,22 +466,17 @@ function getAdminPage() {
   </div>
 
 <script>
-  // 在value-settings.js加载前先定义登录函数（避免大文件加载期间点击登录报doLogin未定义）
+  // 轻量早期登录脚本：页面刚渲染就能响应登录，不依赖任何外部文件
   (function() {
     let loginPending = false;
-    let loginInited = false;
 
     function setLoginLoading(loading) {
       var btn = document.getElementById('login-btn');
-      var err = document.getElementById('login-error');
       if (btn) {
         btn.disabled = loading;
         btn.style.opacity = loading ? '0.6' : '1';
         btn.style.cursor = loading ? 'not-allowed' : 'pointer';
         btn.textContent = loading ? '登录中...' : '登录';
-      }
-      if (err && !loading) {
-        // 不自动隐藏，等结果出来再处理
       }
     }
 
@@ -492,6 +487,16 @@ function getAdminPage() {
         err.style.display = 'block';
       }
       setLoginLoading(false);
+    }
+
+    function doShowDashboard() {
+      var loginBox = document.getElementById('login-box');
+      var dashboard = document.getElementById('dashboard');
+      if (loginBox) loginBox.style.display = 'none';
+      if (dashboard) dashboard.style.display = 'block';
+      setLoginLoading(false);
+      // 标记已登录状态，主脚本加载完后会继续初始化（加载日志等）
+      window.__adminLoggedIn = true;
     }
 
     window.tryLogin = function() {
@@ -505,43 +510,21 @@ function getAdminPage() {
       var errEl = document.getElementById('login-error');
       if (errEl) errEl.style.display = 'none';
 
-      // 如果主脚本已加载，直接走完整登录流程
-      if (typeof window._adminDoLogin === 'function') {
-        window._adminDoLogin(pw).then(function() {
-          loginPending = false;
-          setLoginLoading(false);
-        }).catch(function(e) {
-          loginPending = false;
-          showLoginError(e.message || '网络错误');
-        });
-        return;
-      }
-
-      // 主脚本未加载完，先发请求验证密码（走轻量登录接口）
+      // 走轻量登录接口，仅验证密码，毫秒级返回
       fetch('/admin/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: pw }),
       }).then(function(r) { return r.json(); }).then(function(result) {
+        loginPending = false;
         if (result.success) {
           sessionStorage.setItem('admin_pw', pw);
-          // 等主脚本加载完成后再初始化dashboard
-          var waitCount = 0;
-          var waitInterval = setInterval(function() {
-            waitCount++;
-            if (typeof window._adminInitAfterLogin === 'function') {
-              clearInterval(waitInterval);
-              window._adminInitAfterLogin(result);
-              loginPending = false;
-              setLoginLoading(false);
-            } else if (waitCount > 100) {
-              // 10秒超时，直接刷新页面
-              clearInterval(waitInterval);
-              location.reload();
-            }
-          }, 100);
+          doShowDashboard();
+          // 如果主脚本已加载，触发后续初始化
+          if (typeof window._adminAfterDashboardReady === 'function') {
+            window._adminAfterDashboardReady();
+          }
         } else {
-          loginPending = false;
           showLoginError(result.error || '密码错误');
         }
       }).catch(function() {
@@ -550,32 +533,14 @@ function getAdminPage() {
       });
     };
 
-    // 懒加载value-settings.js（只有打开估值设置时才加载，不阻塞登录）
-    let vsLoading = false;
-    let vsLoaded = false;
-    window._loadValueSettings = function(callback) {
-      if (vsLoaded) { callback && callback(); return; }
-      if (vsLoading) {
-        var check = setInterval(function() {
-          if (vsLoaded) { clearInterval(check); callback && callback(); }
-        }, 50);
-        return;
-      }
-      vsLoading = true;
-      var script = document.createElement('script');
-      script.src = '/public/value-settings.js?v=20260824';
-      script.onerror = function() {
-        vsLoading = false;
-        window.__vsFailed = true;
-        callback && callback();
-      };
-      script.onload = function() {
-        vsLoading = false;
-        vsLoaded = true;
-        callback && callback();
-      };
-      document.head.appendChild(script);
-    };
+    // 自动登录（保存了密码的情况）
+    var savedPw = sessionStorage.getItem('admin_pw');
+    if (savedPw) {
+      var pwEl = document.getElementById('password');
+      if (pwEl) pwEl.value = savedPw;
+      // 延迟一点执行，确保DOM完整
+      setTimeout(function() { window.tryLogin(); }, 50);
+    }
   })();
 </script>
 <script>
@@ -644,11 +609,43 @@ function getAdminPage() {
   // 页面加载时恢复游戏上下文（按钮状态）
   updateGameSwitchUI();
 
-  const savedPw = sessionStorage.getItem('admin_pw');
-  if (savedPw) {
-    document.getElementById('password').value = savedPw;
-    _adminDoLogin(savedPw);
+  // 如果早期脚本已经完成登录，直接做后续初始化（加载日志等）
+  if (window.__adminLoggedIn) {
+    _adminAfterDashboardReady();
+  } else {
+    const savedPw = sessionStorage.getItem('admin_pw');
+    if (savedPw) {
+      document.getElementById('password').value = savedPw;
+      _adminDoLogin(savedPw);
+    }
   }
+
+  // 懒加载value-settings.js（只有打开估值设置时才加载，不阻塞登录）
+  let vsLoading = false;
+  let vsLoaded = false;
+  window._loadValueSettings = function(callback) {
+    if (vsLoaded) { callback && callback(); return; }
+    if (vsLoading) {
+      var check = setInterval(function() {
+        if (vsLoaded) { clearInterval(check); callback && callback(); }
+      }, 50);
+      return;
+    }
+    vsLoading = true;
+    var script = document.createElement('script');
+    script.src = '/public/value-settings.js?v=20260824';
+    script.onerror = function() {
+      vsLoading = false;
+      window.__vsFailed = true;
+      callback && callback();
+    };
+    script.onload = function() {
+      vsLoading = false;
+      vsLoaded = true;
+      callback && callback();
+    };
+    document.head.appendChild(script);
+  };
 
   // 登录主逻辑（走轻量接口，仅验证密码，毫秒级返回）
   async function _adminDoLogin(pw) {
@@ -707,6 +704,7 @@ function getAdminPage() {
   // 暴露给早期脚本调用
   window._adminDoLogin = _adminDoLogin;
   window._adminInitAfterLogin = _adminInitAfterLogin;
+  window._adminAfterDashboardReady = loadLogs; // dashboard已显示时，主脚本加载完后只需要加载日志
 
   // 兼容：保留doLogin函数名（供其他可能的引用使用）
   async function doLogin() {
