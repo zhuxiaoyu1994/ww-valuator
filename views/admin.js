@@ -533,6 +533,17 @@ function getAdminPage() {
       });
     };
 
+    // 简易Tab切换（主脚本加载完后会被完整版本覆盖）
+    window.switchTab = function(name, btn) {
+      var btns = document.querySelectorAll('.tab-btn');
+      for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+      var contents = document.querySelectorAll('.tab-content');
+      for (var j = 0; j < contents.length; j++) contents[j].classList.remove('active');
+      if (btn) btn.classList.add('active');
+      var tab = document.getElementById('tab-' + name);
+      if (tab) tab.classList.add('active');
+    };
+
     // 自动登录（保存了密码的情况）
     var savedPw = sessionStorage.getItem('admin_pw');
     if (savedPw) {

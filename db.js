@@ -122,6 +122,28 @@ async function insertLog(log) {
   } catch (e) {
     console.error('[DB] 写入失败:', e.message);
   }
+
+  // 清理旧日志，只保留最近 200 条（避免数据库无限增长）
+  // 每插入 20 条清理一次，降低开销
+  try {
+    if (!insertLog._counter) insertLog._counter = 0;
+    insertLog._counter++;
+    if (insertLog._counter >= 20) {
+      insertLog._counter = 0;
+      // 按游戏分别保留最近 200 条
+      const games = ['wuwa', 'zzz'];
+      for (const g of games) {
+        await dbClient.execute({
+          sql: `DELETE FROM query_logs WHERE game = ? AND id NOT IN (
+                  SELECT id FROM query_logs WHERE game = ? ORDER BY id DESC LIMIT 200
+                )`,
+          args: [g, g],
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[DB] 清理旧日志失败:', e.message);
+  }
 }
 
 /**

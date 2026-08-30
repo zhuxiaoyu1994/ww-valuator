@@ -86,7 +86,7 @@ function normalizeIp(ip) {
 
 // 查询日志（内存存储，最多保留1000条）
 const queryLogs = [];
-const MAX_LOGS = 1000;
+const MAX_LOGS = 200;
 
 // ============================================================
 // 查询缓存（LRU + TTL，避免重复请求螃蟹网API）
@@ -1171,7 +1171,7 @@ app.post('/admin/api/logs', async (req, res) => {
   // 优先从数据库读取（持久化），回退到内存
   const dbStats = await db.getStats(logGame);
   if (dbStats) {
-    const logs = await db.queryLogs(500, 0, '', logGame);
+    const logs = await db.queryLogs(100, 0, '', logGame);
     return res.json({
       success: true,
       data: {
