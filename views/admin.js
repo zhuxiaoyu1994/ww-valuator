@@ -141,6 +141,11 @@ function getAdminPage() {
   .mon-note { font-size: 12px; color: #666; margin-top: 10px; }
   .mon-ext-link { color: #60a5fa; text-decoration: none; }
   .mon-ext-link:hover { text-decoration: underline; }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
 </style>
 </head>
 <body>
@@ -149,6 +154,14 @@ function getAdminPage() {
     <div class="error" id="login-error">密码错误</div>
     <input type="password" id="password" placeholder="请输入管理密码" onkeydown="if(event.key==='Enter')tryLogin()">
     <button id="login-btn" onclick="tryLogin()">登录</button>
+  </div>
+
+  <div id="loading-box" style="display:none;max-width:400px;margin:100px auto;text-align:center;">
+    <h2 style="color:#4ade80;margin-bottom:16px;">登录成功</h2>
+    <p style="color:#888;font-size:14px;">正在加载功能模块，请稍候...</p>
+    <div style="margin-top:20px;">
+      <div style="display:inline-block;width:32px;height:32px;border:3px solid #2a2a4a;border-top-color:#4ade80;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+    </div>
   </div>
 
   <div class="dashboard" id="dashboard">
@@ -491,9 +504,9 @@ function getAdminPage() {
 
     function doShowDashboard() {
       var loginBox = document.getElementById('login-box');
-      var dashboard = document.getElementById('dashboard');
+      var loadingBox = document.getElementById('loading-box');
       if (loginBox) loginBox.style.display = 'none';
-      if (dashboard) dashboard.style.display = 'block';
+      if (loadingBox) loadingBox.style.display = 'block';
       setLoginLoading(false);
       // 标记已登录状态，主脚本加载完后会继续初始化（加载日志等）
       window.__adminLoggedIn = true;
@@ -620,9 +633,9 @@ function getAdminPage() {
   // 页面加载时恢复游戏上下文（按钮状态）
   updateGameSwitchUI();
 
-  // 如果早期脚本已经完成登录，直接做后续初始化（加载日志等）
+  // 如果早期脚本已经完成登录，直接初始化dashboard
   if (window.__adminLoggedIn) {
-    _adminAfterDashboardReady();
+    _adminInitAfterLogin();
   } else {
     const savedPw = sessionStorage.getItem('admin_pw');
     if (savedPw) {
@@ -692,6 +705,8 @@ function getAdminPage() {
   // 登录成功后初始化dashboard（异步加载日志数据）
   function _adminInitAfterLogin() {
     document.getElementById('login-box').style.display = 'none';
+    var loadingBox = document.getElementById('loading-box');
+    if (loadingBox) loadingBox.style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     // 刷新登录按钮状态
     var btn = document.getElementById('login-btn');
@@ -715,7 +730,7 @@ function getAdminPage() {
   // 暴露给早期脚本调用
   window._adminDoLogin = _adminDoLogin;
   window._adminInitAfterLogin = _adminInitAfterLogin;
-  window._adminAfterDashboardReady = loadLogs; // dashboard已显示时，主脚本加载完后只需要加载日志
+  window._adminAfterDashboardReady = _adminInitAfterLogin; // 早期脚本登录后，主脚本加载完时调用
 
   // 兼容：保留doLogin函数名（供其他可能的引用使用）
   async function doLogin() {
@@ -2184,7 +2199,7 @@ function getAdminPage() {
     list.innerHTML = blocklistData.map(function(ip) {
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #1f1f3a;">' +
         '<span style="font-size:14px;font-family:monospace;color:#e0e0e0;">' + escapeHtml(ip) + '</span>' +
-        '<button onclick="blRemoveIp(\'' + ip.replace(/'/g, "\\'") + '\')" style="padding:5px 14px;border:1px solid #ef4444;border-radius:6px;background:transparent;color:#ef4444;font-size:12px;cursor:pointer;">解封</button>' +
+        '<button onclick="blRemoveIp(\\'' + ip.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 14px;border:1px solid #ef4444;border-radius:6px;background:transparent;color:#ef4444;font-size:12px;cursor:pointer;">解封</button>' +
         '</div>';
     }).join('');
   }
