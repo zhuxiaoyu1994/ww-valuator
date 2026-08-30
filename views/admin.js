@@ -147,8 +147,8 @@ function getAdminPage() {
   <div class="login-box" id="login-box">
     <h1>管理后台</h1>
     <div class="error" id="login-error">密码错误</div>
-    <input type="password" id="password" placeholder="请输入管理密码" onkeydown="if(event.key==='Enter')doLogin()">
-    <button onclick="doLogin()">登录</button>
+    <input type="password" id="password" placeholder="请输入管理密码" onkeydown="if(event.key==='Enter')tryLogin()">
+    <button id="login-btn" onclick="tryLogin()">登录</button>
   </div>
 
   <div class="dashboard" id="dashboard">
@@ -465,7 +465,94 @@ function getAdminPage() {
     </div>
   </div>
 
-<script src="/public/value-settings.js?v=20260824" onerror="window.__vsFailed=true"></script>
+<script>
+  // 在value-settings.js加载前先定义登录函数（避免大文件加载期间点击登录报doLogin未定义）
+  (function() {
+    let loginPending = false;
+    let loginInited = false;
+
+    function setLoginLoading(loading) {
+      var btn = document.getElementById('login-btn');
+      var err = document.getElementById('login-error');
+      if (btn) {
+        btn.disabled = loading;
+        btn.style.opacity = loading ? '0.6' : '1';
+        btn.style.cursor = loading ? 'not-allowed' : 'pointer';
+        btn.textContent = loading ? '登录中...' : '登录';
+      }
+      if (err && !loading) {
+        // 不自动隐藏，等结果出来再处理
+      }
+    }
+
+    function showLoginError(msg) {
+      var err = document.getElementById('login-error');
+      if (err) {
+        err.textContent = msg || '密码错误';
+        err.style.display = 'block';
+      }
+      setLoginLoading(false);
+    }
+
+    window.tryLogin = function() {
+      if (loginPending) return;
+      var pwInput = document.getElementById('password');
+      var pw = pwInput ? pwInput.value.trim() : '';
+      if (!pw) return;
+
+      loginPending = true;
+      setLoginLoading(true);
+      var errEl = document.getElementById('login-error');
+      if (errEl) errEl.style.display = 'none';
+
+      // 如果主脚本已加载，直接走完整登录流程
+      if (typeof window._adminDoLogin === 'function') {
+        window._adminDoLogin(pw).then(function() {
+          loginPending = false;
+          setLoginLoading(false);
+        }).catch(function(e) {
+          loginPending = false;
+          showLoginError(e.message || '网络错误');
+        });
+        return;
+      }
+
+      // 主脚本未加载完，先发请求验证密码
+      var currentGame = sessionStorage.getItem('admin_game') || 'wuwa';
+      fetch('/admin/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw, game: currentGame }),
+      }).then(function(r) { return r.json(); }).then(function(result) {
+        if (result.success) {
+          sessionStorage.setItem('admin_pw', pw);
+          // 等主脚本加载完成后再初始化dashboard
+          var waitCount = 0;
+          var waitInterval = setInterval(function() {
+            waitCount++;
+            if (typeof window._adminInitAfterLogin === 'function') {
+              clearInterval(waitInterval);
+              window._adminInitAfterLogin(result);
+              loginPending = false;
+              setLoginLoading(false);
+            } else if (waitCount > 100) {
+              // 10秒超时，直接刷新页面
+              clearInterval(waitInterval);
+              location.reload();
+            }
+          }, 100);
+        } else {
+          loginPending = false;
+          showLoginError(result.error || '密码错误');
+        }
+      }).catch(function() {
+        loginPending = false;
+        showLoginError('网络错误，请稍后重试');
+      });
+    };
+  })();
+</script>
+<script src="/public/value-settings.js?v=20260824" defer onerror="window.__vsFailed=true"></script>
 <script>
   // ============================================================
   // 通用变量
@@ -538,11 +625,11 @@ function getAdminPage() {
   const savedPw = sessionStorage.getItem('admin_pw');
   if (savedPw) {
     document.getElementById('password').value = savedPw;
-    doLogin();
+    _adminDoLogin(savedPw);
   }
 
-  async function doLogin() {
-    const pw = document.getElementById('password').value.trim();
+  // 登录主逻辑（供早期tryLogin调用，也供自动登录使用）
+  async function _adminDoLogin(pw) {
     if (!pw) return;
     try {
       const resp = await fetch('/admin/api/logs', {
@@ -553,21 +640,48 @@ function getAdminPage() {
       const result = await resp.json();
       if (result.success) {
         sessionStorage.setItem('admin_pw', pw);
-        document.getElementById('login-box').style.display = 'none';
-        document.getElementById('dashboard').style.display = 'block';
-        allLogs = result.data.logs;
-        document.getElementById('stat-total').textContent = result.data.stats.totalQueries;
-        document.getElementById('stat-success').textContent = result.data.stats.successCount;
-        document.getElementById('stat-lookup').textContent = result.data.stats.lookupCount;
-        document.getElementById('stat-eval').textContent = result.data.stats.evalCount;
-        renderTable();
+        _adminInitAfterLogin(result);
       } else {
-        document.getElementById('login-error').style.display = 'block';
+        var errEl = document.getElementById('login-error');
+        if (errEl) {
+          errEl.textContent = result.error || '密码错误';
+          errEl.style.display = 'block';
+        }
+        throw new Error(result.error || '密码错误');
       }
     } catch (e) {
-      document.getElementById('login-error').textContent = '网络错误';
-      document.getElementById('login-error').style.display = 'block';
+      var errEl2 = document.getElementById('login-error');
+      if (errEl2) {
+        errEl2.textContent = e.message === '密码错误' ? '密码错误' : '网络错误，请稍后重试';
+        errEl2.style.display = 'block';
+      }
+      throw e;
     }
+  }
+
+  // 登录成功后初始化dashboard
+  function _adminInitAfterLogin(result) {
+    document.getElementById('login-box').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    allLogs = result.data.logs;
+    document.getElementById('stat-total').textContent = result.data.stats.totalQueries;
+    document.getElementById('stat-success').textContent = result.data.stats.successCount;
+    document.getElementById('stat-lookup').textContent = result.data.stats.lookupCount;
+    document.getElementById('stat-eval').textContent = result.data.stats.evalCount;
+    renderTable();
+    // 刷新登录按钮状态
+    var btn = document.getElementById('login-btn');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '登录'; }
+  }
+
+  // 暴露给早期脚本调用
+  window._adminDoLogin = _adminDoLogin;
+  window._adminInitAfterLogin = _adminInitAfterLogin;
+
+  // 兼容：保留doLogin函数名（供其他可能的引用使用）
+  async function doLogin() {
+    const pw = document.getElementById('password').value.trim();
+    return _adminDoLogin(pw);
   }
 
   function logout() {
