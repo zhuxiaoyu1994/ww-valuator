@@ -46,18 +46,32 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zhucs3336466';
 const BLOCKLIST_KEY = 'blocked_ips';
 let blockedIps = (process.env.BLOCKED_IPS || '216.195.201.153').split(',').map(s => s.trim()).filter(Boolean);
 
-// 启动时从数据库加载封禁列表（覆盖环境变量初始值）
-(async () => {
-  try {
-    const saved = await db.getConfig(BLOCKLIST_KEY);
-    if (Array.isArray(saved) && saved.length >= 0) {
-      blockedIps = saved;
-      console.log('[Blocklist] 已从数据库加载封禁列表:', blockedIps.length, '条');
-    }
-  } catch (e) {
-    console.log('[Blocklist] 加载数据库封禁列表失败，使用环境变量初始值:', e.message);
+// 封禁列表缓存（60秒TTL，serverless 多实例间保持同步）
+const BLOCKLIST_CACHE_TTL = 60 * 1000;
+let blockedIpsLoadedAt = 0;
+let blockedIpsPromise = null;
+
+async function ensureBlockedIpsLoaded() {
+  const now = Date.now();
+  if (blockedIpsLoadedAt && (now - blockedIpsLoadedAt < BLOCKLIST_CACHE_TTL)) {
+    return;
   }
-})();
+  if (!blockedIpsPromise) {
+    blockedIpsPromise = (async () => {
+      try {
+        const saved = await db.getConfig(BLOCKLIST_KEY);
+        if (Array.isArray(saved)) {
+          blockedIps = saved;
+        }
+      } catch (e) {
+        // 数据库不可用时保持现有内存值
+      }
+      blockedIpsLoadedAt = Date.now();
+      blockedIpsPromise = null;
+    })();
+  }
+  await blockedIpsPromise;
+}
 
 /**
  * 将封禁列表持久化到数据库
@@ -65,6 +79,7 @@ let blockedIps = (process.env.BLOCKED_IPS || '216.195.201.153').split(',').map(s
 async function saveBlockedIps() {
   try {
     await db.setConfig(BLOCKLIST_KEY, blockedIps);
+    blockedIpsLoadedAt = Date.now();
   } catch (e) {
     console.error('[Blocklist] 保存封禁列表到数据库失败:', e.message);
   }
@@ -146,12 +161,14 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
 }));
 
 // IP黑名单拦截中间件
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   // 放行管理页面和封禁管理API（否则被封IP无法解封）
   if (req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
       req.path === '/admin' || req.path.startsWith('/admin/api/')) {
     return next();
   }
+  // 确保封禁列表已从数据库加载（60秒缓存，serverless 多实例间同步）
+  await ensureBlockedIpsLoaded();
   const rawIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   const clientIp = normalizeIp(rawIp);
   // 支持精确匹配、后缀匹配（.xxx）、前缀匹配（xxx.）
