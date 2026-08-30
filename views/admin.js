@@ -517,12 +517,11 @@ function getAdminPage() {
         return;
       }
 
-      // 主脚本未加载完，先发请求验证密码
-      var currentGame = sessionStorage.getItem('admin_game') || 'wuwa';
-      fetch('/admin/api/logs', {
+      // 主脚本未加载完，先发请求验证密码（走轻量登录接口）
+      fetch('/admin/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, game: currentGame }),
+        body: JSON.stringify({ password: pw }),
       }).then(function(r) { return r.json(); }).then(function(result) {
         if (result.success) {
           sessionStorage.setItem('admin_pw', pw);
@@ -651,19 +650,19 @@ function getAdminPage() {
     _adminDoLogin(savedPw);
   }
 
-  // 登录主逻辑（供早期tryLogin调用，也供自动登录使用）
+  // 登录主逻辑（走轻量接口，仅验证密码，毫秒级返回）
   async function _adminDoLogin(pw) {
     if (!pw) return;
     try {
-      const resp = await fetch('/admin/api/logs', {
+      const resp = await fetch('/admin/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, game: currentGame }),
+        body: JSON.stringify({ password: pw }),
       });
       const result = await resp.json();
       if (result.success) {
         sessionStorage.setItem('admin_pw', pw);
-        _adminInitAfterLogin(result);
+        _adminInitAfterLogin();
       } else {
         var errEl = document.getElementById('login-error');
         if (errEl) {
@@ -682,19 +681,27 @@ function getAdminPage() {
     }
   }
 
-  // 登录成功后初始化dashboard
-  function _adminInitAfterLogin(result) {
+  // 登录成功后初始化dashboard（异步加载日志数据）
+  function _adminInitAfterLogin() {
     document.getElementById('login-box').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
-    allLogs = result.data.logs;
-    document.getElementById('stat-total').textContent = result.data.stats.totalQueries;
-    document.getElementById('stat-success').textContent = result.data.stats.successCount;
-    document.getElementById('stat-lookup').textContent = result.data.stats.lookupCount;
-    document.getElementById('stat-eval').textContent = result.data.stats.evalCount;
-    renderTable();
     // 刷新登录按钮状态
     var btn = document.getElementById('login-btn');
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '登录'; }
+    // 异步加载日志数据（不阻塞登录）
+    loadLogs();
+  }
+
+  // 加载查询日志和统计数据（登录后首次加载）
+  async function loadLogs() {
+    // 显示加载中
+    document.getElementById('stat-total').textContent = '...';
+    document.getElementById('stat-success').textContent = '...';
+    document.getElementById('stat-lookup').textContent = '...';
+    document.getElementById('stat-eval').textContent = '...';
+    const tbody = document.getElementById('log-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#666;">加载中...</td></tr>';
+    await refreshLogs();
   }
 
   // 暴露给早期脚本调用

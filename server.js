@@ -40,7 +40,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 管理后台密码（可通过环境变量配置）
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'guga2024';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zhucs3336466';
 
 // IP黑名单（初始从环境变量加载，运行时增删时同步到数据库）
 const BLOCKLIST_KEY = 'blocked_ips';
@@ -1149,6 +1149,15 @@ app.post('/blocklist/api/remove', async (req, res) => {
 // 管理后台页面
 app.get('/admin', (req, res) => {
   res.send(getAdminPage());
+});
+
+// 管理后台API - 轻量登录（仅验证密码，毫秒级返回）
+app.post('/admin/api/login', (req, res) => {
+  const { password } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  res.json({ success: true });
 });
 
 // 管理后台API - 获取日志（按游戏筛选）
