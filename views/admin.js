@@ -550,9 +550,35 @@ function getAdminPage() {
         showLoginError('网络错误，请稍后重试');
       });
     };
+
+    // 懒加载value-settings.js（只有打开估值设置时才加载，不阻塞登录）
+    let vsLoading = false;
+    let vsLoaded = false;
+    window._loadValueSettings = function(callback) {
+      if (vsLoaded) { callback && callback(); return; }
+      if (vsLoading) {
+        var check = setInterval(function() {
+          if (vsLoaded) { clearInterval(check); callback && callback(); }
+        }, 50);
+        return;
+      }
+      vsLoading = true;
+      var script = document.createElement('script');
+      script.src = '/public/value-settings.js?v=20260824';
+      script.onerror = function() {
+        vsLoading = false;
+        window.__vsFailed = true;
+        callback && callback();
+      };
+      script.onload = function() {
+        vsLoading = false;
+        vsLoaded = true;
+        callback && callback();
+      };
+      document.head.appendChild(script);
+    };
   })();
 </script>
-<script src="/public/value-settings.js?v=20260824" defer onerror="window.__vsFailed=true"></script>
 <script>
   // ============================================================
   // 通用变量
@@ -598,7 +624,7 @@ function getAdminPage() {
     currentGame = game;
     sessionStorage.setItem('admin_game', game);
     updateGameSwitchUI();
-    // 估值设置面板切换到对应游戏的存储键与默认配置
+    // 估值设置面板切换到对应游戏的存储键与默认配置（仅在已加载时）
     if (typeof setValueSettingsGame === 'function') setValueSettingsGame(game);
     // 日志按新游戏重新加载
     refreshLogs();
@@ -616,11 +642,8 @@ function getAdminPage() {
   // ============================================================
   // 登录
   // ============================================================
-  // 页面加载时恢复游戏上下文（按钮状态 + 估值设置面板存储键）
+  // 页面加载时恢复游戏上下文（按钮状态）
   updateGameSwitchUI();
-  if (currentGame !== 'wuwa' && typeof setValueSettingsGame === 'function') {
-    setValueSettingsGame(currentGame);
-  }
 
   const savedPw = sessionStorage.getItem('admin_pw');
   if (savedPw) {
@@ -710,6 +733,8 @@ function getAdminPage() {
   // ============================================================
   function safeOpenValueSettings() {
     if (typeof openValueSettings === 'function') {
+      // 确保游戏上下文正确
+      if (typeof setValueSettingsGame === 'function') setValueSettingsGame(currentGame);
       openValueSettings(function() {
         // 保存后如果成交记录已加载，重新获取以刷新估值
         if (dealsLoaded) {
@@ -719,7 +744,17 @@ function getAdminPage() {
     } else if (window.__vsFailed) {
       alert('估值设置面板加载失败，请刷新页面重试。');
     } else {
-      alert('估值设置面板尚未加载完成，请稍后重试。');
+      // 触发懒加载
+      window._loadValueSettings(function() {
+        if (typeof openValueSettings === 'function') {
+          if (typeof setValueSettingsGame === 'function') setValueSettingsGame(currentGame);
+          openValueSettings(function() {
+            if (dealsLoaded) fetchDeals(true);
+          });
+        } else {
+          alert('估值设置面板加载失败，请刷新页面重试。');
+        }
+      });
     }
   }
 
