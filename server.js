@@ -71,6 +71,21 @@ async function saveBlockedIps() {
 }
 
 /**
+ * 从数据库加载封禁列表到内存（serverless 环境每次请求可能在新实例上）
+ */
+async function loadBlockedIps() {
+  try {
+    const saved = await db.getConfig(BLOCKLIST_KEY);
+    if (Array.isArray(saved)) {
+      blockedIps = saved;
+    }
+  } catch (e) {
+    // 数据库不可用时保持现有内存值
+  }
+  return blockedIps;
+}
+
+/**
  * 规范化客户端 IP 地址
  * 将 ::ffff:127.0.0.1 格式的 IPv4-mapped IPv6 地址还原为 IPv4
  */
@@ -1099,12 +1114,13 @@ app.get('/blocklist', (req, res) => {
   res.send(getBlocklistPage());
 });
 
-// 获取封禁列表
-app.post('/blocklist/api/list', (req, res) => {
+// 获取封禁列表（每次从数据库加载，避免 serverless 多实例内存不一致）
+app.post('/blocklist/api/list', async (req, res) => {
   const { password } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
+  await loadBlockedIps();
   res.json({ success: true, data: blockedIps });
 });
 
@@ -1120,6 +1136,7 @@ app.post('/blocklist/api/add', async (req, res) => {
   if (!/^[\d.:a-fA-F]+$/.test(trimIp)) {
     return res.json({ success: false, error: 'IP格式不正确' });
   }
+  await loadBlockedIps();
   if (blockedIps.includes(trimIp)) {
     return res.json({ success: false, error: '该IP已在封禁列表中' });
   }
@@ -1136,6 +1153,7 @@ app.post('/blocklist/api/remove', async (req, res) => {
     return res.json({ success: false, error: '密码错误' });
   }
   const trimIp = (ip || '').trim();
+  await loadBlockedIps();
   blockedIps = blockedIps.filter(b => b !== trimIp);
   await saveBlockedIps();
   console.log('[Blocklist] 移除封禁IP:', trimIp);
