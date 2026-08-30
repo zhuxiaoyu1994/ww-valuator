@@ -168,6 +168,7 @@ function getAdminPage() {
       <button class="tab-btn" onclick="switchTab('deals', this)">成交记录</button>
       <button class="tab-btn" onclick="switchTab('monitor', this)">监控脚本</button>
       <button class="tab-btn" onclick="switchTab('config', this)">配置管理</button>
+      <button class="tab-btn" onclick="switchTab('blocklist', this)">IP封禁</button>
     </div>
 
     <!-- Tab 1: 查询日志 -->
@@ -444,6 +445,24 @@ function getAdminPage() {
         <button onclick="safeOpenValueSettings()" style="padding:10px 24px;background:#fbbf24;color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">打开估值规则设置</button>
       </div>
     </div>
+
+    <!-- Tab 5: IP封禁 -->
+    <div id="tab-blocklist" class="tab-content">
+      <div class="mon-card">
+        <h2>IP封禁管理</h2>
+        <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
+          封禁指定 IP 后，该 IP 将无法访问估价接口和查询日志。支持精确匹配、前缀匹配（如 <code style="color:#888;">216.195.201.</code>）和后缀匹配（如 <code style="color:#888;">.example.com</code>）。<br>
+          封禁列表保存在服务器数据库中，重启不丢失。
+        </p>
+        <div style="font-size:13px;color:#888;margin-bottom:12px;" id="bl-stats">加载中...</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <input type="text" id="bl-new-ip" placeholder="输入要封禁的IP地址，如 1.2.3.4" onkeydown="if(event.key==='Enter')blAddIp()" style="flex:1;padding:10px 14px;border:1px solid #2a2a4a;border-radius:8px;background:#1a1a3a;color:#e0e0e0;font-size:14px;">
+          <button onclick="blAddIp()" style="padding:10px 24px;background:#e94560;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">封禁</button>
+          <button onclick="blRefresh()" style="padding:10px 20px;background:#1a1a3a;color:#4ade80;border:1px solid #2a2a4a;border-radius:8px;font-size:14px;cursor:pointer;">刷新</button>
+        </div>
+        <div id="bl-list" style="background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;"></div>
+      </div>
+    </div>
   </div>
 
 <script src="/public/value-settings.js?v=20260824" onerror="window.__vsFailed=true"></script>
@@ -566,6 +585,9 @@ function getAdminPage() {
     document.getElementById('tab-' + name).classList.add('active');
     if (name === 'deals' && !dealsLoaded && !dealsLoading) {
       fetchDealsInitial();
+    }
+    if (name === 'blocklist') {
+      blRefresh();
     }
   }
 
@@ -1959,6 +1981,86 @@ function getAdminPage() {
   function escapeHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ============================================================
+  // IP封禁管理
+  // ============================================================
+  let blocklistData = [];
+
+  function blRefresh() {
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) return;
+    fetch('/blocklist/api/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    }).then(r => r.json()).then(result => {
+      if (result.success) {
+        blocklistData = result.data;
+        blRenderList();
+      } else {
+        document.getElementById('bl-stats').textContent = '加载失败：' + (result.error || '未知错误');
+      }
+    }).catch(() => {
+      document.getElementById('bl-stats').textContent = '加载失败：网络错误';
+    });
+  }
+
+  function blRenderList() {
+    const stats = document.getElementById('bl-stats');
+    const list = document.getElementById('bl-list');
+    if (!stats || !list) return;
+    stats.textContent = '当前共 ' + blocklistData.length + ' 个被封禁 IP';
+    if (blocklistData.length === 0) {
+      list.innerHTML = '<div style="text-align:center;color:#666;padding:40px;font-size:14px;">暂无封禁IP</div>';
+      return;
+    }
+    list.innerHTML = blocklistData.map(function(ip) {
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #1f1f3a;">' +
+        '<span style="font-size:14px;font-family:monospace;color:#e0e0e0;">' + escapeHtml(ip) + '</span>' +
+        '<button onclick="blRemoveIp(\'' + ip.replace(/'/g, "\\'") + '\')" style="padding:5px 14px;border:1px solid #ef4444;border-radius:6px;background:transparent;color:#ef4444;font-size:12px;cursor:pointer;">解封</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  function blAddIp() {
+    const ipInput = document.getElementById('bl-new-ip');
+    const ip = ipInput.value.trim();
+    if (!ip) return;
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) return;
+    fetch('/blocklist/api/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, ip: ip }),
+    }).then(r => r.json()).then(result => {
+      if (result.success) {
+        ipInput.value = '';
+        blocklistData = result.data;
+        blRenderList();
+      } else {
+        alert(result.error || '操作失败');
+      }
+    }).catch(() => { alert('网络错误'); });
+  }
+
+  function blRemoveIp(ip) {
+    if (!confirm('确定解封 ' + ip + ' 吗？')) return;
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) return;
+    fetch('/blocklist/api/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, ip: ip }),
+    }).then(r => r.json()).then(result => {
+      if (result.success) {
+        blocklistData = result.data;
+        blRenderList();
+      } else {
+        alert(result.error || '操作失败');
+      }
+    }).catch(() => { alert('网络错误'); });
   }
 </script>
 </body>

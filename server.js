@@ -133,7 +133,8 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
 // IP黑名单拦截中间件
 app.use((req, res, next) => {
   // 放行管理页面和封禁管理API（否则被封IP无法解封）
-  if (req.path === '/blocklist' || req.path.startsWith('/blocklist/api/')) {
+  if (req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
+      req.path === '/admin' || req.path.startsWith('/admin/api/')) {
     return next();
   }
   const rawIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
