@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.2.0
+// @version      3.2.1
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2492,7 +2492,7 @@
       console.error('[鸣潮监控] GM请求也失败:', gmErr.message);
     }
 
-    if (wafDetected || true) {
+    if (wafDetected) {
       console.warn('[鸣潮监控] 检测到WAF验证，启动popup解决器...');
       await solveWAFChallenge();
 
@@ -2531,7 +2531,8 @@
       }
     }
 
-    throw new Error('所有请求方式均失败(列表API)');
+    console.error('[鸣潮监控] 所有请求方式均失败(列表API)，可能被WAF/反爬拦截');
+    return null;
   }
 
   /**
@@ -2590,7 +2591,8 @@
       if (fsRetry) return fsRetry;
     } catch (e) {}
 
-    throw new Error('所有请求方式均失败(秒杀库API)');
+    console.error('[鸣潮监控] 所有请求方式均失败(秒杀库API)，可能被WAF/反爬拦截');
+    return null;
   }
 
   /**
@@ -2601,6 +2603,7 @@
       try {
         const data = await fetchFlashSaleList(page);
         if (data && data.success) return data;
+        if (!data) return null;
         if (i < retries) {
           await new Promise(r => setTimeout(r, 2000));
           continue;
@@ -2625,6 +2628,8 @@
       try {
         const data = await fetchList(page);
         if (data && data.success) return data;
+        // fetchList返回null表示WAF拦截，重试无意义
+        if (!data) return null;
         if (i < retries) {
           await new Promise(r => setTimeout(r, 2000));
           continue;
@@ -10397,6 +10402,8 @@ function openSettings() {
   async function doRefresh() {
     lastRefreshTime = Date.now();
 
+    // 螃蟹网API扫描（独立try-catch，失败不影响其他平台）
+    var pxb7Error = null;
     try {
       // 扫描第1页
       const data = await fetchListWithRetry(1);
@@ -10409,7 +10416,9 @@ function openSettings() {
         handleListResponse(list, false);
         lastRefreshError = '';  // 刷新成功，清除错误
       } else if (data && !data.success) {
-        lastRefreshError = 'API返回失败: ' + (data.message || data.msg || '未知错误');
+        lastRefreshError = '螃蟹网API: ' + (data.message || data.msg || '未知错误');
+      } else if (!data) {
+        lastRefreshError = '螃蟹网API被WAF拦截（依赖拦截+其他平台正常）';
       }
 
       // 可选：扫描第2-3页
@@ -10434,18 +10443,10 @@ function openSettings() {
             if (flashData && flashData.success && flashData.data) {
               const flashList = Array.isArray(flashData.data) ? flashData.data : (flashData.data.list || null);
               if (flashList) {
-                // 调试：打印第一条商品的完整数据，找出秒杀价字段
-                if (page === 1 && flashList.length > 0) {
-                  console.log('[鸣潮监控] 秒杀池首条商品完整数据:', JSON.stringify(flashList[0]));
-                }
                 flashTotal += flashList.length;
                 handleListResponse(flashList, false, true);
                 console.log('[鸣潮监控] 秒杀库第' + page + '页扫描完成，获取' + flashList.length + '条');
-              } else {
-                console.log('[鸣潮监控] 秒杀库第' + page + '页：响应格式无list数据', flashData);
               }
-            } else {
-              console.log('[鸣潮监控] 秒杀库第' + page + '页：API返回', flashData ? (flashData.success ? 'success但无data' : '失败:' + (flashData.message || flashData.msg)) : '空响应');
             }
           } catch (e) {
             console.error('[鸣潮监控] 秒杀库第' + page + '页获取失败:', e);
@@ -10455,6 +10456,14 @@ function openSettings() {
           console.log('[鸣潮监控] 秒杀库扫描完成，共获取' + flashTotal + '条');
         }
       }
+    } catch (e) {
+      pxb7Error = e;
+      lastRefreshError = '螃蟹网: ' + (e.message || e);
+      console.error('[鸣潮监控] 螃蟹网API失败(WAF/反爬):', e.message);
+    }
+
+    // 以下其他平台扫描不受螃蟹网API失败影响
+    try {
 
       // 盼之平台扫描（SSR HTML抓取）
       if (pzdsEnabled) {
@@ -10515,8 +10524,8 @@ function openSettings() {
         }
       }
     } catch (e) {
-      lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
-      console.error('[鸣潮监控] 列表刷新失败:', e);
+      if (!pxb7Error) lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
+      console.error('[鸣潮监控] 其他平台扫描失败:', e);
     }
 
     updateBottomBar();
