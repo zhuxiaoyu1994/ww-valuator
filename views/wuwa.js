@@ -338,6 +338,12 @@ function getPageHTML() {
       font-family: var(--mono);
       cursor: pointer;
       transition: all 0.2s;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: bottom;
     }
     .history-tag:hover { border-color: var(--accent); color: var(--text); }
 
@@ -604,9 +610,10 @@ function getPageHTML() {
     <div class="input-card" id="panel-paste" style="display:none;">
       <div class="input-row" style="flex-direction:column;gap:12px;">
         <textarea id="eval-text" placeholder="粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述文本（包含角色、命座、武器、资源等信息）"></textarea>
-        <div class="input-row">
-          <input type="number" class="price-input" id="eval-price" placeholder="标价(元)" min="0" />
+        <div class="input-row" style="gap:8px;flex-direction:row;">
+          <input type="number" class="price-input" id="eval-price" placeholder="标价(元)" min="0" style="flex:1;" />
           <button class="eval-btn" id="eval-btn" onclick="doEvaluate()">估价</button>
+          <button class="clear-btn" id="clear-paste-btn" onclick="clearPasteInput()" style="flex-shrink:0;width:60px;padding:0;border:1px solid #ddd;background:#f9f9f9;color:#666;border-radius:8px;cursor:pointer;font-size:14px;">清空</button>
         </div>
       </div>
     </div>
@@ -631,7 +638,10 @@ function getPageHTML() {
 
     <!-- History -->
     <div class="history" id="history-section" style="display:none;">
-      <div class="history-title">最近查询</div>
+      <div class="history-title" style="display:flex;align-items:center;">
+        <span>最近查询</span>
+        <span style="margin-left:auto;letter-spacing:0;color:var(--bad);cursor:pointer;font-size:12px;" onclick="clearHistory()">清空历史</span>
+      </div>
       <div class="history-tags" id="history-tags"></div>
     </div>
 
@@ -716,6 +726,12 @@ function getPageHTML() {
     localStorage.setItem('mw_page_loaded_at', pageLoadTime);
 
     updateConfigInfo();
+
+    function clearPasteInput() {
+      document.getElementById('eval-text').value = '';
+      document.getElementById('eval-price').value = '';
+      document.getElementById('eval-text').focus();
+    }
 
     function clearLookupInput() {
       document.getElementById('product-id').value = '';
@@ -1278,9 +1294,15 @@ function getPageHTML() {
       let html = '';
       history.forEach(h => {
         const ratioText = h.ratio >= 0 ? '+' + h.ratio + '%' : h.ratio + '%';
-        html += '<span class="history-tag" onclick="loadHistory(\\'' + h.id + '\\')">' + h.id + ' (' + ratioText + ')</span>';
+        html += '<span class="history-tag" title="' + escStatsHtml(h.id) + '" onclick="loadHistory(\\'' + h.id + '\\')">' + h.id + ' (' + ratioText + ')</span>';
       });
       document.getElementById('history-tags').innerHTML = html;
+    }
+
+    function clearHistory() {
+      if (!confirm('确定清空全部查询历史？')) return;
+      localStorage.removeItem('mw_history');
+      renderHistory();
     }
 
     function loadHistory(productId) {

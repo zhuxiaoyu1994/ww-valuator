@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.2.1
+// @version      3.3.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -5720,7 +5720,7 @@
           <button class="mw-btn" id="mwBtnRefresh">立即刷新</button>
           <button class="mw-btn" id="mwBtnSettings">估值设置</button>
           <button class="mw-btn" id="mwBtnClearTable">清空表格</button>
-          <button class="mw-btn" id="mwBtnCleanDiff">清理差价</button>
+          <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
           <button class="mw-btn" id="mwBtnExportCSV">导出CSV</button>
           <span class="mw-input-label">≥</span>
@@ -5796,7 +5796,7 @@
     dom.btnRefresh = document.getElementById('mwBtnRefresh');
     dom.btnSettings = document.getElementById('mwBtnSettings');
     dom.btnClearTable = document.getElementById('mwBtnClearTable');
-    dom.btnCleanDiff = document.getElementById('mwBtnCleanDiff');
+    dom.btnCleanData = document.getElementById('mwBtnCleanData');
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
     dom.btnExportCSV = document.getElementById('mwBtnExportCSV');
     dom.inputThreshold = document.getElementById('mwInputThreshold');
@@ -6475,24 +6475,7 @@
       }
     });
 
-    dom.btnCleanDiff.addEventListener('click', function () {
-      var input = prompt('清理差价小于该值的账号（负数表示估值低于标价）\n例如输入 -1000，将删除差价 < -1000 元的账号', '-1000');
-      if (input === null) return;
-      var threshold = parseFloat(input);
-      if (isNaN(threshold)) { alert('请输入有效数字'); return; }
-      var before = tableData.length;
-      tableData = tableData.filter(function (row) {
-        var diff = (row.value || 0) - (row.price || 0);
-        return diff >= threshold;
-      });
-      var removed = before - tableData.length;
-      if (removed > 0) {
-        saveTableData();
-        refreshTableDisplay();
-        updateStatusText();
-      }
-      alert('已清理差价 < ' + threshold + ' 元的账号\n删除 ' + removed + ' 条，剩余 ' + tableData.length + ' 条');
-    });
+    dom.btnCleanData.addEventListener('click', openCleanDataDialog);
 
     dom.btnExportCSV.addEventListener('click', exportCSV);
 
@@ -7425,6 +7408,191 @@
     }
     pinnedProductId = null;
     pinnedRow = null;
+  }
+
+  // ============================================================
+  // 清理数据对话框（差价/日期/估值组合条件）
+  // ============================================================
+
+  /**
+   * 打开清理数据对话框：满足任一启用条件的账号将被清理，留空表示不启用该条件
+   */
+  function openCleanDataDialog() {
+    const existing = document.getElementById('mw-clean-modal');
+    if (existing) { existing.remove(); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mw-clean-modal';
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,0.7);' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'Noto Sans CJK SC\',sans-serif;';
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText =
+      'position:relative;width:420px;max-width:92vw;' +
+      'background:#1a1a2e;color:#e0e0e0;border-radius:12px;' +
+      'box-shadow:0 20px 60px rgba(0,0,0,0.6);border:1px solid #0f3460;padding:20px;';
+
+    const closeBtn = document.createElement('div');
+    closeBtn.style.cssText =
+      'position:absolute;top:10px;right:14px;width:26px;height:26px;' +
+      'line-height:26px;text-align:center;font-size:18px;color:#666;cursor:pointer;' +
+      'border-radius:6px;transition:all 0.2s;';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.title = '关闭';
+    closeBtn.onmouseenter = function () { this.style.color = '#e94560'; this.style.background = 'rgba(233,69,96,0.1)'; };
+    closeBtn.onmouseleave = function () { this.style.color = '#666'; this.style.background = 'transparent'; };
+    closeBtn.onclick = function () { overlay.remove(); };
+    dialog.appendChild(closeBtn);
+
+    const title = document.createElement('h2');
+    title.style.cssText = 'font-size:17px;color:#e94560;margin-bottom:4px;';
+    title.textContent = '清理数据';
+    dialog.appendChild(title);
+
+    const subtitle = document.createElement('p');
+    subtitle.style.cssText = 'font-size:12px;color:#888;margin-bottom:16px;line-height:1.5;';
+    subtitle.textContent = '满足任一启用条件的账号将被清理（条件留空表示不启用）。';
+    dialog.appendChild(subtitle);
+
+    const inputStyle =
+      'width:130px;padding:5px 8px;border:1px solid #0f3460;border-radius:6px;' +
+      'background:#16213e;color:#e0e0e0;font-size:13px;outline:none;';
+    const labelStyle = 'font-size:13px;color:#c8c8d8;';
+
+    function addRow(labelText, input, suffixText) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:14px;';
+      const label = document.createElement('span');
+      label.style.cssText = labelStyle + 'flex-shrink:0;';
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(input);
+      if (suffixText) {
+        const suffix = document.createElement('span');
+        suffix.style.cssText = 'font-size:12px;color:#888;';
+        suffix.textContent = suffixText;
+        row.appendChild(suffix);
+      }
+      dialog.appendChild(row);
+      return row;
+    }
+
+    const diffInput = document.createElement('input');
+    diffInput.type = 'number';
+    diffInput.value = '0';
+    diffInput.style.cssText = inputStyle;
+    addRow('差价 <', diffInput, '元（差价 = 估值 - 标价）');
+
+    const defaultDate = new Date(Date.now() - 2 * 86400000);
+    const defaultDateStr = defaultDate.getFullYear() + '-' + String(defaultDate.getMonth() + 1).padStart(2, '0') + '-' + String(defaultDate.getDate()).padStart(2, '0');
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.value = defaultDateStr;
+    dateInput.style.cssText = inputStyle;
+    addRow('上架早于', dateInput, '（不含当天）');
+
+    const valInput = document.createElement('input');
+    valInput.type = 'number';
+    valInput.value = '500';
+    valInput.style.cssText = inputStyle;
+    addRow('估值 <', valInput, '元');
+
+    // 根据输入构建过滤条件，未启用任何条件时返回 null
+    function buildPredicate() {
+      var diffTh = parseFloat(diffInput.value);
+      var valTh = parseFloat(valInput.value);
+      var cutoff = null;
+      var dateStr = dateInput.value;
+      if (dateStr) {
+        var dm = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (dm) cutoff = new Date(parseInt(dm[1], 10), parseInt(dm[2], 10) - 1, parseInt(dm[3], 10)).getTime();
+      }
+      if (isNaN(diffTh) && cutoff == null && isNaN(valTh)) return null;
+      return function (row) {
+        if (!isNaN(diffTh)) {
+          var diff = (row.value || 0) - (row.price || 0);
+          if (diff < diffTh) return true;
+        }
+        if (cutoff != null) {
+          var time = row.listTime || row.firstSeen || 0;
+          if (time < cutoff) return true;
+        }
+        if (!isNaN(valTh)) {
+          if ((row.value || 0) < valTh) return true;
+        }
+        return false;
+      };
+    }
+
+    const preview = document.createElement('div');
+    preview.style.cssText = 'font-size:12px;color:#f59e0b;margin:4px 0 16px;min-height:16px;';
+    dialog.appendChild(preview);
+
+    function updatePreview() {
+      var pred = buildPredicate();
+      if (pred == null) {
+        preview.textContent = '未启用任何条件，请至少填写一项';
+        preview.style.color = '#e94560';
+        return;
+      }
+      var cnt = 0;
+      for (var i = 0; i < tableData.length; i++) {
+        if (pred(tableData[i])) cnt++;
+      }
+      preview.textContent = '将删除 ' + cnt + ' 条，剩余 ' + (tableData.length - cnt) + ' 条';
+      preview.style.color = '#f59e0b';
+    }
+
+    diffInput.addEventListener('input', updatePreview);
+    dateInput.addEventListener('input', updatePreview);
+    valInput.addEventListener('input', updatePreview);
+    updatePreview();
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '取消';
+    cancelBtn.style.cssText =
+      'padding:7px 18px;border:none;border-radius:6px;background:#16213e;color:#888;' +
+      'font-size:13px;cursor:pointer;';
+    cancelBtn.onmouseenter = function () { this.style.background = '#0f3460'; };
+    cancelBtn.onmouseleave = function () { this.style.background = '#16213e'; };
+    cancelBtn.onclick = function () { overlay.remove(); };
+    btnRow.appendChild(cancelBtn);
+
+    const cleanBtn = document.createElement('button');
+    cleanBtn.textContent = '清理';
+    cleanBtn.style.cssText =
+      'padding:7px 18px;border:none;border-radius:6px;background:#e94560;color:#fff;' +
+      'font-size:13px;font-weight:600;cursor:pointer;';
+    cleanBtn.onmouseenter = function () { this.style.background = '#c73e54'; };
+    cleanBtn.onmouseleave = function () { this.style.background = '#e94560'; };
+    cleanBtn.onclick = function () {
+      var pred = buildPredicate();
+      if (pred == null) { alert('请至少填写一个清理条件'); return; }
+      var before = tableData.length;
+      tableData = tableData.filter(function (row) { return !pred(row); });
+      var removed = before - tableData.length;
+      overlay.remove();
+      if (removed > 0) {
+        saveTableData();
+        refreshTableDisplay();
+        updateStatusText();
+      }
+      alert('已清理 ' + removed + ' 条，剩余 ' + tableData.length + ' 条');
+    };
+    btnRow.appendChild(cleanBtn);
+
+    dialog.appendChild(btnRow);
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+    diffInput.focus();
   }
 
   // ============================================================
