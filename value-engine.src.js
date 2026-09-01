@@ -1199,7 +1199,7 @@ function calculateValue(parsed, price) {
     }
   }
 
-  // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武 + 满命角色(1+命座,E级除外) + 其专武（不重复计算）
+  // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
   // 专武有效金：精1=1, 精N=1+(N-1)×0.5（精2=1.5, 精3=2, 精5=3）
   const EFFECTIVE_TIERS = ['S'];
   var effectiveYellow = 0;
@@ -1242,24 +1242,6 @@ function calculateValue(parsed, price) {
         var tRefine = tSigWeapon.refine || 1;
         effectiveYellow += 1 + (tRefine - 1) * 0.5;
         effectiveCountedWeapons[tSigName] = true;
-      }
-    }
-  }
-  // 满命角色（E级除外，不重复计算）
-  for (var fci = 0; fci < parsed.characters.length; fci++) {
-    var fChar = parsed.characters[fci];
-    if ((fChar.const || 0) < 6) continue;
-    if (fChar.tier === 'E') continue;
-    if (effectiveCountedChars[fChar.name]) continue;
-    effectiveYellow += 1 + (fChar.const || 0);
-    effectiveCountedChars[fChar.name] = true;
-    var fSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[fChar.name] || SIG_WEAPONS[fChar.name]) : SIG_WEAPONS[fChar.name];
-    if (fSigName && hasSignatureWeapons.indexOf(fChar.name) >= 0 && !effectiveCountedWeapons[fSigName]) {
-      var fSigWeapon = parsed.weapons.find(function(wp) { return wp.name === fSigName; });
-      if (fSigWeapon) {
-        var fRefine = fSigWeapon.refine || 1;
-        effectiveYellow += 1 + (fRefine - 1) * 0.5;
-        effectiveCountedWeapons[fSigName] = true;
       }
     }
   }
