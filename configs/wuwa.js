@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 22,
+  configVersion: 24,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
@@ -78,9 +78,10 @@ const WUWA_CONFIG = {
       { baseCoeff: 0.4, threshold: 40, step: 0.02 },
       { baseCoeff: 0.88, threshold: null, step: 0.008 }
     ],
+    effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
   },
 
-  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002 },
+  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002, pullMaxPrice: 5 },
 
   defaultTeamMates: {
     '爱弥斯': ['莫宁', '达妮娅'], '绯雪': ['洛瑟菈', '琳奈'],

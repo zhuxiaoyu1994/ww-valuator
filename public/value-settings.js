@@ -85,6 +85,8 @@
     var s = saved || {};
     var w = Object.assign({}, DEFAULT_WEIGHTS, s);
     w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, s.c6TierWeights || {});
+    // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
+    w.effTierWeights = Object.assign({}, DEFAULT_WEIGHTS.effTierWeights || { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 }, s.effTierWeights || {});
     w.c6MultiBonus = (s.c6MultiBonus && s.c6MultiBonus.length) ? s.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
     w.teamMultiBonus = (s.teamMultiBonus && s.teamMultiBonus.length) ? s.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
     w.flatDiscountRules = (s.flatDiscountRules && s.flatDiscountRules.length) ? s.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
@@ -92,6 +94,7 @@
     w.pullBase = (s.pullBase != null) ? s.pullBase : (DEFAULT_WEIGHTS.pullBase != null ? DEFAULT_WEIGHTS.pullBase : (defaults.pullFormula || {}).pullBase);
     w.pullBasePrice = (s.pullBasePrice != null) ? s.pullBasePrice : (DEFAULT_WEIGHTS.pullBasePrice != null ? DEFAULT_WEIGHTS.pullBasePrice : (defaults.pullFormula || {}).pullBasePrice);
     w.pullStepPrice = (s.pullStepPrice != null) ? s.pullStepPrice : (DEFAULT_WEIGHTS.pullStepPrice != null ? DEFAULT_WEIGHTS.pullStepPrice : (defaults.pullFormula || {}).pullStepPrice);
+    w.pullMaxPrice = (s.pullMaxPrice != null) ? s.pullMaxPrice : (DEFAULT_WEIGHTS.pullMaxPrice != null ? DEFAULT_WEIGHTS.pullMaxPrice : ((defaults.pullFormula || {}).pullMaxPrice != null ? (defaults.pullFormula || {}).pullMaxPrice : 0));
     w.yellowBase = (s.yellowBase != null) ? s.yellowBase : (DEFAULT_WEIGHTS.yellowBase != null ? DEFAULT_WEIGHTS.yellowBase : 40);
     w.yellowStep = (s.yellowStep != null) ? s.yellowStep : (DEFAULT_WEIGHTS.yellowStep != null ? DEFAULT_WEIGHTS.yellowStep : 1);
     w.yellowBaseCoeff = (s.yellowBaseCoeff != null) ? s.yellowBaseCoeff : (DEFAULT_WEIGHTS.yellowBaseCoeff != null ? DEFAULT_WEIGHTS.yellowBaseCoeff : 1.0);
@@ -353,6 +356,36 @@
     var tierLabels = { S: 'S级 热门人权', A: 'A级 热门限定', B: 'B级 温门核心', C: 'C级 冷门限定', D: 'D级 退环境', E: 'E级 常驻五星' };
     var tierColors = { S: '#4ade80', A: '#e94560', B: '#fbbf24', C: '#9ca3af', D: '#6b7280', E: '#4b5563' };
     var tierOrder = ['S', 'A', 'B', 'C', 'D', 'E'];
+
+    // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
+    var effTierWeights = Object.assign({}, w.effTierWeights || DEFAULT_WEIGHTS.effTierWeights || { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 });
+    var effTierWeightInputs = {};
+    var effTierRow = document.createElement('div');
+    effTierRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;';
+    var effTierLabel = document.createElement('span');
+    effTierLabel.textContent = '有效金系数';
+    effTierLabel.style.cssText = 'color:#aaa;font-size:11px;';
+    effTierLabel.title = '该级别角色的命座与专武折算计入有效金的比例（如D级0.5=D级角色只算半金）';
+    effTierRow.appendChild(effTierLabel);
+    var effTierList = ['S', 'A', 'B', 'C', 'D', 'E'];
+    for (var etw = 0; etw < effTierList.length; etw++) {
+      (function (t) {
+        var wrapper = document.createElement('span');
+        wrapper.style.cssText = 'display:flex;align-items:center;gap:2px;';
+        var tLabel = document.createElement('span');
+        tLabel.textContent = t + '级';
+        tLabel.style.cssText = 'color:' + tierColors[t] + ';font-size:11px;font-weight:600;';
+        wrapper.appendChild(tLabel);
+        var tInput = document.createElement('input');
+        tInput.type = 'number'; tInput.value = effTierWeights[t] != null ? effTierWeights[t] : 1; tInput.step = '0.05'; tInput.min = '0';
+        tInput.title = '该级别角色计入有效金的比例';
+        tInput.style.cssText = 'width:44px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:#38bdf8;font-size:11px;text-align:right;font-weight:600;';
+        effTierWeightInputs[t] = tInput;
+        wrapper.appendChild(tInput);
+        effTierRow.appendChild(wrapper);
+      })(effTierList[etw]);
+    }
+    charSection.appendChild(effTierRow);
 
     // 获取角色的默认级别（在CHAR_TIERS中的原始级别）
     function getDefaultTier(name) {
@@ -772,6 +805,27 @@
     pullStepPriceUnit.textContent = '元/抽'; pullStepPriceUnit.style.cssText = 'color:#555;font-size:11px;';
     pullFormulaRow.appendChild(pullStepPriceUnit);
 
+    // 分隔
+    var pullSep3 = document.createElement('span');
+    pullSep3.textContent = '|'; pullSep3.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
+    pullFormulaRow.appendChild(pullSep3);
+
+    // 每抽价格上限
+    var pullMaxPriceLabel = document.createElement('span');
+    pullMaxPriceLabel.textContent = '每抽上限';
+    pullMaxPriceLabel.style.cssText = 'font-size:12px;color:#f87171;font-weight:600;';
+    pullFormulaRow.appendChild(pullMaxPriceLabel);
+    var pullMaxPriceInput = document.createElement('input');
+    pullMaxPriceInput.type = 'number'; pullMaxPriceInput.min = 0; pullMaxPriceInput.step = 0.1;
+    pullMaxPriceInput.value = w.pullMaxPrice != null ? w.pullMaxPrice : 5;
+    pullMaxPriceInput.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#f87171;font-size:12px;text-align:right;font-weight:600;';
+    pullMaxPriceInput.title = '每抽价格上限（元，0=不限制，默认5）';
+    pullFormulaRow.appendChild(pullMaxPriceInput);
+
+    var pullMaxPriceUnit = document.createElement('span');
+    pullMaxPriceUnit.textContent = '元'; pullMaxPriceUnit.style.cssText = 'color:#555;font-size:11px;';
+    pullFormulaRow.appendChild(pullMaxPriceUnit);
+
     pullSection.appendChild(pullFormulaRow);
 
     // 预览
@@ -781,6 +835,7 @@
       var base = parseFloat(pullBaseInput.value) || 0;
       var basePrice = parseFloat(pullBasePriceInput.value) || 0;
       var stepPrice = parseFloat(pullStepPriceInput.value) || 0;
+      var maxPrice = parseFloat(pullMaxPriceInput.value) || 0;
       var samples = [0, 50, 100, 150, base, base + 50, base + 100, base + 200, base + 400, base + 800];
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
@@ -788,11 +843,12 @@
         var p = samples[si];
         var perPull = basePrice + (p - base) * stepPrice;
         if (perPull < 0) perPull = 0;
+        if (maxPrice > 0 && perPull > maxPrice) perPull = maxPrice;
         html += p + '抽 → ' + (Math.round(perPull * 1000) / 1000) + '元/抽　';
       }
       pullPreview.innerHTML = html;
     }
-    [pullBaseInput, pullBasePriceInput, pullStepPriceInput].forEach(function(inp) {
+    [pullBaseInput, pullBasePriceInput, pullStepPriceInput, pullMaxPriceInput].forEach(function(inp) {
       inp.oninput = updatePullPreview;
     });
     updatePullPreview();
@@ -802,12 +858,13 @@
     var pullDefaultRow = document.createElement('div');
     pullDefaultRow.style.cssText = 'margin-top:8px;';
     var loadPullDefaultBtn = document.createElement('button');
-    loadPullDefaultBtn.textContent = '载入默认（200抽基准1.0元，每抽浮动0.002元）';
+    loadPullDefaultBtn.textContent = '载入默认（200抽基准1.0元，每抽浮动0.002元，上限5元）';
     loadPullDefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#1a1a3a;color:#60a5fa;font-size:11px;cursor:pointer;';
     loadPullDefaultBtn.onclick = function () {
       pullBaseInput.value = (DEFAULT_WEIGHTS.pullBase != null) ? DEFAULT_WEIGHTS.pullBase : 200;
       pullBasePriceInput.value = (DEFAULT_WEIGHTS.pullBasePrice != null) ? DEFAULT_WEIGHTS.pullBasePrice : 1.0;
       pullStepPriceInput.value = (DEFAULT_WEIGHTS.pullStepPrice != null) ? DEFAULT_WEIGHTS.pullStepPrice : 0.002;
+      pullMaxPriceInput.value = (DEFAULT_WEIGHTS.pullMaxPrice != null) ? DEFAULT_WEIGHTS.pullMaxPrice : 5;
       updatePullPreview();
     };
     pullDefaultRow.appendChild(loadPullDefaultBtn);
@@ -1652,7 +1709,7 @@
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
+    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -1817,6 +1874,8 @@
       newW.pullBasePrice = isNaN(_pullBasePriceVal) ? 1.0 : _pullBasePriceVal;
       var _pullStepPriceVal = parseFloat(pullStepPriceInput.value);
       newW.pullStepPrice = isNaN(_pullStepPriceVal) ? 0.002 : _pullStepPriceVal;
+      var _pullMaxPriceVal = parseFloat(pullMaxPriceInput.value);
+      newW.pullMaxPrice = isNaN(_pullMaxPriceVal) ? (DEFAULT_WEIGHTS.pullMaxPrice != null ? DEFAULT_WEIGHTS.pullMaxPrice : 5) : _pullMaxPriceVal;
 
       // 收集满命抽数加成公式参数
       var _pullC6BaseVal = parseFloat(pullC6BaseInput.value);
@@ -1852,6 +1911,14 @@
         newC6Weights[c6TierList[cw]] = isNaN(cwVal) ? 0 : cwVal;
       }
       newW.c6TierWeights = newC6Weights;
+
+      // 收集有效金级别系数
+      var newEffTierWeights = {};
+      for (var etw2 = 0; etw2 < effTierList.length; etw2++) {
+        var etwVal = parseFloat(effTierWeightInputs[effTierList[etw2]].value);
+        newEffTierWeights[effTierList[etw2]] = isNaN(etwVal) ? 1 : etwVal;
+      }
+      newW.effTierWeights = newEffTierWeights;
 
       // 收集有效金系数参数（动态分段数组）
       var _effMaxCoeffVal = parseFloat(effMaxCoeffInp.value);

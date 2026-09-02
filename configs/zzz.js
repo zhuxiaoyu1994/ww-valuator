@@ -1,7 +1,7 @@
 'use strict';
 
 const ZZZ_CONFIG = {
-  configVersion: 2,
+  configVersion: 4,
   gameName: '绝区零',
   gameSlug: 'zzz',
 
@@ -64,9 +64,10 @@ const ZZZ_CONFIG = {
       { baseCoeff: 1.3, threshold: 100, step: 0.014 },
       { baseCoeff: 2.0, threshold: null, step: 0.008 }
     ],
+    effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
   },
 
-  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002 },
+  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002, pullMaxPrice: 5 },
 
   defaultTeamMates: {},
 

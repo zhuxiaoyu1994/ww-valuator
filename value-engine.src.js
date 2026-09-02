@@ -139,6 +139,8 @@ function buildDefaultWeights(customWeights) {
   const saved = customWeights || {};
   const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
   w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
+  // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
+  w.effTierWeights = Object.assign({}, DEFAULT_WEIGHTS.effTierWeights, saved.effTierWeights || {});
   w.c6MultiBonus = (saved.c6MultiBonus && saved.c6MultiBonus.length) ? saved.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
   // 满命溢价公式参数
   w.c6Base = (saved.c6Base != null) ? saved.c6Base : DEFAULT_WEIGHTS.c6Base;
@@ -161,6 +163,7 @@ function buildDefaultWeights(customWeights) {
   w.pullBase = (saved.pullBase != null) ? saved.pullBase : DEFAULT_PULL_FORMULA.pullBase;
   w.pullBasePrice = (saved.pullBasePrice != null) ? saved.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
   w.pullStepPrice = (saved.pullStepPrice != null) ? saved.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
+  w.pullMaxPrice = (saved.pullMaxPrice != null) ? saved.pullMaxPrice : (DEFAULT_PULL_FORMULA.pullMaxPrice != null ? DEFAULT_PULL_FORMULA.pullMaxPrice : 0);
   // 限定金系数公式参数
   w.yellowBase = (saved.yellowBase != null) ? saved.yellowBase : 40;
   w.yellowStep = (saved.yellowStep != null) ? saved.yellowStep : 1;
@@ -799,15 +802,17 @@ function getCharValue(char, hasSigWeapon, w) {
 }
 
 /**
- * 计算抽数价值（公式：每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动）
+ * 计算抽数价值（公式：每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动，上限封顶）
  */
 function calculatePullValue(pulls) {
   var base = (weights && weights.pullBase != null) ? weights.pullBase : DEFAULT_PULL_FORMULA.pullBase;
   var basePrice = (weights && weights.pullBasePrice != null) ? weights.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
   var stepPrice = (weights && weights.pullStepPrice != null) ? weights.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
+  var maxPrice = (weights && weights.pullMaxPrice != null) ? weights.pullMaxPrice : (DEFAULT_PULL_FORMULA.pullMaxPrice != null ? DEFAULT_PULL_FORMULA.pullMaxPrice : 0);
 
   var perPull = basePrice + (pulls - base) * stepPrice;
   if (perPull < 0) perPull = 0;
+  if (maxPrice > 0 && perPull > maxPrice) perPull = maxPrice;
 
   var value = pulls * perPull;
   var tierLabel = pulls + '抽';
@@ -1201,6 +1206,12 @@ function calculateValue(parsed, price) {
 
   // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
   // 专武有效金：精1=1, 精N=1+(N-1)×0.5（精2=1.5, 精3=2, 精5=3）
+  // 级别系数：该级别角色及其专武的贡献 × effTierWeights[tier]（默认1）
+  var effTierWeights = w.effTierWeights || {};
+  function effTierCoeffOf(tier) {
+    var v = effTierWeights[tier];
+    return (v != null && !isNaN(v)) ? v : 1;
+  }
   const EFFECTIVE_TIERS = ['S'];
   var effectiveYellow = 0;
   var effectiveCountedWeapons = {};
@@ -1209,14 +1220,14 @@ function calculateValue(parsed, price) {
   for (var eci = 0; eci < parsed.characters.length; eci++) {
     var eChar = parsed.characters[eci];
     if (EFFECTIVE_TIERS.indexOf(eChar.tier) < 0) continue;
-    effectiveYellow += 1 + (eChar.const || 0);
+    effectiveYellow += (1 + (eChar.const || 0)) * effTierCoeffOf(eChar.tier);
     effectiveCountedChars[eChar.name] = true;
     var eSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[eChar.name] || SIG_WEAPONS[eChar.name]) : SIG_WEAPONS[eChar.name];
     if (eSigName && hasSignatureWeapons.indexOf(eChar.name) >= 0 && !effectiveCountedWeapons[eSigName]) {
       var eSigWeapon = parsed.weapons.find(function(wp) { return wp.name === eSigName; });
       if (eSigWeapon) {
         var eRefine = eSigWeapon.refine || 1;
-        effectiveYellow += 1 + (eRefine - 1) * 0.5;
+        effectiveYellow += (1 + (eRefine - 1) * 0.5) * effTierCoeffOf(eChar.tier);
         effectiveCountedWeapons[eSigName] = true;
       }
     }
@@ -1233,14 +1244,14 @@ function calculateValue(parsed, price) {
     var tChar = parsed.characters[tci];
     if (!teamCharNames[tChar.name]) continue;
     if (effectiveCountedChars[tChar.name]) continue; // 已计入
-    effectiveYellow += 1 + (tChar.const || 0);
+    effectiveYellow += (1 + (tChar.const || 0)) * effTierCoeffOf(tChar.tier);
     effectiveCountedChars[tChar.name] = true;
     var tSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[tChar.name] || SIG_WEAPONS[tChar.name]) : SIG_WEAPONS[tChar.name];
     if (tSigName && hasSignatureWeapons.indexOf(tChar.name) >= 0 && !effectiveCountedWeapons[tSigName]) {
       var tSigWeapon = parsed.weapons.find(function(wp) { return wp.name === tSigName; });
       if (tSigWeapon) {
         var tRefine = tSigWeapon.refine || 1;
-        effectiveYellow += 1 + (tRefine - 1) * 0.5;
+        effectiveYellow += (1 + (tRefine - 1) * 0.5) * effTierCoeffOf(tChar.tier);
         effectiveCountedWeapons[tSigName] = true;
       }
     }
