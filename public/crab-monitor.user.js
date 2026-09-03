@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.4.0
+// @version      3.5.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -613,6 +613,7 @@
     list: 'https://api-pc.pxb7.com/api/search/product/v2/selectSearchPageList',
     detail: 'https://api-pc.pxb7.com/api/product/web/product/detailPost',
     options: 'https://api-pc.pxb7.com/api/product/web/gameBizProd/selectSearchOption',
+    soldList: 'https://api-pc.pxb7.com/api/search/product/selectSelledList',
   };
 
   /**
@@ -4597,6 +4598,47 @@
     throw new Error('所有请求方式均失败(详情API)');
   }
 
+  /**
+   * 拉取螃蟹网昨日成交清单（POST /api/search/product/selectSelledList）
+   * 响应字段与表格数据兼容：productId/showTitle/price(分)/payTime，全部status=2(已成交)
+   * API无需登录、与列表接口同域名；pageSize上限100，分页拉全量（上限500条防死循环）
+   */
+  async function fetchSoldList() {
+    const all = [];
+    const pageSize = 100;
+    const maxPages = 5;
+    for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+      const body = { pageIndex, pageSize, gameId: G().platformIds.pxb7 };
+      let data = null;
+      try {
+        data = await xhrPost(API_URLS.soldList, body);
+      } catch (e) {
+        console.warn('[鸣潮监控] 已售清单XHR失败(第' + pageIndex + '页):', e.message);
+        // XHR失败尝试fetch备选
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const response = await fetch(API_URLS.soldList, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
+            body: JSON.stringify(body),
+            credentials: 'include',
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (response.ok) {
+            const ct = response.headers.get('content-type') || '';
+            if (ct.indexOf('json') >= 0) data = await response.json();
+          }
+        } catch (e2) { /* 两种方式都失败，跳出 */ }
+      }
+      if (!data || !data.success || !Array.isArray(data.data)) break;
+      all.push(...data.data);
+      if (data.data.length < pageSize) break;
+    }
+    return all;
+  }
+
   // ============================================================
   // 请求拦截
   // ============================================================
@@ -6833,7 +6875,8 @@
       if (row.status === '详估') {
         statusBadge = '<span class="mw-status-badge mw-badge-detail" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">详估</span>';
       } else if (row.status === '已售') {
-        statusBadge = '<span class="mw-status-badge mw-badge-sold" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击重新检查">已售</span>';
+        var soldTip = row.soldPrice ? '成交价¥' + row.soldPrice.toFixed(0) + (row.soldTime ? '（' + row.soldTime + '）' : '') + '，点击重新检查' : '点击重新检查';
+        statusBadge = '<span class="mw-status-badge mw-badge-sold" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="' + soldTip + '">已售</span>';
       } else if (row.status === '降价') {
         statusBadge = '<span class="mw-status-badge mw-badge-drop" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">降价</span>';
       } else if (row.status === '秒杀') {
@@ -6859,7 +6902,9 @@
         '<td>' + row.value.toFixed(0) + '</td>' +
         '<td class="' + diffColorClass + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(0) + '</td>' +
         '<td class="' + ratioColorClass + '">' + ratio.toFixed(1) + '%</td>' +
-        '<td>' + (row.priceHistory && row.priceHistory.length > 0
+        '<td>' + (row.status === '已售' && row.soldPrice
+          ? '<span style="color:#666;text-decoration:line-through;font-size:11px;">¥' + row.price.toFixed(0) + '</span> <span style="color:#e94560;font-weight:600;">成交¥' + row.soldPrice.toFixed(0) + '</span>'
+          : row.priceHistory && row.priceHistory.length > 0
           ? '<span style="color:#666;text-decoration:line-through;font-size:11px;">¥' + row.priceHistory[0].price.toFixed(0) + '</span> <span style="color:' + (row.status === '秒杀' ? '#e94560' : '#f59e0b') + ';font-weight:600;">¥' + row.price.toFixed(0) + '</span>'
           : row.status === '秒杀'
             ? '<span style="color:#e94560;font-weight:600;">秒杀 ¥' + row.price.toFixed(0) + '</span>'
@@ -9603,6 +9648,9 @@ function openSettings() {
     } else if (productId.indexOf('ysy_') === 0) {
       // 易手游无自动付款链接，跳转商品详情页
       buyUrl = ysyUrls().detail + (productUniqueNo || productId.replace(/^ysy_/, '')) + '&shop_source=2';
+    } else if (productId.indexOf('qy_') === 0) {
+      // 7881无自动付款链接，跳转商品详情页（https://search.7881.com/{goodsId}.html）
+      buyUrl = qyUrls().detail + (productUniqueNo || productId.replace(/^qy_/, '')) + '.html';
     } else {
       buyUrl = 'https://www.pxb7.com/product/' + productId + '/1?autobuy=1';
     }
@@ -10418,18 +10466,54 @@ function openSettings() {
     condStr += soldCheckDiff > 0 ? '差价>' + soldCheckDiff + '元' : '差价不限';
     if (soldCheckMinValue > 0) condStr += '，且估值≥' + soldCheckMinValue + '元';
     if (soldCheckMaxValue > 0) condStr += '，估值≤' + soldCheckMaxValue + '元';
-    if (!confirm('将检查 ' + candidates.length + ' 个账号（' + condStr + '）是否已售，可能需要几分钟，是否继续？')) return;
+    if (!confirm('将检查 ' + candidates.length + ' 个账号（' + condStr + '）是否已售。\n\n将优先批量匹配昨日成交清单（几秒完成），未命中的再逐个查询详情（每秒1个），是否继续？')) return;
 
     soldCheckRunning = true;
-    dom.btnCheckSold.textContent = '检查中...';
+    dom.btnCheckSold.textContent = '拉取成交清单...';
     dom.btnCheckSold.style.opacity = '0.6';
 
-    let soldCount = 0;
-    let checkedCount = 0;
+    let soldCount = 0;        // 总已售数
+    let listSoldCount = 0;    // 清单批量命中数
+    let detailCheckedCount = 0; // 详情接口逐个检查数
 
-    for (const row of candidates) {
-      checkedCount++;
-      dom.btnCheckSold.textContent = '检查中(' + checkedCount + '/' + candidates.length + ')';
+    // ===== 第一步：拉取昨日成交清单，批量匹配 =====
+    let soldList = [];
+    try {
+      soldList = await fetchSoldList();
+      console.log('[鸣潮监控] 昨日成交清单拉取成功: ' + soldList.length + ' 条');
+    } catch (e) {
+      console.warn('[鸣潮监控] 成交清单拉取失败，全部走详情接口兜底:', e.message);
+    }
+
+    let fallback = candidates;
+    if (soldList.length > 0) {
+      const soldMap = new Map();
+      for (const item of soldList) {
+        if (item && item.productId) soldMap.set(item.productId, item);
+      }
+      fallback = [];
+      for (const row of candidates) {
+        const soldItem = soldMap.get(row.productId);
+        if (soldItem) {
+          row.status = '已售';
+          soldCount++;
+          listSoldCount++;
+          // 记录真实成交价（分转元）与成交日期
+          const soldPrice = (soldItem.price || 0) / 100;
+          if (soldPrice > 0) row.soldPrice = soldPrice;
+          if (soldItem.payTime) row.soldTime = soldItem.payTime;
+        } else {
+          fallback.push(row);
+        }
+      }
+      console.log('[鸣潮监控] 清单批量匹配: 命中' + listSoldCount + '个，' + fallback.length + '个走详情接口兜底');
+      refreshTableDisplay();
+    }
+
+    // ===== 第二步：清单未命中的（更早售出）逐个查详情兜底 =====
+    for (const row of fallback) {
+      detailCheckedCount++;
+      dom.btnCheckSold.textContent = '检查中(' + detailCheckedCount + '/' + fallback.length + ')';
 
       try {
         const resp = await fetchDetail(row.productId);
@@ -10450,7 +10534,7 @@ function openSettings() {
       refreshTableDisplay();
 
       // 间隔1秒，避免请求过快
-      if (checkedCount < candidates.length) {
+      if (detailCheckedCount < fallback.length) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
@@ -10462,7 +10546,11 @@ function openSettings() {
     dom.btnCheckSold.textContent = '检查已售';
     dom.btnCheckSold.style.opacity = '1';
 
-    alert('检查完成！共检查 ' + candidates.length + ' 个账号，其中 ' + soldCount + ' 个已售。');
+    var summaryStr = '检查完成！共检查 ' + candidates.length + ' 个账号，其中 ' + soldCount + ' 个已售。';
+    if (soldList.length > 0) {
+      summaryStr += '\n（昨日成交清单' + soldList.length + '条，批量命中' + listSoldCount + '个；详情接口兜底检查' + fallback.length + '个）';
+    }
+    alert(summaryStr);
   }
 
   /**
@@ -10488,10 +10576,14 @@ function openSettings() {
         row.status = '已售';
       } else if (resp.data.status === 2 || resp.data.tradeStatus === 2) {
         row.status = '已售';
+        const soldPrice = (resp.data.price || 0) / 100;
+        if (soldPrice > 0) row.soldPrice = soldPrice;
       } else {
         // 仍在售，恢复原状态（如果之前是已售则改为初估）
         if (row.status === '已售') {
           row.status = '初估';
+          delete row.soldPrice;
+          delete row.soldTime;
         }
         // 更新价格
         const newPrice = (resp.data.price || 0) / 100;
@@ -10532,7 +10624,7 @@ function openSettings() {
    */
   function exportCSV() {
     // 改进1：移除"商品码"列（列名按当前游戏）
-    const headers = ['上架时间', '估值', '差价', '性价比', '标价', '原价', '累计降价', '有效金', '限定金', '总金数', '抽数', G().labels.motoColumn, G().labels.charColumn, '状态'];
+    const headers = ['上架时间', '估值', '差价', '性价比', '标价', '原价', '累计降价', '成交价', '有效金', '限定金', '总金数', '抽数', G().labels.motoColumn, G().labels.charColumn, '状态'];
 
     const rows = tableData.map(function (row) {
       const diff = row.value - row.price;
@@ -10547,6 +10639,7 @@ function openSettings() {
         row.price.toFixed(2),
         origPrice.toFixed(2),
         (row.priceDrop || 0).toFixed(2),
+        row.soldPrice ? row.soldPrice.toFixed(2) : '',
         row.effectiveYellow || 0,
         (row.valuation && row.valuation.yellowInfo ? row.valuation.yellowInfo.limitedYellow : 0) || 0,
         row.parsed ? row.parsed.yellowCount : 0,
