@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.5.0
+// @version      3.5.2
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -885,11 +885,6 @@
   let kjsEnabled = false;       // 氪金兽平台监控开关
   let qyEnabled = false;        // 7881平台监控开关
   let ysyEnabled = false;       // 易手游平台监控开关
-  // 检查已售设置
-  let soldCheckRatio = 40;       // 检查已售的性价比阈值(%)
-  let soldCheckDiff = 0;         // 检查已售的差价阈值(元)
-  let soldCheckMinValue = 0;     // 检查已售的估值下限(元)
-  let soldCheckMaxValue = 0;     // 检查已售的估值上限(元，0=不限)
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
@@ -6132,19 +6127,6 @@
         '<input type="number" id="mwCharNotifyDiff" value="0" min="0" style="width:80px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
         '<button id="mwCharNotifyAddRule" style="padding:6px 12px;border:none;border-radius:4px;background:#f59e0b;color:#1a1a2e;font-size:12px;font-weight:600;cursor:pointer;">保存规则</button>' +
         '</div>' +
-        // 检查已售设置
-        '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">检查已售设置</div>' +
-        '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">性价比阈值（%）</label>' +
-        '<input type="number" id="mwSoldCheckRatio" value="' + soldCheckRatio + '" min="0" max="9999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">差价阈值（元）</label>' +
-        '<input type="number" id="mwSoldCheckDiff" value="' + soldCheckDiff + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">估值下限（元）</label>' +
-        '<input type="number" id="mwSoldCheckMinValue" value="' + soldCheckMinValue + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">估值上限（元，0=不限）</label>' +
-        '<input type="number" id="mwSoldCheckMaxValue" value="' + soldCheckMaxValue + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">检查性价比或差价任一超过阈值的账号，且估值在下限~上限范围内（填0表示不限制该条件）</div>' +
         // 最低限制
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">最低限制</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -6488,10 +6470,6 @@
         kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
         qyEnabled = box.querySelector('#mwQyEnabled').checked;
         ysyEnabled = box.querySelector('#mwYsyEnabled').checked;
-        soldCheckRatio = parseFloat(box.querySelector('#mwSoldCheckRatio').value) || 0;
-        soldCheckDiff = parseFloat(box.querySelector('#mwSoldCheckDiff').value) || 0;
-        soldCheckMinValue = parseFloat(box.querySelector('#mwSoldCheckMinValue').value) || 0;
-        soldCheckMaxValue = parseFloat(box.querySelector('#mwSoldCheckMaxValue').value) || 0;
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
@@ -10432,7 +10410,7 @@ function openSettings() {
   }
 
   /**
-   * 检查已售账号（查性价比>20%的账号是否已下架）
+   * 检查已售账号：拉取昨日成交清单批量匹配，命中即标记已售并记录成交价（秒级完成）
    */
   let soldCheckRunning = false;
   async function checkSoldAccounts() {
@@ -10440,117 +10418,57 @@ function openSettings() {
       alert('正在检查中，请稍候...');
       return;
     }
-
-    // 筛选满足条件的账号：性价比或差价任一超过阈值，且未标记已售
-    // 阈值为0表示不限制该条件（即该条件恒满足）
-    const diff = function(row) { return (row.value || 0) - (row.price || 0); };
-    const candidates = tableData.filter(row =>
-      row.status !== '已售' &&
-      (row.value || 0) >= soldCheckMinValue &&
-      (soldCheckMaxValue <= 0 || (row.value || 0) <= soldCheckMaxValue) &&
-      (row.ratio > soldCheckRatio || diff(row) > soldCheckDiff)
-    );
-
-    if (candidates.length === 0) {
-      var ratioStr = soldCheckRatio > 0 ? '性价比>' + soldCheckRatio + '%' : '性价比不限';
-      var diffStr = soldCheckDiff > 0 ? '差价>' + soldCheckDiff + '元' : '差价不限';
-      var valStr = soldCheckMinValue > 0 ? '估值≥' + soldCheckMinValue + '元' : '';
-      if (soldCheckMaxValue > 0) valStr += (valStr ? '且' : '') + '估值≤' + soldCheckMaxValue + '元';
-      alert('没有满足条件的账号需要检查（' + ratioStr + ' 或 ' + diffStr + (valStr ? '，且' + valStr : '') + '）');
+    if (tableData.length === 0) {
+      alert('表格暂无数据，无需检查');
       return;
     }
-
-    var condStr = '';
-    condStr += soldCheckRatio > 0 ? '性价比>' + soldCheckRatio + '%' : '性价比不限';
-    condStr += ' 或 ';
-    condStr += soldCheckDiff > 0 ? '差价>' + soldCheckDiff + '元' : '差价不限';
-    if (soldCheckMinValue > 0) condStr += '，且估值≥' + soldCheckMinValue + '元';
-    if (soldCheckMaxValue > 0) condStr += '，估值≤' + soldCheckMaxValue + '元';
-    if (!confirm('将检查 ' + candidates.length + ' 个账号（' + condStr + '）是否已售。\n\n将优先批量匹配昨日成交清单（几秒完成），未命中的再逐个查询详情（每秒1个），是否继续？')) return;
 
     soldCheckRunning = true;
     dom.btnCheckSold.textContent = '拉取成交清单...';
     dom.btnCheckSold.style.opacity = '0.6';
 
-    let soldCount = 0;        // 总已售数
-    let listSoldCount = 0;    // 清单批量命中数
-    let detailCheckedCount = 0; // 详情接口逐个检查数
+    let soldCount = 0;
 
-    // ===== 第一步：拉取昨日成交清单，批量匹配 =====
+    // 拉取昨日成交清单，批量匹配全部表格记录（Map查找零成本，无需阈值筛选）
     let soldList = [];
     try {
       soldList = await fetchSoldList();
       console.log('[鸣潮监控] 昨日成交清单拉取成功: ' + soldList.length + ' 条');
     } catch (e) {
-      console.warn('[鸣潮监控] 成交清单拉取失败，全部走详情接口兜底:', e.message);
+      console.warn('[鸣潮监控] 成交清单拉取失败:', e.message);
     }
 
-    let fallback = candidates;
     if (soldList.length > 0) {
       const soldMap = new Map();
       for (const item of soldList) {
         if (item && item.productId) soldMap.set(item.productId, item);
       }
-      fallback = [];
-      for (const row of candidates) {
+      for (const row of tableData) {
         const soldItem = soldMap.get(row.productId);
         if (soldItem) {
           row.status = '已售';
           soldCount++;
-          listSoldCount++;
           // 记录真实成交价（分转元）与成交日期
           const soldPrice = (soldItem.price || 0) / 100;
           if (soldPrice > 0) row.soldPrice = soldPrice;
           if (soldItem.payTime) row.soldTime = soldItem.payTime;
-        } else {
-          fallback.push(row);
         }
       }
-      console.log('[鸣潮监控] 清单批量匹配: 命中' + listSoldCount + '个，' + fallback.length + '个走详情接口兜底');
-      refreshTableDisplay();
+      console.log('[鸣潮监控] 清单批量匹配: 命中' + soldCount + '个');
+      saveTableData();
     }
 
-    // ===== 第二步：清单未命中的（更早售出）逐个查详情兜底 =====
-    for (const row of fallback) {
-      detailCheckedCount++;
-      dom.btnCheckSold.textContent = '检查中(' + detailCheckedCount + '/' + fallback.length + ')';
-
-      try {
-        const resp = await fetchDetail(row.productId);
-        // 判断已售：data为null、status===2（下架）、tradeStatus===2（已成交）
-        if (!resp || !resp.success || !resp.data) {
-          row.status = '已售';
-          soldCount++;
-        } else if (resp.data.status === 2 || resp.data.tradeStatus === 2) {
-          row.status = '已售';
-          soldCount++;
-        }
-      } catch (e) {
-        // 请求失败跳过，不标记已售（避免误判）
-        console.log('[鸣潮监控] 检查已售失败: ' + row.productId + ' - ' + e.message);
-      }
-
-      // 更新表格显示
-      refreshTableDisplay();
-
-      // 间隔1秒，避免请求过快
-      if (detailCheckedCount < fallback.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-
-    saveTableData();
     refreshTableDisplay();
 
     soldCheckRunning = false;
     dom.btnCheckSold.textContent = '检查已售';
     dom.btnCheckSold.style.opacity = '1';
 
-    var summaryStr = '检查完成！共检查 ' + candidates.length + ' 个账号，其中 ' + soldCount + ' 个已售。';
-    if (soldList.length > 0) {
-      summaryStr += '\n（昨日成交清单' + soldList.length + '条，批量命中' + listSoldCount + '个；详情接口兜底检查' + fallback.length + '个）';
+    if (soldList.length === 0) {
+      alert('检查失败：昨日成交清单拉取失败，请稍后重试。');
+      return;
     }
-    alert(summaryStr);
+    alert('检查完成！表格 ' + tableData.length + ' 条记录全部匹配，其中 ' + soldCount + ' 个命中昨日成交清单（清单共 ' + soldList.length + ' 条，仅覆盖螃蟹网平台）。');
   }
 
   /**
@@ -10692,10 +10610,6 @@ function openSettings() {
       kjsEnabled: kjsEnabled,
       qyEnabled: qyEnabled,
       ysyEnabled: ysyEnabled,
-      soldCheckRatio: soldCheckRatio,
-      soldCheckDiff: soldCheckDiff,
-      soldCheckMinValue: soldCheckMinValue,
-      soldCheckMaxValue: soldCheckMaxValue,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -10967,10 +10881,6 @@ function openSettings() {
     kjsEnabled = savedState.kjsEnabled != null ? savedState.kjsEnabled : false;
     qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
       ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
-    soldCheckRatio = savedState.soldCheckRatio != null ? savedState.soldCheckRatio : 40;
-    soldCheckDiff = savedState.soldCheckDiff != null ? savedState.soldCheckDiff : 0;
-    soldCheckMinValue = savedState.soldCheckMinValue != null ? savedState.soldCheckMinValue : 0;
-    soldCheckMaxValue = savedState.soldCheckMaxValue != null ? savedState.soldCheckMaxValue : 0;
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
     // 加载推送配置
     if (savedState.pushConfig) {
