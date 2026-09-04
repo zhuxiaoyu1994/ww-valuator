@@ -14,6 +14,9 @@
 
 let dbClient = null;
 
+// 成交记录保留天数（按入库时间计算，超期自动清理）
+const DEALS_RETENTION_DAYS = 7;
+
 // 内存配置存储（当未配置数据库时作为降级方案，重启后丢失）
 const memoryConfigStore = new Map();
 
@@ -456,7 +459,31 @@ async function insertDealsBatch(deals) {
     }
     console.log(`[DB] 成交记录逐条插入: ${inserted} 新增, ${skipped} 跳过`);
   }
+  // 只保留最近 N 天成交记录，避免数据库无限增长（以入库时间为准，成交数据每日抓取一次昨日成交，时间差约一天）
+  await cleanupOldDeals(DEALS_RETENTION_DAYS);
   return { inserted, skipped };
+}
+
+/**
+ * 清理超期成交记录
+ * @param {number} days - 保留天数（按 fetched_at 入库时间计算，ISO 字符串字典序即时间序）
+ */
+async function cleanupOldDeals(days) {
+  if (!dbClient) return 0;
+  try {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const result = await dbClient.execute({
+      sql: 'DELETE FROM deals WHERE fetched_at < ?',
+      args: [cutoff],
+    });
+    if (result.rowsAffected > 0) {
+      console.log(`[DB] 成交记录清理: 删除 ${result.rowsAffected} 条 ${days} 天前的记录`);
+    }
+    return result.rowsAffected;
+  } catch (e) {
+    console.error('[DB] 清理成交记录失败:', e.message);
+    return 0;
+  }
 }
 
 /**
@@ -587,4 +614,5 @@ module.exports = {
   queryDeals,
   queryAllDealsForStats,
   deleteDealByProductId,
+  cleanupOldDeals,
 };
