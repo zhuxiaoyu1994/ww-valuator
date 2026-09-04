@@ -50,7 +50,7 @@ const WUWA_CONFIG = {
   defaultWeights: {
     c6TierWeights: { S: 1, A: 0.5, B: 0.15, C: 0.1, D: 0.05, E: 0 },
     c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
-    c6Base: 0, c6BaseBonus: 0, c6Step: 0.1, c6StepBonus: 0.025,
+    c6Base: 0, c6BaseBonus: 0, c6Step: 0.1, c6StepBonus: 0.025, c6MaxWeightedConst: 0,
     outfit: 0, motoFrame: 0,
     pullC6Base: 0, pullC6BaseBonus: 0, pullC6Step: 1, pullC6StepBonus: 0.4, pullC6Threshold: 100, pullC6MaxWeightedConst: 5, pullPerWeightedConst: 450, pullPerWeightedConstCount: 0.5,
     teamMultiBonus: [

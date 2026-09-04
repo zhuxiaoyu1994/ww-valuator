@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.6.1
+// @version      3.7.1
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -448,6 +448,7 @@
       c6BaseBonus: 0,      // 基准溢价（0%）
       c6Step: 0.1,         // 每档满命数
       c6StepBonus: 0.025,  // 每档浮动（2.5%）
+      c6MaxWeightedConst: 0, // 加权满命数上限，超过此值溢价不再增加（0=不封顶）
       // 资源定价
       outfit: 0,             // 服饰/皮肤单价
       motoFrame: 0,          // 车架模组/邦布单价
@@ -1205,6 +1206,7 @@
     w.c6BaseBonus = (saved.c6BaseBonus != null) ? saved.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
     w.c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
     w.c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+    w.c6MaxWeightedConst = (saved.c6MaxWeightedConst != null) ? saved.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
     // 满命抽数加成公式参数
     w.pullC6Base = (saved.pullC6Base != null) ? saved.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
     w.pullC6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
@@ -2186,9 +2188,12 @@
     var c6BaseBonus = (w.c6BaseBonus != null) ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
     var c6Step = (w.c6Step != null) ? w.c6Step : DEFAULT_WEIGHTS.c6Step;
     var c6StepBonus = (w.c6StepBonus != null) ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+    var c6MaxWC = (w.c6MaxWeightedConst != null) ? w.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
 
+    // 加权满命上限（0=不封顶）：超过上限后按上限值计算溢价
+    var c6EffWC = (c6MaxWC > 0 && weightedFullConst > c6MaxWC) ? c6MaxWC : weightedFullConst;
     let c6BonusMultiplier = weightedFullConst > 0
-      ? c6BaseBonus + (weightedFullConst - c6Base) / c6Step * c6StepBonus
+      ? c6BaseBonus + (c6EffWC - c6Base) / c6Step * c6StepBonus
       : 0;
     if (c6BonusMultiplier < 0) c6BonusMultiplier = 0;
     if (c6BonusMultiplier > 0) {
@@ -5463,8 +5468,8 @@
           break;
         case 'diff':
         default:
-          valA = (a.value || 0) - (a.price || 0);
-          valB = (b.value || 0) - (b.price || 0);
+          valA = (a.value || 0) - getDiffBasePrice(a);
+          valB = (b.value || 0) - getDiffBasePrice(b);
           break;
       }
       return sortDirection === 'asc' ? valA - valB : valB - valA;
@@ -7100,7 +7105,7 @@
     displayData = displayData.filter(row => {
       const price = row.price || 0;
       const value = row.value || 0;
-      const diff = value - price;
+      const diff = value - getDiffBasePrice(row);
       const ratio = row.ratio || 0;
       if (priceFilter.min != null && price < priceFilter.min) return false;
       if (priceFilter.max != null && price > priceFilter.max) return false;
@@ -7129,7 +7134,7 @@
     // 构建表格行（仅当前页）
     let html = '';
     for (const row of pageData) {
-      const diff = row.value - row.price;
+      const diff = row.value - getDiffBasePrice(row);
       const ratio = row.ratio || 0;
       const isPositive = diff > 0;
       const isGold = ratio > threshold;
@@ -7331,6 +7336,13 @@
   }
 
   /**
+   * 差价计算基准价：已售商品用成交价（差价=估价-成交价），其余用当前价
+   */
+  function getDiffBasePrice(row) {
+    return (row.status === '已售' && row.soldPrice > 0) ? row.soldPrice : (row.price || 0);
+  }
+
+  /**
    * 性价比颜色
    */
   function getRatioColor(ratio) {
@@ -7357,7 +7369,8 @@
     const v = getRowValuation(row);
     const ratio = row.ratio || 0;
     const color = getRatioColor(ratio);
-    const price = row.price || 0;
+    const isSold = row.status === '已售' && row.soldPrice > 0;
+    const price = getDiffBasePrice(row);
     const estValue = v.totalValue || row.value || 0;
     const diff = estValue - price;
     const productLink = getProductUrl(row);
@@ -7518,7 +7531,7 @@
       '</div>' +
       // 价格对比
       '<div style="display:flex;gap:8px;margin-bottom:14px;">' +
-        '<div style="flex:1;background:#16213e;border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:11px;color:#666;margin-bottom:2px;">标价</div><div style="font-size:16px;font-weight:700;color:#e94560;">¥' + price.toFixed(0) + '</div></div>' +
+        '<div style="flex:1;background:#16213e;border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:11px;color:#666;margin-bottom:2px;">' + (isSold ? '成交价' : '标价') + '</div><div style="font-size:16px;font-weight:700;color:#e94560;">¥' + price.toFixed(0) + '</div></div>' +
         '<div style="display:flex;align-items:center;font-size:16px;color:#444;">→</div>' +
         '<div style="flex:1;background:#16213e;border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:11px;color:#666;margin-bottom:2px;">估值</div><div style="font-size:16px;font-weight:700;color:' + color + ';">¥' + estValue.toFixed(0) + '</div></div>' +
         '<div style="display:flex;align-items:center;font-size:16px;color:#444;">=</div>' +
@@ -8613,7 +8626,10 @@ function openSettings() {
     c6FormulaRow.appendChild(c6fLabel('命浮动'));
     var c6StepBonusInp = c6fInput((weights.c6StepBonus != null ? weights.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus) * 100, '0.5', '#10b981', '每档浮动百分比');
     c6FormulaRow.appendChild(c6StepBonusInp);
-    c6FormulaRow.appendChild(c6fLabel('%'));
+    c6FormulaRow.appendChild(c6fLabel('%，加权上限'));
+    var c6MaxWCInp = c6fInput(weights.c6MaxWeightedConst != null ? weights.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0), '0.5', '#f59e0b', '加权满命数超过此值后溢价不再增加（0=不封顶）');
+    c6FormulaRow.appendChild(c6MaxWCInp);
+    c6FormulaRow.appendChild(c6fLabel('（0=不封顶）'));
     c6Section.appendChild(c6FormulaRow);
 
     // 预览
@@ -8624,18 +8640,22 @@ function openSettings() {
       var baseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
       var step = parseFloat(c6StepInp.value) || 1;
       var stepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var maxWC = parseFloat(c6MaxWCInp.value);
+      if (isNaN(maxWC) || maxWC <= 0) maxWC = 0;
       var samples = [0, 1, 2, base, base + step, base + step * 5, base + step * 10, base + step * 20, base + step * 50];
+      if (maxWC > 0) samples.push(maxWC, maxWC + step, maxWC + step * 5);
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var c = samples[si];
-        var bonus = baseBonus + (c - base) / step * stepBonus;
+        var effC = (maxWC > 0 && c > maxWC) ? maxWC : c;
+        var bonus = baseBonus + (effC - base) / step * stepBonus;
         if (bonus < 0) bonus = 0;
         html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
       }
       c6Preview.innerHTML = html;
     }
-    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp].forEach(function(inp) {
+    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp, c6MaxWCInp].forEach(function(inp) {
       inp.oninput = updateC6Preview;
     });
     updateC6Preview();
@@ -8652,6 +8672,7 @@ function openSettings() {
       c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
       c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
       c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
+      c6MaxWCInp.value = DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0;
       updateC6Preview();
     };
     c6DefaultRow.appendChild(loadC6DefaultBtn);
@@ -9260,7 +9281,7 @@ function openSettings() {
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
+    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, c6MaxWeightedConst: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
     for (var wk of Object.keys(DEFAULT_WEIGHTS)) {
       if (skipKeys[wk]) continue;
       var meta = WEIGHT_LABELS[wk] || { label: wk, desc: '' };
@@ -9551,6 +9572,7 @@ function openSettings() {
       newW.c6BaseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
       var _c6s = parseFloat(c6StepInp.value); newW.c6Step = (!isNaN(_c6s) && _c6s > 0) ? _c6s : DEFAULT_WEIGHTS.c6Step;
       newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var _c6mwc = parseFloat(c6MaxWCInp.value); newW.c6MaxWeightedConst = !isNaN(_c6mwc) ? _c6mwc : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
 
       // 收集满命权重
       var newC6Weights = {};
@@ -10614,8 +10636,9 @@ function openSettings() {
         productId: row.productId,
         showTitle: row.showTitle,
         price: row.price,
+        soldPrice: row.soldPrice || null,
         value: row.value,
-        diff: row.value - row.price,
+        diff: row.value - getDiffBasePrice(row),
         ratio: row.ratio,
         status: row.status,
         yellowCount: row.parsed ? row.parsed.yellowCount : 0,

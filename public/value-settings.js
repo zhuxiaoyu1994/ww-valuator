@@ -130,6 +130,7 @@
     w.c6BaseBonus = (s.c6BaseBonus != null) ? s.c6BaseBonus : (DEFAULT_WEIGHTS.c6BaseBonus != null ? DEFAULT_WEIGHTS.c6BaseBonus : 1.0);
     w.c6Step = (s.c6Step != null) ? s.c6Step : (DEFAULT_WEIGHTS.c6Step != null ? DEFAULT_WEIGHTS.c6Step : 0.1);
     w.c6StepBonus = (s.c6StepBonus != null) ? s.c6StepBonus : (DEFAULT_WEIGHTS.c6StepBonus != null ? DEFAULT_WEIGHTS.c6StepBonus : 0.05);
+    w.c6MaxWeightedConst = (s.c6MaxWeightedConst != null) ? s.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
     w.pullC6Base = (s.pullC6Base != null) ? s.pullC6Base : (DEFAULT_WEIGHTS.pullC6Base != null ? DEFAULT_WEIGHTS.pullC6Base : 5);
     w.pullC6BaseBonus = (s.pullC6BaseBonus != null) ? s.pullC6BaseBonus : (DEFAULT_WEIGHTS.pullC6BaseBonus != null ? DEFAULT_WEIGHTS.pullC6BaseBonus : 0.5);
     w.pullC6Step = (s.pullC6Step != null) ? s.pullC6Step : (DEFAULT_WEIGHTS.pullC6Step != null ? DEFAULT_WEIGHTS.pullC6Step : 0.1);
@@ -1060,7 +1061,10 @@
     c6FormulaRow.appendChild(c6fLabel('命浮动'));
     var c6StepBonusInp = c6fInput((w.c6StepBonus != null ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus) * 100, '0.5', '#4ade80', '每档浮动百分比');
     c6FormulaRow.appendChild(c6StepBonusInp);
-    c6FormulaRow.appendChild(c6fLabel('%'));
+    c6FormulaRow.appendChild(c6fLabel('%，加权上限'));
+    var c6MaxWCInp = c6fInput(w.c6MaxWeightedConst != null ? w.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0), '0.5', '#fbbf24', '加权满命数超过此值后溢价不再增加（0=不封顶）');
+    c6FormulaRow.appendChild(c6MaxWCInp);
+    c6FormulaRow.appendChild(c6fLabel('（0=不封顶）'));
     c6Section.appendChild(c6FormulaRow);
 
     // 预览
@@ -1071,18 +1075,22 @@
       var baseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
       var step = parseFloat(c6StepInp.value) || 1;
       var stepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var maxWC = parseFloat(c6MaxWCInp.value);
+      if (isNaN(maxWC) || maxWC <= 0) maxWC = 0;
       var samples = [0, 1, 2, base, base + step, base + step * 5, base + step * 10, base + step * 20, base + step * 50];
+      if (maxWC > 0) samples.push(maxWC, maxWC + step, maxWC + step * 5);
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var c = samples[si];
-        var bonus = baseBonus + (c - base) / step * stepBonus;
+        var effC = (maxWC > 0 && c > maxWC) ? maxWC : c;
+        var bonus = baseBonus + (effC - base) / step * stepBonus;
         if (bonus < 0) bonus = 0;
         html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
       }
       c6Preview.innerHTML = html;
     }
-    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp].forEach(function(inp) {
+    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp, c6MaxWCInp].forEach(function(inp) {
       inp.oninput = updateC6Preview;
     });
     updateC6Preview();
@@ -1099,6 +1107,7 @@
       c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
       c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
       c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
+      c6MaxWCInp.value = DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0;
       updateC6Preview();
     };
     c6DefaultRow.appendChild(loadC6DefaultBtn);
@@ -1900,6 +1909,8 @@
       var _c6StepVal = parseFloat(c6StepInp.value);
       newW.c6Step = isNaN(_c6StepVal) ? DEFAULT_WEIGHTS.c6Step : _c6StepVal;
       newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var _c6MaxWCVal = parseFloat(c6MaxWCInp.value);
+      newW.c6MaxWeightedConst = isNaN(_c6MaxWCVal) ? (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0) : _c6MaxWCVal;
 
       // 保留默认满命溢价档位（引擎使用，UI 不编辑）
       newW.c6MultiBonus = DEFAULT_WEIGHTS.c6MultiBonus;

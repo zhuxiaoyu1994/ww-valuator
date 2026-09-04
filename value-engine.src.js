@@ -147,6 +147,7 @@ function buildDefaultWeights(customWeights) {
   w.c6BaseBonus = (saved.c6BaseBonus != null) ? saved.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
   w.c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
   w.c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+  w.c6MaxWeightedConst = (saved.c6MaxWeightedConst != null) ? saved.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
   // 满命抽数加成公式参数
   w.pullC6Base = (saved.pullC6Base != null) ? saved.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
   w.pullC6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
@@ -1086,9 +1087,12 @@ function calculateValue(parsed, price) {
   var c6BaseBonus = (w.c6BaseBonus != null) ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
   var c6Step = (w.c6Step != null) ? w.c6Step : DEFAULT_WEIGHTS.c6Step;
   var c6StepBonus = (w.c6StepBonus != null) ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+  var c6MaxWC = (w.c6MaxWeightedConst != null) ? w.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
 
+  // 加权满命上限（0=不封顶）：超过上限后按上限值计算溢价
+  var c6EffWC = (c6MaxWC > 0 && weightedFullConst > c6MaxWC) ? c6MaxWC : weightedFullConst;
   let c6BonusMultiplier = weightedFullConst > 0
-    ? c6BaseBonus + (weightedFullConst - c6Base) / c6Step * c6StepBonus
+    ? c6BaseBonus + (c6EffWC - c6Base) / c6Step * c6StepBonus
     : 0;
   if (c6BonusMultiplier < 0) c6BonusMultiplier = 0;
   if (c6BonusMultiplier > 0) {
