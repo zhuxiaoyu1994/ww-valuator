@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.6.0
+// @version      3.6.1
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -1338,6 +1338,30 @@
     w.deletedChars = saved.deletedChars || [];
     // 用户自定义角色级别覆盖
     w.charTierOverride = saved.charTierOverride || {};
+    applyCharTierOverrides(w, saved.charPrices);
+    return w;
+  }
+
+  /**
+   * 将角色级别覆盖（charTierOverride）与自定义角色（charPrices）应用到 CHAR_LOOKUP 查找表
+   * loadWeights 与设置面板保存后都必须调用，否则新级别不会作用于解析/显示/估值
+   */
+  function applyCharTierOverrides(w, savedCharPrices) {
+    w.charTierOverride = w.charTierOverride || {};
+    // 先按内置配置重置（改回默认级别的角色不在 override 中，需清除此前应用的旧覆盖）
+    CHAR_LOOKUP = {};
+    for (const [dTier, dInfo] of Object.entries(CHAR_TIERS)) {
+      for (const dName of dInfo.chars) {
+        CHAR_LOOKUP[dName] = {
+          tier: dTier,
+          price: dInfo.price,
+          isHot: dInfo.isHot != null ? dInfo.isHot : (dTier === 'S' || dTier === 'A' || dTier === 'B')
+        };
+      }
+    }
+    for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
+      if (CHAR_LOOKUP[canonical]) CHAR_LOOKUP[alias] = CHAR_LOOKUP[canonical];
+    }
     for (var ctoName in w.charTierOverride) {
       if (!w.charTierOverride.hasOwnProperty(ctoName)) continue;
       var ctoTier = w.charTierOverride[ctoName];
@@ -1356,21 +1380,19 @@
       }
     }
     // 补充：charPrices中的自定义角色也加入CHAR_LOOKUP（兼容旧导出未包含charTierOverride的情况）
-    if (saved.charPrices) {
-      for (var cpName in saved.charPrices) {
-        if (!saved.charPrices.hasOwnProperty(cpName)) continue;
-        if (!CHAR_LOOKUP[cpName]) {
-          var cpTier = (w.charTierOverride && w.charTierOverride[cpName]) || 'C';
-          var cpTierPrice = CHAR_TIERS[cpTier] ? CHAR_TIERS[cpTier].price : 0;
-          CHAR_LOOKUP[cpName] = {
-            tier: cpTier,
-            price: cpTierPrice,
-            isHot: cpTier === 'S' || cpTier === 'A' || cpTier === 'B'
-          };
-        }
+    var cpSource = savedCharPrices || w.charPrices || {};
+    for (var cpName in cpSource) {
+      if (!cpSource.hasOwnProperty(cpName)) continue;
+      if (!CHAR_LOOKUP[cpName]) {
+        var cpTier = (w.charTierOverride && w.charTierOverride[cpName]) || 'C';
+        var cpTierPrice = CHAR_TIERS[cpTier] ? CHAR_TIERS[cpTier].price : 0;
+        CHAR_LOOKUP[cpName] = {
+          tier: cpTier,
+          price: cpTierPrice,
+          isHot: cpTier === 'S' || cpTier === 'A' || cpTier === 'B'
+        };
       }
     }
-    return w;
   }
 
   /**
@@ -1563,7 +1585,13 @@
         charMap[c.name] = c;
       }
     }
-    return Object.values(charMap);
+    // 级别按查找表重映射（用户改级别后 CHAR_TIERS 遍历来源仍是旧级别）
+    const result = Object.values(charMap);
+    for (const c of result) {
+      const lkInfo = CHAR_LOOKUP[c.name];
+      if (lkInfo) { c.tier = lkInfo.tier; c.price = lkInfo.price; c.isHot = lkInfo.isHot; }
+    }
+    return result;
   }
 
   /**
@@ -9593,6 +9621,8 @@ function openSettings() {
         return;
       }
       weights = newW;
+      // 立即应用新的角色级别覆盖到查找表，否则重算仍按旧级别解析
+      applyCharTierOverrides(newW);
       overlay.remove();
       // 全量重算表格中已有行的估值
       recalcAllRows();
