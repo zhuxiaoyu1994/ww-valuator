@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.5.2
+// @version      3.6.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -921,6 +921,8 @@
   let searchKeyword = '';                           // 商品编号/文字搜索
   let showOnlySold = false;                         // 是否只显示已售账号
   let showOnlyFlashSale = false;                    // 是否只显示秒杀账号
+  const PAGE_SIZE = 100;                            // 表格分页每页行数
+  let currentPage = 1;                              // 当前页码（1-based）
   let monitorTimeout = null;     // 监控定时器
   let countdownTimer = null;     // 倒计时定时器
   let weights = null;            // 估值权重（init时从localStorage加载）
@@ -5493,7 +5495,7 @@
           position: fixed;
           top: 80px; right: 16px;
           width: 760px;
-          height: 500px;
+          height: calc(100vh - 100px);
           min-width: 480px;
           min-height: 300px;
           background: #0a0a1a;
@@ -5794,14 +5796,14 @@
           <button class="mw-btn" id="mwBtnClearTable">清空表格</button>
           <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
-          <button class="mw-btn" id="mwBtnExportCSV">导出CSV</button>
           <span class="mw-input-label">≥</span>
           <input type="number" class="mw-input" id="mwInputThreshold" value="20" min="0" max="999">%
           <button class="mw-collapse-btn" id="mwBtnCollapse" title="折叠/展开">—</button>
         </div>
       </div>
-      <div class="mw-filter-bar" id="mwFilterBar" style="display:none;">
+      <div class="mw-filter-bar" id="mwFilterBar" style="display:flex;">
         <span>筛选角色: </span><span id="mwFilterCharTags" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;"></span>
+        <span class="mw-filter-clear" id="mwFilterAddChar" style="color:#10b981;" title="添加角色筛选（可搜索全部角色，含未显示的低级别角色）">＋角色</span>
         <span class="mw-filter-clear" id="mwFilterClear">重置</span>
       </div>
       <div class="mw-filter-bar" id="mwNumFilterBar" style="display:flex;">
@@ -5850,6 +5852,7 @@
             <tr><td colspan="11" class="mw-empty">等待数据加载...</td></tr>
           </tbody>
         </table>
+        <div id="mwPaginationBar" style="display:none;position:sticky;bottom:0;left:0;z-index:6;background:#0a0a1a;border-top:1px solid #2a2a4a;align-items:center;justify-content:center;padding:5px 0;flex-wrap:wrap;user-select:none;"></div>
       </div>
       <div class="mw-bottom-bar" id="mwBottomBar">
         <span id="mwBottomLeft">最后刷新: - | 下次刷新: -</span>
@@ -5870,7 +5873,6 @@
     dom.btnClearTable = document.getElementById('mwBtnClearTable');
     dom.btnCleanData = document.getElementById('mwBtnCleanData');
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
-    dom.btnExportCSV = document.getElementById('mwBtnExportCSV');
     dom.inputThreshold = document.getElementById('mwInputThreshold');
     dom.tableBody = document.getElementById('mwTableBody');
     dom.filterBar = document.getElementById('mwFilterBar');
@@ -6532,8 +6534,6 @@
 
     dom.btnCleanData.addEventListener('click', openCleanDataDialog);
 
-    dom.btnExportCSV.addEventListener('click', exportCSV);
-
     // 检查已售
     dom.btnCheckSold.addEventListener('click', checkSoldAccounts);
 
@@ -6546,9 +6546,17 @@
 
     dom.filterClear.addEventListener('click', function () {
       charFilter = [];
-      dom.filterBar.style.display = 'none';
+      currentPage = 1;
+      updateFilterBar();
       refreshTableDisplay();
     });
+
+    var filterAddBtn = document.getElementById('mwFilterAddChar');
+    if (filterAddBtn) {
+      filterAddBtn.addEventListener('click', function () {
+        openCharPicker(filterAddBtn);
+      });
+    }
 
     // 数值筛选输入框事件（输入时实时筛选）
     function bindNumFilter(inputId, filterObj, key) {
@@ -6557,6 +6565,7 @@
       el.addEventListener('input', function () {
         const v = this.value.trim();
         filterObj[key] = (v === '' || isNaN(parseFloat(v))) ? null : parseFloat(v);
+        currentPage = 1;
         refreshTableDisplay();
       });
     }
@@ -6565,6 +6574,7 @@
     if (searchInput) {
       searchInput.addEventListener('input', function () {
         searchKeyword = this.value.trim().toLowerCase();
+        currentPage = 1;
         refreshTableDisplay();
       });
     }
@@ -6591,6 +6601,7 @@
         ratioFilter.min = null;
         ratioFilter.max = null;
         searchKeyword = '';
+        currentPage = 1;
         ['mwFilterPriceMin', 'mwFilterPriceMax', 'mwFilterValueMin', 'mwFilterValueMax',
          'mwFilterDiffMin', 'mwFilterDiffMax', 'mwFilterRatioMin', 'mwFilterRatioMax'].forEach(function (id) {
           const el = document.getElementById(id);
@@ -6607,6 +6618,7 @@
     if (showOnlySoldEl) {
       showOnlySoldEl.addEventListener('change', function () {
         showOnlySold = this.checked;
+        currentPage = 1;
         refreshTableDisplay();
       });
     }
@@ -6616,6 +6628,7 @@
     if (showOnlyFlashSaleEl) {
       showOnlyFlashSaleEl.addEventListener('change', function () {
         showOnlyFlashSale = this.checked;
+        currentPage = 1;
         refreshTableDisplay();
       });
     }
@@ -6719,15 +6732,11 @@
    */
   function updateFilterBar() {
     if (!dom.filterBar || !dom.filterCharTags) return;
-    if (charFilter.length === 0) {
-      dom.filterBar.style.display = 'none';
-      return;
-    }
     dom.filterBar.style.display = 'flex';
     const constUnit = G().constUnitDisplay;
     dom.filterCharTags.innerHTML = charFilter.map(function (cond) {
       const label = cond.name + (cond.minConst > 0 ? cond.minConst + constUnit + '+' : '');
-      return '<span class="mw-char-filter-tag" data-char="' + cond.name + '" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid #e94560;border-radius:999px;background:rgba(233,69,96,0.15);color:#e94560;font-size:11px;cursor:pointer;" title="点击移除">' + label + ' ×</span>';
+      return '<span class="mw-char-filter-tag" data-char="' + cond.name + '" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid #e94560;border-radius:999px;background:rgba(233,69,96,0.15);color:#e94560;font-size:11px;cursor:pointer;" title="' + cond.name + '：点击移除，右键调整命座条件（当前' + (cond.minConst > 0 ? '≥' + cond.minConst + constUnit : '不限命座') + '）">' + label + ' ×</span>';
     }).join('');
     var filterTags = dom.filterCharTags.querySelectorAll('.mw-char-filter-tag');
     filterTags.forEach(function (t) {
@@ -6735,8 +6744,281 @@
         var name = t.getAttribute('data-char');
         var idx = charFilter.findIndex(function (c) { return c.name === name; });
         if (idx >= 0) charFilter.splice(idx, 1);
+        currentPage = 1;
         updateFilterBar();
         refreshTableDisplay();
+      });
+      t.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var name = t.getAttribute('data-char');
+        var cond = charFilter.find(function (c) { return c.name === name; });
+        if (cond) {
+          cond.minConst = (cond.minConst || 0) >= 6 ? 0 : (cond.minConst || 0) + 1;
+          currentPage = 1;
+          updateFilterBar();
+          refreshTableDisplay();
+        }
+      });
+    });
+  }
+
+  /**
+   * 角色选择器弹层：搜索并添加任意角色到筛选（含表格中未显示的低级别角色）
+   */
+  function openCharPicker(anchorEl) {
+    var existing = document.getElementById('mwCharPicker');
+    if (existing) { existing.remove(); return; }
+
+    var picker = document.createElement('div');
+    picker.id = 'mwCharPicker';
+    picker.style.cssText = 'position:fixed;z-index:1000001;background:#16213e;border:1px solid #e94560;border-radius:8px;padding:10px;width:300px;box-shadow:0 4px 24px rgba(0,0,0,.6);';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = '搜索角色名（如：达妮娅）...';
+    input.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 10px;border:1px solid #0f3460;border-radius:4px;background:#0f3460;color:#e0e0e0;font-size:13px;margin-bottom:8px;outline:none;';
+
+    var list = document.createElement('div');
+    list.style.cssText = 'max-height:280px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start;';
+
+    var hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:#666;margin-top:8px;';
+    hint.textContent = '点击添加/移除筛选；标签右键调整命座条件';
+
+    picker.appendChild(input);
+    picker.appendChild(list);
+    picker.appendChild(hint);
+    document.body.appendChild(picker);
+
+    // 定位到按钮下方
+    try {
+      var rect = anchorEl.getBoundingClientRect();
+      picker.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 316)) + 'px';
+      picker.style.top = Math.min(rect.bottom + 6, window.innerHeight - 360) + 'px';
+    } catch (e) {
+      picker.style.left = '40px';
+      picker.style.top = '120px';
+    }
+
+    function renderList(kw) {
+      var items = [];
+      var tiers = CHAR_TIERS || {};
+      Object.keys(tiers).forEach(function (tier) {
+        var info = tiers[tier] || {};
+        (info.chars || []).forEach(function (name) {
+          if (kw && name.toLowerCase().indexOf(kw) < 0) return;
+          items.push({ name: name, tier: tier, price: info.price });
+        });
+      });
+      items.sort(function (a, b) {
+        var ta = TIER_ORDER[a.tier] != null ? TIER_ORDER[a.tier] : 99;
+        var tb = TIER_ORDER[b.tier] != null ? TIER_ORDER[b.tier] : 99;
+        if (ta !== tb) return ta - tb;
+        return a.name.localeCompare(b.name, 'zh');
+      });
+      if (items.length === 0) {
+        list.innerHTML = '<span style="color:#666;font-size:12px;padding:4px;">无匹配角色</span>';
+        return;
+      }
+      list.innerHTML = items.map(function (it) {
+        var active = charFilter.some(function (c) { return c.name === it.name; });
+        var color = it.tier === 'S' ? '#e94560' : (it.tier === 'A' ? '#f59e0b' : '#8a8fb5');
+        var bg = active ? 'background:rgba(233,69,96,.25);border-color:#e94560;' : 'border-color:#0f3460;';
+        return '<span class="mw-picker-char" data-name="' + it.name + '" title="' + it.tier + '级，默认估值' + it.price + '元" style="display:inline-block;padding:3px 8px;border:1px solid;border-radius:4px;font-size:12px;cursor:pointer;color:' + color + ';' + bg + '">' + it.name + '</span>';
+      }).join('');
+      list.querySelectorAll('.mw-picker-char').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var name = el.getAttribute('data-name');
+          var idx = charFilter.findIndex(function (c) { return c.name === name; });
+          if (idx >= 0) {
+            charFilter.splice(idx, 1);
+          } else {
+            charFilter.push({ name: name, minConst: 0 });
+          }
+          currentPage = 1;
+          updateFilterBar();
+          refreshTableDisplay();
+          renderList(input.value.trim().toLowerCase());
+        });
+      });
+    }
+
+    renderList('');
+    input.addEventListener('input', function () {
+      renderList(this.value.trim().toLowerCase());
+    });
+    input.focus();
+
+    // 点击外部关闭
+    setTimeout(function () {
+      var closeHandler = function (e) {
+        if (picker.contains(e.target) || (anchorEl && anchorEl.contains(e.target))) return;
+        picker.remove();
+        document.removeEventListener('mousedown', closeHandler);
+      };
+      document.addEventListener('mousedown', closeHandler);
+    }, 0);
+  }
+
+  /**
+   * 表格事件委托：在 tbody 上统一监听，避免每次重渲染对数千个标签逐个绑定
+   * （角色标签点击/右键、状态标签查已售、删除按钮、行悬停/点击钉住）
+   */
+  let tableEventsBound = false;
+  function bindTableDelegatedEvents() {
+    if (tableEventsBound || !dom.tableBody) return;
+    tableEventsBound = true;
+    const tbody = dom.tableBody;
+
+    tbody.addEventListener('click', function (e) {
+      const charTag = e.target.closest('.mw-char-tag');
+      if (charTag) {
+        e.stopPropagation();
+        const charName = charTag.getAttribute('data-char');
+        if (!charName) return;
+        const idx = charFilter.findIndex(c => c.name === charName);
+        if (idx >= 0) charFilter.splice(idx, 1);
+        else charFilter.push({ name: charName, minConst: 0 });
+        currentPage = 1;
+        updateFilterBar();
+        refreshTableDisplay();
+        return;
+      }
+      const soldBadge = e.target.closest('[data-check-sold]');
+      if (soldBadge) {
+        e.stopPropagation();
+        checkSingleSold(soldBadge.getAttribute('data-check-sold'), soldBadge);
+        return;
+      }
+      const delBtn = e.target.closest('.mw-delete-btn');
+      if (delBtn) {
+        e.stopPropagation();
+        deleteRowByProductId(delBtn.getAttribute('data-delete-id'));
+        return;
+      }
+      // 行点击：钉住详情（点空白/非交互元素）
+      const tr = e.target.closest('tr[data-product-id]');
+      if (tr) {
+        e.stopPropagation();
+        togglePinRow(tr.getAttribute('data-product-id'), tr);
+      }
+    });
+
+    tbody.addEventListener('contextmenu', function (e) {
+      const charTag = e.target.closest('.mw-char-tag');
+      if (!charTag) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const charName = charTag.getAttribute('data-char');
+      if (!charName) return;
+      const cond = charFilter.find(c => c.name === charName);
+      if (cond) {
+        cond.minConst = (cond.minConst || 0) >= 6 ? 0 : (cond.minConst || 0) + 1;
+      } else {
+        charFilter.push({ name: charName, minConst: 1 });
+      }
+      currentPage = 1;
+      updateFilterBar();
+      refreshTableDisplay();
+    });
+
+    // 悬停详情面板（mouseover 冒泡捕获进出行的时机）
+    tbody.addEventListener('mouseover', function (e) {
+      const tr = e.target.closest('tr[data-product-id]');
+      if (tr) {
+        if (hoverHideTimer) { clearTimeout(hoverHideTimer); hoverHideTimer = null; }
+        showHoverDetail(tr.getAttribute('data-product-id'), tr);
+      }
+    });
+    tbody.addEventListener('mouseout', function (e) {
+      const tr = e.target.closest('tr[data-product-id]');
+      if (tr && !tr.contains(e.relatedTarget)) {
+        hoverHideTimer = setTimeout(function () { hideHoverDetail(); }, 200);
+      }
+    });
+  }
+
+  /**
+   * 删除表格行（事件委托共用）
+   */
+  function deleteRowByProductId(pid) {
+    var idx = tableData.findIndex(function (r) { return r.productId === pid; });
+    if (idx < 0) return;
+    var delRow = tableData[idx];
+    tableData.splice(idx, 1);
+    // 同步从 seenIds 移除，允许未来重新发现
+    var seenIdx = seenIds.indexOf(pid);
+    if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
+    // 同步从 notifiedIds 移除
+    ['_drop', '_flash'].forEach(function (suf) {
+      var nIdx = notifiedIds.indexOf(pid + suf);
+      if (nIdx >= 0) notifiedIds.splice(nIdx, 1);
+    });
+    saveTableData();
+    saveStorage(STORAGE_KEYS.seen, seenIds);
+    saveStorage(STORAGE_KEYS.notified, notifiedIds);
+    sortTableData();
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[鸣潮监控] 手动删除: ' + (delRow.productUniqueNo || pid));
+  }
+
+  /**
+   * 渲染表格底部分页栏
+   */
+  function renderPaginationBar(totalCount, totalPages) {
+    var bar = document.getElementById('mwPaginationBar');
+    if (!bar) return;
+    totalPages = totalPages || Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+    if (totalCount <= PAGE_SIZE) {
+      bar.style.display = 'none';
+      return;
+    }
+    bar.style.display = 'flex';
+    var btnStyle = function (disabled, active) {
+      return 'padding:2px 9px;border:1px solid ' + (active ? '#e94560' : '#0f3460') + ';border-radius:4px;background:' +
+        (active ? 'rgba(233,69,96,.2)' : '#16213e') + ';color:' + (disabled ? '#555' : (active ? '#e94560' : '#8a8fb5')) +
+        ';font-size:11px;cursor:' + (disabled ? 'default' : 'pointer') + ';margin:0 2px;';
+    };
+    // 页码窗口：当前页前后各2页 + 首尾页，最多9个按钮
+    var pages = [];
+    var winStart = Math.max(1, currentPage - 2);
+    var winEnd = Math.min(totalPages, winStart + 4);
+    winStart = Math.max(1, Math.min(winStart, winEnd - 4));
+    for (var p = winStart; p <= winEnd; p++) pages.push(p);
+    if (pages[0] > 1) {
+      pages.unshift(totalPages > 6 ? '...' : 2);
+      pages.unshift(1);
+    }
+    if (pages[pages.length - 1] < totalPages) {
+      pages.push(totalPages - 1 > pages[pages.length - 1] + 1 ? '...' : totalPages - 1);
+      pages.push(totalPages);
+    }
+    var html = '<span style="color:#666;font-size:11px;margin-right:6px;">共' + totalCount + '条</span>';
+    html += '<span data-page="' + (currentPage - 1) + '" style="' + btnStyle(currentPage <= 1) + '">‹</span>';
+    pages.forEach(function (p) {
+      if (p === '...') {
+        html += '<span style="color:#555;font-size:11px;margin:0 2px;">…</span>';
+      } else {
+        html += '<span data-page="' + p + '" style="' + btnStyle(false, p === currentPage) + '">' + p + '</span>';
+      }
+    });
+    html += '<span data-page="' + (currentPage + 1) + '" style="' + btnStyle(currentPage >= totalPages) + '">›</span>';
+    html += '<span style="color:#666;font-size:11px;margin-left:4px;">' + currentPage + '/' + totalPages + '页</span>';
+    bar.innerHTML = html;
+
+    bar.querySelectorAll('[data-page]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var p = parseInt(el.getAttribute('data-page'), 10);
+        if (isNaN(p) || p < 1 || p > totalPages || p === currentPage) return;
+        currentPage = p;
+        refreshTableDisplay();
+        // 翻页后滚到表格顶部
+        try {
+          var table = document.getElementById('mwTable');
+          if (table) table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) { /* ignore */ }
       });
     });
   }
@@ -6806,12 +7088,19 @@
     if (displayData.length === 0) {
       dom.tableBody.innerHTML = '<tr><td colspan="11" class="mw-empty">' +
         (charFilter && charFilter.length > 0 ? '当前筛选无数据' : '暂无数据，等待监控...') + '</td></tr>';
+      renderPaginationBar(0);
       return;
     }
 
-    // 构建表格行
+    // 分页截取（监控扫描高频刷新时只渲染当前页，避免2000+行全量渲染卡顿）
+    const totalPages = Math.ceil(displayData.length / PAGE_SIZE);
+    if (currentPage > totalPages) currentPage = totalPages; // 数据减少时收敛页码
+    const pageStart = (currentPage - 1) * PAGE_SIZE;
+    const pageData = displayData.slice(pageStart, pageStart + PAGE_SIZE);
+
+    // 构建表格行（仅当前页）
     let html = '';
-    for (const row of displayData) {
+    for (const row of pageData) {
       const diff = row.value - row.price;
       const ratio = row.ratio || 0;
       const isPositive = diff > 0;
@@ -6897,99 +7186,8 @@
     }
 
     dom.tableBody.innerHTML = html;
-
-    // 绑定角色标签点击筛选（单击切换选中，右键切换命座条件）
-    const tags = dom.tableBody.querySelectorAll('.mw-char-tag');
-    tags.forEach(function (tag) {
-      tag.addEventListener('click', function (e) {
-        e.stopPropagation();
-        const charName = tag.getAttribute('data-char');
-        if (!charName) return;
-        const idx = charFilter.findIndex(c => c.name === charName);
-        if (idx >= 0) {
-          charFilter.splice(idx, 1);
-        } else {
-          charFilter.push({ name: charName, minConst: 0 });
-        }
-        updateFilterBar();
-        refreshTableDisplay();
-      });
-      tag.addEventListener('contextmenu', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        const charName = tag.getAttribute('data-char');
-        if (!charName) return;
-        const cond = charFilter.find(c => c.name === charName);
-        if (cond) {
-          cond.minConst = (cond.minConst || 0) >= 6 ? 0 : (cond.minConst || 0) + 1;
-        } else {
-          charFilter.push({ name: charName, minConst: 1 });
-        }
-        updateFilterBar();
-        refreshTableDisplay();
-      });
-    });
-
-    // 绑定状态标签点击检查已售
-    const soldBadges = dom.tableBody.querySelectorAll('[data-check-sold]');
-    soldBadges.forEach(function (badge) {
-      badge.addEventListener('click', function (e) {
-        e.stopPropagation();
-        const pid = badge.getAttribute('data-check-sold');
-        checkSingleSold(pid, badge);
-      });
-    });
-
-    // 绑定删除按钮点击
-    const delBtns = dom.tableBody.querySelectorAll('.mw-delete-btn');
-    delBtns.forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        const pid = btn.getAttribute('data-delete-id');
-        var idx = tableData.findIndex(function (r) { return r.productId === pid; });
-        if (idx >= 0) {
-          var delRow = tableData[idx];
-          tableData.splice(idx, 1);
-          // 同步从 seenIds 移除，允许未来重新发现
-          var seenIdx = seenIds.indexOf(pid);
-          if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
-          // 同步从 notifiedIds 移除
-          ['_drop', '_flash'].forEach(function (suf) {
-            var nIdx = notifiedIds.indexOf(pid + suf);
-            if (nIdx >= 0) notifiedIds.splice(nIdx, 1);
-          });
-          saveTableData();
-          saveStorage(STORAGE_KEYS.seen, seenIds);
-          saveStorage(STORAGE_KEYS.notified, notifiedIds);
-          sortTableData();
-          refreshTableDisplay();
-          updateStatusText();
-          console.log('[鸣潮监控] 手动删除: ' + (delRow.productUniqueNo || pid));
-        }
-      });
-      // 悬停效果
-      btn.addEventListener('mouseenter', function () { btn.style.color = '#e94560'; });
-      btn.addEventListener('mouseleave', function () { btn.style.color = '#666'; });
-    });
-
-    // 绑定行悬停/点击事件（改进3：详情面板）
-    const rows = dom.tableBody.querySelectorAll('tr[data-product-id]');
-    rows.forEach(function (tr) {
-      const productId = tr.getAttribute('data-product-id');
-      tr.addEventListener('mouseenter', function () {
-        if (hoverHideTimer) { clearTimeout(hoverHideTimer); hoverHideTimer = null; }
-        showHoverDetail(productId, tr);
-      });
-      tr.addEventListener('mouseleave', function () {
-        hoverHideTimer = setTimeout(function () { hideHoverDetail(); }, 200);
-      });
-      tr.addEventListener('click', function (e) {
-        // 点击角色标签时不触发钉住（标签自身已 stopPropagation）
-        if (e.target.classList.contains('mw-char-tag')) return;
-        e.stopPropagation();
-        togglePinRow(productId, tr);
-      });
-    });
+    bindTableDelegatedEvents();
+    renderPaginationBar(displayData.length, totalPages);
 
     // 表格重渲染后，恢复钉住行的高亮（pinnedRow 元素已被替换）
     if (pinnedProductId) {
@@ -10535,52 +10733,6 @@ function openSettings() {
 
     saveTableData();
     refreshTableDisplay();
-  }
-
-  /**
-   * 导出CSV（UTF-8 BOM）
-   */
-  function exportCSV() {
-    // 改进1：移除"商品码"列（列名按当前游戏）
-    const headers = ['上架时间', '估值', '差价', '性价比', '标价', '原价', '累计降价', '成交价', '有效金', '限定金', '总金数', '抽数', G().labels.motoColumn, G().labels.charColumn, '状态'];
-
-    const rows = tableData.map(function (row) {
-      const diff = row.value - row.price;
-      const charsStr = row.parsed && row.parsed.characters ?
-        row.parsed.characters.map(function (c) { return c.name + c.const + G().constUnitDisplay; }).join(' ') : '';
-      var origPrice = row.priceHistory && row.priceHistory.length > 0 ? row.priceHistory[0].price : row.price;
-      return [
-        formatDateTime(new Date(row.listTime)),
-        row.value.toFixed(2),
-        diff.toFixed(2),
-        row.ratio.toFixed(1) + '%',
-        row.price.toFixed(2),
-        origPrice.toFixed(2),
-        (row.priceDrop || 0).toFixed(2),
-        row.soldPrice ? row.soldPrice.toFixed(2) : '',
-        row.effectiveYellow || 0,
-        (row.valuation && row.valuation.yellowInfo ? row.valuation.yellowInfo.limitedYellow : 0) || 0,
-        row.parsed ? row.parsed.yellowCount : 0,
-        row.parsed ? row.parsed.pulls : 0,
-        row.parsed ? row.parsed.motoCount : 0,
-        charsStr,
-        row.status,
-      ];
-    });
-
-    const csv = '\uFEFF' + [headers, ...rows]
-      .map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); })
-      .join('\r\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = G().name + '监控_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   }
 
   // ============================================================
