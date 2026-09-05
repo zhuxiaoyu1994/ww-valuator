@@ -35,6 +35,7 @@ const getPageHTML = require('./views/wuwa');
 const getZZZPage = require('./views/zzz');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
+const { getTestbankUploadPage, getTestbankListPage } = require('./views/testbank');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1175,6 +1176,273 @@ app.post('/blocklist/api/remove', async (req, res) => {
   await saveBlockedIps();
   console.log('[Blocklist] 移除封禁IP:', trimIp);
   res.json({ success: true, data: blockedIps });
+});
+
+// ============================================================
+// 估值题库（已售商品上传 + 估值设置测试）
+// ============================================================
+
+const TESTBANK_KEY = 'test_bank';
+
+app.get('/testbank', (req, res) => {
+  res.send(getTestbankUploadPage());
+});
+
+app.get('/testbank/list', (req, res) => {
+  res.send(getTestbankListPage());
+});
+
+// pxb7 gameId → 站内游戏key 反查
+function gameKeyFromPxb7Id(gameId) {
+  for (const g of validGames) {
+    const pid = gameConfigs[g] && gameConfigs[g].platformIds && gameConfigs[g].platformIds.pxb7;
+    if (String(pid) === String(gameId)) return g;
+  }
+  return null;
+}
+
+// 从链接或纯编号中提取 productId
+function parsePxb7ProductId(input) {
+  const s = String(input || '').trim();
+  const m = s.match(/pxb7\.com\/product\/(\d+)/) || s.match(/\/product\/(\d+)/) || s.match(/m1\.pxb7\.com.*[?&]id=(\d+)/);
+  if (m) return m[1];
+  if (/^\d{10,}$/.test(s)) return s;
+  return null;
+}
+
+// 拉取成交清单（用于自动匹配昨日成交的商品的成交价）
+function fetchPxb7SoldList(gameId) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({ pageIndex: 1, pageSize: 100, gameId: String(gameId) });
+    const apiPath = '/api/search/product/selectSelledList';
+    const options = {
+      hostname: 'api-pc.pxb7.com',
+      port: 443,
+      path: apiPath,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Origin': 'https://www.pxb7.com',
+        'Referer': 'https://www.pxb7.com/',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    };
+    const req = https.request(options, (res) => {
+      res.setEncoding('utf8');
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.success === true && Array.isArray(json.data)) {
+            resolve(json.data);
+          } else {
+            resolve([]);
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on('error', (err) => reject(err));
+    req.setTimeout(7000, () => req.destroy(new Error('请求超时')));
+    req.write(postData);
+    req.end();
+  });
+}
+
+// 抓取商品信息（标题/标价/编号/游戏/是否已售），并尝试从成交清单匹配成交价
+app.post('/testbank/api/fetch', async (req, res) => {
+  const { url } = req.body;
+  const productId = parsePxb7ProductId(url);
+  if (!productId) {
+    return res.json({ success: false, error: '无法识别商品编号，请粘贴形如 https://www.pxb7.com/product/xxxx/1 的链接' });
+  }
+  try {
+    const d = await fetchProductDetail(productId);
+    if (!d) {
+      return res.json({ success: false, error: '未找到该商品（可能已删除）' });
+    }
+    const game = gameKeyFromPxb7Id(d.gameId) || 'wuwa';
+    const out = {
+      productId: String(d.productId || productId),
+      productUniqueNo: d.productUniqueNo || '',
+      showTitle: d.showTitle || d.title || '',
+      listPrice: (d.price || 0) / 100,
+      game,
+      gameName: d.gameName || game,
+      sold: d.tradeStatus === 2 || d.status === 2,
+      suggestedDealPrice: null,
+      payTime: null,
+    };
+    // 尝试从昨日成交清单自动匹配成交价（非致命）
+    try {
+      const soldList = await fetchPxb7SoldList(d.gameId);
+      const hit = (soldList || []).find(i => String(i.productId) === String(productId));
+      if (hit && hit.price > 0) {
+        out.suggestedDealPrice = hit.price / 100;
+        out.payTime = hit.payTime || null;
+      }
+    } catch (e) {
+      // 忽略：清单拉取失败不影响上传
+    }
+    res.json({ success: true, data: out });
+  } catch (e) {
+    res.json({ success: false, error: '获取失败: ' + e.message + '，可手动填写标题入库' });
+  }
+});
+
+// 添加题目（支持批量）
+app.post('/testbank/api/add', async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.json({ success: false, error: '没有可入库的数据' });
+  }
+  const bank = (await db.getConfig(TESTBANK_KEY)) || [];
+  const existingIds = new Set(bank.map(x => String(x.productId)).filter(Boolean));
+  let added = 0, skipped = 0;
+  for (const it of items) {
+    if (!it || !it.showTitle || !(it.dealPrice > 0)) continue;
+    const pid = String(it.productId || '');
+    if (pid && existingIds.has(pid)) { skipped++; continue; }
+    const entry = {
+      id: 'tb_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      productId: pid,
+      productUniqueNo: String(it.productUniqueNo || ''),
+      url: String(it.url || ''),
+      game: validGames.includes(it.game) ? it.game : 'wuwa',
+      showTitle: String(it.showTitle),
+      listPrice: Number(it.listPrice) || 0,
+      dealPrice: Number(it.dealPrice),
+      dealSource: it.dealSource === 'soldlist' ? 'soldlist' : 'manual',
+      payTime: String(it.payTime || ''),
+      note: String(it.note || ''),
+      addedBy: String(it.addedBy || ''),
+      addedAt: new Date().toISOString(),
+    };
+    if (pid) existingIds.add(pid);
+    bank.push(entry);
+    added++;
+  }
+  if (added > 0) {
+    await db.setConfig(TESTBANK_KEY, bank);
+    console.log('[Testbank] 新增 ' + added + ' 题（跳过重复 ' + skipped + '）');
+  }
+  res.json({ success: true, data: { added, skipped } });
+});
+
+// 题库列表
+app.post('/testbank/api/list', async (req, res) => {
+  const bank = (await db.getConfig(TESTBANK_KEY)) || [];
+  res.json({ success: true, data: bank });
+});
+
+// 编辑题目
+app.post('/testbank/api/update', async (req, res) => {
+  const { id, patch } = req.body;
+  if (!id || !patch || typeof patch !== 'object') {
+    return res.json({ success: false, error: '参数无效' });
+  }
+  const bank = (await db.getConfig(TESTBANK_KEY)) || [];
+  const idx = bank.findIndex(x => x.id === id);
+  if (idx < 0) return res.json({ success: false, error: '题目不存在' });
+  if (patch.showTitle !== undefined) {
+    patch.showTitle = String(patch.showTitle).trim();
+    if (!patch.showTitle) return res.json({ success: false, error: '标题不能为空' });
+  }
+  if (patch.dealPrice !== undefined) {
+    patch.dealPrice = Number(patch.dealPrice);
+    if (!(patch.dealPrice > 0)) return res.json({ success: false, error: '成交价必须大于0' });
+  }
+  if (patch.listPrice !== undefined) patch.listPrice = Number(patch.listPrice) || 0;
+  if (patch.note !== undefined) patch.note = String(patch.note);
+  bank[idx] = { ...bank[idx], ...patch, updatedAt: new Date().toISOString() };
+  await db.setConfig(TESTBANK_KEY, bank);
+  res.json({ success: true });
+});
+
+// 删除题目
+app.post('/testbank/api/delete', async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.json({ success: false, error: '参数无效' });
+  const bank = (await db.getConfig(TESTBANK_KEY)) || [];
+  const next = bank.filter(x => x.id !== id);
+  if (next.length === bank.length) return res.json({ success: false, error: '题目不存在' });
+  await db.setConfig(TESTBANK_KEY, next);
+  res.json({ success: true });
+});
+
+// 用当前线上估值设置跑一遍题库，输出每题估值与整体偏差统计
+app.post('/testbank/api/evaluate', async (req, res) => {
+  const bank = (await db.getConfig(TESTBANK_KEY)) || [];
+  if (bank.length === 0) {
+    return res.json({ success: true, data: { items: {}, stats: { count: 0 } } });
+  }
+
+  // 每个游戏加载一次当前生效的自定义权重
+  const weightsCache = {};
+  for (const g of validGames) {
+    try {
+      const { value } = await db.getConfigWithMeta(getConfigKey(g));
+      weightsCache[g] = value || null;
+    } catch (e) {
+      weightsCache[g] = null;
+    }
+  }
+
+  const items = {};
+  const devs = []; // { game, devPct }
+  for (const it of bank) {
+    const engine = getEngine(it.game);
+    try {
+      const r = engine.evaluateWithPrice(it.showTitle, Math.round(it.dealPrice * 100), weightsCache[it.game] || null);
+      const estimated = r && r.details ? r.details.finalValue : null;
+      if (estimated > 0) {
+        const devPct = (estimated - it.dealPrice) / it.dealPrice * 100;
+        items[it.id] = { estimated, devPct: Math.round(devPct * 10) / 10 };
+        devs.push({ game: it.game, devPct });
+      } else {
+        items[it.id] = { error: '无法估值' };
+      }
+    } catch (e) {
+      items[it.id] = { error: e.message };
+    }
+  }
+
+  const median = (arr) => {
+    if (arr.length === 0) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+  const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+
+  const allPct = devs.map(d => d.devPct);
+  const pass20 = allPct.filter(p => Math.abs(p) <= 20).length;
+  const stats = {
+    count: devs.length,
+    medianDevPct: Math.round(median(allPct) * 10) / 10,
+    meanAbsDevPct: allPct.length ? Math.round(sum(allPct.map(Math.abs)) / allPct.length * 10) / 10 : 0,
+    pass20Count: pass20,
+    pass20Rate: allPct.length ? Math.round(pass20 / allPct.length * 1000) / 10 : 0,
+    overCount: allPct.filter(p => p > 0).length,
+    underCount: allPct.filter(p => p < 0).length,
+  };
+  // 分游戏小结
+  const gameStats = {};
+  for (const g of validGames) {
+    const gp = devs.filter(d => d.game === g).map(d => d.devPct);
+    if (gp.length > 0) {
+      const gp20 = gp.filter(p => Math.abs(p) <= 20).length;
+      gameStats[g] = g + '共' + gp.length + '题，中位偏差' + (Math.round(median(gp) * 10) / 10) + '%，±20%合格' + gp20 + '/' + gp.length;
+    }
+  }
+  stats.games = gameStats;
+
+  res.json({ success: true, data: { items, stats } });
 });
 
 // ============================================================
