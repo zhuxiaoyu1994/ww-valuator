@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.7.1
+// @version      3.8.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -10669,16 +10669,13 @@ function openSettings() {
       alert('正在检查中，请稍候...');
       return;
     }
-    if (tableData.length === 0) {
-      alert('表格暂无数据，无需检查');
-      return;
-    }
 
     soldCheckRunning = true;
     dom.btnCheckSold.textContent = '拉取成交清单...';
     dom.btnCheckSold.style.opacity = '0.6';
 
     let soldCount = 0;
+    let importedCount = 0;
 
     // 拉取昨日成交清单，批量匹配全部表格记录（Map查找零成本，无需阈值筛选）
     let soldList = [];
@@ -10694,6 +10691,7 @@ function openSettings() {
       for (const item of soldList) {
         if (item && item.productId) soldMap.set(item.productId, item);
       }
+      // 第一阶段：批量匹配表格已有记录，命中即标记已售
       for (const row of tableData) {
         const soldItem = soldMap.get(row.productId);
         if (soldItem) {
@@ -10706,6 +10704,36 @@ function openSettings() {
         }
       }
       console.log('[鸣潮监控] 清单批量匹配: 命中' + soldCount + '个');
+
+      // 第二阶段：清单中未入表的成交记录，估值后导入监控列表（行情参考）
+      const existingIds = new Set(tableData.map(r => r.productId));
+      const skipStats = Object.create(null);
+      batchMode = true;
+      try {
+        for (const item of soldList) {
+          if (!item || !item.productId) continue;
+          if (existingIds.has(item.productId)) { skipStats['已在表格'] = (skipStats['已在表格'] || 0) + 1; continue; }
+          const result = importSoldItem(item);
+          if (result === true) importedCount++;
+          else skipStats[result] = (skipStats[result] || 0) + 1;
+        }
+      } finally {
+        batchMode = false;
+      }
+      if (importedCount > 0) {
+        console.log('[鸣潮监控] 导入成交记录: ' + importedCount + ' 条');
+        sortTableData();
+        saveStorage(STORAGE_KEYS.seen, seenIds);
+      }
+      // 未导入明细（控制台可查具体原因）
+      const skipKeys = Object.keys(skipStats);
+      if (skipKeys.length > 0) {
+        let skipTotal = 0;
+        const parts = skipKeys.map(k => { skipTotal += skipStats[k]; return k + skipStats[k] + '条'; });
+        console.log('[鸣潮监控] 未导入 ' + skipTotal + ' 条: ' + parts.join('、'));
+        skipDetailText = '；未导入 ' + skipTotal + ' 条（' + parts.join('、') + '）';
+      }
+
       saveTableData();
     }
 
@@ -10719,7 +10747,72 @@ function openSettings() {
       alert('检查失败：昨日成交清单拉取失败，请稍后重试。');
       return;
     }
-    alert('检查完成！表格 ' + tableData.length + ' 条记录全部匹配，其中 ' + soldCount + ' 个命中昨日成交清单（清单共 ' + soldList.length + ' 条，仅覆盖螃蟹网平台）。');
+    alert('检查完成！表格 ' + tableData.length + ' 条记录全部匹配，其中 ' + soldCount + ' 个命中昨日成交清单；另有 ' + importedCount + ' 条成交记录已导入监控列表（清单共 ' + soldList.length + ' 条，仅覆盖螃蟹网平台）' + (skipDetailText || '') + '。');
+  }
+
+  /**
+   * 将成交清单中未入表的账号导入监控列表（成交行情参考）
+   * 收录标准与在售流程一致：估值≥300、等级达标、排除自主截图
+   * @param {object} item - 成交清单条目 {productId, showTitle, price(分), payTime}
+   * @returns {boolean|string} true=已导入，否则返回拒绝原因
+   */
+  function importSoldItem(item) {
+    const productId = item.productId;
+    const showTitle = item.showTitle || item.title || '';
+    const price = (item.price || 0) / 100; // 成交价（分转元）
+    if (price <= 0) return '无价格';
+
+    // 自主截图账号不收录
+    if (/自主截图/.test(showTitle)) return '自主截图';
+
+    // 解析与估值（与在售流程一致）
+    const parsed = parseAccountInfo(showTitle);
+    const valuation = calculateValue(parsed, price);
+
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) return '估值低于300';
+    // 等级低于门槛且明确解析到等级时不收录
+    if (valuation.levelFound && valuation.level < G().minLevel) return '等级低于' + G().minLevel;
+
+    // 成交时间作为listTime（按时间排序时体现成交先后），解析失败回退当前时间
+    let listTime = Date.now();
+    if (typeof item.payTime === 'number') {
+      listTime = item.payTime;
+    } else if (item.payTime) {
+      const t = Date.parse(item.payTime);
+      if (!isNaN(t)) listTime = t;
+    }
+
+    addTableRow({
+      productId,
+      productUniqueNo: item.productUniqueNo || '',
+      fingerprint: generateFingerprint(parsed),
+      showTitle,
+      price,
+      value: valuation.totalValue,
+      ratio: valuation.ratio,
+      status: '已售',
+      effectiveYellow: valuation.effectiveYellow || 0,
+      soldPrice: price,
+      soldTime: item.payTime || '',
+      parsed: {
+        yellowCount: parsed.yellowCount,
+        pulls: Math.round(parsed.pulls * 10) / 10,
+        motoCount: parsed.motoCount,
+        characters: parsed.characters.map(c => ({ name: c.name, const: c.const, tier: c.tier, isHot: c.isHot, price: c.price })),
+        weapons: parsed.weapons.map(w => ({ name: w.name, refine: w.refine })),
+      },
+      valuation: valuation,
+      listTime,
+      firstSeen: Date.now(),
+    });
+
+    // 标记已见，避免后续在售扫描把已售状态覆盖为初估
+    seenIds.push(productId);
+    if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    console.log('[鸣潮监控] 导入成交记录: ' + (item.productUniqueNo || productId) + ' 成交¥' + price.toFixed(0) + ' 估值¥' + valuation.totalValue.toFixed(0));
+    return true;
   }
 
   /**
