@@ -41,6 +41,7 @@ const COMMON_CSS = `
   .badge-onsale { background: rgba(241,196,15,0.15); color: #f1c40f; }
   .badge-manual { background: rgba(122,162,247,0.15); color: #7aa2f7; }
   .badge-game { background: rgba(155,89,182,0.15); color: #bb8bfa; }
+  .who { color: #2ecc71; font-weight: 600; }
 `;
 
 function getTestbankUploadPage() {
@@ -405,7 +406,7 @@ function getTestbankListPage() {
       const srcBadge = it.dealSource === 'soldlist' ? '<span class="badge badge-sold">清单价</span>' : '<span class="badge badge-manual">手填价</span>';
       return '<tr>' +
         '<td class="muted">' + (idx + 1) + '</td>' +
-        '<td class="t-title"><div class="no">' + esc(it.productUniqueNo || it.productId || '(手动)' + '') + ' ' + srcBadge + ' <span class="muted">' + esc(it.game || '') + (it.note ? ' · ' + esc(it.note) : '') + '</span></div><div class="short" onclick="toggleTitle(this)">' + esc(short) + '<div class="title-expand">' + esc(it.showTitle) + '</div></div></td>' +
+        '<td class="t-title"><div class="no">' + esc(it.productUniqueNo || it.productId || '(手动)' + '') + ' ' + srcBadge + ' <span class="muted">' + esc(it.game || '') + (it.addedBy ? ' · <span class="who">' + esc(it.addedBy) + '</span>' : '') + (it.note ? ' · ' + esc(it.note) : '') + '</span></div><div class="short" onclick="toggleTitle(this)">' + esc(short) + '<div class="title-expand">' + esc(it.showTitle) + '</div></div></td>' +
         '<td>' + (it.listPrice ? '<span class="money">¥' + it.listPrice + '</span>' : '-') + '</td>' +
         '<td><span class="money num">¥' + it.dealPrice + '</span></td>' +
         '<td>' + estCell + '</td>' +
