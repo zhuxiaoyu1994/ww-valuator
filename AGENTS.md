@@ -7,8 +7,11 @@
 ## 目录结构
 
 ```
-youxigujia/                          # 工作区根目录（无 git 仓库）
-└── 鸣潮估价助手/                     # 网站项目（git 仓库，remote: ww-valuator）
+<工作区>/                             # 工作区根目录（无 git 仓库）
+├── .deploy-keys/                    # git 部署密钥（在仓库外，严禁提交）
+│   ├── id_ed25519                   # Deploy Key 私钥（拷贝到其他电脑时需单独带走）
+│   └── id_ed25519.pub               # 公钥（已登记在 GitHub 仓库 Deploy Keys）
+└── ww-valuator/                     # 网站项目（git 仓库，分支 main）
     ├── server.js                    # Express 主服务入口
     ├── configs/                     # 各游戏默认配置（configVersion 所在处）
     │   ├── wuwa.js                  # 鸣潮配置（charTiers/sigWeapons/资源换算等）
@@ -68,7 +71,7 @@ youxigujia/                          # 工作区根目录（无 git 仓库）
 1. 编辑 `configs/wuwa.js` / `configs/zzz.js` 中的常量，`configVersion` +1
 2. 编辑 `value-engine.src.js` 中对应常量
 3. 编辑 `public/crab-monitor.user.js` 中对应常量（注意缩进差异），`CONFIG_VERSION` 同步递增，`@version` 升版本号
-4. 在 `鸣潮估价助手/` 下运行：`node build-engine.js` 重新生成混淆版
+4. 在 `ww-valuator/` 下运行：`node build-engine.js` 重新生成混淆版
 5. 验证各处常量一致（可用 `grep` 对比关键值）
 6. 提交改动文件（含 `public/value-settings.js`，如设置面板 UI 有新增项）
 7. 推送到 GitHub，Vercel 自动部署；手动更新 Greasy Fork
@@ -76,7 +79,7 @@ youxigujia/                          # 工作区根目录（无 git 仓库）
 ## 构建
 
 ```bash
-cd 鸣潮估价助手
+cd ww-valuator
 node build-engine.js        # 生成 value-engine.js（依赖 javascript-obfuscator）
 npm start                   # 本地启动（node server.js）
 ```
@@ -85,8 +88,40 @@ npm start                   # 本地启动（node server.js）
 
 - **Vercel**：push 到 `main` 分支自动部署，入口 `api/server.js`（Serverless Function）
 - **域名**：`www.youxigujia.cn`（Vercel 自定义域名）
-- **GitHub 仓库**：`git@github.com:zhuxiaoyu1994/ww-valuator.git`
+- **GitHub 仓库**：`ssh://git@ssh.github.com:443/zhuxiaoyu1994/ww-valuator.git`
 - **油猴脚本**：需手动在 Greasy Fork / 分发渠道更新发布
+
+### Git 推送通道（SSH over 443，重要）
+
+当前网络环境下 `github.com` 的 HTTPS 通道被阻断（git 命令行 TLS 握手超时，clone/push 会卡死），但 GitHub 官方的 SSH-over-HTTPS 端点 `ssh.github.com:443` 畅通。因此：
+
+- **推送必须走 SSH over 443，禁止改回 HTTPS 远程地址**（`https://github.com/...` 会超时）
+- 远程地址已配置为 `ssh://git@ssh.github.com:443/zhuxiaoyu1994/ww-valuator.git`（URL 内嵌 443 端口，跨机器通用）
+- 认证使用仓库级 Deploy Key（读写权限、仅授权本仓库），公钥登记在 GitHub 仓库 Settings → Deploy keys（名称 `ww-valuator-deploy`）
+- 私钥存放在**仓库外**的 `../.deploy-keys/id_ed25519`，严禁提交进 git
+- 本机 `.git/config` 中的 `core.sshCommand` 通过 8.3 短路径指定私钥（因工作区路径含空格，且 TRAE 沙箱禁止写 `~/.ssh`）
+
+### 新电脑环境配置（拷贝项目后首次使用必做）
+
+前置条件：已安装 Node.js（v18+）和 git。拷贝/克隆项目到新电脑后，按以下步骤恢复 git 推送能力：
+
+1. **准备私钥**（二选一）：
+   - 从旧电脑用 U 盘等离线方式拷贝 `../.deploy-keys/id_ed25519` 到新电脑（勿经网络明文传输、勿提交进仓库）
+   - 或在新电脑生成新密钥：`ssh-keygen -t ed25519 -C "ww-valuator-deploy-<机器名>"`，将 `.pub` 公钥内容添加到 GitHub 仓库 Settings → Deploy keys（勾选 Allow write access，一个仓库可登记多把密钥）
+2. **配置 SSH 走 443**：在 `~/.ssh/config` 中添加（之后远程地址也可用标准 `git@github.com:zhuxiaoyu1994/ww-valuator.git` 形式）：
+   ```
+   Host github.com
+     HostName ssh.github.com
+     Port 443
+     User git
+     IdentityFile ~/.ssh/id_ed25519
+   ```
+3. **清除旧机器路径配置**（整目录拷贝时 `.git/config` 带着旧机器的 `core.sshCommand`）：
+   ```bash
+   git config --unset core.sshCommand
+   ```
+4. **验证**：`git ls-remote origin` 能返回分支列表即成功
+5. 若新电脑也在 TRAE 沙箱内（`~/.ssh` 不可写），参照本机方案：私钥放仓库外目录，`git config core.sshCommand "ssh -i <私钥路径> -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"`；路径含空格时需换算 8.3 短路径（PowerShell：`(New-Object -ComObject Scripting.FileSystemObject).GetFolder("<路径>").ShortPath`）
 
 ### Vercel 路由配置（vercel.json）
 
