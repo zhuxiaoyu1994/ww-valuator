@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.8.0
+// @version      3.9.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -353,6 +353,7 @@
       state: prefix + '_monitor_state',
       weights: prefix + '_monitor_config',
       configVersion: prefix + '_monitor_config_version',
+      backup: prefix + '_monitor_last_backup',
     };
   }
 
@@ -843,6 +844,12 @@
   const SYNC_URLS = {
     sync: 'https://www.youxigujia.cn/api/push-config/sync',
     get: 'https://www.youxigujia.cn/api/push-config/get',
+  };
+
+  // 监控列表云端备份URL（防止脚本重装/换浏览器丢失历史列表）
+  const BACKUP_URLS = {
+    save: 'https://www.youxigujia.cn/api/monitor-backup/save',
+    get: 'https://www.youxigujia.cn/api/monitor-backup/get',
   };
 
   // 配置常量
@@ -5829,6 +5836,8 @@
           <button class="mw-btn" id="mwBtnClearTable">清空表格</button>
           <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
+          <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端（每天也会自动备份一次）">云端备份</button>
+          <button class="mw-btn" id="mwBtnCloudRestore" title="从云端恢复监控列表（与本地合并，不覆盖本地已有行）">云端恢复</button>
           <span class="mw-input-label">≥</span>
           <input type="number" class="mw-input" id="mwInputThreshold" value="20" min="0" max="999">%
           <button class="mw-collapse-btn" id="mwBtnCollapse" title="折叠/展开">—</button>
@@ -5906,6 +5915,8 @@
     dom.btnClearTable = document.getElementById('mwBtnClearTable');
     dom.btnCleanData = document.getElementById('mwBtnCleanData');
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
+    dom.btnCloudBackup = document.getElementById('mwBtnCloudBackup');
+    dom.btnCloudRestore = document.getElementById('mwBtnCloudRestore');
     dom.inputThreshold = document.getElementById('mwInputThreshold');
     dom.tableBody = document.getElementById('mwTableBody');
     dom.filterBar = document.getElementById('mwFilterBar');
@@ -6569,6 +6580,10 @@
 
     // 检查已售
     dom.btnCheckSold.addEventListener('click', checkSoldAccounts);
+
+    // 云端备份/恢复（防止脚本重装/换浏览器丢失历史列表）
+    dom.btnCloudBackup.addEventListener('click', function () { backupTableToCloud(false); });
+    dom.btnCloudRestore.addEventListener('click', restoreTableFromCloud);
 
     dom.inputThreshold.addEventListener('change', function () {
       threshold = parseInt(dom.inputThreshold.value) || 20;
@@ -10660,6 +10675,188 @@ function openSettings() {
     URL.revokeObjectURL(url);
   }
 
+  // ============================================================
+  // 监控列表云端备份（防止脚本重装/换浏览器丢失历史列表）
+  // 备份按游戏隔离，恢复采用合并策略（本地已有行保留本地状态）
+  // ============================================================
+
+  var backupRunning = false;
+  var lastBackupTime = 0;                          // 上次云端备份成功时间戳
+  var BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;    // 自动备份间隔：24小时
+  var BACKUP_MAX_BYTES = 3 * 1024 * 1024;          // 上传体积上限（低于服务器4MB限制）
+
+  function cloudBackupPassword() {
+    return pushConfig.syncPassword || '';
+  }
+
+  function formatBackupTime(iso) {
+    if (!iso) return '未知时间';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') +
+      ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  /**
+   * 备份监控列表到云端（自动备份 silent=true 不弹窗）
+   */
+  function backupTableToCloud(silent) {
+    if (backupRunning) { if (!silent) alert('正在备份中，请稍候...'); return; }
+    if (tableData.length === 0) { if (!silent) alert('表格暂无数据，无需备份'); return; }
+    var password = cloudBackupPassword();
+    if (!password) { if (!silent) alert('请先在通知设置中填写云端同步密码（管理后台密码）'); return; }
+
+    // 精简行数据（估值/解析缓存可由 showTitle 重算，不参与备份）
+    var rows = tableData.map(slimRow);
+
+    // 控制上传体积：超限时按上架时间保留最新数据
+    var payloadSize = JSON.stringify(rows).length;
+    if (payloadSize > BACKUP_MAX_BYTES) {
+      var sorted = rows.slice().sort(function (a, b) {
+        var ta = a.listTime ? new Date(a.listTime).getTime() : (a.firstSeen || 0);
+        var tb = b.listTime ? new Date(b.listTime).getTime() : (b.firstSeen || 0);
+        return tb - ta; // 新的在前
+      });
+      while (sorted.length > 200 && JSON.stringify(sorted).length > BACKUP_MAX_BYTES) {
+        sorted = sorted.slice(0, Math.floor(sorted.length * 0.8));
+      }
+      rows = sorted;
+      console.warn('[鸣潮监控] 备份体积超限(' + (payloadSize / 1024 / 1024).toFixed(2) + 'MB)，已裁剪保留最新' + rows.length + '条');
+    }
+
+    var scriptVer = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) ? GM_info.script.version : '';
+    backupRunning = true;
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: BACKUP_URLS.save,
+      headers: { 'Content-Type': 'application/json' },
+      data: JSON.stringify({ password: password, game: currentGame, tableData: rows, scriptVersion: scriptVer }),
+      onload: function (resp) {
+        backupRunning = false;
+        try {
+          var json = JSON.parse(resp.responseText);
+          if (json.success) {
+            lastBackupTime = Date.now();
+            saveStorage(STORAGE_KEYS.backup, lastBackupTime, true);
+            console.log('[鸣潮监控] 云端备份成功: ' + json.rowCount + '条 (' + G().name + ')');
+            if (!silent) alert('云端备份成功：' + json.rowCount + ' 条记录（游戏：' + G().name + '）');
+          } else {
+            console.error('[鸣潮监控] 云端备份失败:', json.error);
+            if (!silent) alert('云端备份失败: ' + (json.error || '未知错误'));
+          }
+        } catch (e) {
+          console.error('[鸣潮监控] 云端备份响应解析失败');
+          if (!silent) alert('云端备份失败: 服务器响应异常');
+        }
+      },
+      onerror: function () {
+        backupRunning = false;
+        console.error('[鸣潮监控] 云端备份网络错误');
+        if (!silent) alert('云端备份失败: 网络错误');
+      },
+    });
+  }
+
+  /**
+   * 合并云端恢复的行到本地表格（按productId去重，本地已有行优先保留），补齐指纹与已见ID
+   */
+  function mergeRestoredRows(cloudRows) {
+    var localIds = new Set(tableData.map(function (r) { return r.productId; }));
+    var added = 0;
+    for (var i = 0; i < cloudRows.length; i++) {
+      var row = cloudRows[i];
+      if (!row || !row.productId || localIds.has(row.productId)) continue;
+      // 补齐内容指纹（与 init 迁移逻辑一致，避免恢复行被当成新商品重复入表）
+      if (!row.fingerprint && row.showTitle) {
+        try { row.fingerprint = generateFingerprint(parseAccountInfo(row.showTitle)); } catch (e) {}
+      }
+      tableData.push(row);
+      localIds.add(row.productId);
+      added++;
+    }
+    // seenIds 并集：恢复行不再触发"新商品"通知
+    var seenSet = new Set(seenIds);
+    for (const r of tableData) { if (r.productId) seenSet.add(r.productId); }
+    seenIds = Array.from(seenSet);
+    saveTableData();
+    saveStorage(STORAGE_KEYS.seen, seenIds, true);
+    sortTableData();
+    currentPage = 1;
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[鸣潮监控] 云端恢复合并: 新增' + added + '条，共' + tableData.length + '条');
+  }
+
+  /**
+   * 从云端恢复监控列表（手动，合并策略）
+   */
+  function restoreTableFromCloud() {
+    var password = cloudBackupPassword();
+    if (!password) { alert('请先在通知设置中填写云端同步密码（管理后台密码）'); return; }
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: BACKUP_URLS.get,
+      headers: { 'Content-Type': 'application/json' },
+      data: JSON.stringify({ password: password, game: currentGame }),
+      onload: function (resp) {
+        try {
+          var json = JSON.parse(resp.responseText);
+          if (!json.success) { alert('云端恢复失败: ' + (json.error || '未知错误')); return; }
+          if (!json.tableData || json.tableData.length === 0) {
+            alert('服务器暂无' + G().name + '的监控列表备份');
+            return;
+          }
+          if (!confirm('云端备份共 ' + json.rowCount + ' 条（备份于 ' + formatBackupTime(json.backedUpAt) + '）。\n当前本地 ' + tableData.length + ' 条，恢复后合并为两者并集（本地已有行保留本地状态），是否继续？')) return;
+          mergeRestoredRows(json.tableData);
+          alert('恢复完成：合并后共 ' + tableData.length + ' 条记录');
+        } catch (e) {
+          console.error('[鸣潮监控] 云端恢复响应解析失败');
+          alert('云端恢复失败: 服务器响应异常');
+        }
+      },
+      onerror: function () {
+        alert('云端恢复失败: 网络错误');
+      },
+    });
+  }
+
+  /**
+   * 启动时本地列表为空：静默检查云端备份，有则提示恢复（脚本重装/换浏览器场景）
+   */
+  function checkCloudRestoreOnStartup() {
+    if (tableData.length > 0) return;
+    if (!cloudBackupPassword()) return;
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: BACKUP_URLS.get,
+      headers: { 'Content-Type': 'application/json' },
+      data: JSON.stringify({ password: cloudBackupPassword(), game: currentGame }),
+      onload: function (resp) {
+        try {
+          var json = JSON.parse(resp.responseText);
+          if (json.success && json.tableData && json.tableData.length > 0) {
+            if (!confirm('检测到云端备份：' + json.rowCount + ' 条记录（备份于 ' + formatBackupTime(json.backedUpAt) + '）。\n本地列表为空（可能因脚本重装丢失数据），是否从云端恢复？')) return;
+            mergeRestoredRows(json.tableData);
+            alert('恢复完成：共 ' + tableData.length + ' 条记录');
+          }
+        } catch (e) {}
+      },
+      onerror: function () {},
+    });
+  }
+
+  /**
+   * 自动云端备份：距上次备份超过24小时且有密码时静默备份
+   */
+  function checkAutoBackup() {
+    if (!cloudBackupPassword()) return;
+    if (tableData.length === 0) return;
+    if (backupRunning) return;
+    if (Date.now() - lastBackupTime < BACKUP_INTERVAL_MS) return;
+    console.log('[鸣潮监控] 距上次云端备份已超过24小时，开始自动备份...');
+    backupTableToCloud(true);
+  }
+
   /**
    * 检查已售账号：拉取昨日成交清单批量匹配，命中即标记已售并记录成交价（秒级完成）
    */
@@ -11217,6 +11414,14 @@ function openSettings() {
     refreshTableDisplay();
     updateStatusText();
     updateBottomBar();
+
+    // 云端备份：加载上次备份时间，启动自动备份定时器（每30分钟检查一次，24小时未备份则触发）
+    lastBackupTime = loadStorage(STORAGE_KEYS.backup, 0) || 0;
+    setInterval(checkAutoBackup, 30 * 60 * 1000);
+    setTimeout(checkAutoBackup, 60 * 1000);
+
+    // 本地列表为空时静默检查云端备份（脚本重装/换浏览器丢失数据的恢复入口）
+    checkCloudRestoreOnStartup();
 
     // 如果之前在监控，自动启动
     if (savedState.monitorRunning) {

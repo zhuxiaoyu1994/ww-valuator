@@ -151,8 +151,8 @@ function cacheSet(key, data) {
   apiCache.set(key, { data, expireAt: Date.now() + CACHE_TTL });
 }
 
-// 中间件
-app.use(express.json());
+// 中间件（limit 4mb：监控列表云端备份体积可达数MB，需低于 Vercel Serverless 4.5MB 请求体上限）
+app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
 // 静态JS必须每次验证（ETag），避免浏览器缓存旧版 value-settings.js 导致规则面板不同步
 app.use('/public', express.static(path.join(__dirname, 'public'), {
@@ -1787,6 +1787,60 @@ app.post('/api/push-config/get', async (req, res) => {
     }
   } catch (err) {
     console.error('[/api/push-config/get] Error:', err.message);
+    res.json({ success: false, error: '读取失败: ' + err.message });
+  }
+});
+
+// ============================================================
+// 监控列表云端备份（油猴脚本调用，防止脚本重装/换浏览器丢失历史列表）
+// 备份按游戏隔离（wuwa/zzz），存 app_config 表，键 monitor_backup_<game>
+// ============================================================
+app.post('/api/monitor-backup/save', async (req, res) => {
+  const { password, game, tableData, scriptVersion } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  if (!game || !Array.isArray(tableData) || tableData.length === 0) {
+    return res.json({ success: false, error: '参数无效：缺少游戏或列表数据' });
+  }
+  try {
+    await db.setConfig('monitor_backup_' + game, {
+      tableData,
+      rowCount: tableData.length,
+      scriptVersion: scriptVersion || '',
+      backedUpAt: new Date().toISOString(),
+    });
+    console.log(`[/api/monitor-backup/save] ${game} 备份 ${tableData.length} 条 (v${scriptVersion || '?'})`);
+    res.json({ success: true, message: '监控列表已备份到服务器', rowCount: tableData.length });
+  } catch (err) {
+    console.error('[/api/monitor-backup/save] Error:', err.message);
+    res.json({ success: false, error: '备份失败: ' + err.message });
+  }
+});
+
+app.post('/api/monitor-backup/get', async (req, res) => {
+  const { password, game } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  if (!game) {
+    return res.json({ success: false, error: '参数无效：缺少游戏' });
+  }
+  try {
+    const data = await db.getConfig('monitor_backup_' + game);
+    if (data && Array.isArray(data.tableData) && data.tableData.length > 0) {
+      res.json({
+        success: true,
+        tableData: data.tableData,
+        backedUpAt: data.backedUpAt,
+        rowCount: data.tableData.length,
+        scriptVersion: data.scriptVersion || '',
+      });
+    } else {
+      res.json({ success: true, tableData: null, message: '服务器暂无该游戏的监控列表备份' });
+    }
+  } catch (err) {
+    console.error('[/api/monitor-backup/get] Error:', err.message);
     res.json({ success: false, error: '读取失败: ' + err.message });
   }
 });
