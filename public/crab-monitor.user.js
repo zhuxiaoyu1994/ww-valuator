@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.9.0
+// @version      3.10.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2383,6 +2383,40 @@
         }
       }
       effectiveYellowBreakdown.push({ name: tChar.name, tier: tChar.tier, const: tChar.const || 0, contrib: tContrib, coeff: tCoeff, sigName: tSigRefine > 0 ? tSigName : null, sigRefine: tSigRefine, sigContrib: tSigContrib, source: '配队' });
+    }
+    // A级强绑核心：A级角色与其强绑队友同时在场时，双方均计入有效金
+    // （无需完整配队，配队其余成员可替换；仅A级角色触发，其队友按自身级别系数计入）
+    for (var baci = 0; baci < parsed.characters.length; baci++) {
+      var baChar = parsed.characters[baci];
+      if (baChar.tier !== 'A') continue;
+      var baMates = _teamMatesConfig[baChar.name];
+      if (!baMates || !baMates.length) continue;
+      var presentMates = baMates.filter(function(m) { return charNamesSet.has(m); });
+      if (presentMates.length === 0) continue;
+      var bindGroup = [baChar.name].concat(presentMates);
+      for (var bgi = 0; bgi < bindGroup.length; bgi++) {
+        var bName = bindGroup[bgi];
+        if (effectiveCountedChars[bName]) continue;
+        var bChar = parsed.characters.find(function(c) { return c.name === bName; });
+        if (!bChar) continue;
+        var bCoeff = effTierCoeffOf(bChar.tier);
+        var bContrib = (1 + (bChar.const || 0)) * bCoeff;
+        effectiveYellow += bContrib;
+        effectiveCountedChars[bName] = true;
+        var bSigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[bName]) || SIG_WEAPONS[bName];
+        var bSigRefine = 0;
+        var bSigContrib = 0;
+        if (bSigName && hasSignatureWeapons.indexOf(bName) >= 0 && !effectiveCountedWeapons[bSigName]) {
+          var bSigWeapon = parsed.weapons.find(function(wp) { return wp.name === bSigName; });
+          if (bSigWeapon) {
+            bSigRefine = bSigWeapon.refine || 1;
+            bSigContrib = (1 + (bSigRefine - 1) * 0.5) * bCoeff;
+            effectiveYellow += bSigContrib;
+            effectiveCountedWeapons[bSigName] = true;
+          }
+        }
+        effectiveYellowBreakdown.push({ name: bChar.name, tier: bChar.tier, const: bChar.const || 0, contrib: bContrib, coeff: bCoeff, sigName: bSigRefine > 0 ? bSigName : null, sigRefine: bSigRefine, sigContrib: bSigContrib, source: 'A级强绑' });
+      }
     }
 
     // 6. 有效金系数（基于有效金数分段计算，不同段使用不同步长）
@@ -10873,78 +10907,92 @@ function openSettings() {
 
     let soldCount = 0;
     let importedCount = 0;
-
-    // 拉取昨日成交清单，批量匹配全部表格记录（Map查找零成本，无需阈值筛选）
+    let skipDetailText = '';
+    let errText = '';
     let soldList = [];
+
     try {
-      soldList = await fetchSoldList();
-      console.log('[鸣潮监控] 昨日成交清单拉取成功: ' + soldList.length + ' 条');
-    } catch (e) {
-      console.warn('[鸣潮监控] 成交清单拉取失败:', e.message);
-    }
-
-    if (soldList.length > 0) {
-      const soldMap = new Map();
-      for (const item of soldList) {
-        if (item && item.productId) soldMap.set(item.productId, item);
-      }
-      // 第一阶段：批量匹配表格已有记录，命中即标记已售
-      for (const row of tableData) {
-        const soldItem = soldMap.get(row.productId);
-        if (soldItem) {
-          row.status = '已售';
-          soldCount++;
-          // 记录真实成交价（分转元）与成交日期
-          const soldPrice = (soldItem.price || 0) / 100;
-          if (soldPrice > 0) row.soldPrice = soldPrice;
-          if (soldItem.payTime) row.soldTime = soldItem.payTime;
-        }
-      }
-      console.log('[鸣潮监控] 清单批量匹配: 命中' + soldCount + '个');
-
-      // 第二阶段：清单中未入表的成交记录，估值后导入监控列表（行情参考）
-      const existingIds = new Set(tableData.map(r => r.productId));
-      const skipStats = Object.create(null);
-      batchMode = true;
+      // 拉取昨日成交清单，批量匹配全部表格记录（Map查找零成本，无需阈值筛选）
       try {
+        soldList = await fetchSoldList();
+        console.log('[鸣潮监控] 昨日成交清单拉取成功: ' + soldList.length + ' 条');
+      } catch (e) {
+        console.warn('[鸣潮监控] 成交清单拉取失败:', e.message);
+      }
+
+      if (soldList.length > 0) {
+        const soldMap = new Map();
         for (const item of soldList) {
-          if (!item || !item.productId) continue;
-          if (existingIds.has(item.productId)) { skipStats['已在表格'] = (skipStats['已在表格'] || 0) + 1; continue; }
-          const result = importSoldItem(item);
-          if (result === true) importedCount++;
-          else skipStats[result] = (skipStats[result] || 0) + 1;
+          if (item && item.productId) soldMap.set(item.productId, item);
         }
-      } finally {
-        batchMode = false;
-      }
-      if (importedCount > 0) {
-        console.log('[鸣潮监控] 导入成交记录: ' + importedCount + ' 条');
-        sortTableData();
-        saveStorage(STORAGE_KEYS.seen, seenIds);
-      }
-      // 未导入明细（控制台可查具体原因）
-      const skipKeys = Object.keys(skipStats);
-      if (skipKeys.length > 0) {
-        let skipTotal = 0;
-        const parts = skipKeys.map(k => { skipTotal += skipStats[k]; return k + skipStats[k] + '条'; });
-        console.log('[鸣潮监控] 未导入 ' + skipTotal + ' 条: ' + parts.join('、'));
-        skipDetailText = '；未导入 ' + skipTotal + ' 条（' + parts.join('、') + '）';
+        // 第一阶段：批量匹配表格已有记录，命中即标记已售
+        for (const row of tableData) {
+          const soldItem = soldMap.get(row.productId);
+          if (soldItem) {
+            row.status = '已售';
+            soldCount++;
+            // 记录真实成交价（分转元）与成交日期
+            const soldPrice = (soldItem.price || 0) / 100;
+            if (soldPrice > 0) row.soldPrice = soldPrice;
+            if (soldItem.payTime) row.soldTime = soldItem.payTime;
+          }
+        }
+        console.log('[鸣潮监控] 清单批量匹配: 命中' + soldCount + '个');
+
+        // 第二阶段：清单中未入表的成交记录，估值后导入监控列表（行情参考）
+        const existingIds = new Set(tableData.map(r => r.productId));
+        const skipStats = Object.create(null);
+        batchMode = true;
+        try {
+          for (const item of soldList) {
+            if (!item || !item.productId) continue;
+            if (existingIds.has(item.productId)) { skipStats['已在表格'] = (skipStats['已在表格'] || 0) + 1; continue; }
+            // 单条异常只跳过该条，不中断其余导入
+            try {
+              const result = importSoldItem(item);
+              if (result === true) importedCount++;
+              else skipStats[result] = (skipStats[result] || 0) + 1;
+            } catch (e) {
+              console.error('[鸣潮监控] 导入成交记录异常:', item.productUniqueNo || item.productId, e);
+              skipStats['解析异常'] = (skipStats['解析异常'] || 0) + 1;
+            }
+          }
+        } finally {
+          batchMode = false;
+        }
+        if (importedCount > 0) {
+          console.log('[鸣潮监控] 导入成交记录: ' + importedCount + ' 条');
+          sortTableData();
+          saveStorage(STORAGE_KEYS.seen, seenIds);
+        }
+        // 未导入明细（控制台可查具体原因）
+        const skipKeys = Object.keys(skipStats);
+        if (skipKeys.length > 0) {
+          let skipTotal = 0;
+          const parts = skipKeys.map(k => { skipTotal += skipStats[k]; return k + skipStats[k] + '条'; });
+          console.log('[鸣潮监控] 未导入 ' + skipTotal + ' 条: ' + parts.join('、'));
+          skipDetailText = '；未导入 ' + skipTotal + ' 条（' + parts.join('、') + '）';
+        }
+
+        saveTableData();
       }
 
-      saveTableData();
+      refreshTableDisplay();
+    } catch (err) {
+      console.error('[鸣潮监控] 检查已售流程异常:', err);
+      errText = '；流程异常: ' + (err && err.message ? err.message : String(err));
+    } finally {
+      // 任何异常都必须复位运行标志与按钮，否则按钮永久卡在"拉取成交清单..."
+      soldCheckRunning = false;
+      dom.btnCheckSold.textContent = '检查已售';
+      dom.btnCheckSold.style.opacity = '1';
     }
-
-    refreshTableDisplay();
-
-    soldCheckRunning = false;
-    dom.btnCheckSold.textContent = '检查已售';
-    dom.btnCheckSold.style.opacity = '1';
 
     if (soldList.length === 0) {
       alert('检查失败：昨日成交清单拉取失败，请稍后重试。');
       return;
     }
-    alert('检查完成！表格 ' + tableData.length + ' 条记录全部匹配，其中 ' + soldCount + ' 个命中昨日成交清单；另有 ' + importedCount + ' 条成交记录已导入监控列表（清单共 ' + soldList.length + ' 条，仅覆盖螃蟹网平台）' + (skipDetailText || '') + '。');
+    alert('检查完成！表格 ' + tableData.length + ' 条记录全部匹配，其中 ' + soldCount + ' 个命中昨日成交清单；另有 ' + importedCount + ' 条成交记录已导入监控列表（清单共 ' + soldList.length + ' 条，仅覆盖螃蟹网平台）' + (skipDetailText || '') + (errText || '') + '。');
   }
 
   /**

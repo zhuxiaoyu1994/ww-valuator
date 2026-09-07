@@ -1260,6 +1260,34 @@ function calculateValue(parsed, price) {
       }
     }
   }
+  // A级强绑核心：A级角色与其强绑队友同时在场时，双方均计入有效金
+  // （无需完整配队，配队其余成员可替换；仅A级角色触发，其队友按自身级别系数计入）
+  for (var baci = 0; baci < parsed.characters.length; baci++) {
+    var baChar = parsed.characters[baci];
+    if (baChar.tier !== 'A') continue;
+    var baMates = _teamMatesConfig[baChar.name];
+    if (!baMates || !baMates.length) continue;
+    var presentMates = baMates.filter(function(m) { return charNamesSet.has(m); });
+    if (presentMates.length === 0) continue;
+    var bindGroup = [baChar.name].concat(presentMates);
+    for (var bgi = 0; bgi < bindGroup.length; bgi++) {
+      var bName = bindGroup[bgi];
+      if (effectiveCountedChars[bName]) continue;
+      var bChar = parsed.characters.find(function(c) { return c.name === bName; });
+      if (!bChar) continue;
+      effectiveYellow += (1 + (bChar.const || 0)) * effTierCoeffOf(bChar.tier);
+      effectiveCountedChars[bName] = true;
+      var bSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[bName] || SIG_WEAPONS[bName]) : SIG_WEAPONS[bName];
+      if (bSigName && hasSignatureWeapons.indexOf(bName) >= 0 && !effectiveCountedWeapons[bSigName]) {
+        var bSigWeapon = parsed.weapons.find(function(wp) { return wp.name === bSigName; });
+        if (bSigWeapon) {
+          var bRefine = bSigWeapon.refine || 1;
+          effectiveYellow += (1 + (bRefine - 1) * 0.5) * effTierCoeffOf(bChar.tier);
+          effectiveCountedWeapons[bSigName] = true;
+        }
+      }
+    }
+  }
 
   // 6. 有效金系数（基于有效金数分段计算，不同段使用不同步长）
   const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
