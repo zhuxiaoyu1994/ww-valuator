@@ -537,7 +537,7 @@ function getAdminPage() {
         <h2>题库管理 <span id="tb-count-label" style="font-size:13px;color:#888;font-weight:normal;"></span></h2>
         <div class="d-controls" style="margin-bottom:14px;">
           <button class="fetch-btn" id="tb-btn-test" onclick="tbRunEvaluate()">测试估值</button>
-          <span style="font-size:12px;color:#888;">用当前线上估值设置跑一遍全部题目，看偏差</span>
+          <span style="font-size:12px;color:#888;">用当前本地估值规则跑一遍全部题目，看偏差（无本地设置时使用线上默认）</span>
           <span style="flex:1"></span>
           <select id="tb-game-filter" onchange="tbRenderTable()">
             <option value="">全部游戏</option>
@@ -2652,10 +2652,21 @@ function getAdminPage() {
     var btn = document.getElementById('tb-btn-test');
     btn.disabled = true; btn.textContent = '测试中...';
     try {
+      // 读取各游戏的本地估值权重（从 localStorage）
+      var customWeights = {};
+      try {
+        var wuwaSaved = localStorage.getItem('mw_eval_weights');
+        if (wuwaSaved) customWeights.wuwa = JSON.parse(wuwaSaved);
+      } catch (e) { /* 忽略 */ }
+      try {
+        var zzzSaved = localStorage.getItem('zzz_eval_weights');
+        if (zzzSaved) customWeights.zzz = JSON.parse(zzzSaved);
+      } catch (e) { /* 忽略 */ }
+
       const resp = await fetch('/testbank/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: tbPw() }),
+        body: JSON.stringify({ password: tbPw(), customWeights: customWeights }),
       });
       const result = await resp.json();
       if (result.success) {
@@ -2663,7 +2674,8 @@ function getAdminPage() {
         tbEvalStats = result.data.stats;
         tbRenderStats();
         tbRenderTable();
-        tbToast('测试完成，共 ' + result.data.stats.count + ' 题');
+        var hasLocal = Object.keys(customWeights).length > 0;
+        tbToast('测试完成，共 ' + result.data.stats.count + ' 题' + (hasLocal ? '（使用本地估值规则）' : '（使用线上默认规则）'));
       } else { tbToast(result.error || '测试失败', true); }
     } catch (e) { tbToast('网络错误', true); }
     btn.disabled = false; btn.textContent = '测试估值';

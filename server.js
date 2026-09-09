@@ -1397,14 +1397,19 @@ app.post('/testbank/api/evaluate', async (req, res) => {
     return res.json({ success: true, data: { items: {}, stats: { count: 0 } } });
   }
 
-  // 每个游戏加载一次当前生效的自定义权重
+  // 优先使用请求传入的自定义权重（本地估值规则），没有则从数据库加载线上权重
+  const customWeights = req.body.customWeights || {};
   const weightsCache = {};
   for (const g of validGames) {
-    try {
-      const { value } = await db.getConfigWithMeta(getConfigKey(g));
-      weightsCache[g] = value || null;
-    } catch (e) {
-      weightsCache[g] = null;
+    if (customWeights[g] && typeof customWeights[g] === 'object') {
+      weightsCache[g] = customWeights[g];
+    } else {
+      try {
+        const { value } = await db.getConfigWithMeta(getConfigKey(g));
+        weightsCache[g] = value || null;
+      } catch (e) {
+        weightsCache[g] = null;
+      }
     }
   }
 
