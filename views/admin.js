@@ -2256,12 +2256,38 @@ function getAdminPage() {
       sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">需要专武的角色</h4><div style="font-size:12px;color:#ccc;">' + config.needSigWeapons.map(escapeHtml).join('、') + '</div>');
     }
 
-    // 有效金系数（按有效金数分段）
-    if (config.effYellowBaseCoeff != null) {
-      var effHtml = '基准系数: <span style="color:#f59e0b;">' + config.effYellowBaseCoeff + '</span> | 上限: <span style="color:#e94560;">' + (config.effYellowMaxCoeff != null ? config.effYellowMaxCoeff : 2.5) + '</span><br>' +
-        '<span style="color:#22c55e;">第1段(0~' + (config.effYellowSeg1Threshold != null ? config.effYellowSeg1Threshold : 10) + '):</span> 每金浮动' + (config.effYellowSeg1Step != null ? config.effYellowSeg1Step : 0.03) + '<br>' +
-        '<span style="color:#f59e0b;">第2段(' + (config.effYellowSeg1Threshold != null ? config.effYellowSeg1Threshold : 10) + '~' + (config.effYellowSeg2Threshold != null ? config.effYellowSeg2Threshold : 40) + '):</span> 每金浮动' + (config.effYellowSeg2Step != null ? config.effYellowSeg2Step : 0.02) + '<br>' +
-        '<span style="color:#e94560;">第3段(' + (config.effYellowSeg2Threshold != null ? config.effYellowSeg2Threshold : 40) + '+):</span> 每金浮动' + (config.effYellowSeg3Step != null ? config.effYellowSeg3Step : 0.008);
+    // 有效金系数（按有效金数分段，首尾相连）
+    // 新格式：effYellowSegments 数组（3.10.0+ 导出）；旧格式：effYellowSeg* 扁平字段
+    var effSegs = null;
+    if (config.effYellowSegments && Array.isArray(config.effYellowSegments) && config.effYellowSegments.length > 0) {
+      effSegs = config.effYellowSegments;
+    } else if (config.effYellowSeg1Threshold != null || config.effYellowSeg1Step != null || config.effYellowBaseCoeff != null) {
+      // 旧扁平字段转分段数组
+      var _s1T = config.effYellowSeg1Threshold != null ? config.effYellowSeg1Threshold : 10;
+      var _s1S = config.effYellowSeg1Step != null ? config.effYellowSeg1Step : 0.03;
+      var _s2T = config.effYellowSeg2Threshold != null ? config.effYellowSeg2Threshold : 40;
+      var _s2S = config.effYellowSeg2Step != null ? config.effYellowSeg2Step : 0.02;
+      var _s3S = config.effYellowSeg3Step != null ? config.effYellowSeg3Step : 0.008;
+      var _s1B = config.effYellowSeg1BaseCoeff != null ? config.effYellowSeg1BaseCoeff
+        : (config.effYellowBaseCoeff != null ? config.effYellowBaseCoeff : 0.3);
+      effSegs = [
+        { baseCoeff: _s1B, threshold: _s1T, step: _s1S },
+        { baseCoeff: config.effYellowSeg2BaseCoeff != null ? config.effYellowSeg2BaseCoeff : (_s1B + _s1T * _s1S), threshold: _s2T, step: _s2S },
+        { baseCoeff: config.effYellowSeg3BaseCoeff != null ? config.effYellowSeg3BaseCoeff : (_s1B + _s1T * _s1S + (_s2T - _s1T) * _s2S), threshold: null, step: _s3S },
+      ];
+    }
+    if (effSegs) {
+      var segColors = ['#22c55e', '#f59e0b', '#e94560', '#8ecdf5', '#a78bfa'];
+      var effHtml = '上限: <span style="color:#e94560;">' + (config.effYellowMaxCoeff != null ? config.effYellowMaxCoeff : 2.5) + '</span>　首尾相连：每段起点=前段末尾';
+      var segStart = 0;
+      effSegs.forEach(function(seg, idx) {
+        var color = segColors[idx % segColors.length];
+        var range = idx === 0
+          ? '0~' + (seg.threshold != null ? seg.threshold : '+')
+          : segStart + '~' + (seg.threshold != null ? seg.threshold : '+');
+        effHtml += '<br><span style="color:' + color + ';">第' + (idx + 1) + '段(' + range + '):</span> 基准' + seg.baseCoeff + ' 每金+' + seg.step;
+        segStart = seg.threshold != null ? seg.threshold : segStart;
+      });
       sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">有效金系数（按有效金数分段）</h4><div style="font-size:12px;color:#ccc;">' + effHtml + '</div>');
     }
 
