@@ -40,7 +40,7 @@
 - 新功能、交互改动 → 次位 +1（`3.6.1` → `3.7.0`）
 - 大版本重构才升主位
 
-推送到 GitHub 后，需**手动**在 Greasy Fork / 分发渠道同步发布新版本（分发渠道不会自动同步）。
+脚本由本网站托管（`/public/crab-monitor.user.js`），推送到 GitHub 后 Vercel 自动部署即完成发布。已安装用户的 Tampermonkey 定期回源比对 `@version`，检测到版本变化后自动推送更新，无需任何手动发布操作。
 
 ## 核心同步规则（最重要）
 
@@ -59,7 +59,7 @@
 
 ## CONFIG_VERSION 机制
 
-版本常量分布在两处：`configs/wuwa.js`（鸣潮，当前 24）和 `configs/zzz.js`（绝区零，当前 4）各有 `configVersion`；油猴脚本有全局 `CONFIG_VERSION`（随鸣潮配置走，当前 24）。用户配置存储在 localStorage（键名按游戏前缀区分，如 `mw_monitor_config`），脚本启动时比对版本：
+版本常量分布在两处：`configs/wuwa.js`（鸣潮，当前 25）和 `configs/zzz.js`（绝区零，当前 4）各有 `configVersion`；油猴脚本有全局 `CONFIG_VERSION`（随鸣潮配置走，当前 25）。用户配置存储在 localStorage（键名按游戏前缀区分，如 `mw_monitor_config`），脚本启动时比对版本：
 
 - `savedVersion < CONFIG_VERSION` 且用户无自定义 → 直接使用新默认值
 - `savedVersion < CONFIG_VERSION` 且用户有自定义 → 提醒用户更新，不强制覆盖
@@ -74,7 +74,7 @@
 4. 在 `ww-valuator/` 下运行：`node build-engine.js` 重新生成混淆版
 5. 验证各处常量一致（可用 `grep` 对比关键值）
 6. 提交改动文件（含 `public/value-settings.js`，如设置面板 UI 有新增项）
-7. 推送到 GitHub，Vercel 自动部署；手动更新 Greasy Fork
+7. 推送到 GitHub，Vercel 自动部署（油猴脚本随部署自动发布，无需额外操作）
 
 ## 构建
 
@@ -89,7 +89,7 @@ npm start                   # 本地启动（node server.js）
 - **Vercel**：push 到 `main` 分支自动部署，入口 `api/server.js`（Serverless Function）
 - **域名**：`www.youxigujia.cn`（Vercel 自定义域名）
 - **GitHub 仓库**：`ssh://git@ssh.github.com:443/zhuxiaoyu1994/ww-valuator.git`
-- **油猴脚本**：需手动在 Greasy Fork / 分发渠道更新发布
+- **油猴脚本**：由本站 `/public/crab-monitor.user.js` 托管，随 Vercel 部署自动发布，Tampermonkey 回源比对 `@version` 自动更新
 
 ### Git 推送通道（SSH over 443，重要）
 
