@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.11.0
+// @version      3.12.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -2312,7 +2312,7 @@
       }
     }
 
-    // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
+    // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武 + A/B级≥3命角色(1+命座)（不重复计算）
     // 专武有效金：精1=1, 精N=1+(N-1)×0.5（精2=1.5, 精3=2, 精5=3）
     // 级别系数：该级别角色及其专武的贡献 × effTierWeights[tier]（默认1）
     var effTierWeights = w.effTierWeights || {};
@@ -2377,14 +2377,17 @@
     }
     // A级强绑核心：A级角色与其强绑队友同时在场时，双方均计入有效金
     // （无需完整配队，配队其余成员可替换；仅A级角色触发，其队友按自身级别系数计入）
+    // A/B级高命规则：A/B级角色命座≥3时，即使强绑队友不在场，角色自身(含专武)也计入有效金
     for (var baci = 0; baci < parsed.characters.length; baci++) {
       var baChar = parsed.characters[baci];
-      if (baChar.tier !== 'A') continue;
+      if (baChar.tier !== 'A' && baChar.tier !== 'B') continue;
+      var selfHighConst = (baChar.const || 0) >= 3;
       var baMates = _teamMatesConfig[baChar.name];
-      if (!baMates || !baMates.length) continue;
-      var presentMates = baMates.filter(function(m) { return charNamesSet.has(m); });
-      if (presentMates.length === 0) continue;
-      var bindGroup = [baChar.name].concat(presentMates);
+      var presentMates = (baMates || []).filter(function(m) { return charNamesSet.has(m); });
+      var bindTrigger = baChar.tier === 'A' && presentMates.length > 0;
+      if (!bindTrigger && !selfHighConst) continue;
+      var bindGroup = bindTrigger ? [baChar.name].concat(presentMates) : [baChar.name];
+      var bSource = bindTrigger ? 'A级强绑' : baChar.tier + '级高命';
       for (var bgi = 0; bgi < bindGroup.length; bgi++) {
         var bName = bindGroup[bgi];
         if (effectiveCountedChars[bName]) continue;
@@ -2406,7 +2409,7 @@
             effectiveCountedWeapons[bSigName] = true;
           }
         }
-        effectiveYellowBreakdown.push({ name: bChar.name, tier: bChar.tier, const: bChar.const || 0, contrib: bContrib, coeff: bCoeff, sigName: bSigRefine > 0 ? bSigName : null, sigRefine: bSigRefine, sigContrib: bSigContrib, source: 'A级强绑' });
+        effectiveYellowBreakdown.push({ name: bChar.name, tier: bChar.tier, const: bChar.const || 0, contrib: bContrib, coeff: bCoeff, sigName: bSigRefine > 0 ? bSigName : null, sigRefine: bSigRefine, sigContrib: bSigContrib, source: bSource });
       }
     }
 
@@ -8728,7 +8731,7 @@ function openSettings() {
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分段，分段首尾相连：后一段的起点 = 前一段终点的系数，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
+    yellowDesc.innerHTML = '有效金 = S级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武 + A/B级≥3命角色(含专武)。按有效金数量分段，分段首尾相连：后一段的起点 = 前一段终点的系数，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {

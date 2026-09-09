@@ -1197,7 +1197,7 @@ function calculateValue(parsed, price) {
     }
   }
 
-  // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武（不重复计算）
+  // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武 + A/B级≥3命角色(1+命座)（不重复计算）
   // 专武有效金：精1=1, 精N=1+(N-1)×0.5（精2=1.5, 精3=2, 精5=3）
   // 级别系数：该级别角色及其专武的贡献 × effTierWeights[tier]（默认1）
   var effTierWeights = w.effTierWeights || {};
@@ -1251,14 +1251,16 @@ function calculateValue(parsed, price) {
   }
   // A级强绑核心：A级角色与其强绑队友同时在场时，双方均计入有效金
   // （无需完整配队，配队其余成员可替换；仅A级角色触发，其队友按自身级别系数计入）
+  // A/B级高命规则：A/B级角色命座≥3时，即使强绑队友不在场，角色自身(含专武)也计入有效金
   for (var baci = 0; baci < parsed.characters.length; baci++) {
     var baChar = parsed.characters[baci];
-    if (baChar.tier !== 'A') continue;
+    if (baChar.tier !== 'A' && baChar.tier !== 'B') continue;
+    var selfHighConst = (baChar.const || 0) >= 3;
     var baMates = _teamMatesConfig[baChar.name];
-    if (!baMates || !baMates.length) continue;
-    var presentMates = baMates.filter(function(m) { return charNamesSet.has(m); });
-    if (presentMates.length === 0) continue;
-    var bindGroup = [baChar.name].concat(presentMates);
+    var presentMates = (baMates || []).filter(function(m) { return charNamesSet.has(m); });
+    var bindTrigger = baChar.tier === 'A' && presentMates.length > 0;
+    if (!bindTrigger && !selfHighConst) continue;
+    var bindGroup = bindTrigger ? [baChar.name].concat(presentMates) : [baChar.name];
     for (var bgi = 0; bgi < bindGroup.length; bgi++) {
       var bName = bindGroup[bgi];
       if (effectiveCountedChars[bName]) continue;

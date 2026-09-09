@@ -1123,7 +1123,7 @@
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S/A级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分段，分段首尾相连：后一段的起点 = 前一段终点的系数，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
+    yellowDesc.innerHTML = '有效金 = S级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武 + A/B级≥3命角色(含专武)。按有效金数量分段，分段首尾相连：后一段的起点 = 前一段终点的系数，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {
