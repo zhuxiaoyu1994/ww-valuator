@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.10.0
+// @version      3.11.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 24;
+  const CONFIG_VERSION = 25;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -493,19 +493,19 @@
       // 限定金分段系数（null=单公式模式；数组=分段模式）
       yellowSegments: null,
       // 有效金系数（基于有效金数分段，每段独立基准系数，互不影响）
-      effYellowSeg1BaseCoeff: 0.15,  // 第1段基准系数（有效金=0时的系数）
+      effYellowSeg1BaseCoeff: 0.15,  // 第1段基准系数（该段起点=0处的系数）
       effYellowSeg1Threshold: 15,    // 第1段边界（0~15有效金）
       effYellowSeg1Step: 0.03,       // 第1段每金浮动
-      effYellowSeg2BaseCoeff: 0.6,   // 第2段基准系数（绝对，gold=0时的虚拟截距）
+      effYellowSeg2BaseCoeff: 0.6,   // 第2段基准系数（该段起点=15处的系数）
       effYellowSeg2Threshold: 50,    // 第2段边界（15~50有效金）
       effYellowSeg2Step: 0.02,       // 第2段每金浮动
-      effYellowSeg3BaseCoeff: 1.3,   // 第3段基准系数（绝对，gold=0时的虚拟截距）
+      effYellowSeg3BaseCoeff: 1.3,   // 第3段基准系数（该段起点=50处的系数）
       effYellowSeg3Step: 0.014,      // 第3段（50~100有效金）每金浮动
       effYellowMaxCoeff: 2,          // 系数上限
-      effYellowSegments: [           // 3段递推式分段
+      effYellowSegments: [           // 分段系数（baseCoeff=该段起点处的系数值）
         { baseCoeff: 0.3, threshold: 10, step: 0.03 },
-        { baseCoeff: 0.4, threshold: 40, step: 0.02 },
-        { baseCoeff: 0.88, threshold: null, step: 0.008 }
+        { baseCoeff: 0.6, threshold: 40, step: 0.02 },
+        { baseCoeff: 1.2, threshold: null, step: 0.008 }
       ],
       // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
       effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
@@ -1267,7 +1267,7 @@
         _s2B = saved.effYellowSeg2BaseCoeff;
       } else {
         var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
-        _s2B = _oldBase + _s1T * (_s1S - _s2S);
+        _s2B = _oldBase + _s1T * _s1S;
       }
       if (saved.effYellowSeg3BaseCoeff != null) {
         _s3B = saved.effYellowSeg3BaseCoeff;
@@ -1275,7 +1275,7 @@
         var _oldBase2 = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
         var _seg2Val = _oldBase2 + _s1T * _s1S;
         var _seg3Val = _seg2Val + (_s2T - _s1T) * _s2S;
-        _s3B = _seg3Val - _s2T * _s3S;
+        _s3B = _seg3Val;
       }
       w.effYellowSegments = [
         { baseCoeff: _s1B, threshold: _s1T, step: _s1S },
@@ -1968,58 +1968,52 @@
   }
 
   /**
-   * 计算有效金系数（基于有效金数分段，每段完全独立）
-   * 每段用绝对gold线性公式：coeff = segBase + gold × segStep
-   * threshold仅用于判断分段归属，不参与计算
-   * 调整任意段的base/step/threshold不影响其他段的计算结果
+   * 计算有效金系数（基于有效金数分段，分段首尾相连）
+   * 每段线性公式：coeff = 段起点系数 + (有效金数 - 段起点金数) × step
+   * 段起点系数递推：第1段 = baseCoeff（有效金=0处），后续段 = 前一段在其边界处的系数值
+   * 因此曲线连续不跳变：调整前一段的基准/边界/浮动会整体平移后续所有分段
+   * 后续段自身存储的 baseCoeff 不参与计算（仅作展示参考）
    */
   function getEffectiveYellowCoeff(effectiveYellow) {
     var w = weights || DEFAULT_WEIGHTS;
     var segs = w.effYellowSegments || [
       { baseCoeff: 0.3, threshold: 10, step: 0.03 },
-      { baseCoeff: 0.4, threshold: 40, step: 0.02 },
-      { baseCoeff: 0.88, threshold: null, step: 0.008 }
+      { baseCoeff: 0.6, threshold: 40, step: 0.02 },
+      { baseCoeff: 1.2, threshold: null, step: 0.008 }
     ];
     var maxCoeff = (w.effYellowMaxCoeff != null) ? w.effYellowMaxCoeff : 2.5;
+
+    // 递推各段起点（首尾相连）
+    var steps = [];
+    var startGold = [];
+    var startCoeff = [];
+    for (var i = 0; i < segs.length; i++) {
+      var seg = segs[i];
+      steps[i] = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
+      if (i === 0) {
+        startGold[0] = 0;
+        startCoeff[0] = (seg.baseCoeff != null) ? seg.baseCoeff : 0.3;
+      } else {
+        var prevT = segs[i - 1].threshold;
+        if (prevT == null) prevT = startGold[i - 1];
+        startGold[i] = prevT;
+        startCoeff[i] = startCoeff[i - 1] + (prevT - startGold[i - 1]) * steps[i - 1];
+      }
+    }
 
     var coeff;
     var segIdx = 0;
     var segLabel;
 
-    // 递推计算各分段起点的系数值，确保分段之间始终连贯
-    var segStartCoeff = [];
     for (var i = 0; i < segs.length; i++) {
-      var seg = segs[i];
-      var segBase = (seg.baseCoeff != null) ? seg.baseCoeff : 0.3;
-      var segStep = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
-
-      if (i === 0) {
-        segStartCoeff[i] = segBase;
-      } else {
-        var prevT = segs[i - 1].threshold;
-        var prevPrevT = (i >= 2) ? segs[i - 2].threshold : 0;
-        var prevStep = (segs[i - 1].step != null && segs[i - 1].step !== 0) ? segs[i - 1].step : (segs[i - 1].step === 0 ? 0 : 0.01);
-        segStartCoeff[i] = segStartCoeff[i - 1] + (prevT - prevPrevT) * prevStep;
-      }
-    }
-
-    for (var i = 0; i < segs.length; i++) {
-      var seg = segs[i];
-      var segStep = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
-      var segThreshold = seg.threshold;
-
+      var segThreshold = segs[i].threshold;
       if (segThreshold == null || effectiveYellow <= segThreshold) {
-        if (i === 0) {
-          coeff = segStartCoeff[0] + effectiveYellow * segStep;
-        } else {
-          var prevT = segs[i - 1].threshold;
-          coeff = segStartCoeff[i] + (effectiveYellow - prevT) * segStep;
-        }
+        coeff = startCoeff[i] + (effectiveYellow - startGold[i]) * steps[i];
         segIdx = i;
         if (i === 0) {
           segLabel = (segThreshold != null ? '0~' + segThreshold : '0+') + '有效金';
         } else {
-          segLabel = prevT + (segThreshold != null ? '~' + segThreshold : '+') + '有效金';
+          segLabel = startGold[i] + (segThreshold != null ? '~' + segThreshold : '+') + '有效金';
         }
         break;
       }
@@ -2027,12 +2021,9 @@
 
     if (coeff == null) {
       var lastIdx = segs.length - 1;
-      var lastSeg = segs[lastIdx];
-      var lastStep = (lastSeg.step != null && lastSeg.step !== 0) ? lastSeg.step : (lastSeg.step === 0 ? 0 : 0.001);
-      var prevT = lastIdx > 0 ? segs[lastIdx - 1].threshold : 0;
-      coeff = segStartCoeff[lastIdx] + (effectiveYellow - prevT) * lastStep;
+      coeff = startCoeff[lastIdx] + (effectiveYellow - startGold[lastIdx]) * steps[lastIdx];
       segIdx = lastIdx;
-      segLabel = prevT + '+有效金';
+      segLabel = startGold[lastIdx] + '+有效金';
     }
 
     if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
@@ -8737,7 +8728,7 @@ function openSettings() {
     yellowSection.appendChild(yellowTitle);
     var yellowDesc = document.createElement('p');
     yellowDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    yellowDesc.innerHTML = '有效金 = S级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分段，每段独立基准系数，调整一段不影响其他段。可自由添加/删除分段。';
+    yellowDesc.innerHTML = '有效金 = S级角色(含命座) + 其专武(含精炼) + 完整配队角色(含命座) + 其专武。按有效金数量分段，分段首尾相连：后一段的起点 = 前一段终点的系数，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
     yellowSection.appendChild(yellowDesc);
 
     function yfLabel(text) {
@@ -8788,9 +8779,15 @@ function openSettings() {
           title.style.cssText = 'color:' + color + ';font-size:11px;font-weight:600;margin-right:6px;min-width:90px;';
           row.appendChild(title);
 
-          row.appendChild(yfLabel('基准'));
-          var baseInp = yfInput(seg.baseCoeff != null ? seg.baseCoeff : 0.3, '0.01', '#f59e0b', '基准系数', 44);
+          row.appendChild(yfLabel(si === 0 ? '基准' : '起点'));
+          var baseInp = yfInput(seg.baseCoeff != null ? seg.baseCoeff : 0.3, '0.01', '#f59e0b', si === 0 ? '第1段起点系数（有效金=0处）' : '由前面分段终点自动推算（首尾相连，只读）', 44);
           baseInp.style.textAlign = 'right';
+          if (si > 0) {
+            baseInp.readOnly = true;
+            baseInp.style.background = '#101a2e';
+            baseInp.style.color = '#b58a2e';
+            baseInp.style.borderStyle = 'dashed';
+          }
           row.appendChild(baseInp);
 
           var thresholdInp = null;
@@ -8819,9 +8816,9 @@ function openSettings() {
             row.appendChild(delBtn);
           }
 
-          baseInp.onchange = updateYellowPreview;
-          if (thresholdInp) thresholdInp.onchange = updateYellowPreview;
-          stepInp.onchange = updateYellowPreview;
+          baseInp.addEventListener('input', updateYellowPreview);
+          if (thresholdInp) thresholdInp.addEventListener('input', updateYellowPreview);
+          stepInp.addEventListener('input', updateYellowPreview);
 
           effSegInputs.push({ baseInp: baseInp, thresholdInp: thresholdInp, stepInp: stepInp });
           effSegRows.push(row);
@@ -8852,59 +8849,192 @@ function openSettings() {
     loadYellowDefaultBtn.textContent = '载入默认';
     loadYellowDefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #0f3460;border-radius:4px;background:#1a1a2e;color:#f59e0b;font-size:11px;cursor:pointer;';
     loadYellowDefaultBtn.onclick = function() {
-      weights.effYellowSegments = [
-        { baseCoeff: 0.3, threshold: 10, step: 0.03 },
-        { baseCoeff: 0.4, threshold: 40, step: 0.02 },
-        { baseCoeff: 0.88, threshold: null, step: 0.008 }
-      ];
-      effMaxCoeffInp.value = 2.5;
+      var defSegs = (DEFAULT_WEIGHTS.effYellowSegments && DEFAULT_WEIGHTS.effYellowSegments.length > 0)
+        ? DEFAULT_WEIGHTS.effYellowSegments.map(function(s) { return { baseCoeff: s.baseCoeff, threshold: s.threshold, step: s.step }; })
+        : [
+          { baseCoeff: 0.3, threshold: 10, step: 0.03 },
+          { baseCoeff: 0.6, threshold: 40, step: 0.02 },
+          { baseCoeff: 1.2, threshold: null, step: 0.008 }
+        ];
+      weights.effYellowSegments = defSegs;
+      effMaxCoeffInp.value = (DEFAULT_WEIGHTS.effYellowMaxCoeff != null) ? DEFAULT_WEIGHTS.effYellowMaxCoeff : 2.5;
       renderSegRows();
       updateYellowPreview();
     };
     yellowBtnRow.appendChild(loadYellowDefaultBtn);
     yellowSection.appendChild(yellowBtnRow);
 
+    // 折线图（首尾相连曲线，实时刷新）
+    var effChartBox = document.createElement('div');
+    effChartBox.style.cssText = 'margin-top:10px;';
+    yellowSection.appendChild(effChartBox);
+
     // 预览
     var yellowPreview = document.createElement('div');
     yellowPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(245,158,11,0.05);border-radius:6px;border:1px solid rgba(245,158,11,0.15);margin-top:8px;';
     yellowSection.appendChild(yellowPreview);
 
-    function updateYellowPreview() {
-      var mc = parseFloat(effMaxCoeffInp.value) || 2.5;
+    // 读取当前分段输入 → [{base, thr, step}]
+    function readEffSegInputs() {
       var segs = [];
-      for (var si = 0; si < effSegInputs.length; si++) {
-        var inp = effSegInputs[si];
+      for (var i = 0; i < effSegInputs.length; i++) {
+        var inp = effSegInputs[i];
+        var b = parseFloat(inp.baseInp.value);
+        var t = inp.thresholdInp ? parseFloat(inp.thresholdInp.value) : null;
+        var s = parseFloat(inp.stepInp.value);
         segs.push({
-          baseCoeff: parseFloat(inp.baseInp.value) || 0,
-          threshold: inp.thresholdInp ? (parseFloat(inp.thresholdInp.value) || 0) : null,
-          step: parseFloat(inp.stepInp.value) || 0
+          base: isNaN(b) ? 0 : b,
+          thr: (inp.thresholdInp && !isNaN(t)) ? t : null,
+          step: isNaN(s) ? 0 : s
         });
       }
-      var samples = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100];
-      var html = '';
-      for (var si2 = 0; si2 < samples.length; si2++) {
-        var y = samples[si2];
-        var coeff;
-        var segColor = '#888';
-        for (var sj = 0; sj < segs.length; sj++) {
-          if (segs[sj].threshold == null || y <= segs[sj].threshold) {
-            coeff = segs[sj].baseCoeff + y * segs[sj].step;
-            segColor = segColors[sj % segColors.length];
-            break;
+      return segs;
+    }
+
+    // 首尾相连递推：各段起点金数 sg[i] 与起点系数 sc[i]
+    function connectedStarts(segs) {
+      var sg = [], sc = [];
+      for (var i = 0; i < segs.length; i++) {
+        if (i === 0) {
+          sg[0] = 0;
+          sc[0] = segs.length > 0 ? segs[0].base : 0;
+        } else {
+          var pt = (segs[i - 1].thr != null) ? segs[i - 1].thr : sg[i - 1];
+          sg[i] = pt;
+          sc[i] = sc[i - 1] + (pt - sg[i - 1]) * segs[i - 1].step;
+        }
+      }
+      return { sg: sg, sc: sc };
+    }
+
+    // 构建与估值引擎一致的曲线模型（含上限截断）
+    function buildCurveModel() {
+      var capRaw = parseFloat(effMaxCoeffInp.value);
+      var cap = isNaN(capRaw) ? 2.5 : capRaw;
+      var segs = readEffSegInputs();
+      var cs = connectedStarts(segs);
+      function coeffAt(g) {
+        for (var i = 0; i < segs.length; i++) {
+          if (segs[i].thr == null || g <= segs[i].thr) {
+            return { coeff: cs.sc[i] + (g - cs.sg[i]) * segs[i].step, idx: i };
           }
         }
-        if (coeff == null && segs.length > 0) {
-          var last = segs[segs.length - 1];
-          coeff = (last.baseCoeff || 0) + y * (last.step || 0);
-          segColor = segColors[(segs.length-1) % segColors.length];
+        if (segs.length > 0) {
+          var li = segs.length - 1;
+          return { coeff: cs.sc[li] + (g - cs.sg[li]) * segs[li].step, idx: li };
         }
-        if (mc > 0 && coeff > mc) coeff = mc;
-        if (coeff < 0.1) coeff = 0.1;
-        html += '<span style="color:' + segColor + ';">' + y + '金→×' + (Math.round(coeff * 1000) / 1000) + '</span>　';
+        return { coeff: 0, idx: 0 };
+      }
+      function clamp(c) {
+        if (cap > 0 && c > cap) c = cap;
+        if (c < 0.1) c = 0.1;
+        return c;
+      }
+      return { segs: segs, sg: cs.sg, sc: cs.sc, cap: cap, coeffAt: coeffAt, clamp: clamp };
+    }
+
+    function renderEffChart(m) {
+      if (!m.segs.length) {
+        effChartBox.innerHTML = '<div style="font-size:11px;color:#666;padding:12px;text-align:center;background:#16213e;border-radius:8px;border:1px solid #0f3460;">暂无分段，点击"+ 添加分段"</div>';
+        return;
+      }
+      var W = 512, H = 232, mL = 40, mR = 12, mT = 18, mB = 32;
+      var pw = W - mL - mR, ph = H - mT - mB;
+
+      var lastFinite = 0;
+      for (var i = 0; i < m.segs.length; i++) {
+        if (m.segs[i].thr != null && m.segs[i].thr > lastFinite) lastFinite = m.segs[i].thr;
+      }
+      var xmax = Math.max(80, Math.ceil((lastFinite + 40) / 10) * 10);
+
+      var ymax = 0.5;
+      for (var k = 0; k <= 160; k++) {
+        var cs2 = m.clamp(m.coeffAt((xmax * k) / 160).coeff);
+        if (cs2 > ymax) ymax = cs2;
+      }
+      for (var i2 = 0; i2 < m.segs.length; i2++) {
+        if (m.segs[i2].thr == null) continue;
+        var bc2 = m.clamp(m.coeffAt(m.segs[i2].thr).coeff);
+        if (bc2 > ymax) ymax = bc2;
+      }
+      ymax = Math.ceil(ymax * 1.15 * 10) / 10;
+
+      function X(g) { return mL + (g / xmax) * pw; }
+      function Y(c) {
+        var yy = mT + ph - (c / ymax) * ph;
+        if (yy < mT) yy = mT;
+        if (yy > mT + ph) yy = mT + ph;
+        return yy;
+      }
+
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;background:#16213e;border-radius:8px;border:1px solid #0f3460;">';
+      for (var yi = 0; yi <= 4; yi++) {
+        var cv = (ymax * yi) / 4;
+        var yy = Y(cv);
+        svg += '<line x1="' + mL + '" y1="' + yy.toFixed(1) + '" x2="' + (W - mR) + '" y2="' + yy.toFixed(1) + '" stroke="#233252" stroke-width="1"/>';
+        svg += '<text x="' + (mL - 5) + '" y="' + (yy + 3).toFixed(1) + '" fill="#7a86a3" font-size="10" text-anchor="end">' + (Math.round(cv * 100) / 100) + '</text>';
+      }
+      for (var xi = 0; xi <= 5; xi++) {
+        var gv = Math.round((xmax * xi) / 5);
+        var xx = X(gv);
+        svg += '<line x1="' + xx.toFixed(1) + '" y1="' + mT + '" x2="' + xx.toFixed(1) + '" y2="' + (mT + ph) + '" stroke="#233252" stroke-width="1"/>';
+        svg += '<text x="' + xx.toFixed(1) + '" y="' + (mT + ph + 14) + '" fill="#7a86a3" font-size="10" text-anchor="middle">' + gv + '</text>';
+      }
+      svg += '<text x="' + (W - mR) + '" y="' + (H - 4) + '" fill="#7a86a3" font-size="10" text-anchor="end">有效金数 →</text>';
+      svg += '<text x="4" y="' + (mT - 6) + '" fill="#7a86a3" font-size="10">系数↑</text>';
+
+      if (m.cap > 0 && m.cap <= ymax) {
+        svg += '<line x1="' + mL + '" y1="' + Y(m.cap).toFixed(1) + '" x2="' + (W - mR) + '" y2="' + Y(m.cap).toFixed(1) + '" stroke="#f87171" stroke-width="1" stroke-dasharray="5,4"/>';
+        svg += '<text x="' + (W - mR - 4) + '" y="' + (Y(m.cap) - 4).toFixed(1) + '" fill="#f87171" font-size="10" text-anchor="end">上限×' + m.cap + '</text>';
+      }
+
+      for (var si = 0; si < m.segs.length; si++) {
+        var g0 = m.sg[si];
+        var g1 = (m.segs[si].thr != null) ? m.segs[si].thr : xmax;
+        if (g1 <= g0) continue;
+        var color = segColors[si % segColors.length];
+        var d = '';
+        var M2 = 24;
+        for (var k2 = 0; k2 <= M2; k2++) {
+          var g = g0 + ((g1 - g0) * k2) / M2;
+          var c = m.clamp(m.coeffAt(g).coeff);
+          d += (k2 === 0 ? 'M' : 'L') + X(g).toFixed(1) + ' ' + Y(c).toFixed(1) + ' ';
+        }
+        svg += '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round"/>';
+      }
+
+      var c0 = m.clamp(m.coeffAt(0).coeff);
+      svg += '<circle cx="' + X(0).toFixed(1) + '" cy="' + Y(c0).toFixed(1) + '" r="3" fill="' + segColors[0] + '" stroke="#e0e0e0" stroke-width="1"/>';
+      svg += '<text x="' + (X(0) + 5).toFixed(1) + '" y="' + (Y(c0) - 6).toFixed(1) + '" fill="#d5dbe8" font-size="10" text-anchor="start">0金 ×' + (Math.round(c0 * 1000) / 1000) + '</text>';
+      for (var bi = 0; bi < m.segs.length; bi++) {
+        if (m.segs[bi].thr == null) continue;
+        var bt = m.segs[bi].thr;
+        var bcv = m.clamp(m.coeffAt(bt).coeff);
+        var bcolor = segColors[(bi + 1) % segColors.length];
+        svg += '<circle cx="' + X(bt).toFixed(1) + '" cy="' + Y(bcv).toFixed(1) + '" r="3" fill="' + bcolor + '" stroke="#e0e0e0" stroke-width="1"/>';
+        svg += '<text x="' + X(bt).toFixed(1) + '" y="' + (Y(bcv) - 7).toFixed(1) + '" fill="#d5dbe8" font-size="10" text-anchor="middle">' + bt + '金 ×' + (Math.round(bcv * 1000) / 1000) + '</text>';
+      }
+
+      svg += '</svg>';
+      effChartBox.innerHTML = svg;
+    }
+
+    function updateYellowPreview() {
+      var m = buildCurveModel();
+      // 同步只读起点输入框（第2段起自动推算，首尾相连）
+      for (var i = 1; i < effSegInputs.length && i < m.sc.length; i++) {
+        effSegInputs[i].baseInp.value = Math.round(m.sc[i] * 1000) / 1000;
+      }
+      renderEffChart(m);
+      var samples = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100];
+      var html = '';
+      for (var k = 0; k < samples.length; k++) {
+        var r = m.coeffAt(samples[k]);
+        html += '<span style="color:' + segColors[r.idx % segColors.length] + ';">' + samples[k] + '金→×' + (Math.round(m.clamp(r.coeff) * 1000) / 1000) + '</span>　';
       }
       yellowPreview.innerHTML = html;
     }
-    effMaxCoeffInp.onchange = updateYellowPreview;
+    effMaxCoeffInp.addEventListener('input', updateYellowPreview);
     updateYellowPreview();
 
     dialog.appendChild(yellowSection);

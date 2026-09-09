@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 24,
+  configVersion: 25,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
@@ -75,8 +75,8 @@ const WUWA_CONFIG = {
     effYellowSeg3BaseCoeff: 1.3, effYellowSeg3Step: 0.014, effYellowMaxCoeff: 2,
     effYellowSegments: [
       { baseCoeff: 0.3, threshold: 10, step: 0.03 },
-      { baseCoeff: 0.4, threshold: 40, step: 0.02 },
-      { baseCoeff: 0.88, threshold: null, step: 0.008 }
+      { baseCoeff: 0.6, threshold: 40, step: 0.02 },
+      { baseCoeff: 1.2, threshold: null, step: 0.008 }
     ],
     effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
   },

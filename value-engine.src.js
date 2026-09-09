@@ -201,7 +201,7 @@ function buildDefaultWeights(customWeights) {
       _s2B = saved.effYellowSeg2BaseCoeff;
     } else {
       var _oldBase = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
-      _s2B = _oldBase + _s1T * (_s1S - _s2S);
+      _s2B = _oldBase + _s1T * _s1S;
     }
     if (saved.effYellowSeg3BaseCoeff != null) {
       _s3B = saved.effYellowSeg3BaseCoeff;
@@ -209,7 +209,7 @@ function buildDefaultWeights(customWeights) {
       var _oldBase2 = (saved.effYellowBaseCoeff != null) ? saved.effYellowBaseCoeff : DEFAULT_WEIGHTS.effYellowSeg1BaseCoeff;
       var _seg2Val = _oldBase2 + _s1T * _s1S;
       var _seg3Val = _seg2Val + (_s2T - _s1T) * _s2S;
-      _s3B = _seg3Val - _s2T * _s3S;
+      _s3B = _seg3Val;
     }
     w.effYellowSegments = [
       { baseCoeff: _s1B, threshold: _s1T, step: _s1S },
@@ -888,60 +888,52 @@ function getYellowCoeff(yellowCount) {
 }
 
 /**
- * 计算有效金系数（基于有效金数分段，每段完全独立）
- * 每段用绝对gold线性公式：coeff = segBase + gold × segStep
- * threshold仅用于判断分段归属，不参与计算
- * 调整任意段的base/step/threshold不影响其他段的计算结果
+ * 计算有效金系数（基于有效金数分段，分段首尾相连）
+ * 每段线性公式：coeff = 段起点系数 + (有效金数 - 段起点金数) × step
+ * 段起点系数递推：第1段 = baseCoeff（有效金=0处），后续段 = 前一段在其边界处的系数值
+ * 因此曲线连续不跳变：调整前一段的基准/边界/浮动会整体平移后续所有分段
+ * 后续段自身存储的 baseCoeff 不参与计算（仅作展示参考）
  */
 function getEffectiveYellowCoeff(effectiveYellow) {
   var w = weights || DEFAULT_WEIGHTS;
   var segs = w.effYellowSegments || [
     { baseCoeff: 0.3, threshold: 10, step: 0.03 },
-    { baseCoeff: 0.4, threshold: 40, step: 0.02 },
-    { baseCoeff: 0.88, threshold: null, step: 0.008 }
+    { baseCoeff: 0.6, threshold: 40, step: 0.02 },
+    { baseCoeff: 1.2, threshold: null, step: 0.008 }
   ];
   var maxCoeff = (w.effYellowMaxCoeff != null) ? w.effYellowMaxCoeff : 2.5;
+
+  // 递推各段起点（首尾相连）
+  var steps = [];
+  var startGold = [];
+  var startCoeff = [];
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    steps[i] = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
+    if (i === 0) {
+      startGold[0] = 0;
+      startCoeff[0] = (seg.baseCoeff != null) ? seg.baseCoeff : 0.3;
+    } else {
+      var prevT = segs[i - 1].threshold;
+      if (prevT == null) prevT = startGold[i - 1];
+      startGold[i] = prevT;
+      startCoeff[i] = startCoeff[i - 1] + (prevT - startGold[i - 1]) * steps[i - 1];
+    }
+  }
 
   var coeff;
   var segIdx = 0;
   var segLabel;
 
-  // 递推计算各分段起点的系数值，确保分段之间始终连贯
-  // segStartCoeff[i] = 分段i起点处的系数值
-  var segStartCoeff = [];
   for (var i = 0; i < segs.length; i++) {
-    var seg = segs[i];
-    var segBase = (seg.baseCoeff != null) ? seg.baseCoeff : 0.3;
-    var segStep = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
-
-    if (i === 0) {
-      segStartCoeff[i] = segBase; // 第一段起点 = baseCoeff
-    } else {
-      // 后续段起点 = 前一段在阈值处的系数值（递推，使用段内相对距离）
-      var prevT = segs[i - 1].threshold;
-      var prevPrevT = (i >= 2) ? segs[i - 2].threshold : 0;
-      var prevStep = (segs[i - 1].step != null && segs[i - 1].step !== 0) ? segs[i - 1].step : (segs[i - 1].step === 0 ? 0 : 0.01);
-      segStartCoeff[i] = segStartCoeff[i - 1] + (prevT - prevPrevT) * prevStep;
-    }
-  }
-
-  for (var i = 0; i < segs.length; i++) {
-    var seg = segs[i];
-    var segStep = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.01);
-    var segThreshold = seg.threshold;
-
+    var segThreshold = segs[i].threshold;
     if (segThreshold == null || effectiveYellow <= segThreshold) {
-      if (i === 0) {
-        coeff = segStartCoeff[0] + effectiveYellow * segStep;
-      } else {
-        var prevT = segs[i - 1].threshold;
-        coeff = segStartCoeff[i] + (effectiveYellow - prevT) * segStep;
-      }
+      coeff = startCoeff[i] + (effectiveYellow - startGold[i]) * steps[i];
       segIdx = i;
       if (i === 0) {
         segLabel = (segThreshold != null ? '0~' + segThreshold : '0+') + '有效金';
       } else {
-        segLabel = prevT + (segThreshold != null ? '~' + segThreshold : '+') + '有效金';
+        segLabel = startGold[i] + (segThreshold != null ? '~' + segThreshold : '+') + '有效金';
       }
       break;
     }
@@ -949,12 +941,9 @@ function getEffectiveYellowCoeff(effectiveYellow) {
 
   if (coeff == null) {
     var lastIdx = segs.length - 1;
-    var lastSeg = segs[lastIdx];
-    var lastStep = (lastSeg.step != null && lastSeg.step !== 0) ? lastSeg.step : (lastSeg.step === 0 ? 0 : 0.001);
-    var prevT = lastIdx > 0 ? segs[lastIdx - 1].threshold : 0;
-    coeff = segStartCoeff[lastIdx] + (effectiveYellow - prevT) * lastStep;
+    coeff = startCoeff[lastIdx] + (effectiveYellow - startGold[lastIdx]) * steps[lastIdx];
     segIdx = lastIdx;
-    segLabel = prevT + '+有效金';
+    segLabel = startGold[lastIdx] + '+有效金';
   }
 
   if (maxCoeff > 0 && coeff > maxCoeff) coeff = maxCoeff;
