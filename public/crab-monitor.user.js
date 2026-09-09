@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.12.0
+// @version      3.12.1
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -1414,6 +1414,34 @@
     console.warn('[鸣潮监控] 权重保存失败，尝试清理表格数据释放空间...');
     saveTableData();
     return saveStorage(STORAGE_KEYS.weights, w);
+  }
+
+  /**
+   * 兼容旧版（3.9.x）配置：将扁平的有效金分段字段转换为分段数组
+   * 旧格式导出文件只有 effYellowSeg1BaseCoeff 等扁平字段，无 effYellowSegments 数组，
+   * 而 loadWeights 优先级为 saved.segments > 内置默认 > 扁平字段，导入时若不转换会被忽略
+   * @param {object} cfg - 导入的配置对象
+   * @returns {Array|null} 分段数组；非旧格式返回 null
+   */
+  function convertLegacyEffSegs(cfg) {
+    if (!cfg || cfg.effYellowSegments) return null;
+    var legacyKeys = ['effYellowBaseCoeff', 'effYellowSeg1BaseCoeff', 'effYellowSeg1Threshold', 'effYellowSeg1Step',
+      'effYellowSeg2BaseCoeff', 'effYellowSeg2Threshold', 'effYellowSeg2Step', 'effYellowSeg3BaseCoeff', 'effYellowSeg3Step'];
+    var hasLegacy = legacyKeys.some(function(k) { return cfg[k] != null; });
+    if (!hasLegacy) return null;
+    var s1B = (cfg.effYellowSeg1BaseCoeff != null) ? cfg.effYellowSeg1BaseCoeff : (cfg.effYellowBaseCoeff != null ? cfg.effYellowBaseCoeff : 0.3);
+    var s1T = (cfg.effYellowSeg1Threshold != null) ? cfg.effYellowSeg1Threshold : 10;
+    var s1S = (cfg.effYellowSeg1Step != null) ? cfg.effYellowSeg1Step : 0.03;
+    var s2T = (cfg.effYellowSeg2Threshold != null) ? cfg.effYellowSeg2Threshold : 40;
+    var s2S = (cfg.effYellowSeg2Step != null) ? cfg.effYellowSeg2Step : 0.02;
+    var s3S = (cfg.effYellowSeg3Step != null) ? cfg.effYellowSeg3Step : 0.008;
+    var s2B = (cfg.effYellowSeg2BaseCoeff != null) ? cfg.effYellowSeg2BaseCoeff : s1B + s1T * s1S;
+    var s3B = (cfg.effYellowSeg3BaseCoeff != null) ? cfg.effYellowSeg3BaseCoeff : s2B + (s2T - s1T) * s2S;
+    return [
+      { baseCoeff: s1B, threshold: s1T, step: s1S },
+      { baseCoeff: s2B, threshold: s2T, step: s2S },
+      { baseCoeff: s3B, threshold: null, step: s3S }
+    ];
   }
 
   // ============================================================
@@ -9876,6 +9904,14 @@ function openSettings() {
             if (typeof imported !== 'object' || imported === null) {
               alert('导入失败：文件内容不是有效的配置对象');
               return;
+            }
+            // 兼容旧版（3.9.x）扁平字段配置：转换为分段数组，否则会被内置默认覆盖
+            var convSegs = convertLegacyEffSegs(imported);
+            if (convSegs) {
+              imported.effYellowSegments = convSegs;
+              ['effYellowBaseCoeff', 'effYellowSeg1BaseCoeff', 'effYellowSeg1Threshold', 'effYellowSeg1Step',
+                'effYellowSeg2BaseCoeff', 'effYellowSeg2Threshold', 'effYellowSeg2Step', 'effYellowSeg3BaseCoeff', 'effYellowSeg3Step']
+                .forEach(function(k) { delete imported[k]; });
             }
             // 获取当前已保存的配置（保留监控助手特有字段）
             var current = loadStorage(STORAGE_KEYS.weights, {}) || {};

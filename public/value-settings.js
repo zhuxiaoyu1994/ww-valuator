@@ -108,6 +108,11 @@
       w.effYellowSegments = s.effYellowSegments.map(function(seg) {
         return { baseCoeff: seg.baseCoeff, threshold: seg.threshold != null ? seg.threshold : null, step: seg.step };
       });
+    } else if (DEFAULT_WEIGHTS.effYellowSegments && Array.isArray(DEFAULT_WEIGHTS.effYellowSegments) && DEFAULT_WEIGHTS.effYellowSegments.length > 0) {
+      // 无自定义分段时使用服务器默认（各游戏不同，如绝区零为4段）
+      w.effYellowSegments = DEFAULT_WEIGHTS.effYellowSegments.map(function(seg) {
+        return { baseCoeff: seg.baseCoeff, threshold: seg.threshold != null ? seg.threshold : null, step: seg.step };
+      });
     } else {
       // 向后兼容：从旧的固定3段字段构建数组
       var _s1B = (s.effYellowSeg1BaseCoeff != null) ? s.effYellowSeg1BaseCoeff : (s.effYellowBaseCoeff != null ? s.effYellowBaseCoeff : 0.3);
@@ -231,6 +236,34 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
     var currentVersion = (cachedDefaults && cachedDefaults.configVersion) || 1;
     localStorage.setItem(CONFIG_VERSION_KEY, String(currentVersion));
+  }
+
+  /**
+   * 兼容旧版（3.9.x）配置：将扁平的有效金分段字段转换为分段数组
+   * 旧格式导出文件只有 effYellowSeg1BaseCoeff 等扁平字段，无 effYellowSegments 数组，
+   * 而 loadWeights 优先级为 saved.segments > 服务器默认 > 扁平字段，导入时若不转换会被忽略
+   * @param {object} cfg - 导入的配置对象
+   * @returns {Array|null} 分段数组；非旧格式返回 null
+   */
+  function convertLegacyEffSegs(cfg) {
+    if (!cfg || cfg.effYellowSegments) return null;
+    var legacyKeys = ['effYellowBaseCoeff', 'effYellowSeg1BaseCoeff', 'effYellowSeg1Threshold', 'effYellowSeg1Step',
+      'effYellowSeg2BaseCoeff', 'effYellowSeg2Threshold', 'effYellowSeg2Step', 'effYellowSeg3BaseCoeff', 'effYellowSeg3Step'];
+    var hasLegacy = legacyKeys.some(function(k) { return cfg[k] != null; });
+    if (!hasLegacy) return null;
+    var s1B = (cfg.effYellowSeg1BaseCoeff != null) ? cfg.effYellowSeg1BaseCoeff : (cfg.effYellowBaseCoeff != null ? cfg.effYellowBaseCoeff : 0.3);
+    var s1T = (cfg.effYellowSeg1Threshold != null) ? cfg.effYellowSeg1Threshold : 10;
+    var s1S = (cfg.effYellowSeg1Step != null) ? cfg.effYellowSeg1Step : 0.03;
+    var s2T = (cfg.effYellowSeg2Threshold != null) ? cfg.effYellowSeg2Threshold : 40;
+    var s2S = (cfg.effYellowSeg2Step != null) ? cfg.effYellowSeg2Step : 0.02;
+    var s3S = (cfg.effYellowSeg3Step != null) ? cfg.effYellowSeg3Step : 0.008;
+    var s2B = (cfg.effYellowSeg2BaseCoeff != null) ? cfg.effYellowSeg2BaseCoeff : s1B + s1T * s1S;
+    var s3B = (cfg.effYellowSeg3BaseCoeff != null) ? cfg.effYellowSeg3BaseCoeff : s2B + (s2T - s1T) * s2S;
+    return [
+      { baseCoeff: s1B, threshold: s1T, step: s1S },
+      { baseCoeff: s2B, threshold: s2T, step: s2S },
+      { baseCoeff: s3B, threshold: null, step: s3S }
+    ];
   }
 
   // ============================================================
@@ -2170,6 +2203,14 @@
         reader.onload = function (ev) {
           try {
             var imported = JSON.parse(ev.target.result);
+            // 兼容旧版（3.9.x）扁平字段配置：转换为分段数组，否则会被服务器默认覆盖
+            var convSegs = convertLegacyEffSegs(imported);
+            if (convSegs) {
+              imported.effYellowSegments = convSegs;
+              ['effYellowBaseCoeff', 'effYellowSeg1BaseCoeff', 'effYellowSeg1Threshold', 'effYellowSeg1Step',
+                'effYellowSeg2BaseCoeff', 'effYellowSeg2Threshold', 'effYellowSeg2Step', 'effYellowSeg3BaseCoeff', 'effYellowSeg3Step']
+                .forEach(function(k) { delete imported[k]; });
+            }
             // 去除内部派生字段
             delete imported.constPrices;
             delete imported.deletedChars;
