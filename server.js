@@ -35,7 +35,6 @@ const getPageHTML = require('./views/wuwa');
 const getZZZPage = require('./views/zzz');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
-const { getTestbankUploadPage, getTestbankListPage } = require('./views/testbank');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1184,13 +1183,23 @@ app.post('/blocklist/api/remove', async (req, res) => {
 
 const TESTBANK_KEY = 'test_bank';
 
+// 题库页面已整合进管理后台，旧地址重定向
 app.get('/testbank', (req, res) => {
-  res.send(getTestbankUploadPage());
+  res.redirect(302, '/admin');
 });
 
 app.get('/testbank/list', (req, res) => {
-  res.send(getTestbankListPage());
+  res.redirect(302, '/admin');
 });
+
+// 题库API统一管理密码校验（整合进管理后台后）
+function testbankAuth(req, res) {
+  if (req.body.password !== ADMIN_PASSWORD) {
+    res.json({ success: false, error: '密码错误' });
+    return false;
+  }
+  return true;
+}
 
 // pxb7 gameId → 站内游戏key 反查
 function gameKeyFromPxb7Id(gameId) {
@@ -1256,6 +1265,7 @@ function fetchPxb7SoldList(gameId) {
 
 // 抓取商品信息（标题/标价/编号/游戏/是否已售），并尝试从成交清单匹配成交价
 app.post('/testbank/api/fetch', async (req, res) => {
+  if (!testbankAuth(req, res)) return;
   const { url } = req.body;
   const productId = parsePxb7ProductId(url);
   if (!productId) {
@@ -1297,6 +1307,7 @@ app.post('/testbank/api/fetch', async (req, res) => {
 
 // 添加题目（支持批量）
 app.post('/testbank/api/add', async (req, res) => {
+  if (!testbankAuth(req, res)) return;
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0) {
     return res.json({ success: false, error: '没有可入库的数据' });
@@ -1336,12 +1347,14 @@ app.post('/testbank/api/add', async (req, res) => {
 
 // 题库列表
 app.post('/testbank/api/list', async (req, res) => {
+  if (!testbankAuth(req, res)) return;
   const bank = (await db.getConfig(TESTBANK_KEY)) || [];
   res.json({ success: true, data: bank });
 });
 
 // 编辑题目
 app.post('/testbank/api/update', async (req, res) => {
+  if (!testbankAuth(req, res)) return;
   const { id, patch } = req.body;
   if (!id || !patch || typeof patch !== 'object') {
     return res.json({ success: false, error: '参数无效' });
@@ -1366,6 +1379,7 @@ app.post('/testbank/api/update', async (req, res) => {
 
 // 删除题目
 app.post('/testbank/api/delete', async (req, res) => {
+  if (!testbankAuth(req, res)) return;
   const { id } = req.body;
   if (!id) return res.json({ success: false, error: '参数无效' });
   const bank = (await db.getConfig(TESTBANK_KEY)) || [];
@@ -1377,6 +1391,7 @@ app.post('/testbank/api/delete', async (req, res) => {
 
 // 用当前线上估值设置跑一遍题库，输出每题估值与整体偏差统计
 app.post('/testbank/api/evaluate', async (req, res) => {
+  if (!testbankAuth(req, res)) return;
   const bank = (await db.getConfig(TESTBANK_KEY)) || [];
   if (bank.length === 0) {
     return res.json({ success: true, data: { items: {}, stats: { count: 0 } } });

@@ -142,6 +142,56 @@ function getAdminPage() {
   .mon-ext-link { color: #60a5fa; text-decoration: none; }
   .mon-ext-link:hover { text-decoration: underline; }
 
+  /* Testbank Tab */
+  .tb-links-box textarea { width: 100%; min-height: 100px; font-size: 13px; line-height: 1.6; background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 8px; color: #e0e0e0; padding: 10px 12px; resize: vertical; outline: none; }
+  .tb-links-box textarea:focus { border-color: #4ade80; }
+  .tb-paste-bar { display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .tb-paste-bar input { padding: 8px 12px; border: 1px solid #2a2a4a; border-radius: 6px; background: #1a1a3a; color: #e0e0e0; font-size: 13px; outline: none; }
+  .tb-btn-main { padding: 9px 20px; border: none; border-radius: 8px; background: #4ade80; color: #0f0f23; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .tb-btn-main:hover { background: #22c55e; }
+  .tb-btn-main:disabled { background: #555; cursor: not-allowed; }
+  .tb-item-card { position: relative; background: #0d0d22; border: 1px solid #2a2a4a; border-radius: 8px; padding: 14px; margin-top: 12px; }
+  .tb-item-card .close { position: absolute; top: 10px; right: 10px; }
+  .tb-item-title { font-size: 12px; color: #aaa; line-height: 1.5; max-height: 90px; overflow-y: auto; background: #0d0d20; border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; word-break: break-all; }
+  .tb-item-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; font-size: 13px; }
+  .tb-item-meta .price { color: #fbbf24; font-weight: 600; }
+  .tb-item-form { display: flex; gap: 10px; flex-wrap: wrap; }
+  .tb-item-form .field { display: flex; flex-direction: column; gap: 4px; }
+  .tb-item-form .field label { font-size: 12px; color: #888; }
+  .tb-item-form input, .tb-item-form select { width: 130px; padding: 8px 10px; border: 1px solid #2a2a4a; border-radius: 6px; background: #0f0f23; color: #e0e0e0; font-size: 13px; outline: none; }
+  .tb-item-form input.note-input { width: 220px; }
+  .tb-item-form textarea.manual-title { width: 100%; min-height: 70px; font-size: 12px; padding: 8px 10px; border: 1px solid #2a2a4a; border-radius: 6px; background: #0f0f23; color: #e0e0e0; resize: vertical; outline: none; }
+  .tb-fetching { color: #60a5fa; font-size: 13px; padding: 14px; text-align: center; }
+  .tb-fail-tip { color: #f39c12; font-size: 12px; margin-bottom: 10px; }
+  .tb-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-right: 4px; }
+  .tb-badge-sold { background: rgba(74,222,128,0.15); color: #4ade80; }
+  .tb-badge-onsale { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .tb-badge-manual { background: rgba(96,165,250,0.15); color: #60a5fa; }
+  .tb-badge-game { background: rgba(167,139,250,0.15); color: #a78bfa; }
+  .tb-t-title { max-width: 380px; }
+  .tb-t-title .short { max-height: 58px; overflow: hidden; cursor: pointer; word-break: break-all; color: #bbb; font-size: 12px; line-height: 1.45; }
+  .tb-t-title .no { color: #8ecdf5; font-size: 12px; margin-bottom: 3px; }
+  .tb-title-expand { display: none; font-size: 12px; color: #999; white-space: pre-wrap; word-break: break-all; margin-top: 6px; background: #0d0d20; padding: 8px; border-radius: 6px; max-height: 260px; overflow-y: auto; }
+  .tb-dev-pos { color: #4ade80; font-weight: 600; }
+  .tb-dev-neg { color: #f87171; font-weight: 600; }
+  .tb-pass { color: #4ade80; }
+  .tb-fail-x { color: #f87171; }
+  .tb-btn-blue { padding: 5px 12px; border: 1px solid rgba(96,165,250,0.4); border-radius: 6px; background: transparent; color: #60a5fa; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .tb-btn-blue:hover { background: rgba(96,165,250,0.1); }
+  .tb-btn-del { padding: 5px 12px; border: 1px solid rgba(248,113,113,0.4); border-radius: 6px; background: transparent; color: #f87171; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .tb-btn-del:hover { background: rgba(248,113,113,0.1); }
+  .tb-row-actions { display: flex; gap: 6px; white-space: nowrap; }
+  .tb-modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+  .tb-modal { background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+  .tb-modal h2 { font-size: 17px; color: #4ade80; margin-bottom: 16px; }
+  .tb-modal .field { margin-bottom: 12px; }
+  .tb-modal .field label { display: block; font-size: 12px; color: #888; margin-bottom: 5px; }
+  .tb-modal .field input, .tb-modal .field textarea { width: 100%; padding: 9px 12px; border: 1px solid #2a2a4a; border-radius: 8px; background: #0f0f23; color: #e0e0e0; font-size: 13px; outline: none; }
+  .tb-modal textarea { min-height: 110px; font-size: 12px; resize: vertical; }
+  .tb-modal .foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+  .tb-toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1f4a3a; border: 1px solid #2ecc71; color: #2ecc71; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 9999; display: none; }
+  .tb-toast.err { background: #4a1f27; border-color: #ef4444; color: #ef4444; }
+
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -181,6 +231,7 @@ function getAdminPage() {
       <button class="tab-btn" onclick="switchTab('deals', this)">成交记录</button>
       <button class="tab-btn" onclick="switchTab('monitor', this)">监控脚本</button>
       <button class="tab-btn" onclick="switchTab('config', this)">配置管理</button>
+      <button class="tab-btn" onclick="switchTab('testbank', this)">估值题库</button>
       <button class="tab-btn" onclick="switchTab('blocklist', this)">IP封禁</button>
     </div>
 
@@ -459,6 +510,63 @@ function getAdminPage() {
       </div>
     </div>
 
+    <!-- Tab 6: 估值题库 -->
+    <div id="tab-testbank" class="tab-content">
+      <div class="mon-card">
+        <h2>题库上传</h2>
+        <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:12px;">
+          粘贴螃蟹网<strong style="color:#4ade80;">已售</strong>商品链接，每行一个（支持批量，一次最多 20 个）。<br>
+          自动抓取标题和标价；成交价需手动填写（接口不提供历史成交价，昨日成交清单匹配到时自动预填）。
+        </p>
+        <div class="tb-links-box">
+          <textarea id="tb-links" placeholder="https://www.pxb7.com/product/2358988500582651796/1&#10;https://www.pxb7.com/product/2358988500582651797/1"></textarea>
+        </div>
+        <div class="tb-paste-bar">
+          <button class="tb-btn-main" id="tb-btn-fetch" onclick="tbFetchLinks()">获取商品信息</button>
+          <span style="font-size:12px;color:#888;">上传人（可选）：</span>
+          <input type="text" id="tb-who" placeholder="你的名字">
+        </div>
+        <div id="tb-items"></div>
+        <div class="tb-paste-bar" id="tb-actions" style="display:none;">
+          <button class="tb-btn-main" id="tb-btn-submit" onclick="tbSubmitAll()">提交到题库</button>
+          <span style="font-size:12px;color:#888;" id="tb-submit-tip"></span>
+        </div>
+      </div>
+
+      <div class="mon-card">
+        <h2>题库管理 <span id="tb-count-label" style="font-size:13px;color:#888;font-weight:normal;"></span></h2>
+        <div class="d-controls" style="margin-bottom:14px;">
+          <button class="fetch-btn" id="tb-btn-test" onclick="tbRunEvaluate()">测试估值</button>
+          <span style="font-size:12px;color:#888;">用当前线上估值设置跑一遍全部题目，看偏差</span>
+          <span style="flex:1"></span>
+          <select id="tb-game-filter" onchange="tbRenderTable()">
+            <option value="">全部游戏</option>
+            <option value="wuwa">鸣潮</option>
+            <option value="zzz">绝区零</option>
+          </select>
+          <button onclick="tbLoadList()">刷新</button>
+        </div>
+        <div id="tb-stats-bar" style="display:none;background:#0d0d22;border:1px solid #2a4a6a;border-radius:10px;padding:14px 18px;margin-bottom:14px;font-size:13px;line-height:1.8;"></div>
+        <div class="d-table-wrap">
+          <table class="d-table">
+            <thead>
+              <tr>
+                <th style="width:44px">#</th>
+                <th>商品</th>
+                <th style="width:82px">标价</th>
+                <th style="width:82px">成交价</th>
+                <th style="width:88px">估值</th>
+                <th style="width:88px">偏差</th>
+                <th style="width:64px">结果</th>
+                <th style="width:120px">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tb-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Tab 5: IP封禁 -->
     <div id="tab-blocklist" class="tab-content">
       <div class="mon-card">
@@ -477,6 +585,22 @@ function getAdminPage() {
       </div>
     </div>
   </div>
+
+  <div class="tb-modal-mask" id="tb-modal-mask" onclick="if(event.target===this)tbCloseModal()">
+    <div class="tb-modal">
+      <h2>编辑题目</h2>
+      <div class="field"><label>商品标题（题目）</label><textarea id="tb-e-title"></textarea></div>
+      <div class="field"><label>标价（元）</label><input type="number" id="tb-e-lp"></div>
+      <div class="field"><label>成交价（元，答案）</label><input type="number" id="tb-e-dp"></div>
+      <div class="field"><label>备注</label><input type="text" id="tb-e-note"></div>
+      <div class="foot">
+        <button class="tb-btn-blue" style="padding:8px 20px;font-size:13px;" onclick="tbCloseModal()">取消</button>
+        <button class="tb-btn-main" onclick="tbSaveEdit()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tb-toast" id="tb-toast"></div>
 
 <script>
   // 轻量早期登录脚本：页面刚渲染就能响应登录，不依赖任何外部文件
@@ -753,6 +877,12 @@ function getAdminPage() {
     document.getElementById('tab-' + name).classList.add('active');
     if (name === 'deals' && !dealsLoaded && !dealsLoading) {
       fetchDealsInitial();
+    }
+    if (name === 'testbank' && !tbLoaded) {
+      // 首次打开题库：游戏筛选跟随当前游戏上下文，然后加载列表
+      var tbFilter = document.getElementById('tb-game-filter');
+      if (tbFilter) tbFilter.value = currentGame;
+      tbLoadList();
     }
     if (name === 'blocklist') {
       blRefresh();
@@ -2161,6 +2291,340 @@ function getAdminPage() {
   function escapeHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ============================================================
+  // 估值题库 Tab（上传 + 管理）
+  // ============================================================
+  let tbCards = [];
+  let tbItems = [];
+  let tbEvals = {};
+  let tbEvalStats = null;
+  let tbEditingId = null;
+  let tbLoaded = false;
+
+  function tbPw() { return sessionStorage.getItem('admin_pw'); }
+
+  function tbToast(msg, isErr) {
+    var t = document.getElementById('tb-toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.className = isErr ? 'tb-toast err' : 'tb-toast';
+    t.style.display = 'block';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function() { t.style.display = 'none'; }, 3000);
+  }
+
+  function tbEscape(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // 恢复上传人（localStorage 跨会话记忆）
+  (function() {
+    var savedWho = localStorage.getItem('testbank_who');
+    var whoEl = document.getElementById('tb-who');
+    if (savedWho && whoEl) whoEl.value = savedWho;
+  })();
+
+  function tbParseLinks(text) {
+    return text.split(/[\\n\\r\\s]+/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+  }
+
+  async function tbFetchLinks() {
+    var raw = document.getElementById('tb-links').value;
+    var links = tbParseLinks(raw);
+    if (links.length === 0) { tbToast('请先粘贴至少一个链接', true); return; }
+    if (links.length > 20) { tbToast('一次最多处理 20 个链接', true); return; }
+    var btn = document.getElementById('tb-btn-fetch');
+    btn.disabled = true; btn.textContent = '获取中...';
+    for (var i = 0; i < links.length; i++) {
+      var link = links[i];
+      var card = { url: link, state: 'loading' };
+      tbCards.push(card);
+      tbRenderCards();
+      try {
+        const resp = await fetch('/testbank/api/fetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: tbPw(), url: link }),
+        });
+        const result = await resp.json();
+        if (result.success) {
+          Object.assign(card, result.data, { state: 'ok' });
+          card.dealPrice = card.suggestedDealPrice || '';
+        } else {
+          card.state = 'fail';
+          card.error = result.error || '获取失败';
+        }
+      } catch (e) {
+        card.state = 'fail';
+        card.error = '网络错误';
+      }
+      tbRenderCards();
+    }
+    btn.disabled = false; btn.textContent = '获取商品信息';
+    document.getElementById('tb-links').value = '';
+  }
+
+  function tbRemoveCard(i) { tbCards.splice(i, 1); tbRenderCards(); }
+
+  function tbRenderCards() {
+    var box = document.getElementById('tb-items');
+    box.innerHTML = tbCards.map(function(c, i) {
+      if (c.state === 'loading') {
+        return '<div class="tb-item-card"><div class="tb-fetching">正在获取 ' + tbEscape(c.url) + ' ...</div></div>';
+      }
+      if (c.state === 'fail') {
+        return '<div class="tb-item-card">' +
+          '<button class="tb-btn-del close" onclick="tbRemoveCard(' + i + ')">移除</button>' +
+          '<div class="tb-fail-tip">获取失败：' + tbEscape(c.error) + '。可手动填写标题入库（成交价必填）。</div>' +
+          '<div class="tb-item-title">手动模式：粘贴商品标题（等级/黄数/角色列表等完整描述）</div>' +
+          '<div class="tb-item-form">' +
+            '<div class="field" style="flex:1"><label>商品标题（完整描述，必填）</label><textarea class="manual-title" id="tb-title-' + i + '"></textarea></div>' +
+          '</div>' +
+          '<div class="tb-item-form" style="margin-top:10px">' +
+            '<div class="field"><label>标价（元，选填）</label><input type="number" id="tb-lp-' + i + '" placeholder="如 1888"></div>' +
+            '<div class="field"><label>成交价（元，必填）</label><input type="number" id="tb-dp-' + i + '" placeholder="如 1550"></div>' +
+            '<div class="field"><label>游戏</label><select id="tb-g-' + i + '"><option value="wuwa">鸣潮</option><option value="zzz">绝区零</option></select></div>' +
+            '<div class="field"><label>备注（选填）</label><input type="text" class="note-input" id="tb-note-' + i + '"></div>' +
+          '</div></div>';
+      }
+      var badges = '<span class="tb-badge tb-badge-game">' + tbEscape(c.gameName || c.game) + '</span>' +
+        (c.sold ? '<span class="tb-badge tb-badge-sold">已售</span>' : '<span class="tb-badge tb-badge-onsale">在售/其他</span>') +
+        '<span class="tb-badge tb-badge-manual">编号 ' + tbEscape(c.productUniqueNo || c.productId) + '</span>';
+      var hint = c.suggestedDealPrice ? '已按昨日成交清单预填 ¥' + c.suggestedDealPrice : '接口无法获取成交价，请手动填写';
+      return '<div class="tb-item-card">' +
+        '<button class="tb-btn-del close" onclick="tbRemoveCard(' + i + ')">移除</button>' +
+        '<div class="tb-item-title">' + tbEscape(c.showTitle) + '</div>' +
+        '<div class="tb-item-meta">' + badges + '<span>标价 <span class="price">¥' + (c.listPrice || 0) + '</span></span></div>' +
+        '<div class="tb-item-form">' +
+          '<div class="field"><label>成交价（元，必填）</label><input type="number" id="tb-dp-' + i + '" value="' + (c.dealPrice || '') + '" placeholder="实际成交金额"></div>' +
+          '<div class="field"><label>备注（选填）</label><input type="text" class="note-input" id="tb-note-' + i + '" placeholder="备注"></div>' +
+        '</div>' +
+        '<div style="margin-top:8px;font-size:12px;color:#888;">' + tbEscape(hint) + '</div>' +
+        '</div>';
+    }).join('');
+    document.getElementById('tb-actions').style.display = tbCards.some(function(c) { return c.state !== 'loading'; }) ? 'flex' : 'none';
+    var n = tbCards.filter(function(c) { return c.state !== 'loading'; }).length;
+    document.getElementById('tb-submit-tip').textContent = n + ' 条待提交';
+  }
+
+  async function tbSubmitAll() {
+    var who = document.getElementById('tb-who').value.trim();
+    localStorage.setItem('testbank_who', who);
+    var items = [];
+    for (var i = 0; i < tbCards.length; i++) {
+      var c = tbCards[i];
+      if (c.state === 'loading') continue;
+      var dpEl = document.getElementById('tb-dp-' + i);
+      var dp = parseFloat(dpEl ? dpEl.value : NaN);
+      if (!(dp > 0)) continue;
+      var noteEl = document.getElementById('tb-note-' + i);
+      var note = noteEl ? noteEl.value.trim() : '';
+      if (c.state === 'fail') {
+        var titleEl = document.getElementById('tb-title-' + i);
+        var title = titleEl ? titleEl.value : '';
+        var lpEl = document.getElementById('tb-lp-' + i);
+        var lp = parseFloat(lpEl ? lpEl.value : 0) || 0;
+        var gEl = document.getElementById('tb-g-' + i);
+        var g = gEl ? gEl.value : 'wuwa';
+        if (!title.trim()) continue;
+        items.push({ url: c.url, productId: '', productUniqueNo: '', showTitle: title.trim(), listPrice: lp, dealPrice: dp, dealSource: 'manual', game: g, note: note, addedBy: who });
+      } else {
+        items.push({ url: c.url, productId: c.productId, productUniqueNo: c.productUniqueNo, showTitle: c.showTitle, listPrice: c.listPrice || 0, dealPrice: dp, dealSource: c.suggestedDealPrice === dp ? 'soldlist' : 'manual', payTime: c.payTime || '', game: c.game, note: note, addedBy: who });
+      }
+    }
+    if (items.length === 0) { tbToast('没有可提交的记录（成交价必填且大于0）', true); return; }
+    var btn = document.getElementById('tb-btn-submit');
+    btn.disabled = true; btn.textContent = '提交中...';
+    try {
+      const resp = await fetch('/testbank/api/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: tbPw(), items: items }),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        tbToast('已入库 ' + result.data.added + ' 条' + (result.data.skipped > 0 ? '（跳过重复 ' + result.data.skipped + ' 条）' : ''));
+        tbCards = tbCards.filter(function(c, idx) {
+          if (c.state === 'loading') return true;
+          var dpEl2 = document.getElementById('tb-dp-' + idx);
+          var dp2 = parseFloat(dpEl2 ? dpEl2.value : NaN);
+          return !(dp2 > 0);
+        });
+        tbRenderCards();
+        tbLoaded = true;
+        tbLoadList();
+      } else {
+        tbToast(result.error || '提交失败', true);
+      }
+    } catch (e) {
+      tbToast('网络错误', true);
+    }
+    btn.disabled = false; btn.textContent = '提交到题库';
+  }
+
+  async function tbLoadList() {
+    try {
+      const resp = await fetch('/testbank/api/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: tbPw() }),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        tbItems = result.data;
+        tbLoaded = true;
+        tbRenderTable();
+      } else {
+        tbToast(result.error || '加载失败', true);
+      }
+    } catch (e) {
+      tbToast('加载题库失败', true);
+    }
+  }
+
+  function tbRenderTable() {
+    var gf = document.getElementById('tb-game-filter').value;
+    var list = gf ? tbItems.filter(function(i) { return i.game === gf; }) : tbItems;
+    var tbody = document.getElementById('tb-tbody');
+    document.getElementById('tb-count-label').textContent = tbItems.length > 0 ? '（共 ' + list.length + '/' + tbItems.length + ' 题）' : '';
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#666;padding:40px;">' + (tbItems.length === 0 ? '题库为空，请在上方粘贴已售商品链接上传' : '当前筛选无数据') + '</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(function(it, idx) {
+      var ev = tbEvals[it.id];
+      var estCell = '<span style="color:#888;">-</span>', devCell = '<span style="color:#888;">-</span>', resCell = '<span style="color:#888;">-</span>';
+      if (ev) {
+        if (ev.error) { estCell = '<span class="tb-fail-x">解析失败</span>'; }
+        else {
+          estCell = '<span style="font-weight:600;">¥' + Math.round(ev.estimated) + '</span>';
+          var pct = ev.devPct;
+          devCell = '<span class="' + (pct >= 0 ? 'tb-dev-pos' : 'tb-dev-neg') + '">' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%</span>';
+          resCell = Math.abs(pct) <= 20 ? '<span class="tb-pass">合格</span>' : '<span class="tb-fail-x">超差</span>';
+        }
+      }
+      var short = (it.showTitle || '').length > 120 ? (it.showTitle.substring(0, 120) + '…') : (it.showTitle || '');
+      var srcBadge = it.dealSource === 'soldlist' ? '<span class="tb-badge tb-badge-sold">清单价</span>' : '<span class="tb-badge tb-badge-manual">手填价</span>';
+      return '<tr>' +
+        '<td style="color:#888;">' + (idx + 1) + '</td>' +
+        '<td class="tb-t-title"><div class="no">' + tbEscape(it.productUniqueNo || it.productId || '(手动)') + ' ' + srcBadge + ' <span style="color:#888;font-size:11px;">' + tbEscape(it.game || '') + (it.addedBy ? ' · <span style="color:#4ade80;">' + tbEscape(it.addedBy) + '</span>' : '') + (it.note ? ' · ' + tbEscape(it.note) : '') + '</span></div><div class="short" onclick="tbToggleTitle(this)">' + tbEscape(short) + '<div class="tb-title-expand">' + tbEscape(it.showTitle) + '</div></div></td>' +
+        '<td>' + (it.listPrice ? '<span style="color:#fbbf24;">¥' + it.listPrice + '</span>' : '-') + '</td>' +
+        '<td><span style="color:#fbbf24;font-weight:600;">¥' + it.dealPrice + '</span></td>' +
+        '<td>' + estCell + '</td>' +
+        '<td>' + devCell + '</td>' +
+        '<td>' + resCell + '</td>' +
+        '<td><div class="tb-row-actions">' +
+          '<button class="tb-btn-blue" onclick="tbOpenEdit(\\'' + it.id + '\\')">编辑</button>' +
+          '<button class="tb-btn-del" onclick="tbDeleteItem(\\'' + it.id + '\\')">删除</button>' +
+        '</div></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function tbToggleTitle(el) {
+    var x = el.querySelector('.tb-title-expand');
+    if (x) x.style.display = x.style.display === 'block' ? 'none' : 'block';
+  }
+
+  function tbOpenEdit(id) {
+    var it = tbItems.find(function(x) { return x.id === id; });
+    if (!it) return;
+    tbEditingId = id;
+    document.getElementById('tb-e-title').value = it.showTitle || '';
+    document.getElementById('tb-e-lp').value = it.listPrice || '';
+    document.getElementById('tb-e-dp').value = it.dealPrice || '';
+    document.getElementById('tb-e-note').value = it.note || '';
+    document.getElementById('tb-modal-mask').style.display = 'flex';
+  }
+
+  function tbCloseModal() {
+    document.getElementById('tb-modal-mask').style.display = 'none';
+    tbEditingId = null;
+  }
+
+  async function tbSaveEdit() {
+    if (!tbEditingId) return;
+    var patch = {
+      showTitle: document.getElementById('tb-e-title').value.trim(),
+      listPrice: parseFloat(document.getElementById('tb-e-lp').value) || 0,
+      dealPrice: parseFloat(document.getElementById('tb-e-dp').value),
+      note: document.getElementById('tb-e-note').value.trim(),
+    };
+    if (!patch.showTitle) { tbToast('标题不能为空', true); return; }
+    if (!(patch.dealPrice > 0)) { tbToast('成交价必须大于0', true); return; }
+    try {
+      const resp = await fetch('/testbank/api/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: tbPw(), id: tbEditingId, patch: patch }),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        Object.assign(tbItems.find(function(x) { return x.id === tbEditingId; }), patch);
+        tbEvals = {}; tbEvalStats = null; document.getElementById('tb-stats-bar').style.display = 'none';
+        tbCloseModal();
+        tbRenderTable();
+        tbToast('已保存（估值结果已重置，请重新测试）');
+      } else { tbToast(result.error || '保存失败', true); }
+    } catch (e) { tbToast('网络错误', true); }
+  }
+
+  async function tbDeleteItem(id) {
+    var it = tbItems.find(function(x) { return x.id === id; });
+    if (!it || !confirm('确定删除 ' + (it.productUniqueNo || '该条') + ' 吗？')) return;
+    try {
+      const resp = await fetch('/testbank/api/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: tbPw(), id: id }),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        tbItems = tbItems.filter(function(x) { return x.id !== id; });
+        delete tbEvals[id];
+        tbRenderTable();
+        tbToast('已删除');
+      } else { tbToast(result.error || '删除失败', true); }
+    } catch (e) { tbToast('网络错误', true); }
+  }
+
+  async function tbRunEvaluate() {
+    var btn = document.getElementById('tb-btn-test');
+    btn.disabled = true; btn.textContent = '测试中...';
+    try {
+      const resp = await fetch('/testbank/api/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: tbPw() }),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        tbEvals = result.data.items;
+        tbEvalStats = result.data.stats;
+        tbRenderStats();
+        tbRenderTable();
+        tbToast('测试完成，共 ' + result.data.stats.count + ' 题');
+      } else { tbToast(result.error || '测试失败', true); }
+    } catch (e) { tbToast('网络错误', true); }
+    btn.disabled = false; btn.textContent = '测试估值';
+  }
+
+  function tbRenderStats() {
+    var s = tbEvalStats;
+    var bar = document.getElementById('tb-stats-bar');
+    if (!s || s.count === 0) { bar.style.display = 'none'; return; }
+    var dir = s.medianDevPct >= 0 ? '高估' : '低估';
+    bar.innerHTML =
+      '<b style="color:#4ade80;">共 ' + s.count + ' 题</b> · 估值整体' + dir + ' <b style="color:#60a5fa;">' + Math.abs(s.medianDevPct).toFixed(1) + '%</b>' +
+      '（中位偏差） · 平均绝对误差 <b style="color:#60a5fa;">' + s.meanAbsDevPct.toFixed(1) + '%</b>' +
+      ' · ±20%合格率 <b style="color:#4ade80;">' + s.pass20Rate.toFixed(0) + '%</b>（' + s.pass20Count + '/' + s.count + '）' +
+      ' · 高估 <span class="tb-dev-pos">' + s.overCount + '</span> / 低估 <span class="tb-dev-neg">' + s.underCount + '</span>' +
+      (s.games && s.games.wuwa ? '<br>鸣潮：' + s.games.wuwa : '') +
+      (s.games && s.games.zzz ? ' · 绝区零：' + s.games.zzz : '') +
+      '<div style="font-size:12px;color:#888;margin-top:4px;">偏差 = (估值 − 成交价) / 成交价；正值=估值偏高。改估值设置后重新测试即可对比。</div>';
+    bar.style.display = 'block';
   }
 
   // ============================================================
