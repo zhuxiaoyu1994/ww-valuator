@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.15.0
+// @version      3.16.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -6579,7 +6579,11 @@
           if (ok) {
             alert('推送配置已从服务器恢复，正在刷新面板...');
             renderPpList();
+            renderCharNotifyList();
+            // 推送渠道
             box.querySelector('#mwServerChanKey').value = pushConfig.serverChanKey || '';
+            box.querySelector('#mwDevMessage').value = pushConfig.devMessage || '';
+            // 推送规则
             box.querySelector('#mwSecondaryDelay').value = pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20;
             box.querySelector('#mwSkipHighDiffSecondary').checked = !!pushConfig.skipHighDiffSecondary;
             box.querySelector('#mwHighDiffThreshold').value = pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400;
@@ -6587,6 +6591,26 @@
             if (pf) pf.style.display = pushConfig.skipHighDiffSecondary ? '' : 'none';
             var savedPlatforms = pushConfig.highDiffFilterPlatforms || [];
             box.querySelectorAll('.mwHighDiffPlatform').forEach(function (cb) { cb.checked = savedPlatforms.indexOf(cb.value) >= 0; });
+            // 提醒方式
+            box.querySelector('#mwSoundAlert').checked = !!pushConfig.soundAlert;
+            box.querySelector('#mwVisualAlert').checked = !!pushConfig.visualAlert;
+            box.querySelector('#mwRepeatAlert').checked = !!pushConfig.repeatAlert;
+            // 通知阈值
+            box.querySelector('#mwNotifyDiff').value = notifyDiffThreshold || 0;
+            box.querySelector('#mwNotifyMinValue').value = notifyMinValue || 0;
+            box.querySelector('#mwNotifyMinPrice').value = notifyMinPrice || 0;
+            box.querySelector('#mwNotifyMaxPrice').value = notifyMaxPrice || 0;
+            // 自动购买
+            box.querySelector('#mwAutoBuyEnabled').checked = !!autoBuyEnabled;
+            box.querySelector('#mwAutoBuyDiff').value = autoBuyDiff || 0;
+            box.querySelector('#mwAutoBuyMaxPrice').value = autoBuyMaxPrice || 0;
+            // 监控设置
+            box.querySelector('#mwRefreshInterval').value = refreshIntervalSec || 60;
+            box.querySelector('#mwFlashSaleEnabled').checked = !!flashSaleEnabled;
+            box.querySelector('#mwPzdsEnabled').checked = !!pzdsEnabled;
+            box.querySelector('#mwKjsEnabled').checked = !!kjsEnabled;
+            box.querySelector('#mwQyEnabled').checked = !!qyEnabled;
+            box.querySelector('#mwYsyEnabled').checked = !!ysyEnabled;
           } else {
             alert('服务器暂无推送配置或恢复失败');
           }
@@ -10827,12 +10851,37 @@ function openSettings() {
   function syncPushConfigToServer(password, silent) {
     if (!password) { if (!silent) alert('请先输入同步密码'); return; }
     var payload = {
+      // 推送渠道
       serverChanKey: pushConfig.serverChanKey || '',
       pushPlusSubscribers: pushConfig.pushPlusSubscribers || [],
+      devMessage: pushConfig.devMessage || '',
+      // 推送规则
       secondaryDelay: pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20,
       skipHighDiffSecondary: pushConfig.skipHighDiffSecondary || false,
       highDiffThreshold: pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400,
       highDiffFilterPlatforms: pushConfig.highDiffFilterPlatforms || [],
+      // 提醒方式
+      soundAlert: pushConfig.soundAlert != null ? pushConfig.soundAlert : true,
+      visualAlert: pushConfig.visualAlert != null ? pushConfig.visualAlert : true,
+      repeatAlert: pushConfig.repeatAlert || false,
+      // 通知阈值
+      notifyDiffThreshold: notifyDiffThreshold != null ? notifyDiffThreshold : 0,
+      notifyMinValue: notifyMinValue != null ? notifyMinValue : 0,
+      notifyMinPrice: notifyMinPrice != null ? notifyMinPrice : 0,
+      notifyMaxPrice: notifyMaxPrice != null ? notifyMaxPrice : 0,
+      // 自动购买
+      autoBuyEnabled: autoBuyEnabled || false,
+      autoBuyDiff: autoBuyDiff != null ? autoBuyDiff : 0,
+      autoBuyMaxPrice: autoBuyMaxPrice != null ? autoBuyMaxPrice : 0,
+      // 监控设置
+      refreshIntervalSec: refreshIntervalSec != null ? refreshIntervalSec : 60,
+      flashSaleEnabled: flashSaleEnabled || false,
+      pzdsEnabled: pzdsEnabled != null ? pzdsEnabled : true,
+      kjsEnabled: kjsEnabled != null ? kjsEnabled : true,
+      qyEnabled: qyEnabled != null ? qyEnabled : true,
+      ysyEnabled: ysyEnabled != null ? ysyEnabled : false,
+      // 角色通知规则
+      charNotifyRules: charNotifyRules || [],
     };
     GM_xmlhttpRequest({
       method: 'POST',
@@ -10873,12 +10922,37 @@ function openSettings() {
           var json = JSON.parse(resp.responseText);
           if (json.success && json.pushConfig) {
             var remote = json.pushConfig;
-            pushConfig.serverChanKey = remote.serverChanKey || pushConfig.serverChanKey || '';
+            // 推送渠道
+            pushConfig.serverChanKey = remote.serverChanKey != null ? remote.serverChanKey : (pushConfig.serverChanKey || '');
             pushConfig.pushPlusSubscribers = Array.isArray(remote.pushPlusSubscribers) ? remote.pushPlusSubscribers : pushConfig.pushPlusSubscribers;
+            pushConfig.devMessage = remote.devMessage != null ? remote.devMessage : (pushConfig.devMessage || '');
+            // 推送规则
             pushConfig.secondaryDelay = remote.secondaryDelay != null ? remote.secondaryDelay : pushConfig.secondaryDelay;
             pushConfig.skipHighDiffSecondary = remote.skipHighDiffSecondary != null ? remote.skipHighDiffSecondary : pushConfig.skipHighDiffSecondary;
             pushConfig.highDiffThreshold = remote.highDiffThreshold != null ? remote.highDiffThreshold : pushConfig.highDiffThreshold;
             pushConfig.highDiffFilterPlatforms = Array.isArray(remote.highDiffFilterPlatforms) ? remote.highDiffFilterPlatforms : pushConfig.highDiffFilterPlatforms;
+            // 提醒方式
+            pushConfig.soundAlert = remote.soundAlert != null ? remote.soundAlert : pushConfig.soundAlert;
+            pushConfig.visualAlert = remote.visualAlert != null ? remote.visualAlert : pushConfig.visualAlert;
+            pushConfig.repeatAlert = remote.repeatAlert != null ? remote.repeatAlert : pushConfig.repeatAlert;
+            // 通知阈值
+            if (remote.notifyDiffThreshold != null) notifyDiffThreshold = remote.notifyDiffThreshold;
+            if (remote.notifyMinValue != null) notifyMinValue = remote.notifyMinValue;
+            if (remote.notifyMinPrice != null) notifyMinPrice = remote.notifyMinPrice;
+            if (remote.notifyMaxPrice != null) notifyMaxPrice = remote.notifyMaxPrice;
+            // 自动购买
+            if (remote.autoBuyEnabled != null) autoBuyEnabled = remote.autoBuyEnabled;
+            if (remote.autoBuyDiff != null) autoBuyDiff = remote.autoBuyDiff;
+            if (remote.autoBuyMaxPrice != null) autoBuyMaxPrice = remote.autoBuyMaxPrice;
+            // 监控设置
+            if (remote.refreshIntervalSec != null) refreshIntervalSec = remote.refreshIntervalSec;
+            if (remote.flashSaleEnabled != null) flashSaleEnabled = remote.flashSaleEnabled;
+            if (remote.pzdsEnabled != null) pzdsEnabled = remote.pzdsEnabled;
+            if (remote.kjsEnabled != null) kjsEnabled = remote.kjsEnabled;
+            if (remote.qyEnabled != null) qyEnabled = remote.qyEnabled;
+            if (remote.ysyEnabled != null) ysyEnabled = remote.ysyEnabled;
+            // 角色通知规则
+            if (Array.isArray(remote.charNotifyRules)) charNotifyRules = remote.charNotifyRules;
             saveState();
             console.log('[鸣潮监控] 推送配置已从服务器恢复 (' + (json.syncedAt || '未知时间') + ')');
             if (onDone) onDone(true);
