@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.14.0
+// @version      3.15.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -6277,6 +6277,10 @@
           '<label style="margin-right:8px;cursor:pointer;"><input type="checkbox" class="mwHighDiffPlatform" value="ysy" ' + ((pushConfig.highDiffFilterPlatforms || []).includes('ysy') ? 'checked' : '') + ' style="cursor:pointer;" />易手游</label>' +
           '<span style="color:#555;font-size:9px;">（不勾选则过滤全部平台）</span>' +
           '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+          '<span style="font-size:11px;color:#888;">订阅者列表</span>' +
+          '<button id="mwPpBonusAll" style="padding:2px 8px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#f59e0b;font-size:10px;cursor:pointer;">一键赠送</button>' +
+          '</div>' +
           '<div id="mwPushPlusList" style="margin-bottom:8px;"></div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">' +
           '<div style="flex:1;min-width:60px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">备注</label>' +
@@ -6532,6 +6536,22 @@
       };
 
       renderPpList();
+
+      // 一键赠送所有订阅者
+      box.querySelector('#mwPpBonusAll').onclick = function () {
+        var subs = pushConfig.pushPlusSubscribers || [];
+        if (subs.length === 0) { alert('暂无订阅者'); return; }
+        var daysStr = prompt('给全部 ' + subs.length + ' 位订阅者赠送多少天？', '7');
+        if (daysStr === null) return;
+        var addDays = parseInt(daysStr);
+        if (!addDays || addDays <= 0) { alert('请输入有效的天数'); return; }
+        if (!confirm('确认给 ' + subs.length + ' 位订阅者每人赠送 ' + addDays + ' 天？')) return;
+        subs.forEach(function (sub) {
+          sub.validDays += addDays;
+          sub.bonusDays = (sub.bonusDays || 0) + addDays;
+        });
+        renderPpList();
+      };
 
       // 从通知过滤高差价开关 → 显示/隐藏平台选择
       box.querySelector('#mwSkipHighDiffSecondary').onchange = function () {
