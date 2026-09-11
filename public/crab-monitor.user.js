@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.16.0
+// @version      3.17.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 25;
+  const CONFIG_VERSION = 26;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -2341,12 +2341,16 @@
     }
 
     // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武 + A/B级≥3命角色(1+命座)（不重复计算）
-    // 专武有效金：精1=1, 精N=1+(N-1)×0.5（精2=1.5, 精3=2, 精5=3）
+    // 专武有效金：精1=1, 精2=1.5, 精3=2, 精4=2.5, 精5=5（满精额外加成）
     // 级别系数：该级别角色及其专武的贡献 × effTierWeights[tier]（默认1）
     var effTierWeights = w.effTierWeights || {};
     function effTierCoeffOf(tier) {
       var v = effTierWeights[tier];
       return (v != null && !isNaN(v)) ? v : 1;
+    }
+    function calcSigEffectiveGold(refine) {
+      if (refine >= 5) return 5;
+      return 1 + (refine - 1) * 0.5;
     }
     const EFFECTIVE_TIERS = ['S'];
     var effectiveYellow = 0;
@@ -2367,7 +2371,7 @@
         var eSigWeapon = parsed.weapons.find(function(wp) { return wp.name === eSigName; });
         if (eSigWeapon) {
           eSigRefine = eSigWeapon.refine || 1;
-          eSigContrib = (1 + (eSigRefine - 1) * 0.5) * eCoeff;
+          eSigContrib = calcSigEffectiveGold(eSigRefine) * eCoeff;
           effectiveYellow += eSigContrib;
           effectiveCountedWeapons[eSigName] = true;
         }
@@ -2396,7 +2400,7 @@
         var tSigWeapon = parsed.weapons.find(function(wp) { return wp.name === tSigName; });
         if (tSigWeapon) {
           tSigRefine = tSigWeapon.refine || 1;
-          tSigContrib = (1 + (tSigRefine - 1) * 0.5) * tCoeff;
+          tSigContrib = calcSigEffectiveGold(tSigRefine) * tCoeff;
           effectiveYellow += tSigContrib;
           effectiveCountedWeapons[tSigName] = true;
         }
@@ -2432,7 +2436,7 @@
           var bSigWeapon = parsed.weapons.find(function(wp) { return wp.name === bSigName; });
           if (bSigWeapon) {
             bSigRefine = bSigWeapon.refine || 1;
-            bSigContrib = (1 + (bSigRefine - 1) * 0.5) * bCoeff;
+            bSigContrib = calcSigEffectiveGold(bSigRefine) * bCoeff;
             effectiveYellow += bSigContrib;
             effectiveCountedWeapons[bSigName] = true;
           }

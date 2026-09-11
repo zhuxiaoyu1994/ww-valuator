@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 25,
+  configVersion: 26,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 

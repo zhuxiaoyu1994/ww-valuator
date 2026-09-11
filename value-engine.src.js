@@ -1198,12 +1198,17 @@ function calculateValue(parsed, price) {
   }
 
   // 有效金数：S级角色(1+命座) + 其专武 + 完整配队角色(1+命座) + 其专武 + A/B级≥3命角色(1+命座)（不重复计算）
-  // 专武有效金：精1=1, 精N=1+(N-1)×0.5（精2=1.5, 精3=2, 精5=3）
+  // 专武有效金：精1=1, 精2=1.5, 精3=2, 精4=2.5, 精5=5（满精额外加成）
   // 级别系数：该级别角色及其专武的贡献 × effTierWeights[tier]（默认1）
   var effTierWeights = w.effTierWeights || {};
   function effTierCoeffOf(tier) {
     var v = effTierWeights[tier];
     return (v != null && !isNaN(v)) ? v : 1;
+  }
+  function calcSigEffectiveGold(refine) {
+    // 精1=1, 精2=1.5, 精3=2, 精4=2.5, 精5=5
+    if (refine >= 5) return 5;
+    return 1 + (refine - 1) * 0.5;
   }
   const EFFECTIVE_TIERS = ['S'];
   var effectiveYellow = 0;
@@ -1220,7 +1225,7 @@ function calculateValue(parsed, price) {
       var eSigWeapon = parsed.weapons.find(function(wp) { return wp.name === eSigName; });
       if (eSigWeapon) {
         var eRefine = eSigWeapon.refine || 1;
-        effectiveYellow += (1 + (eRefine - 1) * 0.5) * effTierCoeffOf(eChar.tier);
+        effectiveYellow += calcSigEffectiveGold(eRefine) * effTierCoeffOf(eChar.tier);
         effectiveCountedWeapons[eSigName] = true;
       }
     }
@@ -1244,7 +1249,7 @@ function calculateValue(parsed, price) {
       var tSigWeapon = parsed.weapons.find(function(wp) { return wp.name === tSigName; });
       if (tSigWeapon) {
         var tRefine = tSigWeapon.refine || 1;
-        effectiveYellow += (1 + (tRefine - 1) * 0.5) * effTierCoeffOf(tChar.tier);
+        effectiveYellow += calcSigEffectiveGold(tRefine) * effTierCoeffOf(tChar.tier);
         effectiveCountedWeapons[tSigName] = true;
       }
     }
@@ -1273,7 +1278,7 @@ function calculateValue(parsed, price) {
         var bSigWeapon = parsed.weapons.find(function(wp) { return wp.name === bSigName; });
         if (bSigWeapon) {
           var bRefine = bSigWeapon.refine || 1;
-          effectiveYellow += (1 + (bRefine - 1) * 0.5) * effTierCoeffOf(bChar.tier);
+          effectiveYellow += calcSigEffectiveGold(bRefine) * effTierCoeffOf(bChar.tier);
           effectiveCountedWeapons[bSigName] = true;
         }
       }
