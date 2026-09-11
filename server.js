@@ -181,6 +181,24 @@ app.use(async (req, res, next) => {
     return false;
   });
   if (isBlocked) {
+    // 放行页面访问和粘贴查询（纯本地计算，不消耗第三方资源）
+    const isPage = req.path === '/' || req.path === '/wuwa' || req.path === '/zzz' || req.path === '/platform';
+    const isPasteEval = req.path === '/api/x9k2-eval';
+    const isPublicStatic = req.path.startsWith('/public/') || req.path.startsWith('/icons/') || req.path.startsWith('/covers/');
+    const isConfigApi = req.path === '/api/config/default' || req.path === '/api/defaults' || req.path === '/api/public-stats';
+    if (isPage || isPasteEval || isPublicStatic || isConfigApi) {
+      return next();
+    }
+    // 链接查询（x9k2-find）单独拦截，返回友好提示引导用户使用粘贴查询
+    if (req.path === '/api/x9k2-find') {
+      console.log('[Blocked] 链接查询被拦截: ' + clientIp);
+      return res.json({
+        success: false,
+        error: '您因频繁调用链接查询接口已被管理员封禁，请联系管理员解封，或使用上方「粘贴描述估价」功能。',
+        switchToPaste: true,
+      });
+    }
+    // 其他路径返回 403
     console.log('[Blocked] IP: ' + clientIp + ' ' + req.method + ' ' + req.path);
     return res.status(403).json({ success: false, error: '访问被拒绝' });
   }
