@@ -168,10 +168,15 @@ function getAdminPage() {
   .tb-badge-onsale { background: rgba(251,191,36,0.15); color: #fbbf24; }
   .tb-badge-manual { background: rgba(96,165,250,0.15); color: #60a5fa; }
   .tb-badge-game { background: rgba(167,139,250,0.15); color: #a78bfa; }
-  .tb-t-title { max-width: 380px; }
-  .tb-t-title .short { max-height: 58px; overflow: hidden; cursor: pointer; word-break: break-all; color: #bbb; font-size: 12px; line-height: 1.45; }
+  .tb-t-title { max-width: 420px; }
+  .tb-t-title .short { max-height: 58px; overflow: hidden; cursor: pointer; word-break: break-all; color: #bbb; font-size: 12px; line-height: 1.45; position: relative; }
+  .tb-t-title .short.expanded { max-height: none; overflow: visible; }
+  .tb-t-title .short::after { content: '点击展开 ▼'; position: absolute; bottom: 0; right: 0; background: linear-gradient(to left, #1a1a2e 60%, transparent); color: #60a5fa; font-size: 11px; padding: 2px 0 2px 20px; }
+  .tb-t-title .short.expanded::after { content: '点击收起 ▲'; }
   .tb-t-title .no { color: #8ecdf5; font-size: 12px; margin-bottom: 3px; }
-  .tb-title-expand { display: none; font-size: 12px; color: #999; white-space: pre-wrap; word-break: break-all; margin-top: 6px; background: #0d0d20; padding: 8px; border-radius: 6px; max-height: 260px; overflow-y: auto; }
+  .tb-t-title .feature-tag { display: inline-block; margin-top: 4px; padding: 2px 8px; background: rgba(251,191,36,0.12); color: #fbbf24; font-size: 11px; border-radius: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+  .tb-title-expand { display: none; font-size: 12px; color: #999; white-space: pre-wrap; word-break: break-all; margin-top: 6px; background: #0d0d20; padding: 10px; border-radius: 6px; max-height: 320px; overflow-y: auto; border: 1px solid #2a2a4a; }
+  .short.expanded .tb-title-expand { display: block; }
   .tb-dev-pos { color: #4ade80; font-weight: 600; }
   .tb-dev-neg { color: #f87171; font-weight: 600; }
   .tb-pass { color: #4ade80; }
@@ -592,7 +597,7 @@ function getAdminPage() {
       <div class="field"><label>商品标题（题目）</label><textarea id="tb-e-title"></textarea></div>
       <div class="field"><label>标价（元）</label><input type="number" id="tb-e-lp"></div>
       <div class="field"><label>成交价（元，答案）</label><input type="number" id="tb-e-dp"></div>
-      <div class="field"><label>备注</label><input type="text" id="tb-e-note"></div>
+      <div class="field"><label>商品特点</label><input type="text" id="tb-e-note" placeholder="一句话描述账号特点，如：4队成型/高氪满命号/欧皇初始号等"></div>
       <div class="foot">
         <button class="tb-btn-blue" style="padding:8px 20px;font-size:13px;" onclick="tbCloseModal()">取消</button>
         <button class="tb-btn-main" onclick="tbSaveEdit()">保存</button>
@@ -2444,7 +2449,7 @@ function getAdminPage() {
             '<div class="field"><label>标价（元，选填）</label><input type="number" id="tb-lp-' + i + '" placeholder="如 1888"></div>' +
             '<div class="field"><label>成交价（元，必填）</label><input type="number" id="tb-dp-' + i + '" placeholder="如 1550"></div>' +
             '<div class="field"><label>游戏</label><select id="tb-g-' + i + '"><option value="wuwa">鸣潮</option><option value="zzz">绝区零</option></select></div>' +
-            '<div class="field"><label>备注（选填）</label><input type="text" class="note-input" id="tb-note-' + i + '"></div>' +
+            '<div class="field"><label>商品特点（必填）</label><input type="text" class="note-input" id="tb-note-' + i + '"></div>' +
           '</div></div>';
       }
       var badges = '<span class="tb-badge tb-badge-game">' + tbEscape(c.gameName || c.game) + '</span>' +
@@ -2457,7 +2462,7 @@ function getAdminPage() {
         '<div class="tb-item-meta">' + badges + '<span>标价 <span class="price">¥' + (c.listPrice || 0) + '</span></span></div>' +
         '<div class="tb-item-form">' +
           '<div class="field"><label>成交价（元，必填）</label><input type="number" id="tb-dp-' + i + '" value="' + (c.dealPrice || '') + '" placeholder="实际成交金额"></div>' +
-          '<div class="field"><label>备注（选填）</label><input type="text" class="note-input" id="tb-note-' + i + '" placeholder="备注"></div>' +
+          '<div class="field"><label>商品特点（必填）</label><input type="text" class="note-input" id="tb-note-' + i + '" placeholder="一句话描述账号特点"></div>' +
         '</div>' +
         '<div style="margin-top:8px;font-size:12px;color:#888;">' + tbEscape(hint) + '</div>' +
         '</div>';
@@ -2479,6 +2484,7 @@ function getAdminPage() {
       if (!(dp > 0)) continue;
       var noteEl = document.getElementById('tb-note-' + i);
       var note = noteEl ? noteEl.value.trim() : '';
+      if (!note) continue;
       if (c.state === 'fail') {
         var titleEl = document.getElementById('tb-title-' + i);
         var title = titleEl ? titleEl.value : '';
@@ -2492,7 +2498,7 @@ function getAdminPage() {
         items.push({ url: c.url, productId: c.productId, productUniqueNo: c.productUniqueNo, showTitle: c.showTitle, listPrice: c.listPrice || 0, dealPrice: dp, dealSource: c.suggestedDealPrice === dp ? 'soldlist' : 'manual', payTime: c.payTime || '', game: c.game, note: note, addedBy: who });
       }
     }
-    if (items.length === 0) { tbToast('没有可提交的记录（成交价必填且大于0）', true); return; }
+    if (items.length === 0) { tbToast('没有可提交的记录（成交价和商品特点必填）', true); return; }
     var btn = document.getElementById('tb-btn-submit');
     btn.disabled = true; btn.textContent = '提交中...';
     try {
@@ -2565,9 +2571,10 @@ function getAdminPage() {
       }
       var short = (it.showTitle || '').length > 120 ? (it.showTitle.substring(0, 120) + '…') : (it.showTitle || '');
       var srcBadge = it.dealSource === 'soldlist' ? '<span class="tb-badge tb-badge-sold">清单价</span>' : '<span class="tb-badge tb-badge-manual">手填价</span>';
+      var featureTag = it.note ? '<span class="feature-tag" title="' + tbEscape(it.note) + '">✨ ' + tbEscape(it.note) + '</span>' : '';
       return '<tr>' +
         '<td style="color:#888;">' + (idx + 1) + '</td>' +
-        '<td class="tb-t-title"><div class="no">' + tbEscape(it.productUniqueNo || it.productId || '(手动)') + ' ' + srcBadge + ' <span style="color:#888;font-size:11px;">' + tbEscape(it.game || '') + (it.addedBy ? ' · <span style="color:#4ade80;">' + tbEscape(it.addedBy) + '</span>' : '') + (it.note ? ' · ' + tbEscape(it.note) : '') + '</span></div><div class="short" onclick="tbToggleTitle(this)">' + tbEscape(short) + '<div class="tb-title-expand">' + tbEscape(it.showTitle) + '</div></div></td>' +
+        '<td class="tb-t-title"><div class="no">' + tbEscape(it.productUniqueNo || it.productId || '(手动)') + ' ' + srcBadge + ' <span style="color:#888;font-size:11px;">' + tbEscape(it.game || '') + (it.addedBy ? ' · <span style="color:#4ade80;">' + tbEscape(it.addedBy) + '</span>' : '') + '</span></div>' + featureTag + '<div class="short" onclick="tbToggleTitle(this)">' + tbEscape(short) + '<div class="tb-title-expand">' + tbEscape(it.showTitle) + '</div></div></td>' +
         '<td>' + (it.listPrice ? '<span style="color:#fbbf24;">¥' + it.listPrice + '</span>' : '-') + '</td>' +
         '<td><span style="color:#fbbf24;font-weight:600;">¥' + it.dealPrice + '</span></td>' +
         '<td>' + estCell + '</td>' +
@@ -2582,8 +2589,7 @@ function getAdminPage() {
   }
 
   function tbToggleTitle(el) {
-    var x = el.querySelector('.tb-title-expand');
-    if (x) x.style.display = x.style.display === 'block' ? 'none' : 'block';
+    el.classList.toggle('expanded');
   }
 
   function tbOpenEdit(id) {
@@ -2612,6 +2618,7 @@ function getAdminPage() {
     };
     if (!patch.showTitle) { tbToast('标题不能为空', true); return; }
     if (!(patch.dealPrice > 0)) { tbToast('成交价必须大于0', true); return; }
+    if (!patch.note) { tbToast('商品特点不能为空', true); return; }
     try {
       const resp = await fetch('/testbank/api/update', {
         method: 'POST',

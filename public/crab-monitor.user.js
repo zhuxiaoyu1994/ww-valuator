@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.17.0
+// @version      3.18.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -3129,8 +3129,8 @@
         if (idx > -1) seenIds.splice(idx, 1);
         console.log('[鸣潮监控-盼之] 重新评估: ' + product.productUniqueNo + ' ¥' + price);
       } else {
-        // 补充武器信息：已有行但 showTitle 缺少武器段时，用详情页文本更新
-        if (detailText && !hasWeaponSection(existRow.showTitle)) {
+        // 补充详情页信息：已有行但未成功获取过详情页时，用详情页文本完整更新
+        if (detailText && !existRow._detailFetched) {
           existRow.showTitle = detailText;
           var newParsed = parseAccountInfo(detailText);
           var newValuation = calculateValue(newParsed, price);
@@ -3146,7 +3146,8 @@
           existRow.value = newValuation.totalValue;
           existRow.ratio = newValuation.ratio;
           existRow.effectiveYellow = newValuation.effectiveYellow || 0;
-          console.log('[鸣潮监控-盼之] 补充武器信息: ' + product.productUniqueNo + ' 武器' + newParsed.weapons.length + '个 估值¥' + newValuation.totalValue.toFixed(0));
+          existRow._detailFetched = true;
+          console.log('[鸣潮监控-盼之] 补充详情页信息: ' + product.productUniqueNo + ' 角色' + newParsed.characters.length + '个 武器' + newParsed.weapons.length + '个 估值¥' + newValuation.totalValue.toFixed(0));
           if (!batchMode) { saveTableData(); refreshTableDisplay(); }
         }
         if (price < existRow.price) {
@@ -3268,6 +3269,7 @@
       valuation: valuation,
       listTime: product.listTime || Date.now(),
       firstSeen: Date.now(),
+      _detailFetched: !!(detailText && detailText.length > 20 && parseText === detailText),
     });
 
     console.log('[鸣潮监控-盼之] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
@@ -3300,7 +3302,7 @@
       console.log('  - ' + uniqueNo + ' ¥' + price + ' ' + title);
     });
 
-    // 为新商品预取详情页（跳过超过48小时的旧商品；已在表格中的也检查是否缺少武器信息）
+    // 为新商品预取详情页（跳过超过48小时的旧商品；已在表格中但未成功获取过详情的也继续抓）
     const PZ_MAX_AGE_HOURS = 48;
     const detailMap = {};
     const needDetail = list.filter(p => {
@@ -3308,8 +3310,8 @@
       if (!seenIds.includes(p.productId)) return true;
       const existRow = tableData.find(r => r.productId === p.productId);
       if (!existRow) return true;
-      // 已在表格中但 showTitle 缺少武器段（旧数据），需要补充详情
-      if (existRow.platform === 'pzds' && !hasWeaponSection(existRow.showTitle)) return true;
+      // 已在表格中但未成功获取过详情页的，继续抓取详情
+      if (existRow.platform === 'pzds' && !existRow._detailFetched) return true;
       return false;
     });
     if (needDetail.length > 0) {
