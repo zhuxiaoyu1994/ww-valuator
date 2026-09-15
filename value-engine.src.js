@@ -497,6 +497,14 @@ function parseCharacters(section) {
  */
 function findCharsInText(text) {
   text = text.replace(/[·・]/g, '');
+  // 防护：先剥离武器段落，避免武器名被误识别为角色名
+  let cleanText = text;
+  for (const kw of WEAPON_SECTION_KEYWORDS) {
+    const sec = extractSection(text, kw);
+    if (sec) {
+      cleanText = cleanText.replace(sec, '');
+    }
+  }
   const chars = [];
   for (const [tier, info] of Object.entries(CHAR_TIERS)) {
     for (const name of info.chars) {
@@ -509,20 +517,20 @@ function findCharsInText(text) {
       for (const checkName of namesToCheck) {
         // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
         for (const unit of CONST_UNITS) {
-          if (text.includes('满' + unit + checkName)) {
+          if (cleanText.includes('满' + unit + checkName)) {
             chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
             found = true; break;
           }
-          const m = text.match(new RegExp('(\\d+)' + unit + checkName));
+          const m = cleanText.match(new RegExp('(\\d+)' + unit + checkName));
           if (m) {
             chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
             found = true; break;
           }
-          if (text.includes(checkName + '(满' + unit + ')')) {
+          if (cleanText.includes(checkName + '(满' + unit + ')')) {
             chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
             found = true; break;
           }
-          const m2 = text.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
+          const m2 = cleanText.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
           if (m2) {
             chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
             found = true; break;
@@ -530,7 +538,7 @@ function findCharsInText(text) {
         }
         if (found) break;
         // 仅出现名字
-        if (text.includes(checkName)) {
+        if (cleanText.includes(checkName)) {
           chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
           found = true; break;
         }
@@ -704,6 +712,21 @@ function parseAccountInfo(text) {
     if (r.div > 1) result.pulls += (result[r.key] || 0) / r.div;
     else if (r.div === 1) result.pulls += (result[r.key] || 0);
   }
+
+  // 防护：过滤掉无主专武（有专武但对应角色不在角色列表中，则忽略这把专武）
+  const charNameSet = new Set(result.characters.map(c => c.name));
+  result.weapons = result.weapons.filter(function (wp) {
+    // 查找这把武器是不是某个角色的专武
+    for (const charName in SIG_WEAPONS) {
+      const sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[charName] || SIG_WEAPONS[charName]) : SIG_WEAPONS[charName];
+      if (sigName && (wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name))) {
+        // 是专武 → 检查对应角色是否存在
+        return charNameSet.has(charName);
+      }
+    }
+    // 不是已知专武 → 保留（作为普通武器/无法识别的武器）
+    return true;
+  });
 
   return result;
 }
