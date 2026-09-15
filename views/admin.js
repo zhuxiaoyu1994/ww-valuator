@@ -2712,19 +2712,28 @@ function getAdminPage() {
   function blRefresh() {
     const pw = sessionStorage.getItem('admin_pw');
     if (!pw) return;
+    const statsEl = document.getElementById('bl-stats');
+    if (statsEl) statsEl.textContent = '加载中...';
     fetch('/blocklist/api/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw }),
-    }).then(r => r.json()).then(result => {
+    }).then(async r => {
+      const text = await r.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error('服务器返回非JSON: ' + r.status + ' ' + text.substring(0, 200));
+      }
+    }).then(result => {
       if (result.success) {
         blocklistData = result.data;
         blRenderList();
       } else {
         document.getElementById('bl-stats').textContent = '加载失败：' + (result.error || '未知错误');
       }
-    }).catch(() => {
-      document.getElementById('bl-stats').textContent = '加载失败：网络错误';
+    }).catch((e) => {
+      document.getElementById('bl-stats').textContent = '加载失败：' + (e.message || '网络错误');
     });
   }
 

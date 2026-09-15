@@ -105,7 +105,7 @@ function getBlocklistPage() {
         document.getElementById('login-error').style.display = 'block';
       }
     } catch (e) {
-      document.getElementById('login-error').textContent = '网络错误';
+      document.getElementById('login-error').textContent = '网络错误: ' + (e.message || '未知');
       document.getElementById('login-error').style.display = 'block';
     }
   }
