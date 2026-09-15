@@ -2171,12 +2171,11 @@
         alert('当前没有已保存的自定义配置，请先点击「保存」后再导出。');
         return;
       }
-      // 去除内部派生字段（constPrices 由 constPremiums 推导，无需导出）
+      // 去除内部派生字段（constPrices 由 constPremiums 推导，无需导出；deletedChars 是内部状态）
       try {
         var parsed = JSON.parse(config);
         delete parsed.constPrices;
         delete parsed.deletedChars;
-        delete parsed.sigWeaponsOverride;
         config = JSON.stringify(parsed, null, 2);
       } catch (e) { /* 解析失败则导出原始配置 */ }
       var blob = new Blob([config], { type: 'application/json' });
@@ -2214,7 +2213,6 @@
             // 去除内部派生字段
             delete imported.constPrices;
             delete imported.deletedChars;
-            delete imported.sigWeaponsOverride;
             saveWeights(imported);
             alert('配置导入成功！面板将刷新以显示导入的配置。');
             overlay.remove();

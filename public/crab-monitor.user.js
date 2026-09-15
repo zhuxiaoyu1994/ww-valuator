@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.18.1
+// @version      3.18.2
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -9971,7 +9971,6 @@ function openSettings() {
       var exportData = JSON.parse(JSON.stringify(config));
       delete exportData.constPrices;
       delete exportData.deletedChars;
-      delete exportData.sigWeaponsOverride;
       var blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
