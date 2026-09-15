@@ -2746,10 +2746,29 @@ function getAdminPage() {
       list.innerHTML = '<div style="text-align:center;color:#666;padding:40px;font-size:14px;">暂无封禁IP</div>';
       return;
     }
-    list.innerHTML = blocklistData.map(function(ip) {
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #1f1f3a;">' +
-        '<span style="font-size:14px;font-family:monospace;color:#e0e0e0;">' + escapeHtml(ip) + '</span>' +
+    list.innerHTML = blocklistData.map(function(item) {
+      var ip = typeof item === 'string' ? item : item.ip;
+      var type = item.type || 'manual';
+      var reason = item.reason || '';
+      var typeLabel = type === 'auto' ? '<span style="padding:2px 8px;border-radius:4px;font-size:11px;background:#fbbf24;color:#1a1a2e;margin-left:8px;">自动</span>' : '<span style="padding:2px 8px;border-radius:4px;font-size:11px;background:#ef4444;color:#fff;margin-left:8px;">手动</span>';
+      var createdAt = item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN', {hour12: false}) : '';
+      var expiresAt = item.expiresAt;
+      var expireText = '';
+      if (expiresAt) {
+        var diff = expiresAt - Date.now();
+        if (diff <= 0) {
+          expireText = '<span style="color:#6b7280;margin-left:8px;">已过期</span>';
+        } else {
+          var hours = Math.floor(diff / 3600000);
+          expireText = '<span style="color:#9ca3af;margin-left:8px;">剩余' + hours + '小时</span>';
+        }
+      }
+      return '<div style="padding:12px 18px;border-bottom:1px solid #1f1f3a;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+        '<span style="font-size:14px;font-family:monospace;color:#e0e0e0;">' + escapeHtml(ip) + typeLabel + expireText + '</span>' +
         '<button onclick="blRemoveIp(\\'' + ip.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 14px;border:1px solid #ef4444;border-radius:6px;background:transparent;color:#ef4444;font-size:12px;cursor:pointer;">解封</button>' +
+        '</div>' +
+        (reason ? '<div style="font-size:12px;color:#9ca3af;margin-top:4px;">原因：' + escapeHtml(reason) + (createdAt ? '　时间：' + createdAt : '') + '</div>' : (createdAt ? '<div style="font-size:12px;color:#9ca3af;margin-top:4px;">时间：' + createdAt + '</div>' : '')) +
         '</div>';
     }).join('');
   }
@@ -2772,7 +2791,7 @@ function getAdminPage() {
       } else {
         alert(result.error || '操作失败');
       }
-    }).catch(() => { alert('网络错误'); });
+    }).catch((e) => { alert('网络错误: ' + (e.message || '未知')); });
   }
 
   function blRemoveIp(ip) {
@@ -2790,7 +2809,7 @@ function getAdminPage() {
       } else {
         alert(result.error || '操作失败');
       }
-    }).catch(() => { alert('网络错误'); });
+    }).catch((e) => { alert('网络错误: ' + (e.message || '未知')); });
   }
 </script>
 </body>
