@@ -43,13 +43,33 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zhucs3336466';
 
 // IP黑名单（初始从环境变量加载，运行时增删时同步到数据库）
-const BLOCKLIST_KEY = 'blocked_ips';
-let blockedIps = (process.env.BLOCKED_IPS || '216.195.201.153').split(',').map(s => s.trim()).filter(Boolean);
+const BLOCKLIST_KEY = 'blocked_ips_v2';
+// 封禁列表：[{ ip, type: 'manual'|'auto', reason, createdAt, expiresAt }]
+let blockedIps = [];
+// 从环境变量初始化手动封禁IP
+const envBlockedIps = (process.env.BLOCKED_IPS || '216.195.201.153').split(',').map(s => s.trim()).filter(Boolean);
+// 初始化为手动封禁，永不过期
+for (const ip of envBlockedIps) {
+  blockedIps.push({ ip, type: 'manual', reason: '环境变量配置', createdAt: Date.now(), expiresAt: null });
+}
 
 // 封禁列表缓存（60秒TTL，serverless 多实例间保持同步）
 const BLOCKLIST_CACHE_TTL = 60 * 1000;
 let blockedIpsLoadedAt = 0;
 let blockedIpsPromise = null;
+
+/**
+ * 把旧格式（字符串数组）迁移到新格式（对象数组）
+ */
+function migrateBlocklist(data) {
+  if (!Array.isArray(data)) return [];
+  return data.map(item => {
+    if (typeof item === 'string') {
+      return { ip: item, type: 'manual', reason: '历史封禁', createdAt: Date.now(), expiresAt: null };
+    }
+    return item;
+  });
+}
 
 async function ensureBlockedIpsLoaded() {
   const now = Date.now();
@@ -60,8 +80,8 @@ async function ensureBlockedIpsLoaded() {
     blockedIpsPromise = (async () => {
       try {
         const saved = await db.getConfig(BLOCKLIST_KEY);
-        if (Array.isArray(saved)) {
-          blockedIps = saved;
+        if (Array.isArray(saved) && saved.length > 0) {
+          blockedIps = migrateBlocklist(saved);
         }
       } catch (e) {
         // 数据库不可用时保持现有内存值
@@ -91,8 +111,8 @@ async function saveBlockedIps() {
 async function loadBlockedIps() {
   try {
     const saved = await db.getConfig(BLOCKLIST_KEY);
-    if (Array.isArray(saved)) {
-      blockedIps = saved;
+    if (Array.isArray(saved) && saved.length > 0) {
+      blockedIps = migrateBlocklist(saved);
     }
   } catch (e) {
     // 数据库不可用时保持现有内存值
@@ -113,6 +133,92 @@ function normalizeIp(ip) {
   if (ip === '::1') return '127.0.0.1';
   return ip;
 }
+
+// ============================================================
+// 限流 + 自动封禁
+// ============================================================
+const RATE_LIMIT_PER_MINUTE = 15;     // 每分钟最多 15 次查询
+const RATE_LIMIT_WINDOW = 60 * 1000;  // 限流窗口 1 分钟
+const AUTO_BAN_THRESHOLD = 60;        // 5 分钟内超过 60 次自动封禁
+const AUTO_BAN_WINDOW = 5 * 60 * 1000;// 自动封禁统计窗口 5 分钟
+const AUTO_BAN_DURATION = 24 * 60 * 60 * 1000; // 自动封禁时长 24 小时
+
+// 内存限流计数器 { ip: [{ time, count5min }] }
+// 简单实现：每分钟清零一次
+const rateLimitMap = new Map(); // key: ip, value: { minuteKey, count, count5min, windowStart5min }
+
+function getMinuteKey(ts) {
+  return Math.floor(ts / RATE_LIMIT_WINDOW);
+}
+
+/**
+ * 检查限流并计数
+ * 返回 { limited: boolean, count: number, autoBanned: boolean }
+ */
+async function checkRateLimit(clientIp) {
+  const now = Date.now();
+  const minuteKey = getMinuteKey(now);
+  const entry = rateLimitMap.get(clientIp) || { minuteKey: 0, count: 0, count5min: 0, windowStart5min: now };
+
+  // 5分钟窗口重置
+  if (now - entry.windowStart5min > AUTO_BAN_WINDOW) {
+    entry.count5min = 0;
+    entry.windowStart5min = now;
+  }
+
+  // 分钟窗口重置
+  if (entry.minuteKey !== minuteKey) {
+    entry.count = 0;
+    entry.minuteKey = minuteKey;
+  }
+
+  entry.count++;
+  entry.count5min++;
+  rateLimitMap.set(clientIp, entry);
+
+  // 检查是否需要自动封禁
+  let autoBanned = false;
+  if (entry.count5min > AUTO_BAN_THRESHOLD) {
+    // 检查是否已经被封禁
+    const existing = blockedIps.find(b => b.ip === clientIp);
+    if (!existing) {
+      // 自动封禁
+      blockedIps.push({
+        ip: clientIp,
+        type: 'auto',
+        reason: `5分钟内查询${entry.count5min}次，超过阈值${AUTO_BAN_THRESHOLD}次`,
+        createdAt: now,
+        expiresAt: now + AUTO_BAN_DURATION,
+      });
+      await saveBlockedIps();
+      autoBanned = true;
+      console.log(`[RateLimit] 自动封禁 IP: ${clientIp}, 5分钟${entry.count5min}次`);
+    }
+  }
+
+  const limited = entry.count > RATE_LIMIT_PER_MINUTE;
+  return { limited, count: entry.count, autoBanned, count5min: entry.count5min };
+}
+
+/**
+ * 清理过期的自动封禁记录
+ */
+function cleanExpiredBans() {
+  const now = Date.now();
+  const before = blockedIps.length;
+  blockedIps = blockedIps.filter(b => {
+    if (b.type !== 'auto') return true; // 手动封禁不过期
+    if (!b.expiresAt) return true;
+    return b.expiresAt > now;
+  });
+  if (blockedIps.length !== before) {
+    saveBlockedIps().catch(() => {});
+    console.log(`[RateLimit] 清理过期封禁，移除 ${before - blockedIps.length} 个`);
+  }
+}
+
+// 定时清理过期封禁（每10分钟）
+setInterval(cleanExpiredBans, 10 * 60 * 1000);
 
 // 查询日志（内存存储，最多保留1000条）
 const queryLogs = [];
@@ -169,18 +275,29 @@ app.use(async (req, res, next) => {
   }
   // 确保封禁列表已从数据库加载（60秒缓存，serverless 多实例间同步）
   await ensureBlockedIpsLoaded();
+  // 清理过期的自动封禁
+  cleanExpiredBans();
   const rawIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   const clientIp = normalizeIp(rawIp);
-  // 支持精确匹配、后缀匹配（.xxx）、前缀匹配（xxx.）
-  const isBlocked = blockedIps.some(blocked => {
-    if (clientIp === blocked) return true;
-    if (blocked.startsWith('.') && clientIp.endsWith(blocked)) return true;
-    if (blocked.endsWith('.') && clientIp.startsWith(blocked)) return true;
-    // 支持 CIDR 前缀如 "216.195.201"（匹配 216.195.201.*）
-    if (!blocked.includes(':') && clientIp.startsWith(blocked + '.')) return true;
+
+  // 检查是否被封禁（新格式：对象数组）
+  function isIpBlocked(ip) {
+    const now = Date.now();
+    for (const b of blockedIps) {
+      const blockedIp = typeof b === 'string' ? b : b.ip;
+      // 过期的自动封禁跳过
+      if (typeof b === 'object' && b.type === 'auto' && b.expiresAt && b.expiresAt <= now) {
+        continue;
+      }
+      if (ip === blockedIp) return true;
+      if (blockedIp.startsWith('.') && ip.endsWith(blockedIp)) return true;
+      if (blockedIp.endsWith('.') && ip.startsWith(blockedIp)) return true;
+      if (!blockedIp.includes(':') && ip.startsWith(blockedIp + '.')) return true;
+    }
     return false;
-  });
-  if (isBlocked) {
+  }
+
+  if (isIpBlocked(clientIp)) {
     // 放行页面访问和粘贴查询（纯本地计算，不消耗第三方资源）
     const isPage = req.path === '/' || req.path === '/wuwa' || req.path === '/zzz' || req.path === '/platform';
     const isPasteEval = req.path === '/api/x9k2-eval';
@@ -202,6 +319,30 @@ app.use(async (req, res, next) => {
     console.log('[Blocked] IP: ' + clientIp + ' ' + req.method + ' ' + req.path);
     return res.status(403).json({ success: false, error: '访问被拒绝' });
   }
+
+  // 限流检查（仅对查询接口）
+  const isQueryApi = req.path === '/api/x9k2-find' || req.path === '/api/x9k2-eval';
+  if (isQueryApi) {
+    const result = await checkRateLimit(clientIp);
+    if (result.autoBanned) {
+      console.log(`[RateLimit] 自动封禁 ${clientIp}，5分钟内 ${result.count5min} 次`);
+      return res.json({
+        success: false,
+        error: '您的请求过于频繁，已被临时限制24小时。请联系管理员解封，或使用「粘贴描述估价」功能。',
+        switchToPaste: true,
+        rateLimited: true,
+      });
+    }
+    if (result.limited) {
+      return res.json({
+        success: false,
+        error: `请求过于频繁，请稍后再试（每分钟最多${RATE_LIMIT_PER_MINUTE}次）。`,
+        rateLimited: true,
+        retryAfter: 60,
+      });
+    }
+  }
+
   next();
 });
 
@@ -1156,12 +1297,15 @@ app.post('/blocklist/api/list', async (req, res) => {
     return res.json({ success: false, error: '密码错误' });
   }
   await loadBlockedIps();
-  res.json({ success: true, data: blockedIps });
+  cleanExpiredBans();
+  // 按时间倒序
+  const sorted = [...blockedIps].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  res.json({ success: true, data: sorted });
 });
 
 // 添加封禁IP
 app.post('/blocklist/api/add', async (req, res) => {
-  const { password, ip } = req.body;
+  const { password, ip, reason } = req.body;
   if (password !== ADMIN_PASSWORD) {
     return res.json({ success: false, error: '密码错误' });
   }
@@ -1172,12 +1316,18 @@ app.post('/blocklist/api/add', async (req, res) => {
     return res.json({ success: false, error: 'IP格式不正确' });
   }
   await loadBlockedIps();
-  if (blockedIps.includes(trimIp)) {
+  if (blockedIps.some(b => b.ip === trimIp)) {
     return res.json({ success: false, error: '该IP已在封禁列表中' });
   }
-  blockedIps.push(trimIp);
+  blockedIps.push({
+    ip: trimIp,
+    type: 'manual',
+    reason: reason || '手动封禁',
+    createdAt: Date.now(),
+    expiresAt: null,
+  });
   await saveBlockedIps();
-  console.log('[Blocklist] 添加封禁IP:', trimIp);
+  console.log('[Blocklist] 添加封禁IP:', trimIp, reason || '');
   res.json({ success: true, data: blockedIps });
 });
 
@@ -1189,7 +1339,11 @@ app.post('/blocklist/api/remove', async (req, res) => {
   }
   const trimIp = (ip || '').trim();
   await loadBlockedIps();
-  blockedIps = blockedIps.filter(b => b !== trimIp);
+  const before = blockedIps.length;
+  blockedIps = blockedIps.filter(b => b.ip !== trimIp);
+  if (blockedIps.length === before) {
+    return res.json({ success: false, error: 'IP不在封禁列表中' });
+  }
   await saveBlockedIps();
   console.log('[Blocklist] 移除封禁IP:', trimIp);
   res.json({ success: true, data: blockedIps });
