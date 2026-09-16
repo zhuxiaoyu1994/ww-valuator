@@ -537,6 +537,33 @@ function getPageHTML() {
     .d2 { animation-delay: 0.16s; }
     .d3 { animation-delay: 0.24s; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    /* 帮助问号按钮 */
+    .help-icon {
+      display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;
+      border-radius:50%;background:#2a2a4a;color:#888;font-size:11px;
+      cursor:pointer;vertical-align:middle;margin-left:4px;
+      user-select:none;transition:background 0.2s,color 0.2s;
+    }
+    .help-icon:hover { background:#3b3b6a;color:#ccc; }
+    /* 帮助弹窗 */
+    .help-popup {
+      position:fixed;z-index:100002;background:#1a1a2e;border:1px solid #3b3b6a;
+      border-radius:10px;padding:14px 16px;max-width:300px;font-size:13px;
+      color:#ccc;line-height:1.6;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+      pointer-events:none;opacity:0;transform:translateY(-6px);
+      transition:opacity 0.2s,transform 0.2s;
+    }
+    .help-popup.show { opacity:1;transform:translateY(0); }
+    .help-popup::before {
+      content:'';position:absolute;top:-6px;left:20px;
+      border-left:6px solid transparent;border-right:6px solid transparent;
+      border-bottom:6px solid #3b3b6a;
+    }
+    .help-popup::after {
+      content:'';position:absolute;top:-5px;left:21px;
+      border-left:5px solid transparent;border-right:5px solid transparent;
+      border-bottom:5px solid #1a1a2e;
+    }
   </style>
 </head>
 <body>
@@ -931,7 +958,7 @@ function getPageHTML() {
       summaryHtml += '<div class="label">预估价值</div>';
       if (d.details && d.details.priceRange && d.details.priceRange.low != null) {
         summaryHtml += '<div style="font-size:13px;color:#60a5fa;margin-top:4px;font-weight:500;">合理交易范围：¥' + d.details.priceRange.low + ' ~ ¥' + d.details.priceRange.high +
-          ' <span title="基于同价位段成交记录的市场波动统计得出的参考区间，90%以上同类账号成交价落在此范围内。仅供参考，实际成交受账号细节、卖家心态、平台手续费等因素影响。" style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:#1a2a4a;color:#888;font-size:10px;cursor:help;vertical-align:middle;margin-left:2px;">?</span></div>';
+          ' <span class="help-icon" data-help="range" title="点击查看说明">?</span></div>';
       }
       if (d.price && d.price > 0) {
         const diff = (d.estimatedValue - d.price).toFixed(2);
@@ -1065,7 +1092,7 @@ function getPageHTML() {
         detailHtml += '<div class="result-row" style="padding-top:4px;">' +
           '<span class="key" style="color:#aaa;">' +
             '合理交易范围 ' +
-            '<span class="help-icon" title="基于同价位段成交记录的市场波动统计得出的参考区间，90%以上同类账号成交价落在此范围内。仅供参考，实际成交受账号细节、卖家心态、平台手续费等因素影响。" style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:#2a2a4a;color:#888;font-size:10px;cursor:help;vertical-align:middle;margin-left:2px;">?</span>' +
+            '<span class="help-icon" data-help="range" title="点击查看说明">?</span>' +
           '</span>' +
           '<span class="val" style="color:#60a5fa;font-weight:600;font-size:14px;">¥' + det.priceRange.low + ' ~ ¥' + det.priceRange.high + '</span>' +
           '</div>';
@@ -1164,6 +1191,78 @@ function getPageHTML() {
       document.getElementById('stats-modal').style.display = 'none';
       document.body.style.overflow = '';
     }
+
+    // 帮助弹窗内容
+    var HELP_CONTENTS = {
+      range: '<div style="font-weight:600;color:#60a5fa;margin-bottom:8px;font-size:14px;">合理交易范围</div>' +
+        '<div style="color:#bbb;line-height:1.7;">基于同价位段成交记录的市场波动统计得出的参考区间，90%以上同类账号成交价落在此范围内。</div>' +
+        '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2a2a4a;color:#888;font-size:12px;line-height:1.6;">' +
+        '• 500元以下：±20%（最低±30元）<br>' +
+        '• 500~2000元：±15%<br>' +
+        '• 2000~5000元：±12%<br>' +
+        '• 5000元以上：±10%' +
+        '</div>' +
+        '<div style="margin-top:10px;color:#666;font-size:11px;">仅供参考，实际成交受账号细节、卖家心态、平台手续费等因素影响。</div>'
+    };
+
+    // 显示帮助弹窗
+    function showHelpPopup(icon, key) {
+      // 移除已有弹窗
+      var old = document.querySelector('.help-popup');
+      if (old) old.remove();
+
+      var content = HELP_CONTENTS[key] || '暂无说明';
+      var popup = document.createElement('div');
+      popup.className = 'help-popup';
+      popup.innerHTML = content;
+      document.body.appendChild(popup);
+
+      // 定位到问号下方
+      var rect = icon.getBoundingClientRect();
+      popup.style.left = rect.left + 'px';
+      popup.style.top = (rect.bottom + 8) + 'px';
+
+      // 防止超出右边界
+      var popupRect = popup.getBoundingClientRect();
+      if (popupRect.right > window.innerWidth - 10) {
+        popup.style.left = (window.innerWidth - popupRect.width - 10) + 'px';
+      }
+
+      requestAnimationFrame(function() {
+        popup.classList.add('show');
+      });
+
+      // 点击外部关闭
+      setTimeout(function() {
+        document.addEventListener('click', closeHelpPopupOutside, { once: true });
+      }, 10);
+    }
+
+    function closeHelpPopupOutside(e) {
+      var popup = document.querySelector('.help-popup');
+      if (!popup) return;
+      if (e.target.classList.contains('help-icon')) {
+        // 点击了另一个问号，交给新的处理
+        popup.remove();
+        return;
+      }
+      if (!popup.contains(e.target)) {
+        popup.classList.remove('show');
+        setTimeout(function() { popup.remove(); }, 200);
+      } else {
+        document.addEventListener('click', closeHelpPopupOutside, { once: true });
+      }
+    }
+
+    // 事件委托：点击问号显示帮助
+    document.addEventListener('click', function(e) {
+      var icon = e.target.closest('.help-icon');
+      if (icon) {
+        e.stopPropagation();
+        var key = icon.getAttribute('data-help');
+        showHelpPopup(icon, key);
+      }
+    });
 
     function renderStatsModal(data) {
       var s = data.summary;
