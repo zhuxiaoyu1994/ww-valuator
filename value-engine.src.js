@@ -1235,23 +1235,31 @@ function calculateValue(parsed, price) {
   }
   const EFFECTIVE_TIERS = ['S'];
   var effectiveYellow = 0;
+  var effectiveYellowBreakdown = [];
   var effectiveCountedWeapons = {};
   var effectiveCountedChars = {};
   // S级角色
   for (var eci = 0; eci < parsed.characters.length; eci++) {
     var eChar = parsed.characters[eci];
     if (EFFECTIVE_TIERS.indexOf(eChar.tier) < 0) continue;
-    effectiveYellow += (1 + (eChar.const || 0)) * effTierCoeffOf(eChar.tier);
+    var eContrib = (1 + (eChar.const || 0)) * effTierCoeffOf(eChar.tier);
+    var eCoeff = effTierCoeffOf(eChar.tier);
+    effectiveYellow += eContrib;
     effectiveCountedChars[eChar.name] = true;
     var eSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[eChar.name] || SIG_WEAPONS[eChar.name]) : SIG_WEAPONS[eChar.name];
+    var eSigRefine = 0;
+    var eSigContrib = 0;
     if (eSigName && hasSignatureWeapons.indexOf(eChar.name) >= 0 && !effectiveCountedWeapons[eSigName]) {
       var eSigWeapon = parsed.weapons.find(function(wp) { return wp.name === eSigName; });
       if (eSigWeapon) {
         var eRefine = eSigWeapon.refine || 1;
-        effectiveYellow += calcSigEffectiveGold(eRefine) * effTierCoeffOf(eChar.tier);
+        eSigRefine = eRefine;
+        eSigContrib = calcSigEffectiveGold(eRefine) * effTierCoeffOf(eChar.tier);
+        effectiveYellow += eSigContrib;
         effectiveCountedWeapons[eSigName] = true;
       }
     }
+    effectiveYellowBreakdown.push({ name: eChar.name, tier: eChar.tier, const: eChar.const || 0, contrib: eContrib, coeff: eCoeff, sigName: eSigRefine > 0 ? eSigName : null, sigRefine: eSigRefine, sigContrib: eSigContrib, source: 'S级' });
   }
   // 完整配队角色（排除已计入的S级角色）
   var teamCharNames = {};
@@ -1265,17 +1273,24 @@ function calculateValue(parsed, price) {
     var tChar = parsed.characters[tci];
     if (!teamCharNames[tChar.name]) continue;
     if (effectiveCountedChars[tChar.name]) continue; // 已计入
-    effectiveYellow += (1 + (tChar.const || 0)) * effTierCoeffOf(tChar.tier);
+    var tContrib = (1 + (tChar.const || 0)) * effTierCoeffOf(tChar.tier);
+    var tCoeff = effTierCoeffOf(tChar.tier);
+    effectiveYellow += tContrib;
     effectiveCountedChars[tChar.name] = true;
     var tSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[tChar.name] || SIG_WEAPONS[tChar.name]) : SIG_WEAPONS[tChar.name];
+    var tSigRefine = 0;
+    var tSigContrib = 0;
     if (tSigName && hasSignatureWeapons.indexOf(tChar.name) >= 0 && !effectiveCountedWeapons[tSigName]) {
       var tSigWeapon = parsed.weapons.find(function(wp) { return wp.name === tSigName; });
       if (tSigWeapon) {
         var tRefine = tSigWeapon.refine || 1;
-        effectiveYellow += calcSigEffectiveGold(tRefine) * effTierCoeffOf(tChar.tier);
+        tSigRefine = tRefine;
+        tSigContrib = calcSigEffectiveGold(tRefine) * effTierCoeffOf(tChar.tier);
+        effectiveYellow += tSigContrib;
         effectiveCountedWeapons[tSigName] = true;
       }
     }
+    effectiveYellowBreakdown.push({ name: tChar.name, tier: tChar.tier, const: tChar.const || 0, contrib: tContrib, coeff: tCoeff, sigName: tSigRefine > 0 ? tSigName : null, sigRefine: tSigRefine, sigContrib: tSigContrib, source: '配队' });
   }
   // A级强绑核心：A级角色与其强绑队友同时在场时，双方均计入有效金
   // （无需完整配队，配队其余成员可替换；仅A级角色触发，其队友按自身级别系数计入）
@@ -1294,17 +1309,25 @@ function calculateValue(parsed, price) {
       if (effectiveCountedChars[bName]) continue;
       var bChar = parsed.characters.find(function(c) { return c.name === bName; });
       if (!bChar) continue;
-      effectiveYellow += (1 + (bChar.const || 0)) * effTierCoeffOf(bChar.tier);
+      var bContrib = (1 + (bChar.const || 0)) * effTierCoeffOf(bChar.tier);
+      var bCoeff = effTierCoeffOf(bChar.tier);
+      effectiveYellow += bContrib;
       effectiveCountedChars[bName] = true;
       var bSigName = _sigWeaponsOverride ? (_sigWeaponsOverride[bName] || SIG_WEAPONS[bName]) : SIG_WEAPONS[bName];
+      var bSigRefine = 0;
+      var bSigContrib = 0;
       if (bSigName && hasSignatureWeapons.indexOf(bName) >= 0 && !effectiveCountedWeapons[bSigName]) {
         var bSigWeapon = parsed.weapons.find(function(wp) { return wp.name === bSigName; });
         if (bSigWeapon) {
           var bRefine = bSigWeapon.refine || 1;
-          effectiveYellow += calcSigEffectiveGold(bRefine) * effTierCoeffOf(bChar.tier);
+          bSigRefine = bRefine;
+          bSigContrib = calcSigEffectiveGold(bRefine) * effTierCoeffOf(bChar.tier);
+          effectiveYellow += bSigContrib;
           effectiveCountedWeapons[bSigName] = true;
         }
       }
+      var bSource = bindTrigger ? (baChar.tier === 'A' ? 'A级强绑' : 'A级') : (baChar.tier + '级高命');
+      effectiveYellowBreakdown.push({ name: bChar.name, tier: bChar.tier, const: bChar.const || 0, contrib: bContrib, coeff: bCoeff, sigName: bSigRefine > 0 ? bSigName : null, sigRefine: bSigRefine, sigContrib: bSigContrib, source: bSource });
     }
   }
 
@@ -1313,6 +1336,7 @@ function calculateValue(parsed, price) {
   const yellowInfo = getEffectiveYellowCoeff(effectiveYellow);
   yellowInfo.rawYellowCount = parsed.yellowCount;
   yellowInfo.effectiveYellow = effectiveYellow;
+  yellowInfo.effectiveYellowBreakdown = effectiveYellowBreakdown;
   yellowInfo.limitedYellow = limitedYellow;
   yellowInfo.totalYellow = parsed.yellowCount;
   const yellowCoeff = yellowInfo.coefficient;

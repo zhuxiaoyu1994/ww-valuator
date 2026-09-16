@@ -938,7 +938,7 @@ function getPageHTML() {
       // 金数
       const yi = det.yellowInfo || {};
       if (yi.yellowCount > 0) {
-        var goldBadge = (yi.effectiveYellow != null ? yi.effectiveYellow : '-') + '/' + (yi.limitedYellow != null ? yi.limitedYellow : yi.yellowCount) + '/' + (yi.totalYellow != null ? yi.totalYellow : (yi.rawYellowCount || 0));
+        var goldBadge = (yi.effectiveYellow != null ? fmtGold(yi.effectiveYellow) : '-') + '/' + (yi.limitedYellow != null ? fmtGold(yi.limitedYellow) : yi.yellowCount) + '/' + (yi.totalYellow != null ? fmtGold(yi.totalYellow) : (yi.rawYellowCount || 0));
         hlHtml += '<span style="background:#2e241a;border:1px solid #f59e0b;border-radius:4px;padding:2px 8px;font-size:11px;color:#f59e0b;">' + goldBadge + '金 [有效/限定/总]</span>';
       }
       // 抽数
@@ -1008,8 +1008,21 @@ function getPageHTML() {
       if (flatActive) {
         detailHtml += resultRow('低命折扣', '× ' + fd.value + '（' + fd.notes.join('，') + '）', '#a78bfa');
       } else if (yi.yellowCount > 0) {
-        var goldDisplay = (yi.effectiveYellow != null ? yi.effectiveYellow : '-') + '/' + (yi.limitedYellow != null ? yi.limitedYellow : yi.yellowCount) + '/' + (yi.totalYellow != null ? yi.totalYellow : (yi.rawYellowCount || 0));
+        var goldDisplay = (yi.effectiveYellow != null ? fmtGold(yi.effectiveYellow) : '-') + '/' + (yi.limitedYellow != null ? fmtGold(yi.limitedYellow) : yi.yellowCount) + '/' + (yi.totalYellow != null ? fmtGold(yi.totalYellow) : (yi.rawYellowCount || 0));
         detailHtml += resultRow('有效金系数', goldDisplay + ' [' + (yi.tierLabel || '') + '] × ' + yi.coefficient, '#f59e0b');
+        // 有效金贡献明细
+        var bd = yi.effectiveYellowBreakdown || [];
+        if (bd.length > 0) {
+          var bdItems = bd.map(function(b) {
+            var constText = b.const > 0 ? (b.const === 6 ? '满命' : b.const + '命') : '0命';
+            var sigText = b.sigName ? ' +精' + b.sigRefine + ' ' + escapeHtml(b.sigName) : '';
+            var totalContrib = b.contrib + (b.sigContrib || 0);
+            var contribStr = fmtGold(totalContrib);
+            var coeffText = (b.coeff != null && b.coeff !== 1) ? '×' + b.coeff + ' ' : '';
+            return '<span style="display:inline-block;font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin:2px 4px 2px 0;">' + escapeHtml(b.name) + ' ' + constText + sigText + ' (' + coeffText + '+' + contribStr + ')</span>';
+          });
+          detailHtml += '<div style="padding:4px 0 8px 0;">' + bdItems.join('') + '</div>';
+        }
       }
       // 最终价值
       detailHtml += '<div class="result-row" style="border-top:1px solid #1e1e33;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
@@ -1067,7 +1080,7 @@ function getPageHTML() {
       }
       if (info.pulls > 0) resHtml += resultRow('抽数', info.pulls + ' 抽', '#2dd4bf');
       var yiInfo = det.yellowInfo || {};
-      var goldSummary = (yiInfo.effectiveYellow != null ? yiInfo.effectiveYellow : '-') + '/' + (yiInfo.limitedYellow != null ? yiInfo.limitedYellow : '-') + '/' + (info.yellowCount || 0);
+      var goldSummary = (yiInfo.effectiveYellow != null ? fmtGold(yiInfo.effectiveYellow) : '-') + '/' + (yiInfo.limitedYellow != null ? fmtGold(yiInfo.limitedYellow) : '-') + '/' + (info.yellowCount || 0);
       resHtml += resultRow('有效金/限定金/总金数', goldSummary, '#f59e0b');
       document.getElementById('result-resources').innerHTML = resHtml;
 
@@ -1080,6 +1093,7 @@ function getPageHTML() {
     function resultRow(key, val, color) {
       return '<div class="result-row"><span class="key">' + key + '</span><span class="val" style="color:' + (color || '#e0e0e0') + ';">' + val + '</span></div>';
     }
+    function fmtGold(n) { if (n == null) return '-'; return n % 1 === 0 ? n : (Math.round(n * 10) / 10); }
 
     // ============================================================
     // 算法准确性报告弹窗
