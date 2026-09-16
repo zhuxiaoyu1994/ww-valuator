@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.18.2
+// @version      3.19.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 26;
+  const CONFIG_VERSION = 27;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -509,6 +509,13 @@
       ],
       // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
       effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
+      // 估值交易范围（按估值价位段的百分比计算区间半宽）
+      priceRangeSegments: [
+        { upTo: 500, percent: 0.20, minAmount: 30 },
+        { upTo: 2000, percent: 0.15, minAmount: 0 },
+        { upTo: 5000, percent: 0.12, minAmount: 0 },
+        { upTo: null, percent: 0.10, minAmount: 0 },
+      ],
     };
   }
 
@@ -7656,10 +7663,11 @@
 
     // 生效系数：低命折扣与有效金系数取较低值，只显示生效的那个
     const flatActive = (flatDiscount.value < 1 && flatDiscount.notes.length > 0 && flatDiscount.value < yellowInfo.coefficient);
+    function fmtGold(n) { if (n == null) return '-'; return n % 1 === 0 ? n : (Math.round(n * 10) / 10); }
     const yellowHTML = (!flatActive && yellowInfo.yellowCount > 0) ?
       '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">' +
-      '<div style="font-size:12px;color:#f59e0b;font-weight:600;">有效金系数：' + (yellowInfo.effectiveYellow != null ? yellowInfo.effectiveYellow : yellowInfo.yellowCount) + '有效金 [' + yellowInfo.tierLabel + '] × ' + yellowInfo.coefficient + '</div>' +
-      '<div style="font-size:11px;color:#888;margin-top:2px;">有效金/限定金/总金: ' + (yellowInfo.effectiveYellow != null ? yellowInfo.effectiveYellow : '-') + '/' + (yellowInfo.limitedYellow != null ? yellowInfo.limitedYellow : yellowInfo.yellowCount) + '/' + (yellowInfo.totalYellow != null ? yellowInfo.totalYellow : (yellowInfo.rawYellowCount || 0)) + '</div>' +
+      '<div style="font-size:12px;color:#f59e0b;font-weight:600;">有效金系数：' + (yellowInfo.effectiveYellow != null ? fmtGold(yellowInfo.effectiveYellow) : yellowInfo.yellowCount) + '有效金 [' + yellowInfo.tierLabel + '] × ' + yellowInfo.coefficient + '</div>' +
+      '<div style="font-size:11px;color:#888;margin-top:2px;">有效金/限定金/总金: ' + (yellowInfo.effectiveYellow != null ? fmtGold(yellowInfo.effectiveYellow) : '-') + '/' + (yellowInfo.limitedYellow != null ? fmtGold(yellowInfo.limitedYellow) : yellowInfo.yellowCount) + '/' + (yellowInfo.totalYellow != null ? fmtGold(yellowInfo.totalYellow) : (yellowInfo.rawYellowCount || 0)) + '</div>' +
       (function() {
         var bd = v.effectiveYellowBreakdown || [];
         if (bd.length === 0) return '';
@@ -7705,6 +7713,15 @@
         '<div style="display:flex;align-items:center;font-size:16px;color:#444;">=</div>' +
         '<div style="flex:1;background:#16213e;border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:11px;color:#666;margin-bottom:2px;">差价</div><div style="font-size:16px;font-weight:700;color:' + (diff >= 0 ? '#10b981' : '#ef4444') + ';">' + (diff >= 0 ? '+' : '') + '¥' + diff.toFixed(0) + '</div></div>' +
       '</div>' +
+      // 合理交易范围
+      (v.priceRange && v.priceRange.low != null
+        ? '<div style="background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:8px;padding:8px 12px;margin-bottom:14px;text-align:center;">' +
+            '<div style="font-size:12px;color:#60a5fa;font-weight:600;">' +
+              '合理交易范围：¥' + v.priceRange.low + ' ~ ¥' + v.priceRange.high +
+              ' <span title="基于同价位段成交记录的市场波动统计得出的参考区间，90%以上同类账号成交价落在此范围内。仅供参考，实际成交受账号细节、卖家心态、平台手续费等因素影响。" style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:rgba(96,165,250,0.15);color:#888;font-size:10px;cursor:help;vertical-align:middle;margin-left:2px;">?</span>' +
+            '</div>' +
+          '</div>'
+        : '') +
       // 降价历史
       (row.priceHistory && row.priceHistory.length > 0
         ? '<div style="background:#1a1a2e;border:1px solid #3a2a1a;border-radius:8px;padding:10px;margin-bottom:14px;">' +

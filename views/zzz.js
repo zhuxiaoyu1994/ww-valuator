@@ -899,6 +899,10 @@ function getPageHTML() {
       let summaryHtml = '';
       summaryHtml += '<div class="big-value">' + d.estimatedValue + ' 元</div>';
       summaryHtml += '<div class="label">预估价值</div>';
+      if (d.details && d.details.priceRange && d.details.priceRange.low != null) {
+        summaryHtml += '<div style="font-size:13px;color:#60a5fa;margin-top:4px;font-weight:500;">合理交易范围：¥' + d.details.priceRange.low + ' ~ ¥' + d.details.priceRange.high +
+          ' <span title="基于同价位段成交记录的市场波动统计得出的参考区间，90%以上同类账号成交价落在此范围内。仅供参考，实际成交受账号细节、卖家心态、平台手续费等因素影响。" style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:#1a2a4a;color:#888;font-size:10px;cursor:help;vertical-align:middle;margin-left:2px;">?</span></div>';
+      }
       if (d.price && d.price > 0) {
         const diff = (d.estimatedValue - d.price).toFixed(2);
         const diffText = diff >= 0 ? '+' + diff : diff;
@@ -1026,6 +1030,16 @@ function getPageHTML() {
       }
       // 最终价值
       detailHtml += '<div class="result-row" style="border-top:1px solid #1e1e33;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
+      // 交易范围
+      if (det.priceRange && det.priceRange.low != null) {
+        detailHtml += '<div class="result-row" style="padding-top:4px;">' +
+          '<span class="key" style="color:#aaa;">' +
+            '合理交易范围 ' +
+            '<span class="help-icon" title="基于同价位段成交记录的市场波动统计得出的参考区间，90%以上同类账号成交价落在此范围内。仅供参考，实际成交受账号细节、卖家心态、平台手续费等因素影响。" style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:#2a2a4a;color:#888;font-size:10px;cursor:help;vertical-align:middle;margin-left:2px;">?</span>' +
+          '</span>' +
+          '<span class="val" style="color:#60a5fa;font-weight:600;font-size:14px;">¥' + det.priceRange.low + ' ~ ¥' + det.priceRange.high + '</span>' +
+          '</div>';
+      }
       document.getElementById('result-details').innerHTML = detailHtml;
 
       // ===== 角色明细（按估值从大到小排序） =====

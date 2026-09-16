@@ -1468,10 +1468,32 @@ function evaluateWithPrice(showTitle, priceInCents, customWeights) {
     rawText: parsed.rawText,
   };
 
+  // 计算交易范围（按估值价位段的百分比）
+  var rangeSegments = w.priceRangeSegments || [];
+  var rangeHalf = 0;
+  if (rangeSegments.length > 0 && cv.totalValue > 0) {
+    var prevUpTo = 0;
+    for (var si = 0; si < rangeSegments.length; si++) {
+      var seg = rangeSegments[si];
+      if (seg.upTo == null || cv.totalValue < seg.upTo) {
+        rangeHalf = cv.totalValue * seg.percent;
+        if (seg.minAmount && rangeHalf < seg.minAmount) rangeHalf = seg.minAmount;
+        break;
+      }
+      prevUpTo = seg.upTo;
+    }
+  }
+  var priceRange = {
+    low: Math.round(cv.totalValue - rangeHalf),
+    high: Math.round(cv.totalValue + rangeHalf),
+    halfWidth: Math.round(rangeHalf),
+  };
+
   // details：兼容 server.js / monitor.js 的字段名，同时保留油猴脚本原始字段
   const details = {
     ...cv,
     finalValue: cv.totalValue,
+    priceRange: priceRange,
     characterValue: cv.charValue,
     c6Premium: cv.fullConstPremium,
     teamPremium: cv.teamPremium,

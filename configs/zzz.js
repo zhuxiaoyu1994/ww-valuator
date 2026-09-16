@@ -1,7 +1,7 @@
 'use strict';
 
 const ZZZ_CONFIG = {
-  configVersion: 4,
+  configVersion: 5,
   gameName: '绝区零',
   gameSlug: 'zzz',
 
@@ -65,6 +65,13 @@ const ZZZ_CONFIG = {
       { baseCoeff: 2.0, threshold: null, step: 0.008 }
     ],
     effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
+    // 估值交易范围（按估值价位段的百分比计算区间半宽）
+    priceRangeSegments: [
+      { upTo: 500, percent: 0.20, minAmount: 30 },
+      { upTo: 2000, percent: 0.15, minAmount: 0 },
+      { upTo: 5000, percent: 0.12, minAmount: 0 },
+      { upTo: null, percent: 0.10, minAmount: 0 },
+    ],
   },
 
   defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002, pullMaxPrice: 5 },
