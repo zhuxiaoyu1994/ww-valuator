@@ -426,13 +426,23 @@ function getAdminPage() {
                   <th style="width:100px">价格区间</th><th style="width:50px">数量</th>
                   <th style="width:80px">平均成交价</th><th style="width:80px">平均估值</th>
                   <th style="width:70px">平均偏差</th><th style="width:70px">平均偏差率</th>
-                  <th style="width:60px">MAE</th><th style="width:70px">准确率(±20%)</th>
+                  <th style="width:60px">MAE</th><th style="width:70px">标准差</th><th style="width:70px">P90偏差</th>
+                  <th style="width:130px">建议区间(±P90)</th><th style="width:70px">准确率(±20%)</th>
                 </tr>
               </thead>
               <tbody id="d-price-range-tbody"></tbody>
             </table>
           </div>
-          <div style="font-size:13px;color:#aaa;margin:20px 0 10px;">估值 vs 成交价 散点图</div>
+          <div style="font-size:13px;color:#aaa;margin:20px 0 10px;display:flex;align-items:center;justify-content:space-between;">
+            <span>估值 vs 成交价 散点图</span>
+            <span style="font-size:12px;color:#888;">显示范围：
+              <select id="d-scatter-range" onchange="renderScatterPlot()" style="background:#1a1a33;border:1px solid #2a2a4a;color:#ddd;padding:3px 8px;border-radius:4px;font-size:12px;">
+                <option value="0.95">95% 数据</option>
+                <option value="0.99" selected>99% 数据</option>
+                <option value="1">全部数据</option>
+              </select>
+            </span>
+          </div>
           <div id="d-scatter-plot" style="background:#0d0d22;border-radius:8px;padding:16px;"></div>
         </div>
       </div>
@@ -1752,11 +1762,23 @@ function getAdminPage() {
       var avgD = Math.round(items.reduce(function(s, d) { return s + d.deviation; }, 0) / cnt * 100) / 100;
       var avgDPct = Math.round(items.reduce(function(s, d) { return s + d.deviationPercent; }, 0) / cnt * 100) / 100;
       var mae = Math.round(items.reduce(function(s, d) { return s + Math.abs(d.deviation); }, 0) / cnt * 100) / 100;
+      // 标准差（成交价与估值的偏差的标准差）
+      var variance = items.reduce(function(s, d) { return s + (d.deviation - avgD) * (d.deviation - avgD); }, 0) / cnt;
+      var stdDev = Math.round(Math.sqrt(variance) * 100) / 100;
+      // P90绝对偏差
+      var sortedAbsDev = items.map(function(d) { return Math.abs(d.deviation); }).sort(function(a, b) { return a - b; });
+      var p90Idx = Math.min(Math.floor(sortedAbsDev.length * 0.9), sortedAbsDev.length - 1);
+      var p90Dev = Math.round(sortedAbsDev[p90Idx] * 100) / 100;
       var hit20 = items.filter(function(d) { return Math.abs(d.deviationPercent) <= 20; }).length;
       var acc = Math.round(hit20 / cnt * 1000) / 10;
 
       var devCls = avgDPct > 5 ? 'd-dev-neg' : (avgDPct < -5 ? 'd-dev-pos' : 'd-dev-zero');
       var accColor = acc >= 70 ? '#4ade80' : acc >= 50 ? '#fbbf24' : '#f87171';
+
+      // 建议区间（以平均估值为中心 ± P90偏差，仅作参考展示）
+      var rangeLow = Math.round(avgE - p90Dev);
+      var rangeHigh = Math.round(avgE + p90Dev);
+      var rangeStr = '¥' + rangeLow + ' ~ ¥' + rangeHigh;
 
       return '<tr>' +
         '<td style="font-weight:600;">¥' + r.label + '</td>' +
@@ -1766,18 +1788,31 @@ function getAdminPage() {
         '<td class="' + devCls + '">' + (avgD >= 0 ? '+' : '') + '¥' + avgD + '</td>' +
         '<td class="' + devCls + '">' + (avgDPct >= 0 ? '+' : '') + avgDPct + '%</td>' +
         '<td>¥' + mae + '</td>' +
+        '<td>¥' + stdDev + '</td>' +
+        '<td>¥' + p90Dev + '</td>' +
+        '<td style="color:#60a5fa;font-size:12px;">' + rangeStr + '</td>' +
         '<td style="color:' + accColor + ';font-weight:600;">' + acc + '%</td>' +
         '</tr>';
     }).filter(function(r) { return r !== null; }).join('');
 
-    document.getElementById('d-price-range-tbody').innerHTML = rangeRows || '<tr><td colspan="8" style="text-align:center;padding:20px;color:#666;">暂无数据</td></tr>';
+    document.getElementById('d-price-range-tbody').innerHTML = rangeRows || '<tr><td colspan="11" style="text-align:center;padding:20px;color:#666;">暂无数据</td></tr>';
 
+    renderScatterPlot();
+    document.getElementById('d-accuracy-analysis').style.display = 'block';
+  }
+
+  function renderScatterPlot() {
+    var valid = dealsData.filter(function(d) { return d.estimatedValue > 0; });
     // ===== 散点图(估值 vs 成交价) =====
-    // 使用95百分位数作为坐标轴上限，避免异常值撑大比例
+    // 使用指定百分位数作为坐标轴上限，避免异常值撑大比例
+    var rangeSel = document.getElementById('d-scatter-range');
+    var percentile = rangeSel ? parseFloat(rangeSel.value) : 0.99;
     var allVals = valid.map(function(d) { return d.estimatedValue; }).concat(valid.map(function(d) { return d.price; }));
     allVals.sort(function(a, b) { return a - b; });
-    var p95Index = Math.floor(allVals.length * 0.95);
-    var maxVal = allVals[p95Index] || allVals[allVals.length - 1] || 100;
+    var pIndex = Math.floor(allVals.length * percentile) - 1;
+    if (pIndex < 0) pIndex = 0;
+    var maxVal = allVals[pIndex] || allVals[allVals.length - 1] || 100;
+    if (percentile >= 1) maxVal = allVals[allVals.length - 1] || 100;
     // 向上取整到合适的刻度
     if (maxVal <= 500) maxVal = Math.ceil(maxVal / 50) * 50;
     else if (maxVal <= 2000) maxVal = Math.ceil(maxVal / 100) * 100;
@@ -1839,8 +1874,6 @@ function getAdminPage() {
 
     sp.push('</svg>');
     document.getElementById('d-scatter-plot').innerHTML = sp.join('');
-
-    document.getElementById('d-accuracy-analysis').style.display = 'block';
   }
 
   function applyDealsFilter() {
