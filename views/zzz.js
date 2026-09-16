@@ -1015,11 +1015,11 @@ function getPageHTML() {
         if (bd.length > 0) {
           var bdItems = bd.map(function(b) {
             var constText = b.const > 0 ? (b.const === 6 ? '满命' : b.const + '命') : '0命';
-            var sigText = b.sigName ? ' +精' + b.sigRefine + ' ' + escapeHtml(b.sigName) : '';
+            var sigText = b.sigName ? ' +精' + b.sigRefine + ' ' + escStatsHtml(b.sigName) : '';
             var totalContrib = b.contrib + (b.sigContrib || 0);
             var contribStr = fmtGold(totalContrib);
             var coeffText = (b.coeff != null && b.coeff !== 1) ? '×' + b.coeff + ' ' : '';
-            return '<span style="display:inline-block;font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin:2px 4px 2px 0;">' + escapeHtml(b.name) + ' ' + constText + sigText + ' (' + coeffText + '+' + contribStr + ')</span>';
+            return '<span style="display:inline-block;font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin:2px 4px 2px 0;">' + escStatsHtml(b.name) + ' ' + constText + sigText + ' (' + coeffText + '+' + contribStr + ')</span>';
           });
           detailHtml += '<div style="padding:4px 0 8px 0;">' + bdItems.join('') + '</div>';
         }
