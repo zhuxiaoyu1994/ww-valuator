@@ -1469,7 +1469,7 @@ function evaluateWithPrice(showTitle, priceInCents, customWeights) {
   };
 
   // 计算交易范围（按估值价位段的百分比）
-  var rangeSegments = w.priceRangeSegments || [];
+  var rangeSegments = weights.priceRangeSegments || [];
   var rangeHalf = 0;
   if (rangeSegments.length > 0 && cv.totalValue > 0) {
     var prevUpTo = 0;
@@ -1484,7 +1484,7 @@ function evaluateWithPrice(showTitle, priceInCents, customWeights) {
     }
   }
   var priceRange = {
-    low: Math.round(cv.totalValue - rangeHalf),
+    low: Math.max(0, Math.round(cv.totalValue - rangeHalf)),
     high: Math.round(cv.totalValue + rangeHalf),
     halfWidth: Math.round(rangeHalf),
   };
