@@ -598,11 +598,115 @@ async function deleteDealByProductId(productId) {
   }
 }
 
+// ============================================================
+// 限流计数（基于数据库，支持 Serverless 多实例）
+// ============================================================
+
+/**
+ * 确保限流计数表存在
+ */
+async function ensureRateLimitTable() {
+  if (!dbClient) return;
+  try {
+    await dbClient.execute(`
+      CREATE TABLE IF NOT EXISTS rate_counters (
+        ip TEXT NOT NULL,
+        window_key TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (ip, window_key)
+      )
+    `);
+    // 索引：按 IP 查询
+    try {
+      await dbClient.execute(`CREATE INDEX IF NOT EXISTS idx_rate_counters_ip ON rate_counters(ip)`);
+    } catch (e) { /* 索引已存在 */ }
+    console.log('[DB] 限流计数表已就绪');
+  } catch (e) {
+    console.error('[DB] 建限流表失败:', e.message);
+  }
+}
+
+/**
+ * 原子递增限流计数并返回当前计数值
+ * @param {string} ip - 客户端IP
+ * @param {string} windowKey - 窗口键（如 "1min:12345" 或 "5min:123"）
+ * @returns {number} 当前计数值（递增后）
+ */
+async function incrementRateCounter(ip, windowKey) {
+  if (!dbClient) return null; // 无数据库时返回 null，调用方回退到内存计数
+  try {
+    const now = new Date().toISOString();
+    // 原子 upsert + increment
+    await dbClient.execute({
+      sql: `INSERT INTO rate_counters (ip, window_key, count, updated_at)
+            VALUES (?, ?, 1, ?)
+            ON CONFLICT(ip, window_key) DO UPDATE SET count = count + 1, updated_at = excluded.updated_at`,
+      args: [ip, windowKey, now],
+    });
+    // 读取当前值
+    const result = await dbClient.execute({
+      sql: 'SELECT count FROM rate_counters WHERE ip = ? AND window_key = ?',
+      args: [ip, windowKey],
+    });
+    if (result.rows.length > 0) {
+      return result.rows[0].count;
+    }
+    return 1;
+  } catch (e) {
+    console.error('[DB] 限流计数递增失败:', e.message);
+    return null;
+  }
+}
+
+/**
+ * 获取限流计数
+ */
+async function getRateCounter(ip, windowKey) {
+  if (!dbClient) return 0;
+  try {
+    const result = await dbClient.execute({
+      sql: 'SELECT count FROM rate_counters WHERE ip = ? AND window_key = ?',
+      args: [ip, windowKey],
+    });
+    if (result.rows.length > 0) {
+      return result.rows[0].count;
+    }
+    return 0;
+  } catch (e) {
+    console.error('[DB] 限流计数查询失败:', e.message);
+    return 0;
+  }
+}
+
+/**
+ * 清理过期的限流计数（定期调用，避免表无限增长）
+ * @param {number} maxAgeSeconds - 保留多久的计数（秒）
+ */
+async function cleanupRateCounters(maxAgeSeconds = 600) {
+  if (!dbClient) return 0;
+  try {
+    const cutoff = new Date(Date.now() - maxAgeSeconds * 1000).toISOString();
+    const result = await dbClient.execute({
+      sql: 'DELETE FROM rate_counters WHERE updated_at < ?',
+      args: [cutoff],
+    });
+    if (result.rowsAffected > 0) {
+      console.log(`[DB] 限流计数清理: 删除 ${result.rowsAffected} 条过期记录`);
+    }
+    return result.rowsAffected;
+  } catch (e) {
+    console.error('[DB] 限流计数清理失败:', e.message);
+    return 0;
+  }
+}
+
 module.exports = {
   initDb,
   ensureTable,
   ensureConfigTable,
   ensureDealsTable,
+  ensureRateLimitTable,
   insertLog,
   queryLogs,
   getStats,
@@ -615,4 +719,7 @@ module.exports = {
   queryAllDealsForStats,
   deleteDealByProductId,
   cleanupOldDeals,
+  incrementRateCounter,
+  getRateCounter,
+  cleanupRateCounters,
 };

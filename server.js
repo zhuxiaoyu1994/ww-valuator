@@ -143,21 +143,65 @@ const AUTO_BAN_THRESHOLD = 60;        // 5 分钟内超过 60 次自动封禁
 const AUTO_BAN_WINDOW = 5 * 60 * 1000;// 自动封禁统计窗口 5 分钟
 const AUTO_BAN_DURATION = 24 * 60 * 60 * 1000; // 自动封禁时长 24 小时
 
-// 内存限流计数器 { ip: [{ time, count5min }] }
-// 简单实现：每分钟清零一次
+// 内存限流计数器（仅作为数据库不可用时的降级方案）
+// 注意：Vercel Serverless 多实例环境下内存计数不准确，优先使用数据库
 const rateLimitMap = new Map(); // key: ip, value: { minuteKey, count, count5min, windowStart5min }
 
 function getMinuteKey(ts) {
   return Math.floor(ts / RATE_LIMIT_WINDOW);
 }
 
+function get5MinKey(ts) {
+  return Math.floor(ts / AUTO_BAN_WINDOW);
+}
+
 /**
- * 检查限流并计数
- * 返回 { limited: boolean, count: number, autoBanned: boolean }
+ * 检查限流并计数（优先使用数据库，确保跨实例准确）
+ * 返回 { limited: boolean, count: number, autoBanned: boolean, count5min: number, dbBacked: boolean }
  */
 async function checkRateLimit(clientIp) {
   const now = Date.now();
-  const minuteKey = getMinuteKey(now);
+  const minuteKey = '1m:' + getMinuteKey(now);
+  const fiveMinKey = '5m:' + get5MinKey(now);
+
+  // 尝试使用数据库计数（准确，支持跨实例）
+  const count1min = await db.incrementRateCounter(clientIp, minuteKey);
+  if (count1min !== null) {
+    // 数据库模式
+    const count5min = await db.incrementRateCounter(clientIp, fiveMinKey);
+
+    // 定期清理过期计数（每 100 次清理一次）
+    if (!checkRateLimit._cleanupCounter) checkRateLimit._cleanupCounter = 0;
+    checkRateLimit._cleanupCounter++;
+    if (checkRateLimit._cleanupCounter >= 100) {
+      checkRateLimit._cleanupCounter = 0;
+      db.cleanupRateCounters(600).catch(() => {}); // 异步清理，不阻塞
+    }
+
+    // 检查自动封禁
+    let autoBanned = false;
+    if (count5min > AUTO_BAN_THRESHOLD) {
+      await loadBlockedIps(); // 确保封禁列表是最新的
+      const existing = blockedIps.find(b => b.ip === clientIp);
+      if (!existing) {
+        blockedIps.push({
+          ip: clientIp,
+          type: 'auto',
+          reason: `5分钟内查询${count5min}次，超过阈值${AUTO_BAN_THRESHOLD}次`,
+          createdAt: now,
+          expiresAt: now + AUTO_BAN_DURATION,
+        });
+        await saveBlockedIps();
+        autoBanned = true;
+        console.log(`[RateLimit] 自动封禁 IP: ${clientIp}, 5分钟${count5min}次 (DB模式)`);
+      }
+    }
+
+    const limited = count1min > RATE_LIMIT_PER_MINUTE;
+    return { limited, count: count1min, autoBanned, count5min, dbBacked: true };
+  }
+
+  // 降级：内存计数（单实例不准确，仅本地开发用）
   const entry = rateLimitMap.get(clientIp) || { minuteKey: 0, count: 0, count5min: 0, windowStart5min: now };
 
   // 5分钟窗口重置
@@ -167,9 +211,10 @@ async function checkRateLimit(clientIp) {
   }
 
   // 分钟窗口重置
-  if (entry.minuteKey !== minuteKey) {
+  const mKey = getMinuteKey(now);
+  if (entry.minuteKey !== mKey) {
     entry.count = 0;
-    entry.minuteKey = minuteKey;
+    entry.minuteKey = mKey;
   }
 
   entry.count++;
@@ -179,10 +224,8 @@ async function checkRateLimit(clientIp) {
   // 检查是否需要自动封禁
   let autoBanned = false;
   if (entry.count5min > AUTO_BAN_THRESHOLD) {
-    // 检查是否已经被封禁
     const existing = blockedIps.find(b => b.ip === clientIp);
     if (!existing) {
-      // 自动封禁
       blockedIps.push({
         ip: clientIp,
         type: 'auto',
@@ -192,12 +235,12 @@ async function checkRateLimit(clientIp) {
       });
       await saveBlockedIps();
       autoBanned = true;
-      console.log(`[RateLimit] 自动封禁 IP: ${clientIp}, 5分钟${entry.count5min}次`);
+      console.log(`[RateLimit] 自动封禁 IP: ${clientIp}, 5分钟${entry.count5min}次 (内存模式)`);
     }
   }
 
   const limited = entry.count > RATE_LIMIT_PER_MINUTE;
-  return { limited, count: entry.count, autoBanned, count5min: entry.count5min };
+  return { limited, count: entry.count, autoBanned, count5min: entry.count5min, dbBacked: false };
 }
 
 /**
@@ -320,9 +363,9 @@ app.use(async (req, res, next) => {
     return res.status(403).json({ success: false, error: '访问被拒绝' });
   }
 
-  // 限流检查（仅对查询接口）
-  const isQueryApi = req.path === '/api/x9k2-find' || req.path === '/api/x9k2-eval';
-  if (isQueryApi) {
+  // 限流检查（查询接口 + 配置接口）
+  const isRateLimitedApi = req.path === '/api/x9k2-find' || req.path === '/api/x9k2-eval' || req.path === '/api/config/default';
+  if (isRateLimitedApi) {
     const result = await checkRateLimit(clientIp);
     if (result.autoBanned) {
       console.log(`[RateLimit] 自动封禁 ${clientIp}，5分钟内 ${result.count5min} 次`);
@@ -2050,6 +2093,7 @@ function initApp() {
   db.ensureTable();
   db.ensureConfigTable();
   db.ensureDealsTable();
+  db.ensureRateLimitTable();
 }
 
 // 导出 app 和 initApp（供 Vercel 使用）

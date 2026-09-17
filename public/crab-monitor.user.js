@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.19.0
+// @version      3.19.1
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -7384,7 +7384,7 @@
           : row.status === '秒杀'
             ? '<span style="color:#e94560;font-weight:600;">秒杀 ¥' + row.price.toFixed(0) + '</span>'
             : row.price.toFixed(0)) + '</td>' +
-        '<td>' + (row.effectiveYellow || 0) + '/' + ((row.valuation && row.valuation.yellowInfo ? row.valuation.yellowInfo.limitedYellow : 0) || 0) + '/' + (row.parsed ? row.parsed.yellowCount : 0) + '</td>' +
+        '<td>' + (function(v){ if(v==null) return 0; return v%1===0 ? v : (Math.round(v*10)/10); })(row.effectiveYellow) + '/' + ((row.valuation && row.valuation.yellowInfo ? row.valuation.yellowInfo.limitedYellow : 0) || 0) + '/' + (row.parsed ? row.parsed.yellowCount : 0) + '</td>' +
         '<td>' + (row.parsed ? row.parsed.pulls : 0) + '</td>' +
         '<td>' + (row.parsed ? row.parsed.motoCount : 0) + '</td>' +
         '<td class="mw-chars-cell">' + charsHtml + '</td>' +
