@@ -875,10 +875,10 @@ function getPageHTML(options) {
     function parseProductLink(input) {
       const s = String(input || '').trim();
       // 螃蟹网
-      const pxb7Match = s.match(/pxb7\.com\/product\/(\d+)/) || s.match(/\/product\/(\d+)/) || s.match(/m1\.pxb7\.com.*[?&]id=(\d+)/);
+      const pxb7Match = s.match(/pxb7\\.com\\/product\\/(\\d+)/) || s.match(/\\/product\\/(\\d+)/) || s.match(/m1\\.pxb7\\.com.*[?&]id=(\\d+)/);
       if (pxb7Match) return { platform: 'pxb7', productId: pxb7Match[1] };
       // 盼之
-      const pzdsMatch = s.match(/pzds\.com\/goodsDetails\/([^/?]+)/);
+      const pzdsMatch = s.match(/pzds\\.com\\/goodsDetails\\/([^/?]+)/);
       if (pzdsMatch) return { platform: 'pzds', productId: pzdsMatch[1] };
       return null;
     }
@@ -898,7 +898,7 @@ function getPageHTML(options) {
 
       for (let i = 0; i < total; i++) {
         const proxyIdx = (startIdx + i) % total;
-        const proxyUrl = proxies[proxyIdx].replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
+        const proxyUrl = proxies[proxyIdx].replace(/\\/$/, '') + '?path=' + encodeURIComponent(apiPath);
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 8000);
