@@ -487,8 +487,8 @@ app.get('/api/debug-proxy', async (req, res) => {
     return res.json({ ...result, error: 'PXB7_PROXY_URL not set' });
   }
 
-  // 并行测试所有代理 + 直连，总超时控制在 6 秒内避免 Vercel 15s 限制
-  const DEBUG_TIMEOUT = 5000;
+  // 并行测试所有代理 + 直连，单请求超时 8 秒，总耗时控制在 Vercel 15s 限制内
+  const DEBUG_TIMEOUT = 8000;
 
   async function testProxy(proxyBase, idx) {
     const startTime = Date.now();
@@ -866,13 +866,16 @@ const PXB7_COMMON_HEADERS = {
  * @param {object|string} body - POST 数据（对象或字符串）
  * @param {object} [options] - 配置项
  * @param {number} [options.timeout=7000] - 单次请求超时（毫秒）
+ * @param {number} [options.totalTimeout=12000] - 全局总超时（毫秒），避免多代理轮询超过 Vercel 15s 限制
  * @param {boolean} [options.tryDirectFallback=true] - 所有代理失败后是否回退直连
  * @returns {Promise<{data: string, statusCode: number, contentType: string, source: string, proxyIndex: number}>}
  */
 function fetchPxb7Api(apiPath, body, options = {}) {
-  const timeout = options.timeout || 7000;
+  const perTimeout = options.timeout || 7000;
+  const totalTimeout = options.totalTimeout || 12000;
   const tryDirectFallback = options.tryDirectFallback !== false;
   const postData = typeof body === 'string' ? body : JSON.stringify(body);
+  const deadline = Date.now() + totalTimeout;
 
   // 生成随机起始代理索引（轮询效果）
   const totalProxies = PXB7_PROXY_URLS.length;
@@ -885,12 +888,22 @@ function fetchPxb7Api(apiPath, body, options = {}) {
   const errors = [];
 
   function tryNext() {
+    // 检查全局截止时间
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      const combinedErr = new Error('总超时: ' + errors.join('; '));
+      combinedErr.errors = errors;
+      return Promise.reject(combinedErr);
+    }
+    // 单次超时取 perTimeout 和剩余时间的较小值
+    const curTimeout = Math.min(perTimeout, remaining);
+
     // 尝试所有代理
     if (attempt < totalProxies) {
       const proxyIdx = (startIdx + attempt) % totalProxies;
       const proxyBase = PXB7_PROXY_URLS[proxyIdx];
       attempt++;
-      return doProxyRequest(proxyBase, proxyIdx)
+      return doProxyRequest(proxyBase, proxyIdx, curTimeout)
         .then(result => result)
         .catch(err => {
           errors.push(`代理${proxyIdx + 1}[${proxyBase.substring(0, 30)}...]: ${err.message}`);
@@ -899,7 +912,7 @@ function fetchPxb7Api(apiPath, body, options = {}) {
     }
     // 所有代理失败，回退直连
     if (tryDirectFallback) {
-      return doDirectRequest()
+      return doDirectRequest(curTimeout)
         .then(result => result)
         .catch(err => {
           errors.push(`直连: ${err.message}`);
@@ -914,7 +927,7 @@ function fetchPxb7Api(apiPath, body, options = {}) {
     return Promise.reject(combinedErr);
   }
 
-  function doProxyRequest(proxyBase, proxyIdx) {
+  function doProxyRequest(proxyBase, proxyIdx, reqTimeout) {
     return new Promise((resolve, reject) => {
       const proxyUrl = proxyBase.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
       const req = https.request(proxyUrl, {
@@ -941,13 +954,13 @@ function fetchPxb7Api(apiPath, body, options = {}) {
         });
       });
       req.on('error', (err) => reject(err));
-      req.setTimeout(timeout, () => { req.destroy(new Error('请求超时')); });
+      req.setTimeout(reqTimeout, () => { req.destroy(new Error('请求超时')); });
       req.write(postData);
       req.end();
     });
   }
 
-  function doDirectRequest() {
+  function doDirectRequest(reqTimeout) {
     return new Promise((resolve, reject) => {
       const req = https.request({
         hostname: 'api-pc.pxb7.com',
@@ -975,7 +988,7 @@ function fetchPxb7Api(apiPath, body, options = {}) {
         });
       });
       req.on('error', (err) => reject(err));
-      req.setTimeout(timeout, () => { req.destroy(new Error('请求超时')); });
+      req.setTimeout(reqTimeout, () => { req.destroy(new Error('请求超时')); });
       req.write(postData);
       req.end();
     });
