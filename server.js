@@ -474,77 +474,83 @@ app.post('/api/x9k2-eval', (req, res) => {
 });
 
 /**
- * 调试接口 - 检查代理配置和连通性
+ * 调试接口 - 检查代理配置和连通性（支持多代理）
  */
 app.get('/api/debug-proxy', async (req, res) => {
-  const proxyUrl = (process.env.PXB7_PROXY_URL || '').replace(/[`\s'"]/g, '').trim();
-  const result = { proxyConfigured: !!proxyUrl, proxyUrl: proxyUrl || '(empty)', tests: {} };
+  const result = {
+    proxyCount: PXB7_PROXY_URLS.length,
+    proxies: PXB7_PROXY_URLS,
+    tests: {},
+  };
 
-  if (!proxyUrl) {
+  if (PXB7_PROXY_URLS.length === 0) {
     return res.json({ ...result, error: 'PXB7_PROXY_URL not set' });
   }
 
-  // 测试1: detailPost API
+  // 对每个代理测试 detailPost API
+  for (let i = 0; i < PXB7_PROXY_URLS.length; i++) {
+    const proxyBase = PXB7_PROXY_URLS[i];
+    const testKey = `proxy_${i + 1}`;
+    try {
+      const { data, statusCode } = await fetchPxb7Api('/api/product/web/product/detailPost', { productId: '1' }, {
+        timeout: 8000,
+        tryDirectFallback: false, // 只测代理，不回退直连
+      });
+      result.tests[testKey] = {
+        url: proxyBase,
+        status: statusCode,
+        isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
+        preview: data.substring(0, 200),
+      };
+    } catch (err) {
+      result.tests[testKey] = { url: proxyBase, error: err.message };
+    }
+  }
+
+  // 测试直连
   try {
-    const testUrl = proxyUrl.replace(/\/$/, '') + '?path=' + encodeURIComponent('/api/product/web/product/detailPost');
+    const { data, statusCode } = await fetchPxb7Api('/api/product/web/product/detailPost', { productId: '1' }, {
+      timeout: 8000,
+      tryDirectFallback: false,
+    });
+    // 不会走到这里（因为 tryDirectFallback=false 且无代理时直连是唯一选项）
+    // 实际上无代理时 fetchPxb7Api 会直接走直连
+  } catch (err) {
+    // 忽略
+  }
+  // 单独测直连（不经过代理）
+  try {
     const startTime = Date.now();
     const testData = JSON.stringify({ productId: '1' });
-
-    await new Promise((resolve) => {
-      const proxyReq = https.request(testUrl, {
+    const directResult = await new Promise((resolve) => {
+      const req = https.request({
+        hostname: 'api-pc.pxb7.com',
+        port: 443,
+        path: '/api/product/web/product/detailPost',
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(testData) },
-      }, (proxyRes) => {
+        headers: { ...PXB7_COMMON_HEADERS, 'Content-Length': Buffer.byteLength(testData) },
+      }, (res) => {
         let data = '';
-        proxyRes.setEncoding('utf8');
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          result.tests.detailPost = {
-            status: proxyRes.statusCode,
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          resolve({
+            status: res.statusCode,
             elapsed: (Date.now() - startTime) + 'ms',
             isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
             preview: data.substring(0, 200),
-          };
-          resolve();
+          });
         });
       });
-      proxyReq.on('error', (err) => { result.tests.detailPost = { error: err.message }; resolve(); });
-      proxyReq.setTimeout(8000, () => { proxyReq.destroy(); result.tests.detailPost = { error: 'timeout 8s' }; resolve(); });
-      proxyReq.write(testData);
-      proxyReq.end();
+      req.on('error', (err) => resolve({ error: err.message }));
+      req.setTimeout(8000, () => { req.destroy(); resolve({ error: 'timeout 8s' }); });
+      req.write(testData);
+      req.end();
     });
-  } catch (err) { result.tests.detailPost = { error: err.message }; }
-
-  // 测试2: searchPageList API
-  try {
-    const testUrl2 = proxyUrl.replace(/\/$/, '') + '?path=' + encodeURIComponent('/api/search/product/v2/selectSearchPageList');
-    const startTime2 = Date.now();
-    const testData2 = JSON.stringify({ query: 'test', gameId: '10302', pageIndex: 1, pageSize: 1, bizProd: 1, type: '4', posType: 1 });
-
-    await new Promise((resolve) => {
-      const proxyReq = https.request(testUrl2, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(testData2) },
-      }, (proxyRes) => {
-        let data = '';
-        proxyRes.setEncoding('utf8');
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          result.tests.searchList = {
-            status: proxyRes.statusCode,
-            elapsed: (Date.now() - startTime2) + 'ms',
-            isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
-            preview: data.substring(0, 300),
-          };
-          resolve();
-        });
-      });
-      proxyReq.on('error', (err) => { result.tests.searchList = { error: err.message }; resolve(); });
-      proxyReq.setTimeout(8000, () => { proxyReq.destroy(); result.tests.searchList = { error: 'timeout 8s' }; resolve(); });
-      proxyReq.write(testData2);
-      proxyReq.end();
-    });
-  } catch (err) { result.tests.searchList = { error: err.message }; }
+    result.tests.direct = directResult;
+  } catch (err) {
+    result.tests.direct = { error: err.message };
+  }
 
   res.json(result);
 });
@@ -804,37 +810,89 @@ app.post('/api/x9k2-find', async (req, res) => {
 });
 
 /**
- * 从螃蟹网 API 获取商品详情（数字 productId）
- * 优先走 Cloudflare Worker 代理（避免服务器IP被封），无配置时直连
+ * 螃蟹网 API 通用请求工具（多代理轮询 + 失败自动切换 + 回退直连）
+ * 
+ * 环境变量 PXB7_PROXY_URL 支持多个代理，用逗号分隔：
+ *   PXB7_PROXY_URL=https://worker1.example.com,https://worker2.example.com
+ * 
+ * 策略：
+ *   1. 随机选择一个代理作为起点
+ *   2. 当前代理失败（超时/WAF/非JSON/HTTP错误）时，自动尝试下一个代理
+ *   3. 所有代理都失败后，回退直连螃蟹网
+ *   4. 直连也失败才真正报错
  */
-const PXB7_PROXY_URL = (process.env.PXB7_PROXY_URL || '').replace(/[`\s'"]/g, '').trim();
+const PXB7_PROXY_URLS = (process.env.PXB7_PROXY_URL || '')
+  .split(',')
+  .map(s => s.replace(/[`\s'"]/g, '').trim())
+  .filter(Boolean);
 
-function fetchProductDetail(productId) {
-  return new Promise((resolve, reject) => {
-    const postData = JSON.stringify({ productId: String(productId) });
-    const apiPath = '/api/product/web/product/detailPost';
+const PXB7_COMMON_HEADERS = {
+  'Content-Type': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  'Origin': 'https://www.pxb7.com',
+  'Referer': 'https://www.pxb7.com/',
+};
 
-    function parseDetailResponse(data) {
-      try {
-        const json = JSON.parse(data);
-        if ((json.code === 200 || json.success === true) && json.data) {
-          resolve(json.data);
-        } else {
-          resolve(null);
-        }
-      } catch (e) {
-        if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
-          reject(new Error('螃蟹网WAF拦截'));
-        } else {
-          reject(new Error('解析商品数据失败'));
-        }
-      }
+/**
+ * 通用螃蟹网 API 请求
+ * @param {string} apiPath - API 路径，如 /api/product/web/product/detailPost
+ * @param {object|string} body - POST 数据（对象或字符串）
+ * @param {object} [options] - 配置项
+ * @param {number} [options.timeout=7000] - 单次请求超时（毫秒）
+ * @param {boolean} [options.tryDirectFallback=true] - 所有代理失败后是否回退直连
+ * @returns {Promise<{data: string, statusCode: number, contentType: string, source: string, proxyIndex: number}>}
+ */
+function fetchPxb7Api(apiPath, body, options = {}) {
+  const timeout = options.timeout || 7000;
+  const tryDirectFallback = options.tryDirectFallback !== false;
+  const postData = typeof body === 'string' ? body : JSON.stringify(body);
+
+  // 生成随机起始代理索引（轮询效果）
+  const totalProxies = PXB7_PROXY_URLS.length;
+  let startIdx = 0;
+  if (totalProxies > 1) {
+    startIdx = Math.floor(Math.random() * totalProxies);
+  }
+
+  let attempt = 0;
+  const errors = [];
+
+  function tryNext() {
+    // 尝试所有代理
+    if (attempt < totalProxies) {
+      const proxyIdx = (startIdx + attempt) % totalProxies;
+      const proxyBase = PXB7_PROXY_URLS[proxyIdx];
+      attempt++;
+      return doProxyRequest(proxyBase, proxyIdx)
+        .then(result => result)
+        .catch(err => {
+          errors.push(`代理${proxyIdx + 1}[${proxyBase.substring(0, 30)}...]: ${err.message}`);
+          return tryNext();
+        });
     }
+    // 所有代理失败，回退直连
+    if (tryDirectFallback) {
+      return doDirectRequest()
+        .then(result => result)
+        .catch(err => {
+          errors.push(`直连: ${err.message}`);
+          const combinedErr = new Error('所有代理和直连均失败: ' + errors.join('; '));
+          combinedErr.errors = errors;
+          throw combinedErr;
+        });
+    }
+    // 不回退直连，直接抛错
+    const combinedErr = new Error('所有代理均失败: ' + errors.join('; '));
+    combinedErr.errors = errors;
+    return Promise.reject(combinedErr);
+  }
 
-    // 走 CF Worker 代理
-    if (PXB7_PROXY_URL) {
-      const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
-      const proxyReq = https.request(proxyUrl, {
+  function doProxyRequest(proxyBase, proxyIdx) {
+    return new Promise((resolve, reject) => {
+      const proxyUrl = proxyBase.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
+      const req = https.request(proxyUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -844,47 +902,88 @@ function fetchProductDetail(productId) {
         res.setEncoding('utf8');
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => parseDetailResponse(data));
+        res.on('end', () => {
+          const ct = res.headers['content-type'] || '';
+          // WAF / HTML 响应视为失败
+          if (res.statusCode >= 400 || (ct && !ct.includes('json') && data.trim().startsWith('<'))) {
+            const errMsg = data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0
+              ? 'WAF拦截'
+              : `HTTP ${res.statusCode}`;
+            reject(new Error(errMsg));
+            return;
+          }
+          resolve({ data, statusCode: res.statusCode, contentType: ct, source: 'proxy', proxyIndex: proxyIdx });
+        });
       });
-      proxyReq.on('error', (err) => reject(err));
-      proxyReq.setTimeout(7000, () => {
-        proxyReq.destroy(new Error('请求超时'));
+      req.on('error', (err) => reject(err));
+      req.setTimeout(timeout, () => { req.destroy(new Error('请求超时')); });
+      req.write(postData);
+      req.end();
+    });
+  }
+
+  function doDirectRequest() {
+    return new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api-pc.pxb7.com',
+        port: 443,
+        path: apiPath,
+        method: 'POST',
+        headers: {
+          ...PXB7_COMMON_HEADERS,
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        res.setEncoding('utf8');
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          const ct = res.headers['content-type'] || '';
+          if (res.statusCode >= 400 || (ct && !ct.includes('json') && data.trim().startsWith('<'))) {
+            const errMsg = data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0
+              ? 'WAF拦截'
+              : `HTTP ${res.statusCode}`;
+            reject(new Error(errMsg));
+            return;
+          }
+          resolve({ data, statusCode: res.statusCode, contentType: ct, source: 'direct', proxyIndex: -1 });
+        });
       });
-      proxyReq.write(postData);
-      proxyReq.end();
-      return;
-    }
-
-    // 直连螃蟹网（无代理时回退）
-    const options = {
-      hostname: 'api-pc.pxb7.com',
-      port: 443,
-      path: apiPath,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Origin': 'https://www.pxb7.com',
-        'Referer': 'https://www.pxb7.com/',
-        'Content-Length': Buffer.byteLength(postData),
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      res.setEncoding('utf8');
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => parseDetailResponse(data));
+      req.on('error', (err) => reject(err));
+      req.setTimeout(timeout, () => { req.destroy(new Error('请求超时')); });
+      req.write(postData);
+      req.end();
     });
+  }
 
-    req.on('error', (err) => reject(err));
-    req.setTimeout(7000, () => {
-      req.destroy(new Error('请求超时'));
-    });
-    req.write(postData);
-    req.end();
+  return tryNext();
+}
+
+/**
+ * 从螃蟹网 API 获取商品详情（数字 productId）
+ * 优先走 Cloudflare Worker 代理（避免服务器IP被封），无配置时直连
+ */
+function fetchProductDetail(productId) {
+  return new Promise((resolve, reject) => {
+    const apiPath = '/api/product/web/product/detailPost';
+    fetchPxb7Api(apiPath, { productId: String(productId) })
+      .then(({ data }) => {
+        try {
+          const json = JSON.parse(data);
+          if ((json.code === 200 || json.success === true) && json.data) {
+            resolve(json.data);
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
+            reject(new Error('螃蟹网WAF拦截'));
+          } else {
+            reject(new Error('解析商品数据失败'));
+          }
+        }
+      })
+      .catch(reject);
   });
 }
 
@@ -897,7 +996,8 @@ function fetchProductDetail(productId) {
 function fetchProductBySearch(keyword, game) {
   return new Promise((resolve, reject) => {
     const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
-    const postData = JSON.stringify({
+    const apiPath = '/api/search/product/v2/selectSearchPageList';
+    const body = {
       query: String(keyword),
       gameId: gameId,
       pageIndex: 1,
@@ -905,96 +1005,40 @@ function fetchProductBySearch(keyword, game) {
       bizProd: 1,
       type: '4',
       posType: 1,
-    });
-    const apiPath = '/api/search/product/v2/selectSearchPageList';
-
-    // 处理搜索结果的公共逻辑
-    function handleSearchResult(data) {
-      try {
-        const json = JSON.parse(data);
-        if (json.success && json.data) {
-          const list = Array.isArray(json.data) ? json.data : (json.data.list || []);
-          const keywordUpper = String(keyword).toUpperCase();
-          let matched = list.find(item =>
-            (item.productUniqueNo || '').toUpperCase() === keywordUpper
-          );
-          if (!matched) {
-            matched = list.find(item =>
-              (item.productUniqueNo || '').toUpperCase().includes(keywordUpper) ||
-              String(item.productId || '').includes(keyword)
-            );
-          }
-          if (!matched && list.length > 0) {
-            matched = list[0];
-          }
-          resolve(matched || null);
-        } else {
-          resolve(null);
-        }
-      } catch (e) {
-        // WAF拦截检测：返回的是HTML而非JSON
-        if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
-          reject(new Error('螃蟹网WAF拦截，请稍后重试或配置PXB7_PROXY_URL代理'));
-        } else {
-          reject(new Error('解析搜索结果失败'));
-        }
-      }
-    }
-
-    // 走 CF Worker 代理
-    if (PXB7_PROXY_URL) {
-      const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
-      const proxyReq = https.request(proxyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
-        },
-      }, (res) => {
-        res.setEncoding('utf8');
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => handleSearchResult(data));
-      });
-      proxyReq.on('error', (err) => reject(err));
-      proxyReq.setTimeout(7000, () => {
-        proxyReq.destroy(new Error('请求超时'));
-      });
-      proxyReq.write(postData);
-      proxyReq.end();
-      return;
-    }
-
-    // 直连螃蟹网（无代理时回退）
-    const options = {
-      hostname: 'api-pc.pxb7.com',
-      port: 443,
-      path: apiPath,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Origin': 'https://www.pxb7.com',
-        'Referer': 'https://www.pxb7.com/',
-        'Content-Length': Buffer.byteLength(postData),
-      },
     };
 
-    const req = https.request(options, (res) => {
-      res.setEncoding('utf8');
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => handleSearchResult(data));
-    });
-
-    req.on('error', (err) => reject(err));
-    req.setTimeout(7000, () => {
-      req.destroy(new Error('请求超时'));
-    });
-    req.write(postData);
-    req.end();
+    fetchPxb7Api(apiPath, body)
+      .then(({ data }) => {
+        try {
+          const json = JSON.parse(data);
+          if (json.success && json.data) {
+            const list = Array.isArray(json.data) ? json.data : (json.data.list || []);
+            const keywordUpper = String(keyword).toUpperCase();
+            let matched = list.find(item =>
+              (item.productUniqueNo || '').toUpperCase() === keywordUpper
+            );
+            if (!matched) {
+              matched = list.find(item =>
+                (item.productUniqueNo || '').toUpperCase().includes(keywordUpper) ||
+                String(item.productId || '').includes(keyword)
+              );
+            }
+            if (!matched && list.length > 0) {
+              matched = list[0];
+            }
+            resolve(matched || null);
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          if (data && (data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0)) {
+            reject(new Error('螃蟹网WAF拦截，请稍后重试或配置PXB7_PROXY_URL代理'));
+          } else {
+            reject(new Error('解析搜索结果失败'));
+          }
+        }
+      })
+      .catch(reject);
   });
 }
 
@@ -1009,124 +1053,59 @@ function fetchProductBySearch(keyword, game) {
 function fetchSoldProducts(pageIndex, pageSize, game) {
   return new Promise((resolve) => {
     const gameId = (gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302';
-    const postData = JSON.stringify({
+    const apiPath = '/api/search/product/selectSelledList';
+    const body = {
       gameId: gameId,
       pageIndex: pageIndex || 1,
       pageSize: pageSize || 20,
-    });
-    const apiPath = '/api/search/product/selectSelledList';
-    const useProxy = !!PXB7_PROXY_URL;
-    const debug = { useProxy, apiPath, pageIndex, pageSize, proxyStatus: null, directStatus: null, responsePreview: null, parseError: null, apiSuccess: null, dataLength: null, fallbackUsed: false };
+    };
+    const debug = {
+      useProxy: PXB7_PROXY_URLS.length > 0,
+      proxyCount: PXB7_PROXY_URLS.length,
+      apiPath, pageIndex, pageSize,
+      proxyStatus: null, directStatus: null,
+      responsePreview: null, parseError: null,
+      apiSuccess: null, dataLength: null,
+      fallbackUsed: false, proxyIndex: -1,
+    };
 
-    function tryDirect() {
-      debug.fallbackUsed = true;
-      const options = {
-        hostname: 'api-pc.pxb7.com',
-        port: 443,
-        path: apiPath,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'Origin': 'https://www.pxb7.com',
-          'Referer': 'https://www.pxb7.com/',
-          'Content-Length': Buffer.byteLength(postData),
-        },
-      };
-
-      const req = https.request(options, (res) => {
-        res.setEncoding('utf8');
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type'], 'direct'));
-      });
-
-      req.on('error', (err) => {
-        debug.parseError = 'direct error: ' + err.message;
-        console.error('[fetchSoldProducts] Direct error:', err.message);
-        resolve({ products: [], debug });
-      });
-      req.setTimeout(15000, () => {
-        req.destroy(new Error('请求超时'));
-        debug.parseError = 'direct timeout';
-        resolve({ products: [], debug });
-      });
-      req.write(postData);
-      req.end();
-    }
-
-    function handleResult(data, statusCode, contentType, source) {
-      if (source === 'proxy') {
-        debug.proxyStatus = statusCode;
-      } else {
-        debug.directStatus = statusCode;
-      }
-      debug.responsePreview = (typeof data === 'string') ? data.substring(0, 500) : String(data).substring(0, 500);
-      try {
-        // 检测 WAF / HTML 响应
-        if (contentType && !contentType.includes('json') && data.trim().startsWith('<')) {
-          debug.parseError = `WAF/HTML response from ${source}`;
-          console.error(`[fetchSoldProducts] WAF/HTML from ${source}, status:`, statusCode);
-          if (source === 'proxy') { tryDirect(); return; }
-          return resolve({ products: [], debug });
-        }
-        const json = JSON.parse(data);
-        // 代理返回错误（如 Invalid path），回退直连
-        if (source === 'proxy' && (statusCode >= 400 || json.error)) {
-          console.error('[fetchSoldProducts] Proxy returned error:', json.error || statusCode, '- falling back to direct');
-          tryDirect();
-          return;
-        }
-        debug.apiSuccess = json.success;
-        debug.dataLength = Array.isArray(json.data) ? json.data.length : (json.data ? 'non-array' : 'null');
-        if (json.success && json.data) {
-          resolve({ products: json.data, debug });
+    fetchPxb7Api(apiPath, body, { timeout: 15000 })
+      .then(({ data, statusCode, contentType, source, proxyIndex }) => {
+        if (source === 'proxy') {
+          debug.proxyStatus = statusCode;
+          debug.proxyIndex = proxyIndex;
         } else {
-          console.error(`[fetchSoldProducts] API (${source}) returned success=false or no data:`, JSON.stringify(json).substring(0, 300));
-          if (source === 'proxy') { tryDirect(); return; }
+          debug.directStatus = statusCode;
+          debug.fallbackUsed = true;
+        }
+        debug.responsePreview = (typeof data === 'string') ? data.substring(0, 500) : String(data).substring(0, 500);
+        try {
+          // WAF / HTML 响应
+          if (contentType && !contentType.includes('json') && data.trim().startsWith('<')) {
+            debug.parseError = `WAF/HTML response from ${source}`;
+            console.error(`[fetchSoldProducts] WAF/HTML from ${source}, status:`, statusCode);
+            return resolve({ products: [], debug });
+          }
+          const json = JSON.parse(data);
+          debug.apiSuccess = json.success;
+          debug.dataLength = Array.isArray(json.data) ? json.data.length : (json.data ? 'non-array' : 'null');
+          if (json.success && json.data) {
+            resolve({ products: json.data, debug });
+          } else {
+            console.error(`[fetchSoldProducts] API (${source}) returned success=false or no data:`, JSON.stringify(json).substring(0, 300));
+            resolve({ products: [], debug });
+          }
+        } catch (e) {
+          debug.parseError = `${source} parse: ` + e.message;
+          console.error(`[fetchSoldProducts] ${source} JSON parse failed:`, e.message);
           resolve({ products: [], debug });
         }
-      } catch (e) {
-        debug.parseError = `${source} parse: ` + e.message;
-        console.error(`[fetchSoldProducts] ${source} JSON parse failed:`, e.message);
-        if (source === 'proxy') { tryDirect(); return; }
+      })
+      .catch(err => {
+        debug.parseError = 'all failed: ' + err.message;
+        console.error('[fetchSoldProducts] All sources failed:', err.message);
         resolve({ products: [], debug });
-      }
-    }
-
-    // 走 CF Worker 代理，失败时自动回退直连
-    if (useProxy) {
-      const proxyUrl = PXB7_PROXY_URL.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
-      const proxyReq = https.request(proxyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
-        },
-      }, (res) => {
-        res.setEncoding('utf8');
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => handleResult(data, res.statusCode, res.headers['content-type'], 'proxy'));
       });
-      proxyReq.on('error', (err) => {
-        console.error('[fetchSoldProducts] Proxy error, falling back to direct:', err.message);
-        tryDirect();
-      });
-      proxyReq.setTimeout(15000, () => {
-        proxyReq.destroy(new Error('请求超时'));
-        console.error('[fetchSoldProducts] Proxy timeout, falling back to direct');
-        tryDirect();
-      });
-      proxyReq.write(postData);
-      proxyReq.end();
-      return;
-    }
-
-    // 无代理配置，直接直连
-    tryDirect();
   });
 }
 
@@ -1437,28 +1416,10 @@ function parsePxb7ProductId(input) {
 // 拉取成交清单（用于自动匹配昨日成交的商品的成交价）
 function fetchPxb7SoldList(gameId) {
   return new Promise((resolve, reject) => {
-    const postData = JSON.stringify({ pageIndex: 1, pageSize: 100, gameId: String(gameId) });
     const apiPath = '/api/search/product/selectSelledList';
-    const options = {
-      hostname: 'api-pc.pxb7.com',
-      port: 443,
-      path: apiPath,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Origin': 'https://www.pxb7.com',
-        'Referer': 'https://www.pxb7.com/',
-        'Content-Length': Buffer.byteLength(postData),
-      },
-    };
-    const req = https.request(options, (res) => {
-      res.setEncoding('utf8');
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
+    const body = { pageIndex: 1, pageSize: 100, gameId: String(gameId) };
+    fetchPxb7Api(apiPath, body)
+      .then(({ data }) => {
         try {
           const json = JSON.parse(data);
           if (json.success === true && Array.isArray(json.data)) {
@@ -1469,12 +1430,8 @@ function fetchPxb7SoldList(gameId) {
         } catch (e) {
           reject(e);
         }
-      });
-    });
-    req.on('error', (err) => reject(err));
-    req.setTimeout(7000, () => req.destroy(new Error('请求超时')));
-    req.write(postData);
-    req.end();
+      })
+      .catch(reject);
   });
 }
 
