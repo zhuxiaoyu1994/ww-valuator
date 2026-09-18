@@ -1,6 +1,8 @@
 'use strict';
 
-function getPageHTML() {
+function getPageHTML(options) {
+  options = options || {};
+  const pxb7Proxies = options.pxb7Proxies || [];
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -681,6 +683,10 @@ function getPageHTML() {
 
   <script src="/public/value-settings.js?v=20260824" onerror="window.__vsFailed=true"></script>
   <script>
+    // 螃蟹网代理列表（客户端抓取用，多代理轮询降低被封风险）
+    window._pxb7Proxies = ${JSON.stringify(pxb7Proxies)};
+  </script>
+  <script>
     // 切换估值设置面板到绝区零上下文（存储键 zzz_eval_weights，默认配置走 zzz 引擎）
     if (typeof setValueSettingsGame === 'function') setValueSettingsGame('zzz');
 
@@ -834,6 +840,63 @@ function getPageHTML() {
     // ============================================================
     // 按编号查询
     // ============================================================
+
+    // 解析商品链接，返回 { platform, productId }
+    function parseProductLink(input) {
+      const s = String(input || '').trim();
+      // 螃蟹网
+      const pxb7Match = s.match(/pxb7\.com\/product\/(\d+)/) || s.match(/\/product\/(\d+)/) || s.match(/m1\.pxb7\.com.*[?&]id=(\d+)/);
+      if (pxb7Match) return { platform: 'pxb7', productId: pxb7Match[1] };
+      // 盼之
+      const pzdsMatch = s.match(/pzds\.com\/goodsDetails\/([^/?]+)/);
+      if (pzdsMatch) return { platform: 'pzds', productId: pzdsMatch[1] };
+      return null;
+    }
+
+    // 客户端抓取：通过 CORS 代理直接调螃蟹网 API
+    async function clientFetchPxb7(productId) {
+      const proxies = window._pxb7Proxies || [];
+      if (proxies.length === 0) throw new Error('无可用代理');
+
+      const apiPath = '/api/product/web/product/detailPost';
+      const postData = JSON.stringify({ productId: String(productId) });
+
+      // 随机起点轮询
+      const total = proxies.length;
+      const startIdx = Math.floor(Math.random() * total);
+      const errors = [];
+
+      for (let i = 0; i < total; i++) {
+        const proxyIdx = (startIdx + i) % total;
+        const proxyUrl = proxies[proxyIdx].replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
+          const resp = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: postData,
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          const text = await resp.text();
+          // 检测 WAF 拦截
+          if (text.indexOf('aliyun_waf') >= 0 || text.indexOf('_waf_') >= 0) {
+            errors.push('代理' + (proxyIdx + 1) + ': WAF拦截');
+            continue;
+          }
+          const json = JSON.parse(text);
+          if ((json.code === 200 || json.success === true) && json.data) {
+            return json.data;
+          }
+          errors.push('代理' + (proxyIdx + 1) + ': ' + (json.msg || json.message || '返回数据为空'));
+        } catch (e) {
+          errors.push('代理' + (proxyIdx + 1) + ': ' + (e.name === 'AbortError' ? '超时' : e.message));
+        }
+      }
+      throw new Error('所有代理均失败: ' + errors.join('; '));
+    }
+
     async function doLookup() {
       const productId = document.getElementById('product-id').value.trim();
       if (!productId) { alert('请输入商品编号或商品链接'); return; }
@@ -847,32 +910,79 @@ function getPageHTML() {
 
       try {
         const customWeights = (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null);
-        const resp = await fetch('/api/x9k2-find', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId, customWeights, game: 'zzz' }),
-        });
-        const result = await resp.json();
-        document.getElementById('status-msg').innerHTML = '';
+        const parsed = parseProductLink(productId);
+        let clientSuccess = false;
+        let clientError = null;
 
-        if (!result.success) {
-          const isTimeout = result.error && result.error.includes('超时');
-          const switchToPaste = result.switchToPaste || isTimeout;
-          let errorHtml = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
-          if (switchToPaste) {
-            errorHtml += '<div style="text-align:center;margin-top:8px;">' +
-              '<button class="eval-btn" onclick="switchTab(\\'paste\\')">切换到粘贴描述估价</button></div>';
+        // 尝试客户端抓取（仅螃蟹网，且有代理配置时）
+        if (parsed && parsed.platform === 'pxb7' && window._pxb7Proxies && window._pxb7Proxies.length > 0) {
+          try {
+            const productData = await clientFetchPxb7(parsed.productId);
+            const showTitle = productData.showTitle || productData.title || '';
+            const priceInCents = productData.price || 0;
+            const title = productData.gameName || (showTitle ? showTitle.substring(0, 50) : '');
+
+            if (showTitle) {
+              // 客户端拿到数据了，调粘贴估价接口
+              const resp = await fetch('/api/x9k2-eval', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ showTitle, priceInCents, customWeights, game: 'zzz' }),
+              });
+              const result = await resp.json();
+              document.getElementById('status-msg').innerHTML = '';
+
+              if (!result.success) {
+                throw new Error(result.error || '估值失败');
+              }
+
+              // 补全字段，保持和 x9k2-find 返回格式一致
+              result.data.productId = parsed.productId;
+              result.data.title = title;
+              result.data.showTitle = showTitle;
+              result.data.url = 'https://www.pxb7.com/buy/10304/detail?productId=' + parsed.productId;
+              clientSuccess = true;
+              showResult(result.data);
+              saveHistory(productId, result.data);
+            }
+          } catch (e) {
+            clientError = e.message;
+            console.warn('[客户端抓取] 失败，回退服务器模式:', e.message);
           }
-          if (result.pxb7Url) {
-            errorHtml += '<div style="text-align:center;margin-top:8px;">' +
-              '<a href="' + result.pxb7Url + '" target="_blank" style="color:#4a90d9;font-size:14px;">打开螃蟹网商品页面 →</a></div>';
-          }
-          document.getElementById('status-msg').innerHTML = errorHtml;
-          return;
         }
 
-        showResult(result.data);
-        saveHistory(productId, result.data);
+        // 客户端抓取失败或不支持，回退服务器模式
+        if (!clientSuccess) {
+          const resp = await fetch('/api/x9k2-find', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productId, customWeights, game: 'zzz' }),
+          });
+          const result = await resp.json();
+          document.getElementById('status-msg').innerHTML = '';
+
+          if (!result.success) {
+            const isTimeout = result.error && result.error.includes('超时');
+            const switchToPaste = result.switchToPaste || isTimeout;
+            let errorHtml = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
+            if (clientError) {
+              errorHtml += '<div style="font-size:12px;color:#888;margin-top:4px;">客户端抓取失败: ' + clientError + '</div>';
+            }
+            if (switchToPaste) {
+              errorHtml += '<div style="text-align:center;margin-top:8px;">' +
+                '<button class="eval-btn" onclick="switchTab(\\'paste\\')">切换到粘贴描述估价</button></div>';
+            }
+            if (result.pxb7Url) {
+              errorHtml += '<div style="text-align:center;margin-top:8px;">' +
+                '<a href="' + result.pxb7Url + '" target="_blank" style="color:#4a90d9;font-size:14px;">打开螃蟹网商品页面 →</a></div>';
+            }
+            document.getElementById('status-msg').innerHTML = errorHtml;
+            return;
+          }
+
+          showResult(result.data);
+          saveHistory(productId, result.data);
+        }
       } catch (err) {
         document.getElementById('status-msg').innerHTML = '<div class="error-msg">查询失败: ' + err.message + '</div>';
       } finally {

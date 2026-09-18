@@ -1332,11 +1332,11 @@ app.get('/', (req, res) => {
 });
 
 app.get('/wuwa', (req, res) => {
-  res.send(getPageHTML());
+  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS }));
 });
 
 app.get('/zzz', (req, res) => {
-  res.send(getZZZPage());
+  res.send(getZZZPage({ pxb7Proxies: PXB7_PROXY_URLS }));
 });
 
 // ============================================================
