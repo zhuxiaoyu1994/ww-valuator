@@ -474,7 +474,7 @@ app.post('/api/x9k2-eval', (req, res) => {
 });
 
 /**
- * 调试接口 - 检查代理配置和连通性（支持多代理）
+ * 调试接口 - 检查代理配置和连通性（支持多代理，并行测试）
  */
 app.get('/api/debug-proxy', async (req, res) => {
   const result = {
@@ -487,42 +487,58 @@ app.get('/api/debug-proxy', async (req, res) => {
     return res.json({ ...result, error: 'PXB7_PROXY_URL not set' });
   }
 
-  // 对每个代理测试 detailPost API
-  for (let i = 0; i < PXB7_PROXY_URLS.length; i++) {
-    const proxyBase = PXB7_PROXY_URLS[i];
-    const testKey = `proxy_${i + 1}`;
-    try {
-      const { data, statusCode } = await fetchPxb7Api('/api/product/web/product/detailPost', { productId: '1' }, {
-        timeout: 8000,
-        tryDirectFallback: false, // 只测代理，不回退直连
+  // 并行测试所有代理 + 直连，总超时控制在 6 秒内避免 Vercel 15s 限制
+  const DEBUG_TIMEOUT = 5000;
+
+  async function testProxy(proxyBase, idx) {
+    const startTime = Date.now();
+    const apiPath = '/api/product/web/product/detailPost';
+    const testData = JSON.stringify({ productId: '1' });
+    return new Promise((resolve) => {
+      const proxyUrl = proxyBase.replace(/\/$/, '') + '?path=' + encodeURIComponent(apiPath);
+      const req = https.request(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(testData),
+        },
+      }, (res) => {
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          resolve({
+            key: `proxy_${idx + 1}`,
+            value: {
+              url: proxyBase,
+              status: res.statusCode,
+              elapsed: (Date.now() - startTime) + 'ms',
+              isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
+              preview: data.substring(0, 200),
+            },
+          });
+        });
       });
-      result.tests[testKey] = {
-        url: proxyBase,
-        status: statusCode,
-        isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
-        preview: data.substring(0, 200),
-      };
-    } catch (err) {
-      result.tests[testKey] = { url: proxyBase, error: err.message };
-    }
+      req.on('error', (err) => resolve({
+        key: `proxy_${idx + 1}`,
+        value: { url: proxyBase, error: err.message, elapsed: (Date.now() - startTime) + 'ms' },
+      }));
+      req.setTimeout(DEBUG_TIMEOUT, () => {
+        req.destroy();
+        resolve({
+          key: `proxy_${idx + 1}`,
+          value: { url: proxyBase, error: 'timeout', elapsed: (Date.now() - startTime) + 'ms' },
+        });
+      });
+      req.write(testData);
+      req.end();
+    });
   }
 
-  // 测试直连
-  try {
-    const { data, statusCode } = await fetchPxb7Api('/api/product/web/product/detailPost', { productId: '1' }, {
-      timeout: 8000,
-      tryDirectFallback: false,
-    });
-    // 不会走到这里（因为 tryDirectFallback=false 且无代理时直连是唯一选项）
-    // 实际上无代理时 fetchPxb7Api 会直接走直连
-  } catch (err) {
-    // 忽略
-  }
-  // 单独测直连（不经过代理）
-  try {
+  async function testDirect() {
     const startTime = Date.now();
-    const testData = JSON.stringify({ productId: '1' });
-    const directResult = await new Promise((resolve) => {
+    return new Promise((resolve) => {
+      const testData = JSON.stringify({ productId: '1' });
       const req = https.request({
         hostname: 'api-pc.pxb7.com',
         port: 443,
@@ -535,22 +551,31 @@ app.get('/api/debug-proxy', async (req, res) => {
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
           resolve({
-            status: res.statusCode,
-            elapsed: (Date.now() - startTime) + 'ms',
-            isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
-            preview: data.substring(0, 200),
+            key: 'direct',
+            value: {
+              status: res.statusCode,
+              elapsed: (Date.now() - startTime) + 'ms',
+              isWAF: data.indexOf('aliyun_waf') >= 0 || data.indexOf('_waf_') >= 0,
+              preview: data.substring(0, 200),
+            },
           });
         });
       });
-      req.on('error', (err) => resolve({ error: err.message }));
-      req.setTimeout(8000, () => { req.destroy(); resolve({ error: 'timeout 8s' }); });
+      req.on('error', (err) => resolve({ key: 'direct', value: { error: err.message, elapsed: (Date.now() - startTime) + 'ms' } }));
+      req.setTimeout(DEBUG_TIMEOUT, () => {
+        req.destroy();
+        resolve({ key: 'direct', value: { error: 'timeout', elapsed: (Date.now() - startTime) + 'ms' } });
+      });
       req.write(testData);
       req.end();
     });
-    result.tests.direct = directResult;
-  } catch (err) {
-    result.tests.direct = { error: err.message };
   }
+
+  // 并行执行所有测试
+  const tasks = PXB7_PROXY_URLS.map((p, i) => testProxy(p, i));
+  tasks.push(testDirect());
+  const results = await Promise.all(tasks);
+  results.forEach(r => { result.tests[r.key] = r.value; });
 
   res.json(result);
 });
