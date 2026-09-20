@@ -262,6 +262,8 @@ function getPageHTML(options) {
       text-align: center;
       padding: 16px 0;
       position: relative;
+      word-break: break-word;
+      overflow-wrap: break-word;
     }
     .result-summary .big-value {
       font-family: var(--mono);
@@ -467,19 +469,26 @@ function getPageHTML(options) {
       .hud-corner { width: 18px; height: 18px; }
       .back-home { top: 14px; left: 14px; font-size: 12px; padding: 5px 12px; }
       .cover-badge { top: 14px; right: 14px; font-size: 10px; padding: 5px 10px; }
-      .input-row { flex-direction: column; }
+      .input-row { flex-direction: column !important; }
       .price-input { width: 100% !important; }
+      .eval-btn { width: 100% !important; }
+      .clear-btn { width: 100% !important; height: 40px; }
       .qq-group-card { flex-direction: column; text-align: center; }
       .tab-btn { padding: 10px 8px; font-size: 13px; }
       .input-card, .result-card { padding: 16px; }
       .result-row { flex-wrap: wrap; gap: 2px 8px; font-size: 13px; }
       .result-row .key { min-width: 60px; }
       .result-row .val { flex: 1; text-align: right; word-break: break-word; }
-      .result-summary .big-value { font-size: 34px; }
+      .result-summary .big-value { font-size: 32px; }
       .char-tags { gap: 5px; }
       .char-tag { font-size: 11px; padding: 2px 8px; }
+      .help-popup { max-width: calc(100vw - 30px) !important; font-size: 12px; padding: 12px 14px; }
       #stats-modal > div { max-width: 95% !important; margin: 10px auto !important; padding: 14px !important; }
       #stats-modal-content > div[style*="grid"] { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+    @media (max-width: 375px) {
+      .result-summary .big-value { font-size: 26px; }
+      .hero-title h1 { font-size: 22px; }
     }
     /* 估值规则设置入口 */
     .settings-bar {
@@ -1336,6 +1345,11 @@ function getPageHTML(options) {
       var popupRect = popup.getBoundingClientRect();
       if (popupRect.right > window.innerWidth - 10) {
         popup.style.left = (window.innerWidth - popupRect.width - 10) + 'px';
+      }
+      // 防止超出左边界
+      popupRect = popup.getBoundingClientRect();
+      if (popupRect.left < 10) {
+        popup.style.left = '10px';
       }
 
       requestAnimationFrame(function() {
