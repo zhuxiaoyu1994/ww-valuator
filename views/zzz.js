@@ -2078,40 +2078,36 @@ function getPageHTML(options) {
 
     // 从当前生效的权重配置动态构建角色列表（支持用户自定义等级/价格覆盖）
     function veGetCharList() {
-      var defaults = window._serverDefaultConfig || {};
+      var baseList = window._charList || [];
       var saved = (typeof getSavedWeights === 'function') ? (getSavedWeights() || {}) : {};
-      var tiers = defaults.charTiers || {};
-      var charPrices = Object.assign({}, defaults.charPrices || {}, saved.charPrices || {});
+      var charPrices = saved.charPrices || {};
       var tierOverride = saved.charTierOverride || {};
-      var list = [];
       var added = {};
+      var list = [];
 
-      // 先从默认分级里收集所有角色
-      for (var tierKey in tiers) {
-        if (!tiers.hasOwnProperty(tierKey)) continue;
-        var tierInfo = tiers[tierKey] || {};
-        var chars = tierInfo.chars || [];
-        for (var i = 0; i < chars.length; i++) {
-          var name = chars[i];
-          if (added[name]) continue;
-          added[name] = true;
-          // 用户自定义等级覆盖
-          var finalTier = tierOverride[name] || tierKey;
-          var tierData = tiers[finalTier] || tierInfo;
-          var price = charPrices[name] != null ? charPrices[name] : (tierData.price || 0);
-          var isHot = tierData.hotChars ? tierData.hotChars.includes(name) : false;
-          list.push({ name: name, tier: finalTier, price: price, isHot: isHot });
-        }
+      // 基础角色列表（服务端渲染的完整默认数据）+ 用户自定义覆盖
+      for (var i = 0; i < baseList.length; i++) {
+        var c = baseList[i];
+        if (added[c.name]) continue;
+        added[c.name] = true;
+        list.push({
+          name: c.name,
+          tier: tierOverride[c.name] || c.tier,
+          price: charPrices[c.name] != null ? charPrices[c.name] : c.price,
+          isHot: c.isHot,
+        });
       }
-      // 用户自定义等级里可能有新角色（不在默认分级中）
+      // 用户自定义等级里可能有新角色（不在默认列表中）
       for (var ovrName in tierOverride) {
         if (!tierOverride.hasOwnProperty(ovrName)) continue;
         if (added[ovrName]) continue;
         added[ovrName] = true;
-        var ovrTier = tierOverride[ovrName];
-        var ovrTierData = tiers[ovrTier] || {};
-        var ovrPrice = charPrices[ovrName] != null ? charPrices[ovrName] : (ovrTierData.price || 0);
-        list.push({ name: ovrName, tier: ovrTier, price: ovrPrice, isHot: false });
+        list.push({
+          name: ovrName,
+          tier: tierOverride[ovrName],
+          price: charPrices[ovrName] != null ? charPrices[ovrName] : 0,
+          isHot: false,
+        });
       }
       // charPrices 里可能有新角色
       for (var cpName in charPrices) {
@@ -2126,9 +2122,8 @@ function getPageHTML(options) {
     }
 
     function veGetSigWeapons() {
-      var defaults = window._serverDefaultConfig || {};
       var saved = (typeof getSavedWeights === 'function') ? (getSavedWeights() || {}) : {};
-      return Object.assign({}, defaults.sigWeapons || {}, saved.sigWeapons || {});
+      return Object.assign({}, window._sigWeapons || {}, saved.sigWeapons || {});
     }
 
     // 渲染角色卡片列表
