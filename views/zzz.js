@@ -2452,7 +2452,8 @@ function getPageHTML(options) {
           body: JSON.stringify({
             showTitle: desc,
             priceInCents: Math.round(price * 100),
-            customWeights: window._customWeights || null, game: 'zzz',
+            customWeights: (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null),
+            game: 'zzz',
           }),
         });
         const result = await resp.json();
@@ -2467,6 +2468,10 @@ function getPageHTML(options) {
       } finally {
         VE_EVALUATING = false;
       }
+    }
+
+    function veGetCustomWeights() {
+      return (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null);
     }
 
     function veShowLoading(text) {
@@ -2582,7 +2587,7 @@ function getPageHTML(options) {
         fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: window._customWeights || null, game: 'zzz' }),
+          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'zzz' }),
         }).then(function(r) { return r.json(); }).then(function(result) {
           if (result.success && result.data && result.data.info) {
             var info = result.data.info;
