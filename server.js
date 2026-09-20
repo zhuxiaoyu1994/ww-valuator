@@ -458,6 +458,8 @@ app.post('/api/x9k2-eval', (req, res) => {
       costPerformance: result.costPerformance,
       details: result.details,
       info: {
+        characters: result.info.characters,
+        weapons: result.info.weapons,
         starSounds: result.info.starSounds,
         moonPhases: result.info.moonPhases,
         coral: result.info.coral,

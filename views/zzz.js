@@ -2580,13 +2580,13 @@ function getPageHTML(options) {
               });
             });
           }
-          // 回填资源
-          document.getElementById('ve-starsound').value = info.starSound || '';
-          document.getElementById('ve-moonphase').value = info.moonPhase || '';
-          document.getElementById('ve-coral').value = info.aftermathCoral || '';
+          // 回填资源（API 返回的 info 字段名是复数/缩写形式）
+          document.getElementById('ve-starsound').value = info.starSounds || '';
+          document.getElementById('ve-moonphase').value = info.moonPhases || '';
+          document.getElementById('ve-coral').value = info.coral || '';
           document.getElementById('ve-yellow').value = info.yellowCount || '';
-          document.getElementById('ve-outfit').value = info.outfitCount || '';
-          document.getElementById('ve-frame').value = info.vehicleFrameCount || '';
+          document.getElementById('ve-outfit').value = info.outfits || '';
+          // 车架模组/涂装/摩托饰品 info 里不含，暂不回填
           document.getElementById('ve-pulls').value = info.pulls || '';
 
           veRenderChars();
