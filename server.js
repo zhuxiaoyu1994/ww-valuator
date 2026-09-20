@@ -1332,12 +1332,39 @@ app.get('/', (req, res) => {
 });
 
 app.get('/wuwa', (req, res) => {
-  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS }));
+  const engine = getEngine('wuwa');
+  const defaults = engine.getDefaults();
+  const charList = buildCharList(defaults);
+  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {} }));
 });
 
 app.get('/zzz', (req, res) => {
-  res.send(getZZZPage({ pxb7Proxies: PXB7_PROXY_URLS }));
+  const engine = getEngine('zzz');
+  const defaults = engine.getDefaults();
+  const charList = buildCharList(defaults);
+  res.send(getZZZPage({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {} }));
 });
+
+// 从默认配置构建精简角色列表（前端可视化编辑器用）
+function buildCharList(defaults) {
+  const tiers = defaults.charTiers || {};
+  const prices = defaults.charPrices || {};
+  const list = [];
+  for (const [tier, info] of Object.entries(tiers)) {
+    const chars = info.chars || [];
+    for (const name of chars) {
+      list.push({
+        name,
+        tier,
+        price: prices[name] != null ? prices[name] : (info.price || 0),
+        isHot: info.hotChars ? info.hotChars.includes(name) : false,
+      });
+    }
+  }
+  // 按价格从高到低排序
+  list.sort((a, b) => b.price - a.price);
+  return list;
+}
 
 // ============================================================
 // 平台首页 - 多游戏估价平台选择页

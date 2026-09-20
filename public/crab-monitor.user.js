@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.19.1
+// @version      3.20.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -5934,6 +5934,7 @@
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
           <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端（每天也会自动备份一次）">云端备份</button>
           <button class="mw-btn" id="mwBtnCloudRestore" title="从云端恢复监控列表（与本地合并，不覆盖本地已有行）">云端恢复</button>
+          <button class="mw-btn" id="mwBtnMigrate" title="跨脚本管理器/跨浏览器迁移：导出或导入全部数据（监控列表+配置+通知设置）">迁移</button>
           <span class="mw-input-label">≥</span>
           <input type="number" class="mw-input" id="mwInputThreshold" value="20" min="0" max="999">%
           <button class="mw-collapse-btn" id="mwBtnCollapse" title="折叠/展开">—</button>
@@ -6013,6 +6014,7 @@
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
     dom.btnCloudBackup = document.getElementById('mwBtnCloudBackup');
     dom.btnCloudRestore = document.getElementById('mwBtnCloudRestore');
+    dom.btnMigrate = document.getElementById('mwBtnMigrate');
     dom.inputThreshold = document.getElementById('mwInputThreshold');
     dom.tableBody = document.getElementById('mwTableBody');
     dom.filterBar = document.getElementById('mwFilterBar');
@@ -6745,6 +6747,9 @@
     // 云端备份/恢复（防止脚本重装/换浏览器丢失历史列表）
     dom.btnCloudBackup.addEventListener('click', function () { backupTableToCloud(false); });
     dom.btnCloudRestore.addEventListener('click', restoreTableFromCloud);
+
+    // 跨管理器/跨浏览器迁移
+    if (dom.btnMigrate) dom.btnMigrate.addEventListener('click', openMigrateDialog);
 
     dom.inputThreshold.addEventListener('change', function () {
       threshold = parseInt(dom.inputThreshold.value) || 20;
@@ -10332,6 +10337,8 @@ function openSettings() {
       }
       if (valuation.yellowInfo) yellowCount = valuation.yellowInfo.rawYellowCount || valuation.yellowInfo.yellowCount || 0;
       effectiveYellow = valuation.effectiveYellow || 0;
+      // 有效金只保留一位小数用于显示
+      if (effectiveYellow % 1 !== 0) effectiveYellow = Math.round(effectiveYellow * 10) / 10;
       if (valuation.yellowInfo) limitedYellow = valuation.yellowInfo.limitedYellow || 0;
       if (valuation.satisfiedTeams) teamCount = valuation.satisfiedTeams.length;
       level = valuation.level || 0;
@@ -10420,7 +10427,7 @@ function openSettings() {
       var yc = valuation.yellowCoeff || 1;
       var yellowLabel = '';
       if (valuation.yellowInfo && valuation.yellowInfo.tierLabel) {
-        var effYellow = valuation.yellowInfo.effectiveYellow != null ? valuation.yellowInfo.effectiveYellow : '?';
+        var effYellow = valuation.yellowInfo.effectiveYellow != null ? (valuation.yellowInfo.effectiveYellow % 1 === 0 ? valuation.yellowInfo.effectiveYellow : Math.round(valuation.yellowInfo.effectiveYellow * 10) / 10) : '?';
         yellowLabel = ' (' + effYellow + '有效金,' + valuation.yellowInfo.tierLabel + ')';
       }
       var fd = (valuation.flatDiscount && valuation.flatDiscount.value < 1) ? valuation.flatDiscount.value : 1;
@@ -11056,6 +11063,232 @@ function openSettings() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  // ============================================================
+  // 跨脚本管理器/跨浏览器迁移（GM存储数据不跟随扩展，需打包迁移）
+  // ============================================================
+
+  // 原始读写（不做JSON解析，保留字符串原样，GM优先、localStorage回退）
+  function migrateReadRaw(key) {
+    if (_gmReady) {
+      try {
+        var raw = GM_getValue(key);
+        if (raw !== undefined && raw !== null) return raw;
+      } catch (e) {}
+    }
+    try {
+      var ls = localStorage.getItem(key);
+      if (ls !== null) return ls;
+    } catch (e) {}
+    return null;
+  }
+
+  function migrateWriteRaw(key, rawStr) {
+    if (_gmReady) {
+      try { GM_setValue(key, rawStr); return true; } catch (e) {}
+    }
+    try { localStorage.setItem(key, rawStr); return true; } catch (e) {}
+    return false;
+  }
+
+  /**
+   * 导出迁移包：所有游戏的所有存储键（原始字符串）+ 全局键，打包为一个JSON
+   */
+  function exportMigrationPackage() {
+    var pkg = {
+      type: 'crab-monitor-migration',
+      format: 1,
+      exportedAt: new Date().toISOString(),
+      scriptVersion: '3.20.0',
+      global: {},
+      games: {}
+    };
+
+    // 全局键（localStorage 小数据）
+    try {
+      var cg = localStorage.getItem(GLOBAL_STORAGE_KEYS.game);
+      if (cg) pkg.global[GLOBAL_STORAGE_KEYS.game] = cg;
+    } catch (e) {}
+
+    // 各游戏的存储键
+    var totalKeys = 0;
+    Object.keys(GAME_CONFIGS).forEach(function (gameKey) {
+      var keys = buildStorageKeys(GAME_CONFIGS[gameKey].storagePrefix);
+      var gameData = {};
+      Object.keys(keys).forEach(function (k) {
+        var raw = migrateReadRaw(keys[k]);
+        if (raw !== null && raw !== undefined) {
+          gameData[k] = raw;
+          totalKeys++;
+        }
+      });
+      pkg.games[gameKey] = gameData;
+    });
+
+    var pkgStr = JSON.stringify(pkg, null, 2);
+    var blob = new Blob([pkgStr], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '监控助手迁移包_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return { keys: totalKeys, sizeKB: Math.round(pkgStr.length / 1024) };
+  }
+
+  /**
+   * 导入迁移包：校验格式后把所有键写回存储，完成后刷新页面
+   */
+  function importMigrationPackage(file, onDone) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var pkg = JSON.parse(e.target.result);
+        if (pkg.type !== 'crab-monitor-migration' || !pkg.games) {
+          onDone({ ok: false, msg: '不是有效的监控助手迁移包文件' });
+          return;
+        }
+        var written = 0;
+        var failed = 0;
+        // 写回各游戏数据
+        Object.keys(pkg.games).forEach(function (gameKey) {
+          if (!GAME_CONFIGS[gameKey]) return; // 跳过未知游戏（向前兼容）
+          var gameData = pkg.games[gameKey] || {};
+          Object.keys(gameData).forEach(function (k) {
+            if (migrateWriteRaw(buildStorageKeys(GAME_CONFIGS[gameKey].storagePrefix)[k], gameData[k])) written++;
+            else failed++;
+          });
+        });
+        // 写回全局键
+        if (pkg.global) {
+          Object.keys(pkg.global).forEach(function (gk) {
+            try { localStorage.setItem(gk, String(pkg.global[gk])); } catch (e) {}
+          });
+        }
+        onDone({ ok: true, written: written, failed: failed });
+      } catch (err) {
+        onDone({ ok: false, msg: '文件解析失败：' + err.message });
+      }
+    };
+    reader.onerror = function () { onDone({ ok: false, msg: '文件读取失败' }); };
+    reader.readAsText(file);
+  }
+
+  /**
+   * 迁移弹窗：导出全部数据 / 导入迁移包
+   */
+  function openMigrateDialog() {
+    var existing = document.getElementById('mw-migrate-modal');
+    if (existing) { existing.remove(); return; }
+
+    var overlay = document.createElement('div');
+    overlay.id = 'mw-migrate-modal';
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,0.7);' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'Noto Sans CJK SC\',sans-serif;';
+
+    var dialog = document.createElement('div');
+    dialog.style.cssText =
+      'position:relative;width:440px;max-width:92vw;max-height:80vh;overflow:auto;' +
+      'background:#1a1a2e;color:#e0e0e0;border-radius:12px;' +
+      'box-shadow:0 20px 60px rgba(0,0,0,0.6);border:1px solid #0f3460;padding:20px;';
+
+    var closeBtn = document.createElement('div');
+    closeBtn.style.cssText =
+      'position:absolute;top:10px;right:14px;width:26px;height:26px;' +
+      'line-height:26px;text-align:center;font-size:18px;color:#666;cursor:pointer;' +
+      'border-radius:6px;transition:all 0.2s;';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.title = '关闭';
+    closeBtn.onmouseenter = function () { this.style.color = '#e94560'; this.style.background = 'rgba(233,69,96,0.1)'; };
+    closeBtn.onmouseleave = function () { this.style.color = '#666'; this.style.background = 'transparent'; };
+    closeBtn.onclick = function () { overlay.remove(); };
+    dialog.appendChild(closeBtn);
+
+    var title = document.createElement('h2');
+    title.style.cssText = 'font-size:17px;color:#60a5fa;margin-bottom:6px;';
+    title.textContent = '数据迁移';
+    dialog.appendChild(title);
+
+    var desc = document.createElement('p');
+    desc.style.cssText = 'font-size:12px;color:#888;line-height:1.6;margin-bottom:16px;';
+    desc.innerHTML = '更换脚本管理器（如篡改猴→暴力猴/脚本猫）或换浏览器时，GM 存储中的数据<b style="color:#e94560;">不会自动跟过去</b>。<br>先在旧环境点「导出全部数据」得到迁移包文件，再在新环境安装本脚本后点「导入迁移包」。<br>包含：全部游戏的监控列表、估值配置、通知设置、筛选状态。';
+    dialog.appendChild(desc);
+
+    // 当前数据概览
+    var stats = document.createElement('div');
+    stats.style.cssText = 'font-size:12px;color:#a0a0b8;background:#16213e;border-radius:8px;padding:10px 12px;margin-bottom:16px;line-height:1.7;';
+    var statHtml = '';
+    Object.keys(GAME_CONFIGS).forEach(function (gameKey) {
+      var g = GAME_CONFIGS[gameKey];
+      var keys = buildStorageKeys(g.storagePrefix);
+      var tableRaw = migrateReadRaw(keys.table);
+      var count = 0;
+      if (tableRaw) { try { count = JSON.parse(tableRaw).length || 0; } catch (e) {} }
+      statHtml += '<div>' + g.name + '：监控记录 <b style="color:#e0e0e0;">' + count + '</b> 条</div>';
+    });
+    stats.innerHTML = statHtml;
+    dialog.appendChild(stats);
+
+    var btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:10px;';
+
+    var exportBtn = document.createElement('button');
+    exportBtn.textContent = '导出全部数据';
+    exportBtn.style.cssText =
+      'flex:1;padding:10px 12px;border:none;border-radius:8px;cursor:pointer;' +
+      'background:#2563eb;color:#fff;font-size:13px;font-weight:600;transition:all 0.2s;';
+    exportBtn.onmouseenter = function () { this.style.background = '#1d4ed8'; };
+    exportBtn.onmouseleave = function () { this.style.background = '#2563eb'; };
+    exportBtn.onclick = function () {
+      try {
+        var r = exportMigrationPackage();
+        exportBtn.textContent = '已导出 ' + r.keys + ' 项 / ' + r.sizeKB + 'KB';
+        exportBtn.style.background = '#16a34a';
+        setTimeout(function () { exportBtn.textContent = '导出全部数据'; exportBtn.style.background = '#2563eb'; }, 3000);
+      } catch (e) {
+        alert('导出失败：' + e.message);
+      }
+    };
+    btnRow.appendChild(exportBtn);
+
+    var importBtn = document.createElement('button');
+    importBtn.textContent = '导入迁移包';
+    importBtn.style.cssText =
+      'flex:1;padding:10px 12px;border:1px solid #0f3460;border-radius:8px;cursor:pointer;' +
+      'background:#16213e;color:#e0e0e0;font-size:13px;font-weight:600;transition:all 0.2s;';
+    importBtn.onmouseenter = function () { this.style.borderColor = '#2563eb'; };
+    importBtn.onmouseleave = function () { this.style.borderColor = '#0f3460'; };
+    importBtn.onclick = function () {
+      var fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.json,application/json';
+      fileInput.style.display = 'none';
+      fileInput.onchange = function () {
+        setTimeout(function () { if (fileInput.parentNode) fileInput.parentNode.removeChild(fileInput); }, 1000);
+        if (!fileInput.files || !fileInput.files[0]) return;
+        if (!confirm('导入将覆盖当前存储中的同名数据（监控列表、配置等），确定继续？')) return;
+        importMigrationPackage(fileInput.files[0], function (r) {
+          if (r.ok) {
+            alert('导入成功：写入 ' + r.written + ' 项' + (r.failed > 0 ? '，失败 ' + r.failed + ' 项' : '') + '。\n页面即将刷新以加载新数据。');
+            setTimeout(function () { window.location.reload(); }, 500);
+          } else {
+            alert('导入失败：' + r.msg);
+          }
+        });
+      };
+      document.body.appendChild(fileInput);
+      fileInput.click();
+    };
+    btnRow.appendChild(importBtn);
+
+    dialog.appendChild(btnRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
   }
 
   // ============================================================

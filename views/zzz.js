@@ -3,6 +3,8 @@
 function getPageHTML(options) {
   options = options || {};
   const pxb7Proxies = options.pxb7Proxies || [];
+  const charList = options.charList || [];
+  const sigWeapons = options.sigWeapons || {};
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -168,6 +170,489 @@ function getPageHTML(options) {
       font-weight: 600;
       box-shadow: 0 4px 18px var(--accent-glow);
     }
+
+    /* 可视化编辑器 */
+    .visual-editor {
+      display: none;
+    }
+    .visual-editor.active {
+      display: block;
+    }
+    .ve-section-title {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .ve-section-title .ve-count {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .ve-char-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 18px;
+      min-height: 60px;
+    }
+    .ve-char-card {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px 10px 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 150px;
+    }
+    .ve-char-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.2);
+    }
+    .ve-char-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #4a5568, #2d3748);
+    }
+    .ve-char-avatar.S { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .ve-char-avatar.A { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+    .ve-char-avatar.B { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .ve-char-avatar.C { background: linear-gradient(135deg, #10b981, #059669); }
+    .ve-char-avatar.D { background: linear-gradient(135deg, #64748b, #475569); }
+    .ve-char-avatar.E { background: linear-gradient(135deg, #4a5568, #2d3748); }
+    .ve-char-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .ve-char-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ve-char-meta {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .ve-char-meta .tag {
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .ve-char-meta .tag.const {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+    }
+    .ve-char-meta .tag.sig {
+      background: rgba(96, 165, 250, 0.15);
+      color: #60a5fa;
+    }
+    .ve-char-meta .tag.price {
+      color: #4ade80;
+      font-weight: 600;
+    }
+    .ve-char-remove {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ef4444;
+      color: #fff;
+      font-size: 12px;
+      line-height: 18px;
+      text-align: center;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+      border: 2px solid var(--bg-soft);
+    }
+    .ve-char-card:hover .ve-char-remove {
+      opacity: 1;
+    }
+    .ve-add-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 12px;
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 18px;
+    }
+    .ve-add-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(37, 99, 235, 0.05);
+    }
+    .ve-resource-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .ve-resource-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ve-resource-item label {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .ve-resource-item input {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg-soft);
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .ve-resource-item input:focus {
+      border-color: var(--accent);
+    }
+    .ve-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .ve-actions .ve-btn {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg-soft);
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .ve-actions .ve-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .ve-actions .ve-btn.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+      color: #fff;
+      border-color: transparent;
+      font-weight: 600;
+    }
+    .ve-actions .ve-btn.primary:hover {
+      filter: brightness(1.1);
+      color: #fff;
+    }
+
+    /* 角色选择器弹层 */
+    .char-picker {
+      position: absolute;
+      z-index: 1000;
+      width: 320px;
+      max-height: 400px;
+      overflow-y: auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      padding: 12px;
+    }
+    .char-picker-search {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg-soft);
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 10px;
+    }
+    .char-picker-search:focus {
+      border-color: var(--accent);
+    }
+    .char-picker-tiers {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .char-picker-tier-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .char-picker-tier-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .char-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .char-picker-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg-soft);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .char-picker-item:hover {
+      border-color: var(--accent);
+      background: rgba(37, 99, 235, 0.1);
+    }
+    .char-picker-item.selected {
+      border-color: #4ade80;
+      background: rgba(74, 222, 128, 0.1);
+    }
+    .char-picker-item .cp-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      background: linear-gradient(135deg, #4a5568, #2d3748);
+    }
+    .char-picker-item .cp-avatar.S { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .char-picker-item .cp-avatar.A { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+    .char-picker-item .cp-avatar.B { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .char-picker-item .cp-avatar.C { background: linear-gradient(135deg, #10b981, #059669); }
+    .char-picker-item .cp-avatar.D { background: linear-gradient(135deg, #64748b, #475569); }
+    .char-picker-item .cp-name {
+      font-size: 11px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .char-picker-item .cp-price {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    /* 角色编辑弹窗（命座/专武） */
+    .char-edit-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .char-edit-dialog {
+      width: 320px;
+      max-width: 90vw;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .char-edit-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .char-edit-header h3 {
+      font-size: 16px;
+      color: var(--text);
+    }
+    .char-edit-field {
+      margin-bottom: 14px;
+    }
+    .char-edit-field label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .const-slider {
+      display: flex;
+      gap: 6px;
+    }
+    .const-btn {
+      flex: 1;
+      padding: 8px 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg-soft);
+      color: var(--text-dim);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .const-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .const-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .sig-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg-soft);
+      cursor: pointer;
+    }
+    .sig-toggle .sig-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .sig-toggle .sig-name {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 500;
+    }
+    .sig-toggle .sig-desc {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .sig-switch {
+      width: 40px;
+      height: 22px;
+      border-radius: 11px;
+      background: var(--line);
+      position: relative;
+      transition: background 0.2s;
+    }
+    .sig-switch.on {
+      background: var(--accent);
+    }
+    .sig-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s;
+    }
+    .sig-switch.on::after {
+      transform: translateX(18px);
+    }
+    .refine-select {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .refine-btn {
+      flex: 1;
+      padding: 6px 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg-soft);
+      color: var(--text-dim);
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .refine-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .refine-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .char-edit-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .char-edit-actions button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .char-edit-actions .ce-cancel {
+      background: var(--bg-soft);
+      color: var(--text-dim);
+      border: 1px solid var(--line);
+    }
+    .char-edit-actions .ce-confirm {
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+      color: #fff;
+      font-weight: 600;
+    }
+    .char-edit-actions .ce-delete {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .char-edit-actions .ce-delete:hover {
+       background: rgba(239, 68, 68, 0.2);
+     }
+
 
     /* Input area */
     .input-card {
@@ -485,6 +970,16 @@ function getPageHTML(options) {
       .help-popup { max-width: calc(100vw - 30px) !important; font-size: 12px; padding: 12px 14px; }
       #stats-modal > div { max-width: 95% !important; margin: 10px auto !important; padding: 14px !important; }
       #stats-modal-content > div[style*="grid"] { grid-template-columns: repeat(2, 1fr) !important; }
+      /* 可视化编辑器移动端 */
+      .tab-btn { font-size: 12px; padding: 10px 6px; letter-spacing: 0; }
+      .ve-char-card { min-width: 130px; flex: 1 1 calc(50% - 5px); padding: 8px 10px 8px 8px; }
+      .ve-char-avatar { width: 34px; height: 34px; font-size: 14px; }
+      .ve-char-name { font-size: 13px; }
+      .ve-char-remove { opacity: 1; }
+      .ve-resource-grid { grid-template-columns: repeat(2, 1fr); }
+      .ve-actions { flex-direction: column; }
+      .char-picker { width: calc(100vw - 30px); max-width: 320px; }
+      .char-picker-grid { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 375px) {
       .result-summary .big-value { font-size: 26px; }
@@ -606,6 +1101,7 @@ function getPageHTML(options) {
     <div class="tabs rise d1">
       <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">链接查询</button>
       <button class="tab-btn" id="tab-paste" onclick="switchTab('paste')">粘贴描述估价</button>
+      <button class="tab-btn" id="tab-visual" onclick="switchTab('visual')">可视化编辑</button>
     </div>
 
     <!-- 估值规则设置入口 -->
@@ -637,6 +1133,43 @@ function getPageHTML(options) {
         </div>
       </div>
     </div>
+
+    <!-- 可视化编辑 -->
+    <div class="input-card" id="panel-visual" style="display:none;">
+      <!-- 标价 -->
+      <div class="ve-section-title">标价（元）</div>
+      <div style="margin-bottom:18px;">
+        <input type="number" id="ve-price" placeholder="输入标价（可选）" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--text);font-size:14px;font-family:inherit;outline:none;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'">
+      </div>
+
+      <!-- 角色列表 -->
+      <div class="ve-section-title">
+        <span>角色列表</span>
+        <span class="ve-count" id="ve-char-count">0 个角色</span>
+      </div>
+      <div class="ve-char-grid" id="ve-char-grid"></div>
+      <button class="ve-add-btn" onclick="openCharPicker(this)">+ 添加角色</button>
+
+      <!-- 其他资源 -->
+      <div class="ve-section-title" style="margin-top:8px;">其他资源</div>
+      <div class="ve-resource-grid">
+        <div class="ve-resource-item"><label>星声</label><input type="number" id="ve-starsound" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>月相</label><input type="number" id="ve-moonphase" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>余波珊瑚</label><input type="number" id="ve-coral" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>黄数（限定金）</label><input type="number" id="ve-yellow" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>服饰</label><input type="number" id="ve-outfit" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>车架模组</label><input type="number" id="ve-frame" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>总抽数</label><input type="number" id="ve-pulls" min="0" placeholder="0" oninput="veOnChange()"></div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="ve-actions">
+        <button class="ve-btn" onclick="veGenerateDesc()">生成描述文本</button>
+        <button class="ve-btn" onclick="veImportFromPaste()">从描述导入</button>
+        <button class="ve-btn primary" onclick="veEvaluate()">立即估价</button>
+      </div>
+    </div>
+
 
     <!-- 结果 -->
     <div class="result-card" id="result">
@@ -694,6 +1227,8 @@ function getPageHTML(options) {
   <script>
     // 螃蟹网代理列表（客户端抓取用，多代理轮询降低被封风险）
     window._pxb7Proxies = ${JSON.stringify(pxb7Proxies)};
+    window._charList = ${JSON.stringify(charList)};
+    window._sigWeapons = ${JSON.stringify(sigWeapons)};
   </script>
   <script>
     // 切换估值设置面板到绝区零上下文（存储键 zzz_eval_weights，默认配置走 zzz 引擎）
@@ -839,8 +1374,10 @@ function getPageHTML(options) {
       currentTab = tab;
       document.getElementById('tab-lookup').classList.toggle('active', tab === 'lookup');
       document.getElementById('tab-paste').classList.toggle('active', tab === 'paste');
+      document.getElementById('tab-visual').classList.toggle('active', tab === 'visual');
       document.getElementById('panel-lookup').style.display = tab === 'lookup' ? '' : 'none';
       document.getElementById('panel-paste').style.display = tab === 'paste' ? '' : 'none';
+      document.getElementById('panel-visual').style.display = tab === 'visual' ? '' : 'none';
       // 清空结果
       document.getElementById('result').classList.remove('show');
       document.getElementById('status-msg').innerHTML = '';
@@ -1530,6 +2067,538 @@ function getPageHTML(options) {
     // 初始化
     // ============================================================
     renderHistory();
+    // ============================================================
+    // 可视化编辑器
+    // ============================================================
+    var VE_CHARS = [];      // 角色列表 [{name, tier, price, const, hasSig, sigRefine}]
+    var VE_DEBOUNCE = null;
+    var VE_EVALUATING = false;
+
+    function veGetCharList() {
+      return window._charList || [];
+    }
+    function veGetSigWeapons() {
+      return window._sigWeapons || {};
+    }
+
+    // 渲染角色卡片列表
+    function veRenderChars() {
+      var grid = document.getElementById('ve-char-grid');
+      if (!grid) return;
+      document.getElementById('ve-char-count').textContent = VE_CHARS.length + ' 个角色';
+      if (VE_CHARS.length === 0) {
+        grid.innerHTML = '<div style="width:100%;text-align:center;padding:20px 0;color:var(--text-dim);font-size:12px;">还没有添加角色，点击下方按钮添加</div>';
+        return;
+      }
+      // 按价格从高到低排序
+      var sorted = [...VE_CHARS].sort((a, b) => (b.price || 0) - (a.price || 0));
+      grid.innerHTML = sorted.map(function(c) {
+        var tier = c.tier || 'E';
+        var firstChar = c.name.charAt(0);
+        var constStr = c.const >= 6 ? '满命' : (c.const > 0 ? c.const + '命' : '零命');
+        var sigStr = c.hasSig ? ('+专武' + (c.sigRefine > 1 ? '精' + c.sigRefine : '')) : '';
+        var priceStr = '¥' + (c.price || 0);
+        return (
+          '<div class="ve-char-card" onclick="veOpenCharEdit(\\'' + c.name.replace(/'/g, "\\\\'") + '\\')">' +
+            '<div class="ve-char-avatar ' + tier + '">' + firstChar + '</div>' +
+            '<div class="ve-char-info">' +
+              '<div class="ve-char-name">' + c.name + '</div>' +
+              '<div class="ve-char-meta">' +
+                '<span class="tag const">' + constStr + '</span>' +
+                (c.hasSig ? '<span class="tag sig">' + sigStr + '</span>' : '') +
+                '<span class="tag price">' + priceStr + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="ve-char-remove" onclick="event.stopPropagation();veRemoveChar(\\'' + c.name.replace(/'/g, "\\\\'") + '\\')" title="移除">×</div>' +
+          '</div>'
+        );
+      }).join('');
+    }
+
+    // 添加角色
+    function veAddChar(name) {
+      var list = veGetCharList();
+      var info = list.find(function(c) { return c.name === name; });
+      if (!info) return;
+      // 已存在则跳过
+      if (VE_CHARS.find(function(c) { return c.name === name; })) return;
+      var sigMap = veGetSigWeapons();
+      VE_CHARS.push({
+        name: name,
+        tier: info.tier,
+        price: info.price,
+        const: 0,
+        hasSig: false,
+        sigRefine: 1,
+        sigName: sigMap[name] || '',
+      });
+      veRenderChars();
+      veOnChange();
+    }
+
+    // 移除角色
+    function veRemoveChar(name) {
+      VE_CHARS = VE_CHARS.filter(function(c) { return c.name !== name; });
+      veRenderChars();
+      veOnChange();
+    }
+
+    // 打开角色编辑弹窗
+    function veOpenCharEdit(name) {
+      var c = VE_CHARS.find(function(x) { return x.name === name; });
+      if (!c) return;
+      var existing = document.getElementById('ve-char-edit-modal');
+      if (existing) existing.remove();
+
+      var modal = document.createElement('div');
+      modal.id = 've-char-edit-modal';
+      modal.className = 'char-edit-modal';
+
+      var tier = c.tier || 'E';
+      var firstChar = c.name.charAt(0);
+      var sigName = c.sigName || '该角色暂无专武';
+
+      var html =
+        '<div class="char-edit-dialog">' +
+          '<div class="char-edit-header">' +
+            '<div class="ve-char-avatar ' + tier + '" style="width:44px;height:44px;font-size:18px;">' + firstChar + '</div>' +
+            '<h3>' + c.name + '</h3>' +
+          '</div>' +
+
+          '<div class="char-edit-field">' +
+            '<label>命座</label>' +
+            '<div class="const-slider">' +
+              [0,1,2,3,4,5,6].map(function(n) {
+                var label = n >= 6 ? '满命' : (n === 0 ? '零命' : n + '命');
+                return '<button class="const-btn ' + (c.const === n ? 'active' : '') + '" data-const="' + n + '">' + label + '</button>';
+              }).join('') +
+            '</div>' +
+          '</div>' +
+
+          '<div class="char-edit-field">' +
+            '<label>专武</label>' +
+            '<div class="sig-toggle" id="ve-sig-toggle">' +
+              '<div class="sig-info">' +
+                '<div class="sig-name">' + sigName + '</div>' +
+                '<div class="sig-desc">' + (c.sigName ? '点击开启/关闭专武' : '暂无专属武器数据') + '</div>' +
+              '</div>' +
+              '<div class="sig-switch ' + (c.hasSig ? 'on' : '') + '"></div>' +
+            '</div>' +
+            (c.sigName && c.hasSig ?
+              '<div class="refine-select" id="ve-refine-select">' +
+                [1,2,3,4,5].map(function(r) {
+                  return '<button class="refine-btn ' + (c.sigRefine === r ? 'active' : '') + '" data-refine="' + r + '">精' + r + '</button>';
+                }).join('') +
+              '</div>' : '') +
+          '</div>' +
+
+          '<div class="char-edit-actions">' +
+            '<button class="ce-delete" onclick="veDeleteFromEdit()">删除角色</button>' +
+            '<button class="ce-cancel" onclick="veCloseEdit()">取消</button>' +
+            '<button class="ce-confirm" onclick="veConfirmEdit()">确定</button>' +
+          '</div>' +
+        '</div>';
+
+      modal.innerHTML = html;
+      document.body.appendChild(modal);
+
+      // 存储当前编辑的角色名
+      modal.dataset.editingName = name;
+      var editingConst = c.const;
+      var editingHasSig = c.hasSig;
+      var editingSigRefine = c.sigRefine;
+
+      // 命座按钮
+      modal.querySelectorAll('.const-btn').forEach(function(btn) {
+        btn.onclick = function() {
+          editingConst = parseInt(btn.dataset.const);
+          modal.querySelectorAll('.const-btn').forEach(function(b) {
+            b.classList.toggle('active', parseInt(b.dataset.const) === editingConst);
+          });
+        };
+      });
+
+      // 专武开关
+      var sigToggle = modal.querySelector('#ve-sig-toggle');
+      if (sigToggle && c.sigName) {
+        sigToggle.onclick = function() {
+          editingHasSig = !editingHasSig;
+          modal.querySelector('.sig-switch').classList.toggle('on', editingHasSig);
+          // 显示/隐藏精炼选择
+          var refineSel = modal.querySelector('#ve-refine-select');
+          if (editingHasSig && !refineSel) {
+            var newRefine = document.createElement('div');
+            newRefine.className = 'refine-select';
+            newRefine.id = 've-refine-select';
+            newRefine.innerHTML = [1,2,3,4,5].map(function(r) {
+              return '<button class="refine-btn ' + (editingSigRefine === r ? 'active' : '') + '" data-refine="' + r + '">精' + r + '</button>';
+            }).join('');
+            sigToggle.parentNode.insertBefore(newRefine, sigToggle.nextSibling);
+            newRefine.querySelectorAll('.refine-btn').forEach(function(rb) {
+              rb.onclick = function() {
+                editingSigRefine = parseInt(rb.dataset.refine);
+                newRefine.querySelectorAll('.refine-btn').forEach(function(b) {
+                  b.classList.toggle('active', parseInt(b.dataset.refine) === editingSigRefine);
+                });
+              };
+            });
+          } else if (!editingHasSig && refineSel) {
+            refineSel.remove();
+          }
+        };
+      }
+
+      // 精炼按钮（如果已存在）
+      var refineButtons = modal.querySelectorAll('.refine-btn');
+      refineButtons.forEach(function(rb) {
+        rb.onclick = function() {
+          editingSigRefine = parseInt(rb.dataset.refine);
+          modal.querySelectorAll('.refine-btn').forEach(function(b) {
+            b.classList.toggle('active', parseInt(b.dataset.refine) === editingSigRefine);
+          });
+        };
+      });
+
+      // 关闭
+      modal.onclick = function(e) {
+        if (e.target === modal) modal.remove();
+      };
+
+      // 全局函数
+      window.veCloseEdit = function() { modal.remove(); };
+      window.veDeleteFromEdit = function() {
+        if (confirm('确定删除 ' + name + ' 吗？')) {
+          veRemoveChar(name);
+          modal.remove();
+        }
+      };
+      window.veConfirmEdit = function() {
+        var target = VE_CHARS.find(function(x) { return x.name === name; });
+        if (target) {
+          target.const = editingConst;
+          target.hasSig = editingHasSig;
+          target.sigRefine = editingHasSig ? editingSigRefine : 1;
+        }
+        veRenderChars();
+        veOnChange();
+        modal.remove();
+      };
+    }
+
+    // 角色选择器
+    var _charPickerEl = null;
+    var _charPickerTier = 'all';
+    var _charPickerSearch = '';
+
+    function openCharPicker(anchorBtn) {
+      if (_charPickerEl) { _charPickerEl.remove(); _charPickerEl = null; return; }
+
+      var list = veGetCharList();
+      var sigMap = veGetSigWeapons();
+
+      var picker = document.createElement('div');
+      picker.className = 'char-picker';
+      picker.id = 'char-picker';
+
+      // 获取所有级别
+      var tiers = ['all', ...new Set(list.map(function(c) { return c.tier; }).filter(Boolean).sort())];
+
+      picker.innerHTML =
+        '<input type="text" class="char-picker-search" id="cp-search" placeholder="搜索角色名...">' +
+        '<div class="char-picker-tiers" id="cp-tiers">' +
+          tiers.map(function(t) {
+            return '<button class="char-picker-tier-btn ' + (t === 'all' ? 'active' : '') + '" data-tier="' + t + '">' +
+              (t === 'all' ? '全部' : t + '级') + '</button>';
+          }).join('') +
+        '</div>' +
+        '<div class="char-picker-grid" id="cp-grid"></div>';
+
+      // 定位在按钮下方
+      var rect = anchorBtn.getBoundingClientRect();
+      picker.style.top = (window.scrollY + rect.bottom + 8) + 'px';
+      picker.style.left = (window.scrollX + rect.left) + 'px';
+
+      document.body.appendChild(picker);
+      _charPickerEl = picker;
+
+      // 渲染角色网格
+      function renderGrid() {
+        var grid = picker.querySelector('#cp-grid');
+        var filtered = list.filter(function(c) {
+          if (_charPickerTier !== 'all' && c.tier !== _charPickerTier) return false;
+          if (_charPickerSearch && !c.name.toLowerCase().includes(_charPickerSearch.toLowerCase())) return false;
+          return true;
+        });
+        if (filtered.length === 0) {
+          grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px 0;color:var(--text-dim);font-size:12px;">未找到匹配的角色</div>';
+          return;
+        }
+        grid.innerHTML = filtered.map(function(c) {
+          var selected = VE_CHARS.some(function(vc) { return vc.name === c.name; });
+          var tier = c.tier || 'E';
+          return (
+            '<div class="char-picker-item ' + (selected ? 'selected' : '') + '" data-name="' + c.name + '">' +
+              '<div class="cp-avatar ' + tier + '">' + c.name.charAt(0) + '</div>' +
+              '<div class="cp-name">' + c.name + '</div>' +
+              '<div class="cp-price">¥' + c.price + '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        // 点击添加/移除
+        grid.querySelectorAll('.char-picker-item').forEach(function(item) {
+          item.onclick = function() {
+            var name = item.dataset.name;
+            var existing = VE_CHARS.find(function(vc) { return vc.name === name; });
+            if (existing) {
+              veRemoveChar(name);
+            } else {
+              veAddChar(name);
+            }
+            renderGrid();
+          };
+        });
+      }
+
+      // 搜索
+      picker.querySelector('#cp-search').oninput = function(e) {
+        _charPickerSearch = e.target.value;
+        renderGrid();
+      };
+      picker.querySelector('#cp-search').focus();
+
+      // 级别筛选
+      picker.querySelectorAll('.char-picker-tier-btn').forEach(function(btn) {
+        btn.onclick = function() {
+          _charPickerTier = btn.dataset.tier;
+          picker.querySelectorAll('.char-picker-tier-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.tier === _charPickerTier);
+          });
+          renderGrid();
+        };
+      });
+
+      renderGrid();
+
+      // 点击外部关闭
+      setTimeout(function() {
+        document.addEventListener('click', closePickerOnOutside);
+      }, 10);
+      function closePickerOnOutside(e) {
+        if (!picker.contains(e.target) && e.target !== anchorBtn && !anchorBtn.contains(e.target)) {
+          picker.remove();
+          _charPickerEl = null;
+          document.removeEventListener('click', closePickerOnOutside);
+        }
+      }
+    }
+
+    // 数据变动时防抖触发估价
+    function veOnChange() {
+      if (VE_DEBOUNCE) clearTimeout(VE_DEBOUNCE);
+      VE_DEBOUNCE = setTimeout(function() {
+        if (VE_CHARS.length > 0) {
+          veEvaluate(true);
+        }
+      }, 500);
+    }
+
+    // 收集结构化数据
+    function veGetInfo() {
+      var info = {
+        characters: VE_CHARS.map(function(c) {
+          return { name: c.name, const: c.const, tier: c.tier, price: c.price, isHot: c.isHot };
+        }),
+        weapons: [],
+        starSound: parseInt(document.getElementById('ve-starsound').value) || 0,
+        moonPhase: parseInt(document.getElementById('ve-moonphase').value) || 0,
+        aftermathCoral: parseInt(document.getElementById('ve-coral').value) || 0,
+        yellowCount: parseInt(document.getElementById('ve-yellow').value) || 0,
+        outfitCount: parseInt(document.getElementById('ve-outfit').value) || 0,
+        vehicleFrameCount: parseInt(document.getElementById('ve-frame').value) || 0,
+        pulls: parseInt(document.getElementById('ve-pulls').value) || 0,
+      };
+      // 从有专武的角色生成武器列表
+      VE_CHARS.forEach(function(c) {
+        if (c.hasSig && c.sigName) {
+          info.weapons.push({ name: c.sigName, refine: c.sigRefine || 1 });
+        }
+      });
+      return info;
+    }
+
+    // 估价
+    async function veEvaluate(silent) {
+      if (VE_CHARS.length === 0) {
+        if (!silent) veShowError('请先添加至少一个角色');
+        return;
+      }
+      VE_EVALUATING = true;
+      if (!silent) veShowLoading('估价中...');
+
+      var info = veGetInfo();
+      // 生成描述文本再调用估价接口（复用现有接口）
+      var desc = veGenerateDescText(info);
+      var price = parseFloat(document.getElementById('ve-price').value) || 0;
+
+      try {
+        const resp = await fetch('/api/x9k2-eval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            showTitle: desc,
+            priceInCents: Math.round(price * 100),
+            customWeights: window._customWeights || null, game: 'zzz',
+          }),
+        });
+        const result = await resp.json();
+        if (result.success) {
+          veClearStatus();
+          showResult(result.data);
+        } else {
+          veShowError(result.error || '估价失败');
+        }
+      } catch (e) {
+        veShowError('网络错误：' + e.message);
+      } finally {
+        VE_EVALUATING = false;
+      }
+    }
+
+    function veShowLoading(text) {
+      var el = document.getElementById('status-msg');
+      if (el) el.innerHTML = '<div class="loading">' + text + '</div>';
+    }
+    function veShowError(text) {
+      var el = document.getElementById('status-msg');
+      if (el) el.innerHTML = '<div class="error-msg">' + text + '</div>';
+    }
+    function veShowSuccess(text) {
+      var el = document.getElementById('status-msg');
+      if (el) el.innerHTML = '<div class="success-msg" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;padding:10px 14px;border-radius:8px;font-size:13px;text-align:center;">' + text + '</div>';
+    }
+    function veClearStatus() {
+      var el = document.getElementById('status-msg');
+      if (el) el.innerHTML = '';
+    }
+
+    // 生成描述文本（用现有接口的话直接传文本，不依赖 generateDescription 函数）
+    function veGenerateDescText(info) {
+      info = info || veGetInfo();
+      var lines = [];
+      // 角色
+      if (info.characters && info.characters.length > 0) {
+        var sorted = [...info.characters].sort((a, b) => (b.price || 0) - (a.price || 0));
+        var charStr = sorted.map(function(c) {
+          if (c.const >= 6) return '满命' + c.name;
+          if (c.const > 0) return c.const + '命' + c.name;
+          return c.name;
+        }).join('、');
+        lines.push('【角色】' + charStr);
+      }
+      // 武器
+      if (info.weapons && info.weapons.length > 0) {
+        var weaponStr = info.weapons.map(function(w) {
+          return (w.refine > 1 ? '精' + w.refine : '') + w.name;
+        }).join('、');
+        lines.push('【武器】' + weaponStr);
+      }
+      // 资源
+      if (info.starSound) lines.push('【星声】' + info.starSound);
+      if (info.moonPhase) lines.push('【月相】' + info.moonPhase);
+      if (info.aftermathCoral) lines.push('【余波珊瑚】' + info.aftermathCoral);
+      if (info.yellowCount) lines.push('【黄数】' + info.yellowCount);
+      if (info.outfitCount) lines.push('【服饰】' + info.outfitCount + '个');
+      if (info.vehicleFrameCount) lines.push('【车架模组】' + info.vehicleFrameCount + '个');
+      if (info.pulls && !info.yellowCount) lines.push('【总抽数】' + info.pulls);
+      return lines.join('\\n');
+    }
+
+    // 生成描述文本按钮
+    function veGenerateDesc() {
+      var desc = veGenerateDescText();
+      if (!desc) {
+        veShowError('暂无数据可生成');
+        return;
+      }
+      // 复制到剪贴板
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(desc).then(function() {
+          veShowSuccess('描述文本已复制到剪贴板');
+        }).catch(function() {
+          prompt('生成的描述文本（Ctrl+C复制）：', desc);
+        });
+      } else {
+        prompt('生成的描述文本（Ctrl+C复制）：', desc);
+      }
+    }
+
+    // 从描述导入
+    function veImportFromPaste() {
+      var desc = prompt('粘贴描述文本：');
+      if (!desc) return;
+      // 调用估价接口解析，拿到结构化数据后回填
+      fetch('/api/x9k2-eval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: window._customWeights || null, game: 'zzz' }),
+      }).then(function(r) { return r.json(); }).then(function(result) {
+        if (result.success && result.data && result.data.info) {
+          var info = result.data.info;
+          // 回填角色
+          VE_CHARS = [];
+          var sigMap = veGetSigWeapons();
+          var charList = veGetCharList();
+          var weaponNames = (info.weapons || []).map(function(w) { return w.name; });
+          var weaponRefines = {};
+          (info.weapons || []).forEach(function(w) { weaponRefines[w.name] = w.refine || 1; });
+
+          if (info.characters && info.characters.length > 0) {
+            info.characters.forEach(function(c) {
+              var listInfo = charList.find(function(lc) { return lc.name === c.name; });
+              var sigName = sigMap[c.name] || '';
+              var hasSig = false;
+              var sigRefine = 1;
+              if (sigName && weaponNames.some(function(wn) { return wn === sigName || wn.includes(sigName) || sigName.includes(wn); })) {
+                hasSig = true;
+                // 找对应的精炼等级
+                for (var wn in weaponRefines) {
+                  if (wn === sigName || wn.includes(sigName) || sigName.includes(wn)) {
+                    sigRefine = weaponRefines[wn] || 1;
+                    break;
+                  }
+                }
+              }
+              VE_CHARS.push({
+                name: c.name,
+                tier: c.tier || (listInfo ? listInfo.tier : 'E'),
+                price: c.price || (listInfo ? listInfo.price : 0),
+                const: c.const || 0,
+                hasSig: hasSig,
+                sigRefine: sigRefine,
+                sigName: sigName,
+              });
+            });
+          }
+          // 回填资源
+          document.getElementById('ve-starsound').value = info.starSound || '';
+          document.getElementById('ve-moonphase').value = info.moonPhase || '';
+          document.getElementById('ve-coral').value = info.aftermathCoral || '';
+          document.getElementById('ve-yellow').value = info.yellowCount || '';
+          document.getElementById('ve-outfit').value = info.outfitCount || '';
+          document.getElementById('ve-frame').value = info.vehicleFrameCount || '';
+          document.getElementById('ve-pulls').value = info.pulls || '';
+
+          veRenderChars();
+          veEvaluate(true);
+          veShowSuccess('导入成功，共 ' + VE_CHARS.length + ' 个角色');
+        } else {
+          veShowError('导入失败：' + (result.error || '未知错误'));
+        }
+      }).catch(function(e) {
+        veShowError('网络错误：' + e.message);
+      });
+    }
   </script>
 </body>
 </html>`;

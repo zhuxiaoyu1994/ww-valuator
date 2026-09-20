@@ -1541,6 +1541,149 @@ function generateShortDescription(evaluation) {
   return desc;
 }
 
+/**
+ * 从结构化数据生成完整描述文本（反向于 parseAccountInfo）
+ * 生成的格式与 parseAccountInfo 可解析的格式完全一致，支持双向互转
+ * @param {object} info - parseAccountInfo 返回的 info 对象（或等价结构）
+ * @param {object} [options] - 可选配置
+ * @param {boolean} [options.includeHeader=true] - 是否包含【角色】【武器】等段落标题
+ * @param {boolean} [options.groupByTier=false] - 角色是否按级别分组
+ * @returns {string} 完整描述文本
+ */
+function generateDescription(info, options) {
+  info = info || {};
+  options = options || {};
+  const includeHeader = options.includeHeader !== false;
+  const groupByTier = options.groupByTier === true;
+  const lines = [];
+
+  // ---- 角色 ----
+  const chars = info.characters || [];
+  if (chars.length > 0) {
+    let charStr;
+    if (groupByTier) {
+      // 按级别分组（S/A/B/C/D/E），高级别在前
+      const tierOrder = ['S', 'A', 'B', 'C', 'D', 'E'];
+      const groups = {};
+      for (const c of chars) {
+        const t = c.tier || 'E';
+        if (!groups[t]) groups[t] = [];
+        groups[t].push(c);
+      }
+      const groupParts = [];
+      for (const t of tierOrder) {
+        if (groups[t] && groups[t].length > 0) {
+          const names = groups[t].map(c => formatCharName(c)).join('、');
+          groupParts.push(`【${t}级】${names}`);
+        }
+      }
+      charStr = groupParts.join(' ');
+    } else {
+      // 扁平列表，按价值从高到低
+      const sorted = [...chars].sort((a, b) => (b.price || 0) - (a.price || 0));
+      charStr = sorted.map(c => formatCharName(c)).join('、');
+    }
+    lines.push(includeHeader ? '【角色】' + charStr : charStr);
+  }
+
+  // ---- 武器 ----
+  // 区分专武和非专武，专武对应角色名，非专武直接列武器名
+  const weapons = info.weapons || [];
+  if (weapons.length > 0) {
+    const sigWeaponsMap = getSigWeaponsMap();
+    // 专武：角色名+专武标记（武器名也带上）
+    const sigParts = [];
+    const otherParts = [];
+    for (const w of weapons) {
+      let isSig = false;
+      let sigChar = null;
+      for (const [charName, sigName] of Object.entries(sigWeaponsMap)) {
+        if (sigName === w.name || w.name.includes(sigName) || sigName.includes(w.name)) {
+          // 且该角色在角色列表中
+          if (chars.some(c => c.name === charName)) {
+            isSig = true;
+            sigChar = charName;
+            break;
+          }
+        }
+      }
+      const refineStr = w.refine && w.refine > 1 ? `精${w.refine}` : '';
+      if (isSig) {
+        sigParts.push(refineStr + w.name);
+      } else {
+        otherParts.push(refineStr + w.name);
+      }
+    }
+    const allWeaponParts = [...sigParts, ...otherParts];
+    if (allWeaponParts.length > 0) {
+      lines.push(includeHeader ? '【武器】' + allWeaponParts.join('、') : allWeaponParts.join('、'));
+    }
+  }
+
+  // ---- 资源数值 ----
+  const resourceFields = [
+    { key: 'starSound', label: '星声' },
+    { key: 'moonPhase', label: '月相' },
+    { key: 'aftermathCoral', label: '余波珊瑚' },
+    { key: 'floatGoldRipple', label: '浮金波纹' },
+    { key: 'castTideRipple', label: '铸潮波纹' },
+  ];
+  for (const f of resourceFields) {
+    const v = info[f.key];
+    if (v && v > 0) {
+      lines.push(`【${f.label}】${v}`);
+    }
+  }
+
+  // ---- 黄数 ----
+  if (info.yellowCount && info.yellowCount > 0) {
+    lines.push(`【黄数】${info.yellowCount}`);
+  }
+
+  // ---- 抽数（仅当明确设置时）----
+  if (info.pulls && info.pulls > 0 && !info.yellowCount) {
+    lines.push(`【总抽数】${info.pulls}`);
+  }
+
+  // ---- 服饰/摩托/车架/涂装 ----
+  const listFields = [
+    { key: 'outfitCount', label: '服饰' },
+    { key: 'motoCount', label: '摩托' },
+    { key: 'motoAccessoryCount', label: '摩托饰品' },
+    { key: 'vehicleFrameCount', label: '车架模组' },
+    { key: 'paintCount', label: '涂装' },
+  ];
+  for (const f of listFields) {
+    const v = info[f.key];
+    if (v && v > 0) {
+      lines.push(`【${f.label}】${v}个`);
+    }
+  }
+
+  // ---- 等级（如果有）----
+  if (info.level && info.level > 0) {
+    lines.push(`【等级】${info.level}`);
+  }
+
+  return lines.join('\n');
+}
+
+// 辅助：格式化单个角色名（带命座前缀）
+function formatCharName(c) {
+  const constNum = c.const || 0;
+  if (constNum >= 6) return `满${CONST_UNIT_DISPLAY}${c.name}`;
+  if (constNum > 0) return `${constNum}${CONST_UNIT_DISPLAY}${c.name}`;
+  return c.name;
+}
+
+// 辅助：获取当前生效的专武映射（含自定义覆盖）
+function getSigWeaponsMap() {
+  if (_sigWeaponsOverride) {
+    return Object.assign({}, SIG_WEAPONS, _sigWeaponsOverride);
+  }
+  return SIG_WEAPONS;
+}
+
   return {
     CONFIG_VERSION,
     CHAR_TIERS, SIG_WEAPONS, FULL_CONST_WEIGHT, CHAR_LOOKUP, CHAR_ALIASES,
@@ -1554,7 +1697,7 @@ function generateShortDescription(evaluation) {
     findCharsInText, parseWeapons, extractYellowCount, extractListCount,
     extractListItems, checkHasSigWeapon, calcConstPremium, getCharValue,
     calculatePullValue, getYellowCoeff, getEffectiveYellowCoeff, calculateValue,
-    evaluateWithPrice, generateShortDescription, normalizePlatformText,
+    evaluateWithPrice, generateShortDescription, generateDescription, normalizePlatformText,
   };
 }
 
