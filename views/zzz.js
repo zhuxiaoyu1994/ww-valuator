@@ -2076,45 +2076,72 @@ function getPageHTML(options) {
     var VE_DEBOUNCE = null;
     var VE_EVALUATING = false;
 
-    // 从当前生效的权重配置动态构建角色列表（支持用户自定义等级/价格覆盖）
+    // 从当前生效的权重配置动态构建角色列表（支持服务端默认+用户自定义双层覆盖）
     function veGetCharList() {
       var baseList = window._charList || [];
-      var saved = (typeof getSavedWeights === 'function') ? (getSavedWeights() || {}) : {};
-      var charPrices = saved.charPrices || {};
-      var tierOverride = saved.charTierOverride || {};
+      var serverConfig = window._serverDefaultConfig || {};
+      var userConfig = (typeof getSavedWeights === 'function') ? (getSavedWeights() || {}) : {};
+      // 服务端默认覆盖（管理员后台设置）优先级高于硬编码默认，低于用户自定义
+      var serverTierOverride = serverConfig.charTierOverride || {};
+      var serverCharPrices = serverConfig.charPrices || {};
+      var userTierOverride = userConfig.charTierOverride || {};
+      var userCharPrices = userConfig.charPrices || {};
       var added = {};
       var list = [];
 
-      // 基础角色列表（服务端渲染的完整默认数据）+ 用户自定义覆盖
+      // 基础角色列表（服务端渲染的完整默认数据）+ 双层覆盖
       for (var i = 0; i < baseList.length; i++) {
         var c = baseList[i];
         if (added[c.name]) continue;
         added[c.name] = true;
+        // 等级：用户自定义 > 服务端默认 > 基础
+        var finalTier = userTierOverride[c.name] || serverTierOverride[c.name] || c.tier;
+        // 价格：用户自定义 > 服务端默认 > 基础
+        var finalPrice = c.price;
+        if (serverCharPrices[c.name] != null) finalPrice = serverCharPrices[c.name];
+        if (userCharPrices[c.name] != null) finalPrice = userCharPrices[c.name];
         list.push({
           name: c.name,
-          tier: tierOverride[c.name] || c.tier,
-          price: charPrices[c.name] != null ? charPrices[c.name] : c.price,
+          tier: finalTier,
+          price: finalPrice,
           isHot: c.isHot,
         });
       }
-      // 用户自定义等级里可能有新角色（不在默认列表中）
-      for (var ovrName in tierOverride) {
-        if (!tierOverride.hasOwnProperty(ovrName)) continue;
-        if (added[ovrName]) continue;
-        added[ovrName] = true;
+      // 服务端默认里可能有新角色
+      for (var srvName in serverTierOverride) {
+        if (!serverTierOverride.hasOwnProperty(srvName)) continue;
+        if (added[srvName]) continue;
+        added[srvName] = true;
+        var srvPrice = serverCharPrices[srvName] != null ? serverCharPrices[srvName] : 0;
+        if (userCharPrices[srvName] != null) srvPrice = userCharPrices[srvName];
         list.push({
-          name: ovrName,
-          tier: tierOverride[ovrName],
-          price: charPrices[ovrName] != null ? charPrices[ovrName] : 0,
+          name: srvName,
+          tier: userTierOverride[srvName] || serverTierOverride[srvName],
+          price: srvPrice,
+          isHot: false,
+        });
+      }
+      // 用户自定义里可能有新角色
+      for (var usrName in userTierOverride) {
+        if (!userTierOverride.hasOwnProperty(usrName)) continue;
+        if (added[usrName]) continue;
+        added[usrName] = true;
+        list.push({
+          name: usrName,
+          tier: userTierOverride[usrName],
+          price: userCharPrices[usrName] != null ? userCharPrices[usrName] : 0,
           isHot: false,
         });
       }
       // charPrices 里可能有新角色
-      for (var cpName in charPrices) {
-        if (!charPrices.hasOwnProperty(cpName)) continue;
+      var allCharPrices = {};
+      for (var pn in serverCharPrices) { if (serverCharPrices.hasOwnProperty(pn)) allCharPrices[pn] = serverCharPrices[pn]; }
+      for (var pn2 in userCharPrices) { if (userCharPrices.hasOwnProperty(pn2)) allCharPrices[pn2] = userCharPrices[pn2]; }
+      for (var cpName in allCharPrices) {
+        if (!allCharPrices.hasOwnProperty(cpName)) continue;
         if (added[cpName]) continue;
         added[cpName] = true;
-        list.push({ name: cpName, tier: 'E', price: charPrices[cpName], isHot: false });
+        list.push({ name: cpName, tier: 'E', price: allCharPrices[cpName], isHot: false });
       }
       // 按价格从高到低排序
       list.sort(function(a, b) { return b.price - a.price; });
@@ -2122,8 +2149,10 @@ function getPageHTML(options) {
     }
 
     function veGetSigWeapons() {
-      var saved = (typeof getSavedWeights === 'function') ? (getSavedWeights() || {}) : {};
-      return Object.assign({}, window._sigWeapons || {}, saved.sigWeapons || {});
+      var serverConfig = window._serverDefaultConfig || {};
+      var userConfig = (typeof getSavedWeights === 'function') ? (getSavedWeights() || {}) : {};
+      // 用户自定义 > 服务端默认 > 基础
+      return Object.assign({}, window._sigWeapons || {}, serverConfig.sigWeapons || {}, userConfig.sigWeapons || {});
     }
 
     // 渲染角色卡片列表
