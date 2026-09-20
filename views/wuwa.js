@@ -1118,7 +1118,7 @@ function getPageHTML(options) {
     <div class="tabs rise d1">
       <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">链接查询</button>
       <button class="tab-btn" id="tab-paste" onclick="switchTab('paste')">粘贴描述估价</button>
-      <button class="tab-btn" id="tab-visual" onclick="switchTab('visual')">可视化编辑</button>
+      <button class="tab-btn" id="tab-visual" onclick="switchTab('visual')">可视化编辑 <span style="display:inline-block;padding:1px 6px;border-radius:6px;background:rgba(245,158,11,0.15);color:#fbbf24;font-size:10px;font-weight:600;vertical-align:middle;margin-left:2px;letter-spacing:0;">BETA</span></button>
     </div>
 
     <!-- 估值规则设置入口 -->
@@ -1173,6 +1173,8 @@ function getPageHTML(options) {
         <div class="ve-resource-item"><label>星声</label><input type="number" id="ve-starsound" min="0" placeholder="0" oninput="veOnChange()"></div>
         <div class="ve-resource-item"><label>月相</label><input type="number" id="ve-moonphase" min="0" placeholder="0" oninput="veOnChange()"></div>
         <div class="ve-resource-item"><label>余波珊瑚</label><input type="number" id="ve-coral" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>浮金波纹</label><input type="number" id="ve-floatgold" min="0" placeholder="0" oninput="veOnChange()"></div>
+        <div class="ve-resource-item"><label>铸潮波纹</label><input type="number" id="ve-casttide" min="0" placeholder="0" oninput="veOnChange()"></div>
         <div class="ve-resource-item"><label>黄数（限定金）</label><input type="number" id="ve-yellow" min="0" placeholder="0" oninput="veOnChange()"></div>
         <div class="ve-resource-item"><label>服饰</label><input type="number" id="ve-outfit" min="0" placeholder="0" oninput="veOnChange()"></div>
         <div class="ve-resource-item"><label>车架模组</label><input type="number" id="ve-frame" min="0" placeholder="0" oninput="veOnChange()"></div>
@@ -2462,6 +2464,8 @@ function getPageHTML(options) {
         starSound: parseInt(document.getElementById('ve-starsound').value) || 0,
         moonPhase: parseInt(document.getElementById('ve-moonphase').value) || 0,
         aftermathCoral: parseInt(document.getElementById('ve-coral').value) || 0,
+        floatGoldRipple: parseInt(document.getElementById('ve-floatgold').value) || 0,
+        castTideRipple: parseInt(document.getElementById('ve-casttide').value) || 0,
         yellowCount: parseInt(document.getElementById('ve-yellow').value) || 0,
         outfitCount: parseInt(document.getElementById('ve-outfit').value) || 0,
         vehicleFrameCount: parseInt(document.getElementById('ve-frame').value) || 0,
@@ -2557,6 +2561,8 @@ function getPageHTML(options) {
       if (info.starSound) lines.push('【星声】' + info.starSound);
       if (info.moonPhase) lines.push('【月相】' + info.moonPhase);
       if (info.aftermathCoral) lines.push('【余波珊瑚】' + info.aftermathCoral);
+      if (info.floatGoldRipple) lines.push('【浮金波纹】' + info.floatGoldRipple);
+      if (info.castTideRipple) lines.push('【铸潮波纹】' + info.castTideRipple);
       if (info.yellowCount) lines.push('【黄数】' + info.yellowCount);
       if (info.outfitCount) lines.push('【服饰】' + info.outfitCount + '个');
       if (info.vehicleFrameCount) lines.push('【车架模组】' + info.vehicleFrameCount + '个');
@@ -2585,68 +2591,113 @@ function getPageHTML(options) {
 
     // 从描述导入
     function veImportFromPaste() {
-      var desc = prompt('粘贴描述文本：');
-      if (!desc) return;
-      // 调用估价接口解析，拿到结构化数据后回填
-      fetch('/api/x9k2-eval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: window._customWeights || null, game: 'wuwa' }),
-      }).then(function(r) { return r.json(); }).then(function(result) {
-        if (result.success && result.data && result.data.info) {
-          var info = result.data.info;
-          // 回填角色
-          VE_CHARS = [];
-          var sigMap = veGetSigWeapons();
-          var charList = veGetCharList();
-          var weaponNames = (info.weapons || []).map(function(w) { return w.name; });
-          var weaponRefines = {};
-          (info.weapons || []).forEach(function(w) { weaponRefines[w.name] = w.refine || 1; });
+      var existing = document.getElementById('ve-import-modal');
+      if (existing) { existing.remove(); return; }
 
-          if (info.characters && info.characters.length > 0) {
-            info.characters.forEach(function(c) {
-              var listInfo = charList.find(function(lc) { return lc.name === c.name; });
-              var sigName = sigMap[c.name] || '';
-              var hasSig = false;
-              var sigRefine = 1;
-              if (sigName && weaponNames.some(function(wn) { return wn === sigName || wn.includes(sigName) || sigName.includes(wn); })) {
-                hasSig = true;
-                // 找对应的精炼等级
-                for (var wn in weaponRefines) {
-                  if (wn === sigName || wn.includes(sigName) || sigName.includes(wn)) {
-                    sigRefine = weaponRefines[wn] || 1;
-                    break;
+      var modal = document.createElement('div');
+      modal.id = 've-import-modal';
+      modal.className = 'char-edit-modal';
+
+      var dialog = document.createElement('div');
+      dialog.className = 'char-edit-dialog';
+      dialog.style.width = '480px';
+      dialog.style.maxWidth = '92vw';
+
+      dialog.innerHTML =
+        '<h3 style="font-size:16px;color:var(--text);margin-bottom:10px;">从描述文本导入</h3>' +
+        '<p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">粘贴任意平台的商品描述，自动解析角色、武器、资源等数据。</p>' +
+        '<textarea id="ve-import-text" placeholder="粘贴描述文本..." style="width:100%;height:180px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.5;"></textarea>' +
+        '<div class="char-edit-actions">' +
+          '<button class="ce-cancel" id="ve-import-cancel">取消</button>' +
+          '<button class="ce-confirm" id="ve-import-confirm">开始导入</button>' +
+        '</div>';
+
+      modal.appendChild(dialog);
+      document.body.appendChild(modal);
+
+      var textarea = dialog.querySelector('#ve-import-text');
+      textarea.focus();
+
+      // 取消
+      dialog.querySelector('#ve-import-cancel').onclick = function() { modal.remove(); };
+      modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+
+      // 确认导入
+      function doImport() {
+        var desc = textarea.value.trim();
+        if (!desc) { veShowError('请输入描述文本'); return; }
+        modal.remove();
+        veShowLoading('解析中...');
+
+        fetch('/api/x9k2-eval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: window._customWeights || null, game: 'wuwa' }),
+        }).then(function(r) { return r.json(); }).then(function(result) {
+          if (result.success && result.data && result.data.info) {
+            var info = result.data.info;
+            // 回填角色
+            VE_CHARS = [];
+            var sigMap = veGetSigWeapons();
+            var charList = veGetCharList();
+            var weaponNames = (info.weapons || []).map(function(w) { return w.name; });
+            var weaponRefines = {};
+            (info.weapons || []).forEach(function(w) { weaponRefines[w.name] = w.refine || 1; });
+
+            if (info.characters && info.characters.length > 0) {
+              info.characters.forEach(function(c) {
+                var listInfo = charList.find(function(lc) { return lc.name === c.name; });
+                var sigName = sigMap[c.name] || '';
+                var hasSig = false;
+                var sigRefine = 1;
+                if (sigName && weaponNames.some(function(wn) { return wn === sigName || wn.includes(sigName) || sigName.includes(wn); })) {
+                  hasSig = true;
+                  for (var wn in weaponRefines) {
+                    if (wn === sigName || wn.includes(sigName) || sigName.includes(wn)) {
+                      sigRefine = weaponRefines[wn] || 1;
+                      break;
+                    }
                   }
                 }
-              }
-              VE_CHARS.push({
-                name: c.name,
-                tier: c.tier || (listInfo ? listInfo.tier : 'E'),
-                price: c.price || (listInfo ? listInfo.price : 0),
-                const: c.const || 0,
-                hasSig: hasSig,
-                sigRefine: sigRefine,
-                sigName: sigName,
+                VE_CHARS.push({
+                  name: c.name,
+                  tier: c.tier || (listInfo ? listInfo.tier : 'E'),
+                  price: c.price || (listInfo ? listInfo.price : 0),
+                  const: c.const || 0,
+                  hasSig: hasSig,
+                  sigRefine: sigRefine,
+                  sigName: sigName,
+                });
               });
-            });
-          }
-          // 回填资源（API 返回的 info 字段名是复数/缩写形式）
-          document.getElementById('ve-starsound').value = info.starSounds || '';
-          document.getElementById('ve-moonphase').value = info.moonPhases || '';
-          document.getElementById('ve-coral').value = info.coral || '';
-          document.getElementById('ve-yellow').value = info.yellowCount || '';
-          document.getElementById('ve-outfit').value = info.outfits || '';
-          // 车架模组/涂装/摩托饰品 info 里不含，暂不回填
-          document.getElementById('ve-pulls').value = info.pulls || '';
+            }
+            // 回填资源（API 返回的 info 字段名是复数/缩写形式）
+            document.getElementById('ve-starsound').value = info.starSounds || '';
+            document.getElementById('ve-moonphase').value = info.moonPhases || '';
+            document.getElementById('ve-coral').value = info.coral || '';
+            document.getElementById('ve-floatgold').value = info.goldenRipples || '';
+            document.getElementById('ve-casttide').value = info.tideRipples || '';
+            document.getElementById('ve-yellow').value = info.yellowCount || '';
+            document.getElementById('ve-outfit').value = info.outfits || '';
+            document.getElementById('ve-pulls').value = info.pulls || '';
 
-          veRenderChars();
-          veEvaluate(true);
-          veShowSuccess('导入成功，共 ' + VE_CHARS.length + ' 个角色');
-        } else {
-          veShowError('导入失败：' + (result.error || '未知错误'));
+            veRenderChars();
+            veEvaluate(true);
+            veShowSuccess('导入成功，共 ' + VE_CHARS.length + ' 个角色');
+          } else {
+            veShowError('导入失败：' + (result.error || '未知错误'));
+          }
+        }).catch(function(e) {
+          veShowError('网络错误：' + e.message);
+        });
+      }
+
+      dialog.querySelector('#ve-import-confirm').onclick = doImport;
+      // Ctrl+Enter 快捷导入
+      textarea.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          doImport();
         }
-      }).catch(function(e) {
-        veShowError('网络错误：' + e.message);
       });
     }
   </script>
