@@ -46,6 +46,75 @@ function getPageHTML(options) {
     }
     .container { position: relative; z-index: 2; max-width: 880px; margin: 0 auto; padding: 0 20px 44px; }
 
+    /* ===== 顶部导航栏 ===== */
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 60px;
+      background: rgba(10, 10, 20, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .top-nav.scrolled {
+      background: rgba(10, 10, 20, 0.92);
+      box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+    }
+    .top-nav-inner {
+      max-width: 1200px; margin: 0 auto; height: 100%;
+      display: flex; align-items: center; padding: 0 24px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: #fff;
+      font-weight: 700; font-size: 16px;
+    }
+    .nav-logo img {
+      width: 34px; height: 34px; border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .nav-logo span {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .nav-links {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .nav-link {
+      padding: 8px 16px;
+      color: #aaa;
+      text-decoration: none;
+      font-size: 14px;
+      border-radius: 6px;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .nav-link.active {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+    .nav-link.active::after {
+      content: '';
+      position: absolute;
+      bottom: 2px; left: 50%;
+      transform: translateX(-50%);
+      width: 20px; height: 2px;
+      background: #fbbf24;
+      border-radius: 1px;
+    }
+    /* 给页面内容留出导航栏高度 */
+    body { padding-top: 60px; }
+    @media (max-width: 640px) {
+      .top-nav-inner { padding: 0 16px; }
+      .nav-logo span { display: none; }
+      .nav-link { padding: 6px 10px; font-size: 13px; }
+    }
+
     /* ===== 背景氛围 ===== */
     .bg-atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
     .bg-orb {
@@ -985,6 +1054,192 @@ function getPageHTML(options) {
       .result-summary .big-value { font-size: 26px; }
       .hero-title h1 { font-size: 22px; }
     }
+
+    /* ===== 桌面端双栏布局 ===== */
+    @media (min-width: 1024px) {
+      .container { max-width: 1100px; }
+      .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 24px;
+        align-items: start;
+      }
+      .main-left { min-width: 0; }
+      .main-right {
+        position: sticky;
+        top: 80px;
+      }
+      /* 详细结果占满底部 */
+      .result-full {
+        grid-column: 1 / -1;
+        margin-top: 8px;
+      }
+      /* 桌面端隐藏原有的 result-summary */
+      .result-card .result-summary { display: none; }
+      .result-card .result-divider:first-of-type { display: none; }
+    }
+
+    /* ===== 侧边摘要卡 ===== */
+    .side-summary {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 24px;
+      display: none;
+    }
+    @media (min-width: 1024px) {
+      .side-summary { display: block; }
+    }
+    .side-summary .ss-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .side-summary .ss-price {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+      margin-bottom: 2px;
+    }
+    .side-summary .ss-price .unit {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+    .side-summary .ss-range {
+      font-size: 12px;
+      color: #60a5fa;
+      margin-bottom: 14px;
+      font-weight: 500;
+    }
+    .side-summary .ss-ratio {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .side-summary .ss-ratio.good {
+      background: rgba(34, 197, 94, 0.1);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+    .side-summary .ss-ratio.ok {
+      background: rgba(251, 191, 36, 0.1);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+    .side-summary .ss-ratio.bad {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .side-summary .ss-section-title {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .side-summary .ss-highlights {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .side-summary .ss-hl-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .side-summary .ss-hl-item .k { color: var(--text-muted); }
+    .side-summary .ss-hl-item .v { color: var(--text); font-weight: 600; }
+    .side-summary .ss-hl-item .v.good { color: #4ade80; }
+    .side-summary .ss-hl-item .v.warn { color: #fbbf24; }
+    .side-summary .ss-hl-item .v.danger { color: #f87171; }
+    .side-summary .ss-empty {
+      text-align: center;
+      padding: 30px 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .side-summary .ss-empty-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+      opacity: 0.5;
+    }
+    .side-summary .ss-action-btn {
+      width: 100%;
+      margin-top: 16px;
+      padding: 10px;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-radius: 8px;
+      color: var(--accent);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .side-summary .ss-action-btn:hover {
+      background: rgba(251, 191, 36, 0.15);
+    }
+
+    /* ===== 移动端浮动结果条 ===== */
+    @media (max-width: 1023px) {
+      .mobile-float-bar {
+        display: none;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 90;
+        background: rgba(10, 10, 20, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-top: 1px solid var(--line);
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+      }
+      .mobile-float-bar.show {
+        transform: translateY(0);
+        display: flex;
+      }
+      .mobile-float-bar .mfb-price {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .mobile-float-bar .mfb-price .unit {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-left: 2px;
+        font-weight: 400;
+      }
+      .mobile-float-bar .mfb-info {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+      .mobile-float-bar .mfb-ratio {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 20px;
+      }
+      .mobile-float-bar .mfb-ratio.good { background: rgba(34,197,94,0.15); color: #4ade80; }
+      .mobile-float-bar .mfb-ratio.ok { background: rgba(251,191,36,0.15); color: #fbbf24; }
+      .mobile-float-bar .mfb-ratio.bad { background: rgba(239,68,68,0.15); color: #f87171; }
+      /* 移动端底部留出浮动条空间 */
+      body.has-float-bar { padding-bottom: 70px; }
+    }
     /* 估值规则设置入口 */
     .settings-bar {
       display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px;
@@ -1073,6 +1328,21 @@ function getPageHTML(options) {
   </style>
 </head>
 <body>
+  <!-- 顶部导航栏 -->
+  <nav class="top-nav" id="top-nav">
+    <div class="top-nav-inner">
+      <a href="/zzz" class="nav-logo">
+        <img src="/public/icons/wuwaLogo.jpeg" alt="绝区零估价">
+        <span>绝区零估价助手</span>
+      </a>
+      <div class="nav-links">
+        <a href="/zzz" class="nav-link active">估价</a>
+        <a href="/zzz/guide" class="nav-link">使用须知</a>
+        <a href="/zzz/news" class="nav-link">角色资讯</a>
+        <a href="/zzz/tips" class="nav-link">买卖攻略</a>
+      </div>
+    </div>
+  </nav>
   <div class="bg-atmos">
     <div class="bg-grid"></div>
     <div class="bg-orb a"></div>
@@ -1096,6 +1366,10 @@ function getPageHTML(options) {
         <div class="subtitle">角色定价数据持续完善中，估值仅供参考 · 粘贴螃蟹网/盼之商品链接，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）描述估价</div>
       </div>
     </div>
+
+    <!-- 双栏布局开始 -->
+    <div class="main-layout">
+      <div class="main-left">
 
     <!-- Tabs -->
     <div class="tabs rise d1">
@@ -1174,7 +1448,7 @@ function getPageHTML(options) {
 
 
     <!-- 结果 -->
-    <div class="result-card" id="result">
+    <div class="result-card result-full" id="result">
       <div class="result-summary" id="result-summary"></div>
       <div class="result-divider"></div>
       <div id="result-highlights"></div>
@@ -1187,6 +1461,30 @@ function getPageHTML(options) {
       <div class="result-divider"></div>
       <div id="result-resources"></div>
     </div>
+
+      </div><!-- /main-left -->
+
+      <!-- 右侧摘要卡（桌面端固定） -->
+      <div class="main-right">
+        <div class="side-summary" id="side-summary">
+          <div class="ss-empty" id="side-summary-empty">
+            <div class="ss-empty-icon">💰</div>
+            输入账号信息后查看估价结果
+          </div>
+          <div id="side-summary-content" style="display:none;">
+            <div class="ss-label">预估价值</div>
+            <div class="ss-price" id="ss-price">--<span class="unit">元</span></div>
+            <div class="ss-range" id="ss-range" style="display:none;"></div>
+            <div class="ss-ratio" id="ss-ratio" style="display:none;"></div>
+
+            <div class="ss-section-title">核心数据</div>
+            <div class="ss-highlights" id="ss-highlights"></div>
+
+            <button class="ss-action-btn" onclick="document.getElementById('result').scrollIntoView({behavior:'smooth'})">查看详细结果 ↓</button>
+          </div>
+        </div>
+      </div><!-- /main-right -->
+    </div><!-- /main-layout -->
 
     <!-- Loading/Error -->
     <div id="status-msg"></div>
@@ -1225,7 +1523,29 @@ function getPageHTML(options) {
     </div>
   </div>
 
+  <!-- 移动端浮动结果条 -->
+  <div class="mobile-float-bar" id="mobile-float-bar">
+    <div>
+      <div class="mfb-price" id="mfb-price">--<span class="unit">元</span></div>
+      <div class="mfb-info" id="mfb-info">预估价值</div>
+    </div>
+    <div class="mfb-ratio" id="mfb-ratio" style="display:none;"></div>
+  </div>
+
   <script src="/public/value-settings.js?v=20260824" onerror="window.__vsFailed=true"></script>
+  <script>
+    // 顶部导航栏滚动效果
+    (function() {
+      var nav = document.getElementById('top-nav');
+      if (!nav) return;
+      function onScroll() {
+        if (window.scrollY > 20) nav.classList.add('scrolled');
+        else nav.classList.remove('scrolled');
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
   <script>
     // 螃蟹网代理列表（客户端抓取用，多代理轮询降低被封风险）
     window._pxb7Proxies = ${JSON.stringify(pxb7Proxies)};
@@ -1787,6 +2107,101 @@ function getPageHTML(options) {
       // 显示"估值不准"按钮
       const adjustBtn = document.getElementById('adjust-link');
       if (adjustBtn) adjustBtn.style.display = 'inline-block';
+
+      // ===== 更新侧边摘要卡 & 移动端浮动条 =====
+      updateSideSummary(d);
+    }
+
+    // 更新侧边摘要卡和移动端浮动条
+    function updateSideSummary(d) {
+      const det = d.details || {};
+      const info = d.info || {};
+
+      // 隐藏空状态，显示内容
+      const emptyEl = document.getElementById('side-summary-empty');
+      const contentEl = document.getElementById('side-summary-content');
+      if (emptyEl) emptyEl.style.display = 'none';
+      if (contentEl) contentEl.style.display = 'block';
+
+      // 价格
+      const priceEl = document.getElementById('ss-price');
+      if (priceEl) priceEl.innerHTML = d.estimatedValue + '<span class="unit">元</span>';
+
+      // 合理交易范围
+      const rangeEl = document.getElementById('ss-range');
+      if (rangeEl) {
+        if (det.priceRange && det.priceRange.low != null) {
+          rangeEl.style.display = 'block';
+          rangeEl.textContent = '合理交易范围：¥' + det.priceRange.low + ' ~ ¥' + det.priceRange.high;
+        } else {
+          rangeEl.style.display = 'none';
+        }
+      }
+
+      // 性价比
+      const ratioEl = document.getElementById('ss-ratio');
+      if (ratioEl && d.price && d.price > 0) {
+        const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
+        const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(2) + '%' : d.costPerformance.toFixed(2) + '%';
+        const diff = (d.estimatedValue - d.price).toFixed(0);
+        const diffText = diff >= 0 ? '+' + diff : diff;
+        ratioEl.className = 'ss-ratio ' + ratioClass;
+        ratioEl.style.display = 'block';
+        ratioEl.textContent = '性价比 ' + ratioText + '（差价' + diffText + '元）';
+      } else if (ratioEl) {
+        ratioEl.style.display = 'none';
+      }
+
+      // 核心数据亮点
+      const hlEl = document.getElementById('ss-highlights');
+      if (hlEl) {
+        const items = [];
+        const charCount = (det.characters && det.characters.length) || 0;
+        const c6Count = (det.characters || []).filter(c => c.const >= 6).length;
+        const sTierCount = (det.characters || []).filter(c => c.tier === 'S').length;
+        const sigCount = (det.characters || []).filter(c => c.hasSig).length;
+        const yi = det.yellowInfo || {};
+
+        if (charCount > 0) items.push({ k: '五星角色', v: charCount + ' 个' });
+        if (sTierCount > 0) items.push({ k: 'S级角色', v: sTierCount + ' 个', cls: 'danger' });
+        if (c6Count > 0) items.push({ k: '满命角色', v: c6Count + ' 个', cls: 'good' });
+        if (sigCount > 0) items.push({ k: '专武', v: sigCount + ' 把', cls: 'warn' });
+        if (info.pulls > 0) items.push({ k: '总抽数', v: info.pulls + ' 抽' });
+        if (yi.effectiveYellow != null) {
+          items.push({ k: '有效金', v: fmtGold(yi.effectiveYellow) });
+        }
+        if (det.weightedFullConst > 0) {
+          items.push({ k: '加权满命', v: det.weightedFullConst.toFixed(1), cls: 'good' });
+        }
+        if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
+          items.push({ k: '成型配队', v: det.satisfiedTeams.length + ' 组', cls: 'good' });
+        }
+
+        let html = '';
+        items.slice(0, 6).forEach(item => {
+          html += '<div class="ss-hl-item"><span class="k">' + item.k + '</span><span class="v ' + (item.cls || '') + '">' + item.v + '</span></div>';
+        });
+        hlEl.innerHTML = html;
+      }
+
+      // 移动端浮动条
+      const floatBar = document.getElementById('mobile-float-bar');
+      const mfbPrice = document.getElementById('mfb-price');
+      const mfbRatio = document.getElementById('mfb-ratio');
+      if (floatBar) {
+        floatBar.classList.add('show');
+        document.body.classList.add('has-float-bar');
+      }
+      if (mfbPrice) mfbPrice.innerHTML = d.estimatedValue + '<span class="unit">元</span>';
+      if (mfbRatio && d.price && d.price > 0) {
+        const ratioClass2 = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
+        const ratioText2 = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(1) + '%' : d.costPerformance.toFixed(1) + '%';
+        mfbRatio.className = 'mfb-ratio ' + ratioClass2;
+        mfbRatio.style.display = 'block';
+        mfbRatio.textContent = ratioText2;
+      } else if (mfbRatio) {
+        mfbRatio.style.display = 'none';
+      }
     }
 
     function resultRow(key, val, color) {

@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 27,
+  configVersion: 29,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
@@ -53,6 +53,12 @@ const WUWA_CONFIG = {
     c6Base: 0, c6BaseBonus: 0, c6Step: 0.1, c6StepBonus: 0.025, c6MaxWeightedConst: 0,
     outfit: 0, motoFrame: 0,
     pullC6Base: 0, pullC6BaseBonus: 0, pullC6Step: 1, pullC6StepBonus: 0.4, pullC6Threshold: 100, pullC6MaxWeightedConst: 5, pullPerWeightedConst: 450, pullPerWeightedConstCount: 0.5,
+    pullC6MaxBonus: 3.0,
+    pullC6Segments: [
+      { baseBonus: 0, threshold: 2, step: 0.5 },
+      { baseBonus: 1.0, threshold: 5, step: 0.33 },
+      { baseBonus: 2.0, threshold: null, step: 0.1 }
+    ],
     teamMultiBonus: [
       { count: 2, coef: 1 }, { count: 3, coef: 1.05 }, { count: 4, coef: 1.1 },
       { count: 5, coef: 1.15 }, { count: 6, coef: 1.2 }, { count: 7, coef: 1.25 },
@@ -88,7 +94,13 @@ const WUWA_CONFIG = {
     ],
   },
 
-  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002, pullMaxPrice: 5 },
+  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002, pullMaxPrice: 5,
+    pullSegments: [
+      { basePrice: 0.6, threshold: 200, stepPrice: 0.002 },
+      { basePrice: 1.0, threshold: 800, stepPrice: 0.0025 },
+      { basePrice: 2.5, threshold: null, stepPrice: 0.0015 }
+    ]
+  },
 
   defaultTeamMates: {
     '爱弥斯': ['莫宁', '达妮娅'], '绯雪': ['洛瑟菈', '琳奈'],

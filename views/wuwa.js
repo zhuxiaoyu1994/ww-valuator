@@ -46,6 +46,89 @@ function getPageHTML(options) {
     }
     .container { position: relative; z-index: 2; max-width: 880px; margin: 0 auto; padding: 0 20px 44px; }
 
+    /* ===== 顶部导航栏 ===== */
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 60px;
+      background: rgba(10, 10, 20, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .top-nav.scrolled {
+      background: rgba(10, 10, 20, 0.92);
+      box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+    }
+    .top-nav-inner {
+      max-width: 1200px; margin: 0 auto; height: 100%;
+      display: flex; align-items: center; padding: 0 24px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: #fff;
+      font-weight: 700; font-size: 16px;
+    }
+    .nav-logo img {
+      width: 34px; height: 34px; border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .nav-logo span {
+      color: #e63946;
+      font-weight: 700;
+    }
+    .nav-links {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .nav-link {
+      padding: 8px 16px;
+      color: rgba(255,255,255,0.65);
+      text-decoration: none;
+      font-size: 14px;
+      border-radius: 6px;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .nav-link:hover { color: #e63946; background: rgba(230, 57, 70, 0.08); }
+    .nav-link.active {
+      color: #e63946;
+      font-weight: 600;
+    }
+    .nav-link.active::after {
+      content: '';
+      position: absolute;
+      bottom: 2px; left: 50%;
+      transform: translateX(-50%);
+      width: 20px; height: 2px;
+      background: #e63946;
+      border-radius: 1px;
+    }
+    /* 给页面内容留出导航栏高度 */
+    body { padding-top: 60px; }
+    @media (max-width: 640px) {
+      .top-nav-inner { padding: 0 10px; gap: 8px; }
+      .nav-logo img { width: 28px; height: 28px; border-radius: 6px; }
+      .nav-logo span { display: none; }
+      .nav-links {
+        gap: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex: 1;
+        justify-content: flex-end;
+        scrollbar-width: none;
+      }
+      .nav-links::-webkit-scrollbar { display: none; }
+      .nav-link {
+        padding: 6px 8px;
+        font-size: 12px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .nav-link.active::after { display: none; }
+    }
+
     /* ===== 背景氛围 ===== */
     .bg-atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
     .bg-orb {
@@ -191,6 +274,32 @@ function getPageHTML(options) {
       color: var(--accent);
       font-weight: 600;
     }
+    /* 可视化编辑左右布局 */
+    .ve-main-row {
+      display: grid;
+      grid-template-columns: 1fr 200px;
+      gap: 16px;
+      align-items: start;
+    }
+    .ve-main-left { min-width: 0; }
+    .ve-main-right { position: sticky; top: 10px; }
+    .ve-side-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .ve-side-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    @media (max-width: 640px) {
+      .ve-main-row { grid-template-columns: 1fr; }
+      .ve-main-right { position: static; }
+    }
+
     .ve-char-grid {
       display: flex;
       flex-wrap: wrap;
@@ -201,20 +310,129 @@ function getPageHTML(options) {
     .ve-char-card {
       position: relative;
       display: flex;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      gap: 8px;
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 12px;
-      padding: 10px 12px 10px 10px;
-      cursor: pointer;
+      padding: 10px;
+      cursor: default;
       transition: all 0.2s;
-      min-width: 150px;
+      width: calc(33.333% - 7px);
     }
     .ve-char-card:hover {
+      border-color: rgba(96, 165, 250, 0.4);
+    }
+    .ve-char-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ve-char-card .ve-char-avatar {
+      width: 38px;
+      height: 38px;
+      border: 2px solid transparent;
+    }
+    /* 头像边框颜色和等级一致 */
+    .ve-char-card .ve-char-avatar.S { border-color: #e94560; background: linear-gradient(135deg, #e94560, #c73550); }
+    .ve-char-card .ve-char-avatar.A { border-color: #fbbf24; background: linear-gradient(135deg, #fbbf24, #d97706); }
+    .ve-char-card .ve-char-avatar.B { border-color: #60a5fa; background: linear-gradient(135deg, #60a5fa, #3b82f6); }
+    .ve-char-card .ve-char-avatar.C { border-color: #4ade80; background: linear-gradient(135deg, #4ade80, #22c55e); }
+    .ve-char-card .ve-char-avatar.D { border-color: #9ca3af; background: linear-gradient(135deg, #9ca3af, #6b7280); }
+    .ve-char-card .ve-char-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .ve-char-name-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    .ve-char-card .ve-char-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .ve-char-card .ve-char-price {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fbbf24;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .ve-char-card .ve-char-price.muted {
+      color: #555;
+      font-weight: 500;
+    }
+    .ve-char-card .ve-char-tier {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .ve-char-card .ve-char-tier .tier-badge {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 10px;
+    }
+    .ve-char-card .ve-char-tier .tier-badge.S { background: rgba(233,69,96,0.12); color: #ff6b83; }
+    .ve-char-card .ve-char-tier .tier-badge.A { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .ve-char-card .ve-char-tier .tier-badge.B { background: rgba(96,165,250,0.12); color: #60a5fa; }
+    .ve-char-card .ve-char-tier .tier-badge.C { background: rgba(74,222,128,0.1); color: #4ade80; }
+    .ve-char-card .ve-char-tier .tier-badge.D { background: rgba(156,163,175,0.1); color: #9ca3af; }
+    .ve-char-selects {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ve-char-selects select {
+      width: 100%;
+      padding: 4px 6px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg-soft);
+      color: var(--text);
+      font-size: 11px;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+      text-align: center;
+    }
+    .ve-char-selects select:focus {
       border-color: var(--accent);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.2);
+    }
+    .ve-char-price {
+      font-size: 12px;
+      font-weight: 600;
+      color: #fbbf24;
+      text-align: center;
+      margin-top: 2px;
+    }
+    .ve-char-remove {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.8);
+      color: #fff;
+      font-size: 14px;
+      line-height: 18px;
+      text-align: center;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 2;
+    }
+    .ve-char-card:hover .ve-char-remove {
+      opacity: 1;
     }
     .ve-char-avatar {
       width: 40px;
@@ -228,6 +446,14 @@ function getPageHTML(options) {
       color: #fff;
       flex-shrink: 0;
       background: linear-gradient(135deg, #4a5568, #2d3748);
+      overflow: hidden;
+      position: relative;
+    }
+    .ve-char-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
     .ve-char-avatar.S { background: linear-gradient(135deg, #f59e0b, #d97706); }
     .ve-char-avatar.A { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
@@ -315,6 +541,33 @@ function getPageHTML(options) {
       color: var(--accent);
       background: rgba(37, 99, 235, 0.05);
     }
+    /* 顶部显眼的添加角色按钮（红色） */
+    .ve-add-char-top {
+      width: 100%;
+      padding: 14px;
+      border: 2px solid #ef4444;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.06));
+      color: #f87171;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .ve-add-char-top:hover {
+      background: linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.1));
+      border-color: #f87171;
+      color: #fca5a5;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(239,68,68,0.3);
+    }
+    /* 移动端添加角色按钮默认隐藏 */
+    .ve-add-char-mobile { display: none; }
     .ve-resource-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -329,6 +582,12 @@ function getPageHTML(options) {
     .ve-resource-item label {
       font-size: 11px;
       color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .ve-resource-item .res-icon {
+      font-size: 13px;
     }
     .ve-resource-item input {
       padding: 8px 10px;
@@ -376,18 +635,23 @@ function getPageHTML(options) {
       color: #fff;
     }
 
+    /* 移动端估价按钮区（默认隐藏） */
+    .ve-mobile-eval {
+      display: none;
+    }
+
     /* 角色选择器弹层 */
     .char-picker {
       position: absolute;
       z-index: 1000;
-      width: 320px;
-      max-height: 400px;
+      width: 480px;
+      max-height: 520px;
       overflow-y: auto;
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 12px;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-      padding: 12px;
+      padding: 14px;
     }
     .char-picker-search {
       width: 100%;
@@ -427,8 +691,8 @@ function getPageHTML(options) {
     }
     .char-picker-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
     }
     .char-picker-item {
       display: flex;
@@ -461,6 +725,14 @@ function getPageHTML(options) {
       font-weight: 700;
       color: #fff;
       background: linear-gradient(135deg, #4a5568, #2d3748);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .char-picker-item .cp-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
     .char-picker-item .cp-avatar.S { background: linear-gradient(135deg, #f59e0b, #d97706); }
     .char-picker-item .cp-avatar.A { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
@@ -478,6 +750,30 @@ function getPageHTML(options) {
     .char-picker-item .cp-price {
       font-size: 10px;
       color: var(--text-dim);
+    }
+
+    /* 买卖攻略弹窗侧边导航 */
+    .tips-sidenav {
+      display: flex;
+      flex-direction: column;
+    }
+    .tips-nav-item {
+      padding: 10px 20px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      border-left: 2px solid transparent;
+    }
+    .tips-nav-item:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .tips-nav-item.active {
+      color: var(--accent);
+      background: rgba(251, 191, 36, 0.06);
+      border-left-color: var(--accent);
+      font-weight: 600;
     }
 
     /* 角色编辑弹窗（命座/专武） */
@@ -881,7 +1177,8 @@ function getPageHTML(options) {
     .qq-group-card .qr-wrapper img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
+      background: #fff;
     }
     /* 图片放大遮罩层 */
     .img-overlay {
@@ -984,6 +1281,811 @@ function getPageHTML(options) {
       .result-summary .big-value { font-size: 26px; }
       .hero-title h1 { font-size: 22px; }
     }
+
+    /* ===== 桌面端双栏布局 ===== */
+    @media (min-width: 1024px) {
+      .container { max-width: 1100px; }
+      .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 24px;
+        align-items: start;
+      }
+      .main-left { min-width: 0; }
+      .main-right {
+        position: sticky;
+        top: 80px;
+      }
+      /* 详细结果占满底部（桌面端隐藏，内容都在右侧） */
+      .result-full {
+        display: none;
+      }
+      /* 桌面端隐藏原有的 result-summary */
+      .result-card .result-summary { display: none; }
+      .result-card .result-divider:first-of-type { display: none; }
+    }
+
+    /* ===== 侧边摘要卡 ===== */
+    .side-summary {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 24px;
+      display: none;
+    }
+    @media (min-width: 1024px) {
+      .side-summary { display: block; }
+    }
+    .side-summary .ss-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .side-summary .ss-price {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+      margin-bottom: 2px;
+    }
+    .side-summary .ss-price .unit {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+    .side-summary .ss-range {
+      font-size: 12px;
+      color: #60a5fa;
+      margin-bottom: 14px;
+      font-weight: 500;
+    }
+    .side-summary .ss-ratio {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .side-summary .ss-ratio.good {
+      background: rgba(34, 197, 94, 0.1);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+    .side-summary .ss-ratio.ok {
+      background: rgba(251, 191, 36, 0.1);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+    .side-summary .ss-ratio.bad {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .side-summary .ss-section-title {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .side-summary .ss-collapse-title {
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .side-summary .ss-collapse-title:hover {
+      color: var(--text-secondary);
+    }
+    .side-summary .ss-collapse-arrow {
+      font-size: 9px;
+      transition: transform 0.2s;
+    }
+    .side-summary .ss-collapse-arrow.open {
+      transform: rotate(90deg);
+    }
+    .side-summary .ss-highlights {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .side-summary .ss-hl-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .side-summary .ss-hl-item .k { color: var(--text-muted); }
+    .side-summary .ss-hl-item .v { color: var(--text); font-weight: 600; }
+    .side-summary .ss-hl-item .v.good { color: #4ade80; }
+    .side-summary .ss-hl-item .v.warn { color: #fbbf24; }
+    .side-summary .ss-hl-item .v.danger { color: #f87171; }
+    .side-summary .ss-hl-item .k {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .side-summary .hl-tip {
+      position: relative;
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      line-height: 14px;
+      text-align: center;
+      background: rgba(74, 222, 128, 0.15);
+      color: #4ade80;
+      border-radius: 50%;
+      font-size: 10px;
+      cursor: help;
+      font-style: normal;
+      flex-shrink: 0;
+    }
+    .side-summary .hl-tip .tooltip {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 6px;
+      padding: 6px 10px;
+      background: #1a1a2e;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      z-index: 100;
+      transition: all 0.2s;
+      pointer-events: none;
+      font-weight: 400;
+      bottom: auto;
+      top: 100%;
+      left: 0;
+      transform: none;
+      margin-top: 4px;
+    }
+    .side-summary .hl-tip:hover .tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
+    .side-summary .ss-calc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+    .side-summary .ss-calc-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+    }
+    .side-summary .ss-calc-row .label {
+      color: var(--text-muted);
+    }
+    .side-summary .ss-calc-row .val {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .side-summary .ss-calc-row .val.neg { color: #f87171; }
+    .side-summary .ss-calc-row .val.pos { color: #4ade80; }
+    .side-summary .ss-calc-total {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 8px;
+      margin-top: 4px;
+      border-top: 1px dashed var(--line);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .side-summary .ss-calc-total .val {
+      color: #fbbf24;
+      font-size: 15px;
+    }
+    /* 爱发电模块 */
+    .side-summary .ss-afdian {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: linear-gradient(135deg, rgba(255, 107, 157, 0.08), rgba(255, 159, 67, 0.08));
+      border: 1px solid rgba(255, 107, 157, 0.2);
+      border-radius: 10px;
+      margin-top: 4px;
+    }
+    .side-summary .ss-afdian-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+    .side-summary .ss-afdian-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .side-summary .ss-afdian-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+    .side-summary .ss-afdian-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .side-summary .ss-afdian-btn {
+      flex-shrink: 0;
+      padding: 6px 14px;
+      background: linear-gradient(135deg, #ff6b9d, #ff9f43);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 20px;
+      text-decoration: none;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .side-summary .ss-afdian-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(255, 107, 157, 0.4);
+    }
+    /* tooltip 样式 */
+    .ss-calc-row .label {
+      position: relative;
+      cursor: help;
+      border-bottom: 1px dotted var(--text-muted);
+    }
+    .ss-calc-row .label .tooltip {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 6px;
+      padding: 8px 10px;
+      background: #1a1a2e;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      white-space: normal;
+      width: 200px;
+      text-align: left;
+      z-index: 100;
+      transition: all 0.2s;
+      pointer-events: none;
+      font-weight: 400;
+    }
+    .ss-calc-row .label:hover .tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
+    .side-summary .ss-empty {
+      text-align: center;
+      padding: 30px 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .side-summary .ss-empty-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+      opacity: 0.5;
+    }
+    .side-summary .ss-action-btn {
+      width: 100%;
+      margin-top: 16px;
+      padding: 10px;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-radius: 8px;
+      color: var(--accent);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .side-summary .ss-action-btn:hover {
+      background: rgba(251, 191, 36, 0.15);
+    }
+    .side-summary .ss-stats-link {
+      margin-top: 10px;
+      padding: 8px 10px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-dim);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .side-summary .ss-stats-link:hover {
+      color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .side-summary .ss-stats-link span {
+      margin-right: 4px;
+    }
+    /* 估价按钮（红色） */
+    .side-summary .eval-btn {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .side-summary .eval-btn:hover {
+      filter: brightness(1.1);
+      box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+    }
+    .side-summary .ss-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 14px 0;
+    }
+    .ss-action-section {
+      margin-bottom: 4px;
+    }
+
+    /* 移动端估值详情弹窗（桌面端样式） */
+    @media (min-width: 1024px) {
+      .mobile-detail-container {
+        max-width: 640px;
+        margin: 30px auto;
+        background: #0d0d1a;
+        border: 1px solid #1e1e33;
+        border-radius: 14px;
+        padding: 24px;
+        min-height: 300px;
+      }
+      .mobile-detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+      .mobile-detail-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .mobile-detail-subtitle {
+        font-size: 12px;
+        color: #888;
+        margin-top: 4px;
+      }
+      .mobile-detail-close {
+        background: none;
+        border: none;
+        color: #888;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px 10px;
+        font-family: inherit;
+      }
+    }
+
+    /* ===== 移动端浮动结果条 ===== */
+    .mobile-float-bar { display: none; }
+    @media (max-width: 1023px) {
+      /* 移动端隐藏右侧摘要卡，用底部浮动条代替 */
+      .main-right { display: none; }
+      /* 顶部添加角色按钮：移动端隐藏 */
+      .ve-add-char-desktop { display: none; }
+      /* 角色列表下方添加角色按钮：移动端显示 */
+      .ve-add-char-mobile {
+        display: flex;
+        margin-top: 12px;
+      }
+      /* 移动端估价按钮（账号描述下方） - 垂直布局 */
+      .ve-mobile-eval {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 0;
+        margin-bottom: 16px;
+        padding-top: 0;
+        padding-bottom: 16px;
+        border-top: none;
+        border-bottom: 1px solid var(--line);
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .ve-mobile-eval input {
+        width: 100%;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bg-soft);
+        color: var(--text);
+        font-size: 16px;
+        font-weight: 600;
+        font-family: inherit;
+        outline: none;
+        text-align: center;
+        box-sizing: border-box;
+      }
+      .ve-mobile-eval .eval-btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+        font-weight: 600;
+        border-radius: 10px;
+      }
+      .mobile-float-bar {
+        display: none;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 90;
+        background: rgba(10, 10, 20, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-top: 1px solid var(--line);
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+      }
+      .mobile-float-bar.show {
+        transform: translateY(0);
+        display: flex;
+      }
+      .mobile-float-bar .mfb-price {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .mobile-float-bar .mfb-price .unit {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-left: 2px;
+        font-weight: 400;
+      }
+      .mobile-float-bar .mfb-info {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+      .mobile-float-bar .mfb-ratio {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 20px;
+      }
+      .mobile-float-bar .mfb-ratio.good { background: rgba(34,197,94,0.15); color: #4ade80; }
+      .mobile-float-bar .mfb-ratio.ok { background: rgba(251,191,36,0.15); color: #fbbf24; }
+      .mobile-float-bar .mfb-ratio.bad { background: rgba(239,68,68,0.15); color: #f87171; }
+      .mobile-float-bar { cursor: pointer; }
+      .mobile-float-bar .mfb-detail-hint {
+        color: var(--accent);
+        font-size: 11px;
+        margin-left: 4px;
+      }
+      /* 移动端底部留出浮动条空间 */
+      body.has-float-bar { padding-bottom: 70px; }
+
+      /* 移动端估值详情弹窗 - 全屏优化 */
+      #mobile-detail-modal {
+        background: rgba(0,0,0,0.9) !important;
+        overflow: hidden !important;
+      }
+      .mobile-detail-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+        background: #0d0d1a !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding: 0 !important;
+      }
+      .mobile-detail-header {
+        flex-shrink: 0 !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 16px 20px !important;
+        border-bottom: 1px solid var(--line) !important;
+        background: #0d0d1a !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 2 !important;
+      }
+      .mobile-detail-title {
+        font-size: 17px !important;
+        font-weight: 700 !important;
+        color: #fff !important;
+      }
+      .mobile-detail-subtitle {
+        font-size: 11px !important;
+        color: #888 !important;
+        margin-top: 2px !important;
+      }
+      .mobile-detail-close {
+        background: none !important;
+        border: none !important;
+        color: #888 !important;
+        font-size: 28px !important;
+        cursor: pointer !important;
+        padding: 4px 12px !important;
+        font-family: inherit !important;
+      }
+      .mobile-detail-body {
+        flex: 1 !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding: 0 !important;
+      }
+      /* 移动端估值详情 - 内容区 */
+      #mobile-detail-content {
+        padding: 16px;
+      }
+      /* 移动端预估价值大卡片 */
+      .md-value-card {
+        text-align: center;
+        padding: 28px 20px;
+        background: linear-gradient(160deg, rgba(74, 222, 128, 0.12), rgba(34, 197, 94, 0.04));
+        border: 1px solid rgba(74, 222, 128, 0.2);
+        border-radius: 16px;
+        margin-bottom: 16px;
+        position: relative;
+        overflow: hidden;
+      }
+      .md-value-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -30%;
+        width: 200px;
+        height: 200px;
+        background: radial-gradient(circle, rgba(74,222,128,0.08) 0%, transparent 70%);
+        border-radius: 50%;
+      }
+      .md-value-card .label {
+        font-size: 12px;
+        color: rgba(255,255,255,0.5);
+        margin-bottom: 10px;
+        position: relative;
+        z-index: 1;
+      }
+      .md-value-card .price {
+        font-size: 44px;
+        font-weight: 800;
+        color: #4ade80;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.1;
+        position: relative;
+        z-index: 1;
+        text-shadow: 0 0 30px rgba(74,222,128,0.3);
+      }
+      .md-value-card .range {
+        font-size: 11px;
+        color: rgba(255,255,255,0.4);
+        margin-top: 10px;
+        position: relative;
+        z-index: 1;
+      }
+      .md-ratio {
+        display: inline-block;
+        margin-top: 14px;
+        padding: 5px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        position: relative;
+        z-index: 1;
+      }
+      .md-ratio.good { background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+      .md-ratio.ok { background: rgba(251,191,36,0.2); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+      .md-ratio.bad { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+
+      /* 移动端详情 - 卡片容器 */
+      .md-card {
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 12px;
+      }
+      .md-card-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .md-card-title::before {
+        content: '';
+        width: 3px;
+        height: 12px;
+        background: var(--accent);
+        border-radius: 2px;
+      }
+
+      /* 移动端核心数据 - 覆盖 ss-highlights 样式 */
+      #mobile-detail-content .ss-highlights {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 0;
+      }
+      #mobile-detail-content .ss-hl-item {
+        flex-direction: column;
+        gap: 4px;
+        padding: 12px;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.04);
+        border-radius: 10px;
+        text-align: left;
+      }
+      #mobile-detail-content .ss-hl-item:hover {
+        background: rgba(255,255,255,0.04);
+        transform: none;
+      }
+      #mobile-detail-content .ss-hl-item .num {
+        font-size: 20px;
+        font-weight: 700;
+        color: #fff;
+      }
+      #mobile-detail-content .ss-hl-item.good .num { color: #4ade80; }
+      #mobile-detail-content .ss-hl-item .label {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 400;
+      }
+
+      /* 移动端估价计算 - 覆盖 ss-calc 样式 */
+      #mobile-detail-content .ss-calc {
+        margin: 0;
+        padding: 0;
+      }
+      #mobile-detail-content .ss-calc-row {
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+      }
+      #mobile-detail-content .ss-calc-row:last-child {
+        border-bottom: none;
+      }
+      #mobile-detail-content .ss-calc-row .label {
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+      #mobile-detail-content .ss-calc-row .val {
+        font-size: 14px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      #mobile-detail-content .ss-calc-total {
+        margin-top: 12px;
+        padding-top: 14px;
+        border-top: 2px solid var(--line);
+      }
+      #mobile-detail-content .ss-calc-total span:first-child {
+        font-size: 14px;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+      #mobile-detail-content .ss-calc-total .val {
+        font-size: 20px;
+        font-weight: 700;
+        color: #fbbf24;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* 移动端详情 - 底部操作区 */
+      .md-actions {
+        margin-top: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      /* 移动端买卖攻略 & 使用须知弹窗 - 全屏优化 */
+      #tips-modal, #guide-modal {
+        background: rgba(0,0,0,0.9) !important;
+        overflow: hidden !important;
+      }
+      #tips-modal > div, #guide-modal > div {
+        flex-direction: column !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+      }
+      #tips-modal > div > div:first-child, #guide-modal > div > div:first-child {
+        width: 100% !important;
+        border-right: none !important;
+        border-bottom: 1px solid var(--line) !important;
+        padding: 0 !important;
+        flex-shrink: 0 !important;
+      }
+      /* 移动端弹窗 - 目录标题隐藏 */
+      #tips-modal > div > div:first-child > div:first-child,
+      #guide-modal > div > div:first-child > div:first-child {
+        display: none !important;
+      }
+      /* 移动端弹窗 - 目录横向滚动 */
+      .tips-sidenav {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        padding: 10px 16px !important;
+        gap: 8px !important;
+        scrollbar-width: none;
+        width: 100% !important;
+        box-sizing: border-box;
+      }
+      .tips-sidenav::-webkit-scrollbar { display: none; }
+      .tips-nav-item {
+        padding: 8px 16px !important;
+        font-size: 13px !important;
+        border-left: none !important;
+        border-radius: 20px !important;
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        background: rgba(255,255,255,0.04) !important;
+        color: rgba(255,255,255,0.6) !important;
+        margin: 0 !important;
+      }
+      .tips-nav-item.active {
+        border-left: none !important;
+        background: rgba(230, 57, 70, 0.15) !important;
+        color: #e63946 !important;
+        font-weight: 600 !important;
+      }
+      #tips-modal > div > div:last-child, #guide-modal > div > div:last-child {
+        flex: 1 !important;
+        max-height: none !important;
+        height: 0 !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        padding: 0 20px 30px !important;
+      }
+      /* 移动端弹窗关闭按钮 - 右上角 */
+      #tips-modal > div > div:last-child > div:first-child,
+      #guide-modal > div > div:last-child > div:first-child {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #0d0d1a;
+        margin: -16px -20px 12px;
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+      }
+      #tips-modal > div > div:last-child > div:first-child > div,
+      #guide-modal > div > div:last-child > div:first-child > div {
+        flex: 1;
+      }
+      #tips-modal > div > div:last-child > div:first-child button,
+      #guide-modal > div > div:last-child > div:first-child button {
+        font-size: 22px;
+        padding: 4px 12px;
+        color: #888;
+      }
+    }
     /* 估值规则设置入口 */
     .settings-bar {
       display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px;
@@ -1072,6 +2174,21 @@ function getPageHTML(options) {
   </style>
 </head>
 <body>
+  <!-- 顶部导航栏 -->
+  <nav class="top-nav" id="top-nav">
+    <div class="top-nav-inner">
+      <a href="/wuwa" class="nav-logo">
+        <img src="/public/icons/wuwaLogo.jpeg" alt="鸣潮估价">
+        <span>鸣潮估价助手</span>
+      </a>
+      <div class="nav-links">
+        <a href="javascript:void(0)" class="nav-link" onclick="openGuideModal()">使用须知</a>
+        <a href="javascript:void(0)" class="nav-link" onclick="openNewsModal()">角色资讯</a>
+        <a href="javascript:void(0)" class="nav-link" onclick="openTipsModal()">买卖攻略</a>
+        <a href="javascript:void(0)" class="nav-link" onclick="openQQGroupModal()">加群交流</a>
+      </div>
+    </div>
+  </nav>
   <div class="bg-atmos">
     <div class="bg-grid"></div>
     <div class="bg-orb a"></div>
@@ -1092,117 +2209,120 @@ function getPageHTML(options) {
           <h1>鸣潮账号估价</h1>
           <span class="en">WUTHERING WAVES</span>
         </div>
-        <div class="subtitle">粘贴螃蟹网/盼之商品链接，或粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述进行估价</div>
+        <div class="subtitle">粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述进行估价</div>
       </div>
     </div>
 
-    <!-- 教学视频 -->
-    <div class="tutorial-section rise d1">
-      <div class="tutorial-header" onclick="var f=document.getElementById('tutorial-frame');var a=this.querySelector('.tutorial-arrow');if(f.style.display==='none'){f.style.display='block';a.textContent='▲';this.querySelector('.tutorial-label').textContent='收起教程';}else{f.style.display='none';a.textContent='▼';this.querySelector('.tutorial-label').textContent='展开教程';}">
-        <span class="tutorial-icon">▶</span>
-        <span class="tutorial-title">新手必看：鸣潮估价工具使用教程</span>
-        <span class="tutorial-label" style="margin-left:auto;font-size:12px;color:#ff8296;cursor:pointer;">展开教程</span>
-        <span class="tutorial-arrow" style="font-size:10px;color:#ff8296;">▼</span>
-      </div>
-      <div id="tutorial-frame" style="display:none;margin-top:12px;">
-        <div style="position:relative;padding:56.25% 0 0 0;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-          <iframe src="//player.bilibili.com/player.html?bvid=BV1ueKq6TEgV&autoplay=0&high_quality=1&danmaku=1" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>
-        </div>
-        <div style="margin-top:8px;font-size:12px;color:#666;text-align:center;">
-          <a href="https://www.bilibili.com/video/BV1ueKq6TEgV/" target="_blank" style="color:#ff8296;text-decoration:none;">在B站观看完整视频 →</a>
-        </div>
-      </div>
-    </div>
+    <!-- 双栏布局开始 -->
+    <div class="main-layout">
+      <div class="main-left">
 
-    <!-- Tabs -->
-    <div class="tabs rise d1">
-      <button class="tab-btn active" id="tab-lookup" onclick="switchTab('lookup')">链接查询</button>
-      <button class="tab-btn" id="tab-paste" onclick="switchTab('paste')">粘贴描述估价</button>
-      <button class="tab-btn" id="tab-visual" onclick="switchTab('visual')">可视化编辑 <span style="display:inline-block;padding:1px 6px;border-radius:6px;background:rgba(245,158,11,0.15);color:#fbbf24;font-size:10px;font-weight:600;vertical-align:middle;margin-left:2px;letter-spacing:0;">BETA</span></button>
-    </div>
-
-    <!-- 估值规则设置入口 -->
-    <div class="settings-bar rise d2">
-      <button class="settings-btn" id="settings-btn" onclick="safeOpenValueSettings()" style="display:none;">估值规则设置</button>
-      <button class="settings-btn" id="stats-btn" onclick="openStatsModal()">算法准确性报告</button>
-    </div>
-
-    <!-- 按编号查询 -->
-    <div class="input-card rise d2" id="panel-lookup">
-      <div class="input-row" style="flex-direction:column;gap:12px;">
-        <textarea id="product-id" placeholder="粘贴商品链接（螃蟹网/盼之网），如 https://www.pxb7.com/product/2353711688582091796/1 或 https://www.pzds.com/goodsDetails/MC2VGU/6" style="min-height:80px;resize:vertical;"></textarea>
-        <div class="input-row" style="gap:8px;flex-direction:row;">
-          <button class="eval-btn" id="lookup-btn" onclick="doLookup()" style="flex:1;">估价</button>
-          <button class="clear-btn" id="clear-lookup-btn" onclick="clearLookupInput()" style="flex-shrink:0;width:60px;padding:0;border:1px solid #ddd;background:#f9f9f9;color:#666;border-radius:8px;cursor:pointer;font-size:14px;">清空</button>
-        </div>
-        <div id="config-info" style="font-size:12px;color:#888;margin-top:4px;"></div>
-      </div>
-    </div>
-
-    <!-- 粘贴描述估价 -->
-    <div class="input-card" id="panel-paste" style="display:none;">
-      <div class="input-row" style="flex-direction:column;gap:12px;">
-        <textarea id="eval-text" placeholder="粘贴任意平台（螃蟹网/盼之/氪金兽/7881）商品描述文本（包含角色、命座、武器、资源等信息）"></textarea>
-        <div class="input-row" style="gap:8px;flex-direction:row;">
-          <input type="number" class="price-input" id="eval-price" placeholder="标价(元)" min="0" style="flex:1;" />
-          <button class="eval-btn" id="eval-btn" onclick="doEvaluate()">估价</button>
-          <button class="clear-btn" id="clear-paste-btn" onclick="clearPasteInput()" style="flex-shrink:0;width:60px;padding:0;border:1px solid #ddd;background:#f9f9f9;color:#666;border-radius:8px;cursor:pointer;font-size:14px;">清空</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 可视化编辑 -->
-    <div class="input-card" id="panel-visual" style="display:none;">
-      <!-- 标价 -->
-      <div class="ve-section-title">标价（元）</div>
-      <div style="margin-bottom:18px;">
-        <input type="number" id="ve-price" placeholder="输入标价（可选）" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--text);font-size:14px;font-family:inherit;outline:none;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'">
-      </div>
-
-      <!-- 角色列表 -->
+    <!-- 主输入卡片 -->
+    <div class="input-card rise d1">
+      <!-- 描述输入框 -->
       <div class="ve-section-title">
-        <span>角色列表</span>
-        <span class="ve-count" id="ve-char-count">0 个角色</span>
+        <span>账号描述</span>
+        <span style="font-size:11px;color:#888;font-weight:400;">输入描述自动识别，修改角色自动同步</span>
       </div>
-      <div class="ve-char-grid" id="ve-char-grid"></div>
-      <button class="ve-add-btn" onclick="openCharPicker(this)">+ 添加角色</button>
-
-      <!-- 其他资源 -->
-      <div class="ve-section-title" style="margin-top:8px;">其他资源</div>
-      <div class="ve-resource-grid">
-        <div class="ve-resource-item"><label>星声</label><input type="number" id="ve-starsound" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>月相</label><input type="number" id="ve-moonphase" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>余波珊瑚</label><input type="number" id="ve-coral" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>浮金波纹</label><input type="number" id="ve-floatgold" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>铸潮波纹</label><input type="number" id="ve-casttide" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>黄数（限定金）</label><input type="number" id="ve-yellow" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>服饰</label><input type="number" id="ve-outfit" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>车架模组</label><input type="number" id="ve-frame" min="0" placeholder="0" oninput="veOnChange()"></div>
-        <div class="ve-resource-item"><label>总抽数</label><input type="number" id="ve-pulls" min="0" placeholder="0" oninput="veOnChange()"></div>
+      <div style="margin-bottom:14px;">
+        <textarea id="ve-desc-input" placeholder="粘贴账号描述，如：50级，10黄，星声16000，1命今汐+专武..." style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--text);font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:180px;line-height:1.6;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'" oninput="veOnDescInput()"></textarea>
       </div>
 
-      <!-- 操作按钮 -->
-      <div class="ve-actions">
-        <button class="ve-btn" onclick="veGenerateDesc()">生成描述文本</button>
-        <button class="ve-btn" onclick="veImportFromPaste()">从描述导入</button>
-        <button class="ve-btn primary" onclick="veEvaluate()">立即估价</button>
+      <!-- 移动端估价按钮（账号描述下方，仅移动端显示） -->
+      <div class="ve-mobile-eval ve-mobile-eval-desc">
+        <input type="number" id="ve-price-mobile-desc" placeholder="标价(元)" min="0" oninput="syncMobilePrice(this)" />
+        <button class="ve-btn eval-btn" onclick="veEvaluate()">立即估价</button>
+      </div>
+
+      <!-- 角色列表 + 资源 -->
+      <div class="ve-main-row">
+        <div class="ve-main-left" style="grid-column:1/-1;">
+          <!-- 添加角色按钮（顶部显眼位置，仅桌面端显示） -->
+          <button class="ve-add-char-top ve-add-char-desktop" onclick="openCharPickerTop(this)">＋ 添加角色</button>
+
+          <!-- 其他资源 -->
+          <div class="ve-section-title" style="margin-top:14px;">其他资源</div>
+          <div class="ve-resource-grid">
+            <div class="ve-resource-item"><label><span class="res-icon">⭐</span>星声</label><input type="number" id="ve-starsound" min="0" placeholder="0" oninput="veOnChange()"></div>
+            <div class="ve-resource-item"><label><span class="res-icon">🌙</span>月相</label><input type="number" id="ve-moonphase" min="0" placeholder="0" oninput="veOnChange()"></div>
+            <div class="ve-resource-item"><label><span class="res-icon">🪸</span>余波珊瑚</label><input type="number" id="ve-coral" min="0" placeholder="0" oninput="veOnChange()"></div>
+            <div class="ve-resource-item"><label><span class="res-icon">🟡</span>浮金波纹</label><input type="number" id="ve-floatgold" min="0" placeholder="0" oninput="veOnChange()"></div>
+            <div class="ve-resource-item"><label><span class="res-icon">⚔️</span>铸潮波纹</label><input type="number" id="ve-casttide" min="0" placeholder="0" oninput="veOnChange()"></div>
+            <div class="ve-resource-item"><label><span class="res-icon">✨</span>限定金数</label><input type="number" id="ve-yellow" min="0" placeholder="0" oninput="veOnChange()"></div>
+            <div class="ve-resource-item"><label><span class="res-icon">👕</span>服饰</label><input type="number" id="ve-outfit" min="0" placeholder="0" oninput="veOnChange()"></div>
+            <div class="ve-resource-item"><label><span class="res-icon">🏍️</span>车架模组</label><input type="number" id="ve-frame" min="0" placeholder="0" oninput="veOnChange()"></div>
+          </div>
+
+          <!-- 角色列表 -->
+          <div class="ve-section-title" style="margin-top:16px;">
+            <span>角色列表</span>
+            <span class="ve-count" id="ve-char-count">0 个角色</span>
+          </div>
+          <div class="ve-char-grid" id="ve-char-grid"></div>
+
+          <!-- 移动端添加角色按钮（角色列表下方，仅移动端显示） -->
+          <button class="ve-add-char-top ve-add-char-mobile" onclick="openCharPickerTop(this)">＋ 添加角色</button>
+        </div>
       </div>
     </div>
 
-    <!-- 结果 -->
-    <div class="result-card" id="result">
-      <div class="result-summary" id="result-summary"></div>
-      <div class="result-divider"></div>
-      <div id="result-highlights"></div>
-      <div class="result-divider"></div>
-      <div id="result-details"></div>
-      <div class="result-divider"></div>
-      <div id="result-chars"></div>
-      <div class="result-divider"></div>
-      <div id="result-weapons"></div>
-      <div class="result-divider"></div>
-      <div id="result-resources"></div>
-    </div>
+      </div><!-- /main-left -->
+
+      <!-- 右侧摘要卡（桌面端固定） -->
+      <div class="main-right">
+        <div class="side-summary" id="side-summary">
+          <!-- 标价 + 估价按钮 -->
+          <div class="ss-action-section">
+            <div class="ss-label" style="margin-bottom:6px;">标价（元）</div>
+            <input type="number" id="ve-price-side" placeholder="选填" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--text);font-size:16px;font-weight:600;font-family:inherit;outline:none;text-align:center;margin-bottom:10px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'" oninput="syncPriceInput(this)">
+            <button class="ve-btn eval-btn" onclick="veEvaluate()">立即估价</button>
+            <div style="font-size:11px;color:#666;text-align:center;margin-top:6px;">修改内容后点击重新估价</div>
+          </div>
+          
+          <div class="ss-divider" style="display:none;" id="ss-divider-top"></div>
+          
+          <div class="ss-empty" id="side-summary-empty">
+            <div class="ss-empty-icon">💰</div>
+            输入账号信息后查看估价结果
+          </div>
+          <div id="side-summary-content" style="display:none;">
+            <div class="ss-label">预估价值</div>
+            <div class="ss-price" id="ss-price">--<span class="unit">元</span></div>
+            <div class="ss-range" id="ss-range" style="display:none;"></div>
+            <div class="ss-ratio" id="ss-ratio" style="display:none;"></div>
+
+            <div class="ss-stats-link" onclick="openStatsModal()">
+              <span>📊</span> 估值准不准？查看算法准确性报告
+            </div>
+
+            <div class="ss-section-title">核心数据</div>
+            <div class="ss-highlights" id="ss-highlights"></div>
+
+            <div class="ss-divider"></div>
+
+            <div class="ss-section-title ss-collapse-title" onclick="toggleCalcCollapse()">
+              <span>估价计算</span>
+              <span class="ss-collapse-arrow" id="calc-collapse-arrow">▶</span>
+            </div>
+            <div class="ss-calc" id="ss-calc" style="display:none;"></div>
+
+            <div class="ss-divider"></div>
+
+            <!-- 爱发电支持 -->
+            <div class="ss-afdian">
+              <div class="ss-afdian-icon">☕</div>
+              <div class="ss-afdian-text">
+                <div class="ss-afdian-title">对你有帮助？请作者喝杯咖啡</div>
+                <div class="ss-afdian-desc">你的支持是持续更新的动力</div>
+              </div>
+              <a href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener" class="ss-afdian-btn">
+                支持
+              </a>
+            </div>
+          </div>
+        </div>
+      </div><!-- /main-right -->
+    </div><!-- /main-layout -->
 
     <!-- Loading/Error -->
     <div id="status-msg"></div>
@@ -1216,23 +2336,153 @@ function getPageHTML(options) {
       <div class="history-tags" id="history-tags"></div>
     </div>
 
-    <!-- QQ群 & 合规声明 -->
-    <div class="footer-section rise d3">
-      <div class="qq-group-card">
-        <div class="qr-wrapper">
-          <img src="/public/qq-group.jpg" alt="QQ群二维码" />
+    <!-- QQ群弹窗 -->
+    <div id="qqgroup-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;" onclick="if(event.target===this)closeQQGroupModal()">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;padding:28px;text-align:center;min-width:280px;max-width:90vw;">
+        <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px;">咕嘎鸣潮估价群</div>
+        <div style="font-size:12px;color:#888;margin-bottom:16px;">扫码加入，交流估价心得，获取最新行情</div>
+        <img src="/public/qq-group.jpg" alt="QQ群二维码" style="width:100%;max-width:200px;height:auto;aspect-ratio:1/1;object-fit:contain;border-radius:10px;margin-bottom:12px;background:#fff;" />
+        <div style="font-size:13px;color:#aaa;">群号：<span style="color:#fbbf24;font-weight:600;">1064412729</span></div>
+        <button onclick="closeQQGroupModal()" style="margin-top:16px;background:none;border:1px solid var(--line);color:#888;font-size:13px;cursor:pointer;padding:6px 20px;border-radius:6px;">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 角色资讯弹窗 -->
+  <div id="news-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeNewsModal()">
+    <div style="max-width:720px;margin:40px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;padding:28px;min-height:300px;position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#fff;">角色资讯</div>
+          <div style="font-size:12px;color:#888;margin-top:2px;">最新角色动态、版本更新、强度排行</div>
         </div>
-        <div class="info">
-          <h3>咕嘎鸣潮估价群</h3>
-          <div class="group-id">群号：<span class="num">1064412729</span></div>
-          <div class="desc">扫码加入QQ群，交流鸣潮账号估价心得，获取最新行情动态</div>
+        <button onclick="closeNewsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:4px 10px;">×</button>
+      </div>
+      <div style="color:#aaa;font-size:13px;line-height:1.8;">
+        <div style="text-align:center;padding:40px 20px;color:#666;">
+          <div style="font-size:32px;margin-bottom:12px;">📰</div>
+          <div style="font-size:14px;">内容建设中，敬请期待</div>
+          <div style="font-size:12px;color:#555;margin-top:6px;">后续将更新角色强度榜、版本更新资讯、配队推荐等内容</div>
         </div>
       </div>
-      <div class="disclaimer">
-        <div class="title">合规声明</div>
-        <p>本工具仅提供游戏账号行情数据测算参考，不支持、不引导任何账号买卖、转让行为。</p>
-        <p>《鸣潮》官方禁止账号交易，所有账号交易产生封禁、被骗等损失由用户自行承担。</p>
-        <p>本站不收集任何游戏账号密码、实名隐私信息，数据仅本地临时解析。</p>
+    </div>
+  </div>
+
+  <!-- 买卖攻略弹窗 -->
+  <div id="tips-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeTipsModal()">
+    <div style="max-width:800px;margin:30px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;min-height:300px;position:relative;display:flex;">
+      <!-- 左侧目录 -->
+      <div style="width:180px;flex-shrink:0;border-right:1px solid var(--line);padding:20px 0;">
+        <div style="padding:0 20px 12px;font-size:13px;font-weight:600;color:#fff;">目录</div>
+        <div class="tips-sidenav">
+          <div class="tips-nav-item active" data-tab="safety" onclick="switchTipsTab('safety')">账号安全解析</div>
+          <div class="tips-nav-item" data-tab="buy" onclick="switchTipsTab('buy')">买号注意事项</div>
+          <div class="tips-nav-item" data-tab="sell" onclick="switchTipsTab('sell')">卖号注意事项</div>
+          <div class="tips-nav-item" data-tab="wegame" onclick="switchTipsTab('wegame')">WeGame解绑</div>
+          <div class="tips-nav-item" data-tab="tech" onclick="switchTipsTab('tech')">科技号判断</div>
+          <div class="tips-nav-item" data-tab="platform" onclick="switchTipsTab('platform')">平台优惠</div>
+        </div>
+      </div>
+      <!-- 右侧内容 -->
+      <div style="flex:1;padding:24px 28px;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:#fff;" id="tips-title">鸣潮买卖号注意事项</div>
+            <div style="font-size:12px;color:#888;margin-top:4px;">为降低交易风险、避免踩坑，建议在交易前仔细阅读本指南。</div>
+          </div>
+          <button onclick="closeTipsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:0 10px;flex-shrink:0;">×</button>
+        </div>
+
+        <!-- 账号安全 -->
+        <div class="tips-content" id="tips-safety">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#4ade80;">🛡</span> 账号安全
+          </h3>
+          <div style="padding:12px 14px;background:rgba(239,68,68,0.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;font-size:13px;color:#f87171;margin-bottom:16px;line-height:1.7;">
+            <strong>核心提示：</strong>虚拟财产交易本身存在风险。尽管鸣潮账号找回率不高，但任何私下、无担保的交易仍可能导致钱号两空，建议优先选择有保障的第三方平台进行交易。
+          </div>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 实名认证与换绑：</strong>实名信息一经绑定无法更换；手机号可更换。在无第三方绑定的情况下，鸣潮账号只有手机号这一种绑定。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 防范封号风险：</strong>自抽号、科技号存在封号风险，购买前请务必确认账号类型。若有意购买科技号，请自行权衡风险（买别怕，怕别买）。此外，目前多数平台的包赔服务不涵盖封号情形，部分平台支持封号赔付，具体以平台规则及客服说明为准，本站不做平台推荐。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 第三方绑定：</strong>所有第三方绑定在开启新设备验证后都无法上号，账号绑定过多也不利于后续流转。关于 WeGame 与 Tap：若卖家无法自行解绑 WeGame，可通过 WeGame 管理群联系群管理申请解绑，具体步骤见后文；Tap 一经绑定无法解绑，建议优先购买仅绑定手机号的账号。</p>
+          </div>
+        </div>
+
+        <!-- 买号注意 -->
+        <div class="tips-content" id="tips-buy" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#60a5fa;">🛒</span> 买号注意事项
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 仔细验号：</strong>进号后请逐项核对：角色、武器、资源等是否与卖家描述或截图一致，是否为科技号，角色练度是否合理，月相是否为负数。尤其注意资源与抽数：不少商家会以「准多少抽」等话术宣传，请自行根据游戏内数据计算，勿轻信口头承诺。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 第三方绑定查看：</strong>在游戏内依次打开「设置 → 账户设置 → 用户中心」，确认关联账号中是否存在第三方绑定。务必亲自核对，部分卖家页面标注无绑定，实际账号内仍有绑定。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 换绑后及时修改密码：</strong>换绑完成后，建议立即修改账号密码并清除其他设备的登录权限，以降低被盗风险。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">4. 买号后慎绑第三方：</strong>购号后尽量避免绑定第三方，以免影响日后转卖。若需绑定 WeGame，请使用可长期登录的 QQ，勿用小号绑定，否则解绑时难以找回。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">5. 切勿私下交易：</strong>切勿脱离平台进行私下交易，谨防诈骗（贴吧等渠道尤其多发）。若在线下看中账号，可与卖家协商通过平台中介完成交易（手续费较低），并确保全程在官方 APP 内操作。</p>
+          </div>
+          <div style="padding:12px 14px;background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;font-size:12px;color:#d4a84b;margin-top:16px;line-height:1.7;">
+            <strong>小贴士：</strong>建议验号时全程录屏，保留凭证，以便在出现描述不符时维权。
+          </div>
+        </div>
+
+        <!-- 卖号注意 -->
+        <div class="tips-content" id="tips-sell" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#fbbf24;">💰</span> 卖号注意事项
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 切勿线下/私下交易：</strong>私下交易风险极高，易导致钱号两空。鸣潮换绑需通过短信验证，若有人以「登录游戏」等理由要求发送短信，均为诈骗，请勿理会。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 建议先解绑 WeGame 再上架：</strong>解绑后再挂售，更容易出手，也减少买家顾虑。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 定价前先询价：</strong>不要凭感觉定价，以免卖亏。建议先向多家号商询价，再在此基础上适当加价（如约一倍）作为参考，多问几家更稳妥。</p>
+          </div>
+          <div style="padding:12px 14px;background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;font-size:12px;color:#d4a84b;margin-top:16px;line-height:1.7;">
+            <strong>小贴士：</strong>若账号上架后几秒内就被拍下，多为脚本秒单，说明标价偏低，可取消订单并重新定价。价格合理时，1～7 天内成交属正常情况，请勿急躁。
+          </div>
+        </div>
+
+        <!-- WeGame解绑 -->
+        <div class="tips-content" id="tips-wegame" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#a78bfa;">🔗</span> WeGame 解绑指引
+          </h3>
+          <div style="padding:12px 14px;background:rgba(167,139,250,0.06);border-left:3px solid #a78bfa;border-radius:0 8px 8px 0;font-size:13px;color:#c4b5fd;margin-bottom:16px;line-height:1.7;">
+            <strong>重点：</strong>WeGame 现已支持自助解绑，通过官方解绑页面即可操作，无需联系客服。
+          </div>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 进入自助解绑页面：</strong>打开 <a href="https://www.wegame.com.cn/act/wegame/MCunbind/?hcfrom=WeGame.helper" target="_blank" style="color:#60a5fa;">WeGame × 库洛通行证解绑页面</a>，使用需要解绑的 WeGame 账号登录。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 按页面指引操作：</strong>登录后可查看当前绑定关系，按页面提示完成解绑即可。解绑和绑定操作对《鸣潮》《战双帕弥什》同步生效。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 常见问题：</strong>详细的绑定/解绑规则可参考 <a href="https://www.wegame.com.cn/platform/article/detail.html?feedsid=236e3c5304e14bdc8e59fda2ced118a9&articleId=0de2164d7be34b058f4fb82a19b7c77b" target="_blank" style="color:#60a5fa;">WeGame × 鸣潮账号绑定常见问题</a>。</p>
+          </div>
+        </div>
+
+        <!-- 科技号判断 -->
+        <div class="tips-content" id="tips-tech" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#f87171;">⚠</span> 科技号深度识别
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 速通全息截图：</strong>当前不少平台会展示「全息战略」通关截图。若截图中为「主角 + 秧秧 + 赤霞」通关全部全息关卡，即可基本判定为科技号。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 成就查询：</strong>可借助两个成就辅助判断：①「自新世界」— 完成日期即为账号建号日期；②「黑暗森林的幽灵」— 系列成就，对应通关深塔。在成就栏搜索上述两项，若建号首日即完成全部深塔，基本可判定为科技号（首日无资源难以正常全通）。</p>
+          </div>
+          <div style="padding:12px 14px;background:rgba(239,68,68,0.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;font-size:12px;color:#f87171;margin-top:16px;line-height:1.7;">
+            <strong>提醒：</strong>科技号未必被封，但存在封号风险；当前虽封禁较少，但无法排除个案。请自行权衡：买别怕，怕别买。
+          </div>
+        </div>
+
+        <!-- 平台优惠 -->
+        <div class="tips-content" id="tips-platform" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#4ade80;">🎁</span> 平台优惠指南
+          </h3>
+          <div style="padding:12px 14px;background:rgba(74,222,128,0.06);border-left:3px solid #4ade80;border-radius:0 8px 8px 0;font-size:13px;color:#86efac;margin-bottom:16px;line-height:1.7;">
+            螃蟹平台优惠：每月可在京东 APP 领取专属优惠券，买卖号时记得先领券再下单，能省一笔就是一笔。
+          </div>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 打开京东 APP 搜索「螃蟹账号」：</strong>在首页搜索栏输入「螃蟹账号」，找到并进入螃蟹账号官方旗舰店。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 进入店铺领取优惠券：</strong>进入店铺后，关注首页顶部或活动横幅中的「领券」入口，每月可领取一批优惠券，下单前务必先领券再拍单。</p>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -1251,12 +2501,261 @@ function getPageHTML(options) {
     </div>
   </div>
 
+  <!-- 移动端浮动结果条 -->
+  <div class="mobile-float-bar" id="mobile-float-bar" onclick="openMobileDetailModal()">
+    <div>
+      <div class="mfb-price" id="mfb-price">--<span class="unit">元</span></div>
+      <div class="mfb-info" id="mfb-info">预估价值 <span class="mfb-detail-hint">查看详情 ▸</span></div>
+    </div>
+    <div class="mfb-ratio" id="mfb-ratio" style="display:none;"></div>
+  </div>
+
+  <!-- 移动端估值详情弹窗 -->
+  <div id="mobile-detail-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeMobileDetailModal()">
+    <div class="mobile-detail-container">
+      <div class="mobile-detail-header">
+        <div>
+          <div class="mobile-detail-title">估值详情</div>
+          <div class="mobile-detail-subtitle">完整估值计算明细</div>
+        </div>
+        <button onclick="closeMobileDetailModal()" class="mobile-detail-close">×</button>
+      </div>
+      <div class="mobile-detail-body">
+        <div id="mobile-detail-content">
+          <div style="text-align:center;padding:60px 20px;color:#666;">暂无数据</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 使用须知弹窗 -->
+  <div id="guide-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeGuideModal()">
+    <div style="max-width:800px;margin:30px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;min-height:300px;position:relative;display:flex;">
+      <!-- 左侧目录 -->
+      <div style="width:180px;flex-shrink:0;border-right:1px solid var(--line);padding:20px 0;">
+        <div style="padding:0 20px 12px;font-size:13px;font-weight:600;color:#fff;">目录</div>
+        <div class="tips-sidenav">
+          <div class="tips-nav-item active" data-tab="guide-usage" onclick="switchGuideTab('usage')">使用方法</div>
+          <div class="tips-nav-item" data-tab="guide-notice" onclick="switchGuideTab('notice')">重要提示</div>
+          <div class="tips-nav-item" data-tab="guide-tips" onclick="switchGuideTab('tips')">使用小贴士</div>
+          <div class="tips-nav-item" data-tab="guide-data" onclick="switchGuideTab('data')">数据说明</div>
+        </div>
+      </div>
+      <!-- 右侧内容 -->
+      <div style="flex:1;padding:24px 28px;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:#fff;">使用须知</div>
+            <div style="font-size:12px;color:#888;margin-top:4px;">使用前请仔细阅读以下内容</div>
+          </div>
+          <button onclick="closeGuideModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:0 10px;flex-shrink:0;">×</button>
+        </div>
+
+        <!-- 使用方法 -->
+        <div class="guide-content" id="guide-usage">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#60a5fa;">📖</span> 使用方法
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:12px;"><strong style="color:#fff;">方法一：粘贴账号描述（推荐，最快）</strong></p>
+            <ol style="margin-left:20px;margin-bottom:16px;">
+              <li style="margin-bottom:6px;">从螃蟹网、盼之、氪金兽等平台复制账号描述文本</li>
+              <li style="margin-bottom:6px;">粘贴到页面顶部的"账号描述"输入框</li>
+              <li style="margin-bottom:6px;">系统自动识别角色、命座、专武、资源等信息</li>
+              <li style="margin-bottom:6px;">在右侧输入标价（选填），点击"立即估价"查看结果</li>
+            </ol>
+
+            <p style="margin-bottom:12px;"><strong style="color:#fff;">方法二：手动添加角色</strong></p>
+            <ol style="margin-left:20px;margin-bottom:16px;">
+              <li style="margin-bottom:6px;">点击红色的"＋ 添加角色"按钮</li>
+              <li style="margin-bottom:6px;">在弹窗中选择要添加的角色（支持搜索）</li>
+              <li style="margin-bottom:6px;">在角色卡片上调整命座和专武精炼等级</li>
+              <li style="margin-bottom:6px;">在"其他资源"中填写星声、月相等资源数量</li>
+              <li style="margin-bottom:6px;">点击右侧"立即估价"按钮查看结果</li>
+            </ol>
+
+            <p style="margin-bottom:12px;"><strong style="color:#fff;">查看估价结果</strong></p>
+            <ul style="margin-left:20px;margin-bottom:10px;">
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">桌面端</strong>：右侧摘要卡显示预估总价、性价比、核心数据亮点</li>
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">移动端</strong>：点击底部浮动条查看完整估值详情</li>
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">详细结果</strong>：向下滚动查看角色明细、武器明细、资源明细</li>
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">算法准确性</strong>：点击"查看准确性报告"了解模型误差分布</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 重要提示 -->
+        <div class="guide-content" id="guide-notice" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#fbbf24;">⚠️</span> 重要提示
+          </h3>
+          <div style="padding:12px 14px;background:rgba(239,68,68,0.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;font-size:13px;color:#f87171;margin-bottom:16px;line-height:1.7;">
+            <strong>核心提示：</strong>本工具仅提供行情参考，不构成任何交易建议。估价结果基于历史成交数据和算法模型测算，实际交易价格受市场供需、账号稀有度、平台政策等多种因素影响，仅供参考。
+          </div>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 交易风险：</strong>游戏官方禁止账号交易，交易有封禁风险。请勿在非官方平台交易，谨防诈骗。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 隐私安全：</strong>本工具不收集任何账号密码和实名隐私信息，描述解析在本地浏览器进行，数据安全。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 仅供参考：</strong>估价结果为算法测算值，实际成交价可能因账号细节、市场行情等因素有所波动。</p>
+          </div>
+        </div>
+
+        <!-- 使用小贴士 -->
+        <div class="guide-content" id="guide-tips" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#4ade80;">💡</span> 使用小贴士
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 描述越详细越准确：</strong>描述文本越详细，识别越准确，尽量包含完整的角色命座和武器信息。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 角色列表排序：</strong>角色列表按等级排序（S/A/B/C/D），方便快速查看高价值角色。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 自动同步：</strong>修改角色或资源后，描述文本会自动同步更新。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">4. 性价比查看：</strong>输入标价后可查看性价比，正值表示物超所值。</p>
+          </div>
+        </div>
+
+        <!-- 数据说明 -->
+        <div class="guide-content" id="guide-data" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#a78bfa;">📊</span> 数据说明
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">数据来源：</strong>估价模型基于螃蟹网、盼之等平台的历史成交数据训练，定期更新行情参数。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">算法准确性：</strong>算法准确性报告可查看当前模型的误差分布，帮助你了解估价的可靠程度。</p>
+          </div>
+          <div style="margin-top:20px;padding:14px 16px;background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;font-size:12px;color:#d4a84b;line-height:1.7;">
+            如有问题或建议，可加入QQ群反馈：<strong style="color:#fbbf24;">1064412729</strong>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- 图片放大遮罩层 -->
   <div class="img-overlay" id="img-overlay">
     <img src="/public/qq-group.jpg" alt="QQ群二维码" />
   </div>
 
   <script src="/public/value-settings.js?v=20260824" onerror="window.__vsFailed=true"></script>
+  <script>
+    // 头像图片加载失败兜底（显示首字母）
+    function onAvatarError(img) {
+      if (!img || !img.parentNode) return;
+      var name = img.getAttribute('data-name') || '';
+      var firstChar = name.charAt(0) || '?';
+      img.style.display = 'none';
+      img.parentNode.innerHTML = firstChar;
+    }
+
+    // 移动端价格输入同步
+    function syncMobilePrice(el) {
+      var val = el.value;
+      // 同步到侧边栏
+      var side = document.getElementById('ve-price-side');
+      if (side) side.value = val;
+      // 同步到另一个移动端输入框
+      var otherId = el.id === 've-price-mobile-desc' ? 've-price-mobile' : 've-price-mobile-desc';
+      var other = document.getElementById(otherId);
+      if (other && document.activeElement !== other) other.value = val;
+    }
+
+    // 顶部导航栏滚动效果
+    (function() {
+      var nav = document.getElementById('top-nav');
+      if (!nav) return;
+      function onScroll() {
+        if (window.scrollY > 20) nav.classList.add('scrolled');
+        else nav.classList.remove('scrolled');
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+
+      // 首次访问自动弹出使用须知
+      try {
+        if (!localStorage.getItem('mw_guide_shown')) {
+          setTimeout(function() {
+            openGuideModal();
+            localStorage.setItem('mw_guide_shown', '1');
+          }, 500);
+        }
+      } catch(e) {}
+    })();
+
+    // 使用须知弹窗
+    function openGuideModal() {
+      document.getElementById('guide-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeGuideModal() {
+      document.getElementById('guide-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // 使用须知Tab切换
+    function switchGuideTab(tab) {
+      var contents = document.querySelectorAll('.guide-content');
+      contents.forEach(function(c) { c.style.display = 'none'; });
+      var target = document.getElementById('guide-' + tab);
+      if (target) target.style.display = 'block';
+      var items = document.querySelectorAll('#guide-modal .tips-nav-item');
+      items.forEach(function(item) {
+        item.classList.toggle('active', item.getAttribute('data-tab') === 'guide-' + tab);
+      });
+    }
+    function openQQGroupModal() {
+      document.getElementById('qqgroup-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeQQGroupModal() {
+      document.getElementById('qqgroup-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // 移动端估值详情弹窗
+    function openMobileDetailModal() {
+      document.getElementById('mobile-detail-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeMobileDetailModal() {
+      document.getElementById('mobile-detail-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // 角色资讯弹窗
+    function openNewsModal() {
+      document.getElementById('news-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeNewsModal() {
+      document.getElementById('news-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // 买卖攻略弹窗
+    function openTipsModal() {
+      document.getElementById('tips-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeTipsModal() {
+      document.getElementById('tips-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // 买卖攻略Tab切换
+    function switchTipsTab(tab) {
+      var contents = document.querySelectorAll('.tips-content');
+      contents.forEach(function(c) { c.style.display = 'none'; });
+      var target = document.getElementById('tips-' + tab);
+      if (target) target.style.display = 'block';
+      var items = document.querySelectorAll('.tips-nav-item');
+      items.forEach(function(item) {
+        item.classList.toggle('active', item.getAttribute('data-tab') === tab);
+      });
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeGuideModal();
+        closeQQGroupModal();
+        closeNewsModal();
+        closeTipsModal();
+        closeStatsModal();
+      }
+    });
+  </script>
   <script>
     // 螃蟹网代理列表（客户端抓取用，多代理轮询降低被封风险）
     window._pxb7Proxies = ${JSON.stringify(pxb7Proxies)};
@@ -1394,6 +2893,8 @@ function getPageHTML(options) {
         // 重新查询编号以应用新规则
         document.getElementById('product-id').value = lastLookupId;
         doLookup();
+      } else if (currentTab === 'visual' && VE_CHARS.length > 0) {
+        veEvaluate(true);
       }
     }
 
@@ -1623,7 +3124,8 @@ function getPageHTML(options) {
         summaryHtml += '<div class="ratio ' + ratioClass + '">性价比 ' + ratioText + ' (标价' + d.price + '元 · 差价' + diffText + '元)</div>';
       }
       summaryHtml += '<button class="adjust-link" id="adjust-link" onclick="openStatsModal()">估值准不准？查看算法准确性报告</button>';
-      document.getElementById('result-summary').innerHTML = summaryHtml;
+      var sumEl = document.getElementById('result-summary');
+      if (sumEl) sumEl.innerHTML = summaryHtml;
 
       const det = d.details;
       const info = d.info || {};
@@ -1673,7 +3175,8 @@ function getPageHTML(options) {
         hlHtml += '<span style="background:#2e1a2a;border:1px solid #f472b6;border-radius:4px;padding:2px 8px;font-size:11px;color:#f472b6;">低命折扣 ×' + fd.value + '</span>';
       }
       hlHtml += '</div>';
-      document.getElementById('result-highlights').innerHTML = hlHtml;
+      var hlEl = document.getElementById('result-highlights');
+      if (hlEl) hlEl.innerHTML = hlHtml;
 
       // ===== 估价计算 =====
       let detailHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">估价计算</div>';
@@ -1754,7 +3257,8 @@ function getPageHTML(options) {
           '<span class="val" style="color:#60a5fa;font-weight:600;font-size:14px;">¥' + det.priceRange.low + ' ~ ¥' + det.priceRange.high + '</span>' +
           '</div>';
       }
-      document.getElementById('result-details').innerHTML = detailHtml;
+      var detEl = document.getElementById('result-details');
+      if (detEl) detEl.innerHTML = detailHtml;
 
       // ===== 角色明细（按估值从大到小排序） =====
       let charHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">角色明细（按价值排序）</div>';
@@ -1773,7 +3277,8 @@ function getPageHTML(options) {
       } else {
         charHtml += '<span style="color:#666;font-size:12px;">未识别到角色</span>';
       }
-      document.getElementById('result-chars').innerHTML = charHtml;
+      var charsEl = document.getElementById('result-chars');
+      if (charsEl) charsEl.innerHTML = charHtml;
 
       // ===== 武器明细 =====
       let wpnHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">武器明细</div>';
@@ -1789,7 +3294,8 @@ function getPageHTML(options) {
       } else {
         wpnHtml += '<span style="color:#666;font-size:12px;">未识别到武器</span>';
       }
-      document.getElementById('result-weapons').innerHTML = wpnHtml;
+      var wpnEl = document.getElementById('result-weapons');
+      if (wpnEl) wpnEl.innerHTML = wpnHtml;
 
       // ===== 资源明细 =====
       let resHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">资源明细</div>';
@@ -1810,18 +3316,252 @@ function getPageHTML(options) {
       var yiInfo = det.yellowInfo || {};
       var goldSummary = (yiInfo.effectiveYellow != null ? fmtGold(yiInfo.effectiveYellow) : '-') + '/' + (yiInfo.limitedYellow != null ? fmtGold(yiInfo.limitedYellow) : '-') + '/' + (info.yellowCount || 0);
       resHtml += resultRow('有效金/限定金/总金数', goldSummary, '#f59e0b');
-      document.getElementById('result-resources').innerHTML = resHtml;
+      var resEl = document.getElementById('result-resources');
+      if (resEl) resEl.innerHTML = resHtml;
 
-      document.getElementById('result').classList.add('show');
+      var resultEl = document.getElementById('result');
+      if (resultEl) resultEl.classList.add('show');
       // 显示"估值不准"按钮
       const adjustBtn = document.getElementById('adjust-link');
       if (adjustBtn) adjustBtn.style.display = 'inline-block';
+
+      // ===== 更新侧边摘要卡 & 移动端浮动条 =====
+      updateSideSummary(d);
+    }
+
+    // 更新侧边摘要卡和移动端浮动条
+    function updateSideSummary(d) {
+      const det = d.details || {};
+      const info = d.info || {};
+
+      // 隐藏空状态，显示内容
+      const emptyEl = document.getElementById('side-summary-empty');
+      const contentEl = document.getElementById('side-summary-content');
+      const dividerEl = document.getElementById('ss-divider-top');
+      if (emptyEl) emptyEl.style.display = 'none';
+      if (contentEl) contentEl.style.display = 'block';
+      if (dividerEl) dividerEl.style.display = 'block';
+
+      // 价格
+      const priceEl = document.getElementById('ss-price');
+      if (priceEl) priceEl.innerHTML = d.estimatedValue + '<span class="unit">元</span>';
+
+      // 合理交易范围
+      const rangeEl = document.getElementById('ss-range');
+      if (rangeEl) {
+        if (det.priceRange && det.priceRange.low != null) {
+          rangeEl.style.display = 'block';
+          rangeEl.textContent = '合理交易范围：¥' + det.priceRange.low + ' ~ ¥' + det.priceRange.high;
+        } else {
+          rangeEl.style.display = 'none';
+        }
+      }
+
+      // 性价比
+      const ratioEl = document.getElementById('ss-ratio');
+      if (ratioEl && d.price && d.price > 0) {
+        const ratioClass = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
+        const ratioText = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(2) + '%' : d.costPerformance.toFixed(2) + '%';
+        const diff = (d.estimatedValue - d.price).toFixed(0);
+        const diffText = diff >= 0 ? '+' + diff : diff;
+        ratioEl.className = 'ss-ratio ' + ratioClass;
+        ratioEl.style.display = 'block';
+        ratioEl.textContent = '性价比 ' + ratioText + '（差价' + diffText + '元）';
+      } else if (ratioEl) {
+        ratioEl.style.display = 'none';
+      }
+
+      // 核心数据亮点
+      const hlEl = document.getElementById('ss-highlights');
+      if (hlEl) {
+        const items = [];
+        const charCount = (det.characters && det.characters.length) || 0;
+        const c6Count = (det.characters || []).filter(c => c.const >= 6).length;
+        const sTierCount = (det.characters || []).filter(c => c.tier === 'S').length;
+        const sigCount = (det.characters || []).filter(c => c.hasSig).length;
+        const yi = det.yellowInfo || {};
+        const fd = det.flatDiscount || { value: 1, notes: [] };
+
+        if (charCount > 0) items.push({ k: '五星角色', v: charCount + ' 个' });
+        if (sigCount > 0) items.push({ k: '专武', v: sigCount + ' 把', cls: 'warn' });
+        if (info.pulls > 0) items.push({ k: '总抽数', v: info.pulls + ' 抽' });
+        if (yi.effectiveYellow != null) {
+          items.push({ k: '有效金', v: fmtGold(yi.effectiveYellow) });
+        }
+        if (det.weightedFullConst > 0) {
+          items.push({ k: '加权满命', v: det.weightedFullConst.toFixed(1), cls: 'good' });
+        }
+        if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
+          var teamNames = det.satisfiedTeams.map(function(t) { return t.name || t; }).join('、');
+          items.push({ k: '成型配队', v: det.satisfiedTeams.length + ' 组', cls: 'good', tip: teamNames });
+        }
+        if (fd.value < 1) {
+          items.push({ k: '低命折扣', v: '×' + fd.value, cls: 'warn' });
+        }
+
+        let html = '';
+        items.slice(0, 8).forEach(item => {
+          var kHtml = item.k;
+          if (item.tip) {
+            kHtml = item.k + '<span class="hl-tip">ⓘ<span class="tooltip">' + item.tip + '</span></span>';
+          }
+          html += '<div class="ss-hl-item"><span class="k">' + kHtml + '</span><span class="v ' + (item.cls || '') + '">' + item.v + '</span></div>';
+        });
+        hlEl.innerHTML = html;
+      }
+
+      // 估价计算明细
+      const calcEl = document.getElementById('ss-calc');
+      if (calcEl && det) {
+        let calcRows = [];
+        // 角色价值
+        if (det.characterValue != null) {
+          calcRows.push({ label: '角色价值', val: det.characterValue + ' 元' });
+        }
+        // 满命溢价
+        if (det.c6Premium != null && det.c6Premium > 0) {
+          calcRows.push({ label: '满命溢价', val: '+' + det.c6Premium + ' 元', cls: 'pos', tip: '满命角色越多，账号稀缺性越高，额外加成越多' });
+        }
+        // 配队溢价
+        if (det.teamPremium != null && det.teamPremium > 0) {
+          calcRows.push({ label: '配队溢价', val: '+' + det.teamPremium + ' 元', cls: 'pos', tip: '凑成完整成型配队的账号，可玩性更高，有额外价值加成' });
+        }
+        // 抽数价值
+        if (det.pullValue != null && det.pullValue > 0) {
+          calcRows.push({ label: '抽数价值', val: '+' + det.pullValue + ' 元', cls: 'pos', tip: '星声、月相、波纹等抽卡资源按比例换算的等价价值' });
+        }
+        // 资源价值
+        if (det.resourceValue != null && det.resourceValue > 0) {
+          calcRows.push({ label: '资源价值', val: '+' + det.resourceValue + ' 元', cls: 'pos' });
+        }
+        // 强绑折扣
+        if (det.c6DepDiscount != null && det.c6DepDiscount > 0) {
+          calcRows.push({ label: '强绑折扣', val: '-' + det.c6DepDiscount + ' 元', cls: 'neg' });
+        }
+        // 无专武折扣
+        if (det.sigDiscount != null && det.sigDiscount > 0) {
+          calcRows.push({ label: '无专武折扣', val: '-' + det.sigDiscount + ' 元', cls: 'neg' });
+        }
+        // 低命折扣
+        const fd = det.fullConstDep || {};
+        if (fd.value != null && fd.value < 1) {
+          calcRows.push({ label: '低命折扣', val: '× ' + fd.value, cls: 'neg' });
+        }
+        // 有效金系数
+        const yi = det.yellowInfo || {};
+        if (yi.coefficient != null && yi.coefficient !== 1) {
+          const goldLabel = yi.effectiveYellow != null ? fmtGold(yi.effectiveYellow) + ' 金' : '';
+          calcRows.push({ label: '有效金系数', val: '× ' + yi.coefficient, cls: yi.coefficient > 1 ? 'pos' : 'neg', tip: '根据有效金数量（限定角色+专武）调整系数，金越多账号越值钱，系数越高' });
+        }
+
+        let calcHtml = '';
+        calcRows.forEach(function(row) {
+          var labelHtml = row.label;
+          if (row.tip) {
+            labelHtml = row.label + '<span class="tooltip">' + row.tip + '</span>';
+          }
+          calcHtml += '<div class="ss-calc-row"><span class="label">' + labelHtml + '</span><span class="val ' + (row.cls || '') + '">' + row.val + '</span></div>';
+        });
+        calcHtml += '<div class="ss-calc-total"><span>最终估值</span><span class="val">¥' + d.estimatedValue + '</span></div>';
+        calcEl.innerHTML = calcHtml;
+      }
+
+      // 移动端浮动条
+      const floatBar = document.getElementById('mobile-float-bar');
+      const mfbPrice = document.getElementById('mfb-price');
+      const mfbRatio = document.getElementById('mfb-ratio');
+      if (floatBar) {
+        floatBar.classList.add('show');
+        document.body.classList.add('has-float-bar');
+      }
+      if (mfbPrice) mfbPrice.innerHTML = d.estimatedValue + '<span class="unit">元</span>';
+      if (mfbRatio && d.price && d.price > 0) {
+        const ratioClass2 = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
+        const ratioText2 = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(1) + '%' : d.costPerformance.toFixed(1) + '%';
+        mfbRatio.className = 'mfb-ratio ' + ratioClass2;
+        mfbRatio.style.display = 'block';
+        mfbRatio.textContent = ratioText2;
+      } else if (mfbRatio) {
+        mfbRatio.style.display = 'none';
+      }
+
+      // 移动端详情弹窗内容
+      const mobileDetailEl = document.getElementById('mobile-detail-content');
+      if (mobileDetailEl) {
+        let detailHtml = '';
+        // 预估价值大卡片
+        detailHtml += '<div class="md-value-card">';
+        detailHtml += '<div class="label">预估价值</div>';
+        detailHtml += '<div class="price">¥' + d.estimatedValue + '</div>';
+        if (d.reasonableRange) {
+          detailHtml += '<div class="range">合理范围: ¥' + d.reasonableRange[0] + ' ~ ¥' + d.reasonableRange[1] + '</div>';
+        }
+        if (d.price && d.price > 0) {
+          const ratioClass3 = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
+          const ratioText3 = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(1) + '%' : d.costPerformance.toFixed(1) + '%';
+          detailHtml += '<div class="md-ratio ' + ratioClass3 + '">性价比 ' + ratioText3 + '</div>';
+        }
+        detailHtml += '</div>';
+
+        // 核心数据 - 直接复用PC端结构，保持一致
+        const hlEl2 = document.getElementById('ss-highlights');
+        if (hlEl2 && hlEl2.children.length) {
+          detailHtml += '<div class="md-card">';
+          detailHtml += '<div class="md-card-title">核心数据</div>';
+          detailHtml += '<div class="ss-highlights">' + hlEl2.innerHTML + '</div>';
+          detailHtml += '</div>';
+        }
+
+        // 估价计算 - 直接复用PC端结构，保持一致
+        const calcEl2 = document.getElementById('ss-calc');
+        if (calcEl2 && calcEl2.children.length) {
+          detailHtml += '<div class="md-card">';
+          detailHtml += '<div class="md-card-title">估价计算</div>';
+          detailHtml += '<div class="ss-calc">' + calcEl2.innerHTML + '</div>';
+          detailHtml += '</div>';
+        }
+
+        // 底部操作区
+        detailHtml += '<div class="md-actions">';
+        // 算法准确性报告入口
+        detailHtml += '<div onclick="closeMobileDetailModal();openStatsModal();" style="cursor:pointer;text-align:center;padding:14px;border:1px solid var(--line);border-radius:10px;color:var(--text-secondary);font-size:13px;background:var(--bg-soft);">';
+        detailHtml += '<span>📊</span> 估值准不准？查看算法准确性报告';
+        detailHtml += '</div>';
+
+        // 爱发电支持
+        detailHtml += '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,rgba(255,107,157,0.1),rgba(255,159,67,0.08));border:1px solid rgba(255,107,157,0.25);border-radius:12px;">';
+        detailHtml += '<div style="font-size:32px;flex-shrink:0;">☕</div>';
+        detailHtml += '<div style="flex:1;min-width:0;">';
+        detailHtml += '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:3px;">对你有帮助？请作者喝杯咖啡</div>';
+        detailHtml += '<div style="font-size:11px;color:rgba(255,255,255,0.5);">你的支持是持续更新的动力</div>';
+        detailHtml += '</div>';
+        detailHtml += '<a href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener" style="flex-shrink:0;padding:8px 18px;background:linear-gradient(135deg,#ff6b9d,#ff9f43);color:#fff;font-size:13px;font-weight:600;border-radius:20px;text-decoration:none;box-shadow:0 2px 12px rgba(255,107,157,0.3);">支持</a>';
+        detailHtml += '</div>';
+        detailHtml += '</div>';
+
+        mobileDetailEl.innerHTML = detailHtml;
+      }
     }
 
     function resultRow(key, val, color) {
       return '<div class="result-row"><span class="key">' + key + '</span><span class="val" style="color:' + (color || '#e0e0e0') + ';">' + val + '</span></div>';
     }
     function fmtGold(n) { if (n == null) return '-'; return n % 1 === 0 ? n : (Math.round(n * 10) / 10); }
+
+    // 估价计算折叠/展开
+    let calcCollapsed = true;
+    function toggleCalcCollapse() {
+      calcCollapsed = !calcCollapsed;
+      var calcEl = document.getElementById('ss-calc');
+      var arrowEl = document.getElementById('calc-collapse-arrow');
+      if (calcCollapsed) {
+        calcEl.style.display = 'none';
+        arrowEl.classList.remove('open');
+      } else {
+        calcEl.style.display = '';
+        arrowEl.classList.add('open');
+      }
+    }
 
     // ============================================================
     // 算法准确性报告弹窗
@@ -2124,6 +3864,7 @@ function getPageHTML(options) {
     var VE_CHARS = [];      // 角色列表 [{name, tier, price, const, hasSig, sigRefine}]
     var VE_DEBOUNCE = null;
     var VE_EVALUATING = false;
+    var VE_SYNC_DESC = true; // 是否同步描述文本（防止双向触发死循环）
 
     // 从当前生效的权重配置动态构建角色列表（支持服务端默认+用户自定义双层覆盖）
     function veGetCharList() {
@@ -2210,32 +3951,111 @@ function getPageHTML(options) {
       if (!grid) return;
       document.getElementById('ve-char-count').textContent = VE_CHARS.length + ' 个角色';
       if (VE_CHARS.length === 0) {
-        grid.innerHTML = '<div style="width:100%;text-align:center;padding:20px 0;color:var(--text-dim);font-size:12px;">还没有添加角色，点击下方按钮添加</div>';
+        grid.innerHTML = '<div style="width:100%;text-align:center;padding:24px 0;color:var(--text-dim);font-size:12px;">还没有添加角色，点击上方按钮添加</div>';
         return;
       }
-      // 按价格从高到低排序
-      var sorted = [...VE_CHARS].sort((a, b) => (b.price || 0) - (a.price || 0));
+      // 按等级排序（S>A>B>C>D>E），同等级按价格从高到低
+      var tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4, E: 5 };
+      var sorted = [...VE_CHARS].sort(function(a, b) {
+        var ta = tierOrder[a.tier] != null ? tierOrder[a.tier] : 99;
+        var tb = tierOrder[b.tier] != null ? tierOrder[b.tier] : 99;
+        if (ta !== tb) return ta - tb;
+        return (b.price || 0) - (a.price || 0);
+      });
       grid.innerHTML = sorted.map(function(c) {
         var tier = c.tier || 'E';
-        var firstChar = c.name.charAt(0);
-        var constStr = c.const >= 6 ? '满命' : (c.const > 0 ? c.const + '命' : '零命');
-        var sigStr = c.hasSig ? ('+专武' + (c.sigRefine > 1 ? '精' + c.sigRefine : '')) : '';
-        var priceStr = '¥' + (c.price || 0);
+        var tierLabels = { S: 'S级', A: 'A级', B: 'B级', C: 'C级', D: 'D级', E: 'E级' };
+        var tierLabel = tierLabels[tier] || tier + '级';
+        var sigWeapons = veGetSigWeapons();
+        var sigName = sigWeapons[c.name];
+        var hasSig = !!c.hasSig;
+        var sigRefine = c.sigRefine || 1;
+        
+        // 命座选项
+        var constOptions = '';
+        for (var i = 0; i <= 6; i++) {
+          var label = i === 0 ? '零命' : (i === 6 ? '满命' : i + '命');
+          constOptions += '<option value="' + i + '"' + (c.const === i ? ' selected' : '') + '>' + label + '</option>';
+        }
+        
+        // 武器精数选项（0=无，1-5=精1到精5）
+        var refineOptions = '<option value="0">无专武</option>';
+        if (sigName) {
+          for (var j = 1; j <= 5; j++) {
+            refineOptions += '<option value="' + j + '"' + (hasSig && sigRefine === j ? ' selected' : '') + '>精' + j + '</option>';
+          }
+        }
+        
         return (
-          '<div class="ve-char-card" onclick="veOpenCharEdit(\\'' + c.name.replace(/'/g, "\\\\'") + '\\')">' +
-            '<div class="ve-char-avatar ' + tier + '">' + firstChar + '</div>' +
-            '<div class="ve-char-info">' +
-              '<div class="ve-char-name">' + c.name + '</div>' +
-              '<div class="ve-char-meta">' +
-                '<span class="tag const">' + constStr + '</span>' +
-                (c.hasSig ? '<span class="tag sig">' + sigStr + '</span>' : '') +
-                '<span class="tag price">' + priceStr + '</span>' +
+          '<div class="ve-char-card" data-name="' + c.name + '">' +
+            '<div class="ve-char-top">' +
+              '<div class="ve-char-avatar ' + tier + '"><img src="/public/avatars/' + encodeURIComponent(c.name) + '.png" data-name="' + c.name + '" onerror="onAvatarError(this)"></div>' +
+              '<div class="ve-char-info">' +
+                '<div class="ve-char-name-row">' +
+                  '<span class="ve-char-name">' + c.name + '</span>' +
+                  '<span class="ve-char-price' + ((c.price && c.price > 0) ? '' : ' muted') + '">' + ((c.price && c.price > 0) ? '¥' + c.price : '¥--') + '</span>' +
+                '</div>' +
+                '<div class="ve-char-tier"><span class="tier-badge ' + tier + '">' + tierLabel + '</span></div>' +
               '</div>' +
             '</div>' +
-            '<div class="ve-char-remove" onclick="event.stopPropagation();veRemoveChar(\\'' + c.name.replace(/'/g, "\\\\'") + '\\')" title="移除">×</div>' +
+            '<div class="ve-char-selects">' +
+              '<select onchange="veUpdateCharConst(\\'' + c.name.replace(/'/g, "\\\\'") + '\\', this.value)">' + constOptions + '</select>' +
+              '<select onchange="veUpdateCharSig(\\'' + c.name.replace(/'/g, "\\\\'") + '\\', this.value)">' + refineOptions + '</select>' +
+            '</div>' +
+            '<div class="ve-char-remove" onclick="veRemoveChar(\\'' + c.name.replace(/'/g, "\\\\'") + '\\')" title="移除">×</div>' +
           '</div>'
         );
       }).join('');
+    }
+
+    // 更新角色命座
+    function veUpdateCharConst(name, value) {
+      var c = VE_CHARS.find(function(c) { return c.name === name; });
+      if (!c) return;
+      c.const = parseInt(value) || 0;
+      // 重新计算价格
+      var list = veGetCharList();
+      var info = list.find(function(c) { return c.name === name; });
+      if (info) {
+        var constPremiums = (typeof getSavedWeights === 'function') ? ((getSavedWeights() || {}).constPremiums || {}) : {};
+        var basePrice = info.price || 0;
+        var premium = constPremiums[name] && constPremiums[name][c.const] != null ? constPremiums[name][c.const] : 0;
+        c.price = Math.round(basePrice + premium);
+      }
+      veRenderChars();
+      veOnChange();
+    }
+
+    // 更新角色专武精炼
+    function veUpdateCharSig(name, value) {
+      var c = VE_CHARS.find(function(c) { return c.name === name; });
+      if (!c) return;
+      var v = parseInt(value) || 0;
+      if (v === 0) {
+        c.hasSig = false;
+        c.sigRefine = 1;
+      } else {
+        c.hasSig = true;
+        c.sigRefine = v;
+      }
+      // 重新计算价格（简化：专武按固定加成）
+      var list = veGetCharList();
+      var info = list.find(function(c) { return c.name === name; });
+      if (info) {
+        var constPremiums = (typeof getSavedWeights === 'function') ? ((getSavedWeights() || {}).constPremiums || {}) : {};
+        var basePrice = info.price || 0;
+        var premium = constPremiums[name] && constPremiums[name][c.const] != null ? constPremiums[name][c.const] : 0;
+        var sigWeapons = veGetSigWeapons();
+        var sigName = sigWeapons[name];
+        var sigPrice = 0;
+        if (c.hasSig && sigName) {
+          sigPrice = Math.round((info.price || 0) * 0.4 * (0.5 + 0.5 * c.sigRefine));
+        }
+        c.price = Math.round(basePrice + premium + sigPrice);
+        c.sigName = sigName;
+      }
+      veRenderChars();
+      veOnChange();
     }
 
     // 添加角色
@@ -2284,7 +4104,7 @@ function getPageHTML(options) {
       var html =
         '<div class="char-edit-dialog">' +
           '<div class="char-edit-header">' +
-            '<div class="ve-char-avatar ' + tier + '" style="width:44px;height:44px;font-size:18px;">' + firstChar + '</div>' +
+            '<div class="ve-char-avatar ' + tier + '" style="width:44px;height:44px;font-size:18px;"><img src="/public/avatars/' + encodeURIComponent(c.name) + '.png" data-name="' + c.name + '" onerror="onAvatarError(this)"></div>' +
             '<h3>' + c.name + '</h3>' +
           '</div>' +
 
@@ -2413,6 +4233,10 @@ function getPageHTML(options) {
     var _charPickerTier = 'all';
     var _charPickerSearch = '';
 
+    function openCharPickerTop(btn) {
+      openCharPicker(btn);
+    }
+
     function openCharPicker(anchorBtn) {
       if (_charPickerEl) { _charPickerEl.remove(); _charPickerEl = null; return; }
 
@@ -2461,7 +4285,7 @@ function getPageHTML(options) {
           var tier = c.tier || 'E';
           return (
             '<div class="char-picker-item ' + (selected ? 'selected' : '') + '" data-name="' + c.name + '">' +
-              '<div class="cp-avatar ' + tier + '">' + c.name.charAt(0) + '</div>' +
+              '<div class="cp-avatar ' + tier + '"><img src="/public/avatars/' + encodeURIComponent(c.name) + '.png" data-name="' + c.name + '" onerror="onAvatarError(this)"></div>' +
               '<div class="cp-name">' + c.name + '</div>' +
               '<div class="cp-price">¥' + c.price + '</div>' +
             '</div>'
@@ -2518,12 +4342,118 @@ function getPageHTML(options) {
 
     // 数据变动时防抖触发估价
     function veOnChange() {
-      if (VE_DEBOUNCE) clearTimeout(VE_DEBOUNCE);
-      VE_DEBOUNCE = setTimeout(function() {
-        if (VE_CHARS.length > 0) {
-          veEvaluate(true);
+      // 同步更新描述文本
+      if (VE_SYNC_DESC) {
+        var descInput = document.getElementById('ve-desc-input');
+        if (descInput) {
+          var desc = veGenerateDescText();
+          descInput.value = desc;
         }
-      }, 500);
+      }
+    }
+
+    // 描述输入框变化：解析描述到角色列表
+    var VE_DESC_DEBOUNCE = null;
+    function veOnDescInput() {
+      if (VE_DESC_DEBOUNCE) clearTimeout(VE_DESC_DEBOUNCE);
+      VE_DESC_DEBOUNCE = setTimeout(function() {
+        var descInput = document.getElementById('ve-desc-input');
+        if (!descInput) return;
+        var text = descInput.value.trim();
+        if (!text) {
+          VE_CHARS = [];
+          // 清空资源
+          ['ve-starsound','ve-moonphase','ve-coral','ve-floatgold','ve-casttide','ve-yellow','ve-outfit','ve-frame','ve-pulls'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.value = '';
+          });
+          veRenderChars();
+          return;
+        }
+        
+        // 调用估价接口（同时返回解析后的结构化数据）
+        VE_SYNC_DESC = false; // 防止反向触发
+        fetch('/api/x9k2-eval', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ showTitle: text, priceInCents: 0, game: 'wuwa' })
+        }).then(function(r) { return r.json(); })
+          .then(function(result) {
+            if (result.success && result.data) {
+              var info = result.data.info || {};
+              var det = result.data.details || {};
+              var chars = info.characters || [];
+              var weapons = info.weapons || [];
+              var detChars = det.characters || [];
+              
+              // 建立 details 中角色名→价值的映射（估价后才用）
+              var detPriceMap = {};
+              var sigWeaponsMap = veGetSigWeapons();
+              var weaponRefineMap = {}; // weaponName -> refine
+              
+              // 1. 从 info.weapons 里拿（如果解析正确的话）
+              weapons.forEach(function(w) {
+                if (w.name && w.refine) {
+                  weaponRefineMap[w.name] = w.refine;
+                }
+              });
+              
+              // 2. 从文本中正则匹配 "精N+武器名" 兜底
+              var refinePattern = /精([1-5])[\\s]*([^\\s，,、;；+]+)/g;
+              var m;
+              while ((m = refinePattern.exec(text)) !== null) {
+                var refine = parseInt(m[1]);
+                var wName = m[2].replace(/[的是为有]+$/, '');
+                if (wName.length >= 2) {
+                  weaponRefineMap[wName] = refine;
+                }
+              }
+              
+              // 更新角色列表，带上武器精炼信息
+              VE_CHARS = chars.map(function(c) {
+                var sigName = sigWeaponsMap[c.name];
+                var hasSig = !!c.hasSig;
+                var sigRefine = c.sigRefine || 1;
+                
+                // 如果引擎没识别到专武，从 weaponRefineMap 里找
+                if (!hasSig && sigName) {
+                  if (weaponRefineMap[sigName]) {
+                    hasSig = true;
+                    sigRefine = weaponRefineMap[sigName];
+                  }
+                }
+                
+                return {
+                  name: c.name,
+                  tier: c.tier || 'B',
+                  const: c.const || 0,
+                  hasSig: hasSig,
+                  sigRefine: sigRefine,
+                  price: 0, // 估价前不显示价格
+                  sigName: sigName || ''
+                };
+              });
+              
+              // 更新资源（注意：接口返回的字段名是平铺在 info 下的）
+              if (document.getElementById('ve-starsound')) document.getElementById('ve-starsound').value = info.starSounds || '';
+              if (document.getElementById('ve-moonphase')) document.getElementById('ve-moonphase').value = info.moonPhases || '';
+              if (document.getElementById('ve-coral')) document.getElementById('ve-coral').value = info.coral || '';
+              if (document.getElementById('ve-floatgold')) document.getElementById('ve-floatgold').value = info.goldenRipples || '';
+              if (document.getElementById('ve-casttide')) document.getElementById('ve-casttide').value = info.tideRipples || '';
+              if (document.getElementById('ve-yellow')) document.getElementById('ve-yellow').value = info.yellowCount || '';
+              if (document.getElementById('ve-outfit')) document.getElementById('ve-outfit').value = info.outfits || '';
+              if (document.getElementById('ve-frame')) document.getElementById('ve-frame').value = info.motorcycles || '';
+              if (document.getElementById('ve-pulls')) document.getElementById('ve-pulls').value = Math.round(info.pulls || 0) || '';
+              
+              veRenderChars();
+              // 注意：不自动显示估价结果，用户点击"立即估价"才计算
+            }
+          })
+          .catch(function() {})
+          .finally(function() {
+            setTimeout(function() { VE_SYNC_DESC = true; }, 50);
+          });
+      }, 400);
     }
 
     // 收集结构化数据
@@ -2541,7 +4471,7 @@ function getPageHTML(options) {
         yellowCount: parseInt(document.getElementById('ve-yellow').value) || 0,
         outfitCount: parseInt(document.getElementById('ve-outfit').value) || 0,
         vehicleFrameCount: parseInt(document.getElementById('ve-frame').value) || 0,
-        pulls: parseInt(document.getElementById('ve-pulls').value) || 0,
+        pulls: (parseInt(document.getElementById('ve-pulls')?.value) || 0),
       };
       // 从有专武的角色生成武器列表
       VE_CHARS.forEach(function(c) {
@@ -2564,7 +4494,8 @@ function getPageHTML(options) {
       var info = veGetInfo();
       // 生成描述文本再调用估价接口（复用现有接口）
       var desc = veGenerateDescText(info);
-      var price = parseFloat(document.getElementById('ve-price').value) || 0;
+      var priceEl = document.getElementById('ve-price-side') || document.getElementById('ve-price');
+      var price = parseFloat(priceEl.value) || 0;
 
       try {
         const resp = await fetch('/api/x9k2-eval', {
@@ -2581,6 +4512,14 @@ function getPageHTML(options) {
         if (result.success) {
           veClearStatus();
           showResult(result.data);
+          // 用估价结果更新角色价格显示
+          var detChars = (result.data.details && result.data.details.characters) || [];
+          var priceMap = {};
+          detChars.forEach(function(dc) { priceMap[dc.name] = dc.value || 0; });
+          VE_CHARS.forEach(function(c) {
+            if (priceMap[c.name] != null) c.price = priceMap[c.name];
+          });
+          veRenderChars();
         } else {
           veShowError(result.error || '估价失败');
         }
@@ -2754,7 +4693,7 @@ function getPageHTML(options) {
             document.getElementById('ve-casttide').value = info.tideRipples || '';
             document.getElementById('ve-yellow').value = info.yellowCount || '';
             document.getElementById('ve-outfit').value = info.outfits || '';
-            document.getElementById('ve-pulls').value = info.pulls || '';
+            if (document.getElementById('ve-pulls')) document.getElementById('ve-pulls').value = info.pulls || '';
 
             veRenderChars();
             veEvaluate(true);

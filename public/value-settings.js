@@ -95,6 +95,29 @@
     w.pullBasePrice = (s.pullBasePrice != null) ? s.pullBasePrice : (DEFAULT_WEIGHTS.pullBasePrice != null ? DEFAULT_WEIGHTS.pullBasePrice : (defaults.pullFormula || {}).pullBasePrice);
     w.pullStepPrice = (s.pullStepPrice != null) ? s.pullStepPrice : (DEFAULT_WEIGHTS.pullStepPrice != null ? DEFAULT_WEIGHTS.pullStepPrice : (defaults.pullFormula || {}).pullStepPrice);
     w.pullMaxPrice = (s.pullMaxPrice != null) ? s.pullMaxPrice : (DEFAULT_WEIGHTS.pullMaxPrice != null ? DEFAULT_WEIGHTS.pullMaxPrice : ((defaults.pullFormula || {}).pullMaxPrice != null ? (defaults.pullFormula || {}).pullMaxPrice : 0));
+    // 抽数定价 - 分段折线图模式
+    var defPullSegs = (defaults.pullFormula && defaults.pullFormula.pullSegments && defaults.pullFormula.pullSegments.length > 0)
+      ? defaults.pullFormula.pullSegments
+      : null;
+    if (s.pullSegments && Array.isArray(s.pullSegments) && s.pullSegments.length > 0) {
+      w.pullSegments = s.pullSegments.map(function(seg) {
+        return { basePrice: seg.basePrice, threshold: seg.threshold != null ? seg.threshold : null, stepPrice: seg.stepPrice };
+      });
+    } else if (defPullSegs) {
+      w.pullSegments = defPullSegs.map(function(seg) {
+        return { basePrice: seg.basePrice, threshold: seg.threshold != null ? seg.threshold : null, stepPrice: seg.stepPrice };
+      });
+    } else {
+      // 向后兼容：从旧的扁平字段构建单段
+      var _pbBase = (s.pullBase != null) ? s.pullBase : ((defaults.pullFormula || {}).pullBase != null ? defaults.pullFormula.pullBase : 200);
+      var _pbBasePrice = (s.pullBasePrice != null) ? s.pullBasePrice : ((defaults.pullFormula || {}).pullBasePrice != null ? defaults.pullFormula.pullBasePrice : 1.0);
+      var _pbStepPrice = (s.pullStepPrice != null) ? s.pullStepPrice : ((defaults.pullFormula || {}).pullStepPrice != null ? defaults.pullFormula.pullStepPrice : 0.002);
+      var _pbStartPrice = _pbBasePrice - _pbBase * _pbStepPrice;
+      if (_pbStartPrice < 0) _pbStartPrice = 0;
+      w.pullSegments = [
+        { basePrice: _pbStartPrice, threshold: null, stepPrice: _pbStepPrice }
+      ];
+    }
     w.yellowBase = (s.yellowBase != null) ? s.yellowBase : (DEFAULT_WEIGHTS.yellowBase != null ? DEFAULT_WEIGHTS.yellowBase : 40);
     w.yellowStep = (s.yellowStep != null) ? s.yellowStep : (DEFAULT_WEIGHTS.yellowStep != null ? DEFAULT_WEIGHTS.yellowStep : 1);
     w.yellowBaseCoeff = (s.yellowBaseCoeff != null) ? s.yellowBaseCoeff : (DEFAULT_WEIGHTS.yellowBaseCoeff != null ? DEFAULT_WEIGHTS.yellowBaseCoeff : 1.0);
@@ -144,6 +167,27 @@
     w.pullC6MaxWeightedConst = (s.pullC6MaxWeightedConst != null) ? s.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
     w.pullPerWeightedConst = (s.pullPerWeightedConst != null) ? s.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
     w.pullPerWeightedConstCount = (s.pullPerWeightedConstCount != null) ? s.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1);
+    // 满命抽数加成 - 分段折线图模式
+    w.pullC6MaxBonus = (s.pullC6MaxBonus != null) ? s.pullC6MaxBonus : (DEFAULT_WEIGHTS.pullC6MaxBonus != null ? DEFAULT_WEIGHTS.pullC6MaxBonus : 3.0);
+    if (s.pullC6Segments && Array.isArray(s.pullC6Segments) && s.pullC6Segments.length > 0) {
+      w.pullC6Segments = s.pullC6Segments.map(function(seg) {
+        return { baseBonus: seg.baseBonus, threshold: seg.threshold != null ? seg.threshold : null, step: seg.step };
+      });
+    } else if (DEFAULT_WEIGHTS.pullC6Segments && Array.isArray(DEFAULT_WEIGHTS.pullC6Segments) && DEFAULT_WEIGHTS.pullC6Segments.length > 0) {
+      w.pullC6Segments = DEFAULT_WEIGHTS.pullC6Segments.map(function(seg) {
+        return { baseBonus: seg.baseBonus, threshold: seg.threshold != null ? seg.threshold : null, step: seg.step };
+      });
+    } else {
+      // 向后兼容：从旧的扁平字段构建单段
+      var _pc6Base = (s.pullC6Base != null) ? s.pullC6Base : (DEFAULT_WEIGHTS.pullC6Base != null ? DEFAULT_WEIGHTS.pullC6Base : 5);
+      var _pc6BaseBonus = (s.pullC6BaseBonus != null) ? s.pullC6BaseBonus : (DEFAULT_WEIGHTS.pullC6BaseBonus != null ? DEFAULT_WEIGHTS.pullC6BaseBonus : 0.5);
+      var _pc6Step = (s.pullC6Step != null) ? s.pullC6Step : (DEFAULT_WEIGHTS.pullC6Step != null ? DEFAULT_WEIGHTS.pullC6Step : 0.1);
+      var _pc6StepBonus = (s.pullC6StepBonus != null) ? s.pullC6StepBonus : (DEFAULT_WEIGHTS.pullC6StepBonus != null ? DEFAULT_WEIGHTS.pullC6StepBonus : 0.005);
+      var _pc6MaxWC = (s.pullC6MaxWeightedConst != null) ? s.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
+      w.pullC6Segments = [
+        { baseBonus: _pc6BaseBonus, threshold: _pc6MaxWC > 0 ? _pc6MaxWC : null, step: _pc6Step > 0 ? (_pc6StepBonus / _pc6Step) : 0 }
+      ];
+    }
     w.teamMates = (s.teamMates && Object.keys(s.teamMates).length > 0) ? s.teamMates : (DEFAULT_WEIGHTS.teamMates || defaults.teamMates || {});
     w.charPrices = Object.assign({}, defaults.charPrices, DEFAULT_WEIGHTS.charPrices || {}, s.charPrices || {});
     w.constPremiums = Object.assign({}, defaults.constPremiums, DEFAULT_WEIGHTS.constPremiums || {}, s.constPremiums || {});
@@ -765,230 +809,687 @@
 
     dialog.appendChild(charSection);
 
-    // ===== 2. 抽数阶梯定价（公式） =====
+    // ===== 2. 抽数阶梯定价（分段折线图） =====
     var pullSection = document.createElement('div');
     pullSection.style.cssText = 'margin-bottom:20px;';
     var pullTitle = document.createElement('div');
     pullTitle.style.cssText = 'font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:6px;border-bottom:1px solid #2a2a4a;padding-bottom:6px;';
-    pullTitle.textContent = '抽数定价（资源越多每抽越值钱）';
+    pullTitle.textContent = '抽数定价（资源越多每抽越值钱，分段折线图）';
     pullSection.appendChild(pullTitle);
     var pullDesc = document.createElement('p');
     pullDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:12px;line-height:1.5;';
-    pullDesc.innerHTML = '抽数 = 星声/160 + 月相/160 + 余波珊瑚/8 + 浮金波纹 + 铸潮波纹。资源越多每抽越值钱，按公式线性递增。';
+    pullDesc.innerHTML = '抽数 = 星声/160 + 月相/160 + 余波珊瑚/8 + 浮金波纹 + 铸潮波纹。按抽数分段定价，分段首尾相连：后一段的起点 = 前一段终点的每抽价，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
     pullSection.appendChild(pullDesc);
 
-    // 公式参数输入区
-    var pullFormulaRow = document.createElement('div');
-    pullFormulaRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;';
+    // 通用参数行：每抽上限
+    var pullCommonRow = document.createElement('div');
+    pullCommonRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;padding:8px 10px;background:rgba(96,165,250,0.03);border-radius:6px;border:1px solid rgba(96,165,250,0.1);';
+    function pullLabel(text) {
+      var s = document.createElement('span');
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:10px;';
+      return s;
+    }
+    function pullInput(val, step, color, title, inpW) {
+      var i = document.createElement('input');
+      i.type = 'number'; i.value = val; i.step = step; i.min = '0';
+      i.title = title;
+      i.style.cssText = 'width:' + (inpW||48) + 'px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:' + color + ';font-size:11px;text-align:center;font-weight:600;';
+      return i;
+    }
+    pullCommonRow.appendChild(pullLabel('每抽上限'));
+    var pullMaxPriceInput = pullInput(w.pullMaxPrice != null ? w.pullMaxPrice : 5, '0.1', '#f87171', '每抽价格上限（元，0=不限制）', 48);
+    pullCommonRow.appendChild(pullMaxPriceInput);
+    pullCommonRow.appendChild(pullLabel('元'));
+    pullSection.appendChild(pullCommonRow);
 
-    // 基准抽数
-    var pullBaseLabel = document.createElement('span');
-    pullBaseLabel.textContent = '基准抽数';
-    pullBaseLabel.style.cssText = 'font-size:12px;color:#60a5fa;font-weight:600;';
-    pullFormulaRow.appendChild(pullBaseLabel);
-    var pullBaseInput = document.createElement('input');
-    pullBaseInput.type = 'number'; pullBaseInput.min = 0; pullBaseInput.step = 1;
-    pullBaseInput.value = w.pullBase != null ? w.pullBase : 200;
-    pullBaseInput.style.cssText = 'width:70px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#60a5fa;font-size:12px;text-align:center;';
-    pullBaseInput.title = '基准抽数（默认200）';
-    pullFormulaRow.appendChild(pullBaseInput);
+    // 分段容器
+    var pullSegColors = ['#22c55e', '#3b82f6', '#f59e0b', '#e94560', '#a855f7', '#ec4899'];
+    var pullSegInputs = [];
+    var pullSegsContainer = document.createElement('div');
+    pullSection.appendChild(pullSegsContainer);
 
-    var pullBaseUnit = document.createElement('span');
-    pullBaseUnit.textContent = '抽'; pullBaseUnit.style.cssText = 'color:#555;font-size:11px;';
-    pullFormulaRow.appendChild(pullBaseUnit);
+    function renderPullSegRows() {
+      pullSegsContainer.innerHTML = '';
+      pullSegInputs.length = 0;
+      var segs = w.pullSegments || [];
+      for (var si = 0; si < segs.length; si++) {
+        (function(si) {
+          var seg = segs[si];
+          var color = pullSegColors[si % pullSegColors.length];
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:' + color + '11;border-radius:6px;border:1px solid ' + color + '33;';
+          var isLast = (si === segs.length - 1);
+          var prevT = si > 0 ? segs[si-1].threshold : 0;
+          var label = isLast ? '第' + (si+1) + '段(' + prevT + '+抽)' : '第' + (si+1) + '段(' + prevT + '~T' + (si+1) + '抽)';
+          var title = document.createElement('span');
+          title.textContent = label;
+          title.style.cssText = 'color:' + color + ';font-size:11px;font-weight:600;margin-right:6px;min-width:110px;';
+          row.appendChild(title);
 
-    // 分隔
-    var pullSep1 = document.createElement('span');
-    pullSep1.textContent = '|'; pullSep1.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
-    pullFormulaRow.appendChild(pullSep1);
+          // 基准价格（第1段可编辑，后续段只读自动推算）
+          row.appendChild(pullLabel(si === 0 ? '基准价格' : '起点价格'));
+          var baseInp = pullInput(seg.basePrice != null ? seg.basePrice : 0.6, '0.01', '#4ade80', si === 0 ? '第1段起点每抽价（0抽处）' : '由前面分段终点自动推算（首尾相连，只读）', 52);
+          baseInp.style.textAlign = 'right';
+          if (si > 0) {
+            baseInp.readOnly = true;
+            baseInp.style.background = '#06060f';
+            baseInp.style.color = '#2e8b57';
+            baseInp.style.borderStyle = 'dashed';
+          }
+          row.appendChild(baseInp);
+          row.appendChild(pullLabel('元'));
 
-    // 基准每抽价格
-    var pullBasePriceLabel = document.createElement('span');
-    pullBasePriceLabel.textContent = '基准每抽价格';
-    pullBasePriceLabel.style.cssText = 'font-size:12px;color:#4ade80;font-weight:600;';
-    pullFormulaRow.appendChild(pullBasePriceLabel);
-    var pullBasePriceInput = document.createElement('input');
-    pullBasePriceInput.type = 'number'; pullBasePriceInput.min = 0; pullBasePriceInput.step = 0.1;
-    pullBasePriceInput.value = w.pullBasePrice != null ? w.pullBasePrice : 1.0;
-    pullBasePriceInput.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#4ade80;font-size:12px;text-align:right;font-weight:600;';
-    pullBasePriceInput.title = '基准每抽价格（元，默认1.0）';
-    pullFormulaRow.appendChild(pullBasePriceInput);
+          // 边界（最后一段无边界）
+          var thresholdInp = null;
+          if (!isLast) {
+            row.appendChild(pullLabel('|边界'));
+            thresholdInp = pullInput(seg.threshold != null ? seg.threshold : 200, '10', color, '抽数上界', 50);
+            thresholdInp.style.textAlign = 'right';
+            row.appendChild(thresholdInp);
+          }
 
-    var pullBasePriceUnit = document.createElement('span');
-    pullBasePriceUnit.textContent = '元'; pullBasePriceUnit.style.cssText = 'color:#555;font-size:11px;';
-    pullFormulaRow.appendChild(pullBasePriceUnit);
+          // 每抽浮动
+          row.appendChild(pullLabel('|每抽浮动'));
+          var stepInp = pullInput((seg.stepPrice != null ? seg.stepPrice : 0.002) * 1000, '0.1', '#fbbf24', '每抽浮动价格（‰）', 52);
+          stepInp.style.textAlign = 'right';
+          row.appendChild(stepInp);
+          row.appendChild(pullLabel('‰'));
 
-    // 分隔
-    var pullSep2 = document.createElement('span');
-    pullSep2.textContent = '|'; pullSep2.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
-    pullFormulaRow.appendChild(pullSep2);
+          // 删除按钮（至少保留1段）
+          if (segs.length > 1) {
+            var delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'margin-left:4px;padding:1px 6px;border:1px solid #444;border-radius:3px;background:#1a1a2e;color:#f87171;font-size:10px;cursor:pointer;line-height:1.4;';
+            delBtn.title = '删除此段';
+            delBtn.onclick = function() {
+              w.pullSegments.splice(si, 1);
+              renderPullSegRows();
+              updatePullChartPreview();
+            };
+            row.appendChild(delBtn);
+          }
 
-    // 每抽浮动价格
-    var pullStepPriceLabel = document.createElement('span');
-    pullStepPriceLabel.textContent = '每抽浮动';
-    pullStepPriceLabel.style.cssText = 'font-size:12px;color:#fbbf24;font-weight:600;';
-    pullFormulaRow.appendChild(pullStepPriceLabel);
-    var pullStepPriceInput = document.createElement('input');
-    pullStepPriceInput.type = 'number'; pullStepPriceInput.min = 0; pullStepPriceInput.step = 0.001;
-    pullStepPriceInput.value = w.pullStepPrice != null ? w.pullStepPrice : 0.002;
-    pullStepPriceInput.style.cssText = 'width:70px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#fbbf24;font-size:12px;text-align:right;font-weight:600;';
-    pullStepPriceInput.title = '每抽浮动价格（默认0.002）';
-    pullFormulaRow.appendChild(pullStepPriceInput);
+          baseInp.addEventListener('input', updatePullChartPreview);
+          if (thresholdInp) thresholdInp.addEventListener('input', updatePullChartPreview);
+          stepInp.addEventListener('input', updatePullChartPreview);
 
-    var pullStepPriceUnit = document.createElement('span');
-    pullStepPriceUnit.textContent = '元/抽'; pullStepPriceUnit.style.cssText = 'color:#555;font-size:11px;';
-    pullFormulaRow.appendChild(pullStepPriceUnit);
+          pullSegInputs.push({ baseInp: baseInp, thresholdInp: thresholdInp, stepInp: stepInp });
+          pullSegsContainer.appendChild(row);
+        })(si);
+      }
+    }
+    renderPullSegRows();
 
-    // 分隔
-    var pullSep3 = document.createElement('span');
-    pullSep3.textContent = '|'; pullSep3.style.cssText = 'color:#333;font-size:11px;margin:0 4px;';
-    pullFormulaRow.appendChild(pullSep3);
+    // 添加分段 + 载入默认按钮
+    var pullBtnRow = document.createElement('div');
+    pullBtnRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;';
+    var addPullSegBtn = document.createElement('button');
+    addPullSegBtn.textContent = '+ 添加分段';
+    addPullSegBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#22c55e;font-size:11px;cursor:pointer;';
+    addPullSegBtn.onclick = function() {
+      var segs = w.pullSegments || [];
+      var prevT = segs.length > 0 ? (segs[segs.length-1].threshold || 500) : 500;
+      if (segs.length > 0 && segs[segs.length-1].threshold == null) {
+        segs[segs.length-1].threshold = prevT;
+      }
+      segs.push({ basePrice: 2.0, threshold: null, stepPrice: 0.001 });
+      w.pullSegments = segs;
+      renderPullSegRows();
+      updatePullChartPreview();
+    };
+    pullBtnRow.appendChild(addPullSegBtn);
+    var pullDefaultBtn = document.createElement('button');
+    pullDefaultBtn.textContent = '载入默认';
+    pullDefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#60a5fa;font-size:11px;cursor:pointer;';
+    pullDefaultBtn.onclick = function() {
+      var defFormula = (defaults && defaults.pullFormula) || {};
+      var defSegs = (defFormula.pullSegments && defFormula.pullSegments.length > 0)
+        ? defFormula.pullSegments.map(function(s) { return { basePrice: s.basePrice, threshold: s.threshold, stepPrice: s.stepPrice }; })
+        : [
+          { basePrice: 0.6, threshold: 200, stepPrice: 0.002 },
+          { basePrice: 1.0, threshold: 800, stepPrice: 0.0025 },
+          { basePrice: 2.5, threshold: null, stepPrice: 0.0015 }
+        ];
+      w.pullSegments = defSegs;
+      pullMaxPriceInput.value = (defFormula.pullMaxPrice != null) ? defFormula.pullMaxPrice : 5;
+      renderPullSegRows();
+      updatePullChartPreview();
+    };
+    pullBtnRow.appendChild(pullDefaultBtn);
+    pullSection.appendChild(pullBtnRow);
 
-    // 每抽价格上限
-    var pullMaxPriceLabel = document.createElement('span');
-    pullMaxPriceLabel.textContent = '每抽上限';
-    pullMaxPriceLabel.style.cssText = 'font-size:12px;color:#f87171;font-weight:600;';
-    pullFormulaRow.appendChild(pullMaxPriceLabel);
-    var pullMaxPriceInput = document.createElement('input');
-    pullMaxPriceInput.type = 'number'; pullMaxPriceInput.min = 0; pullMaxPriceInput.step = 0.1;
-    pullMaxPriceInput.value = w.pullMaxPrice != null ? w.pullMaxPrice : 5;
-    pullMaxPriceInput.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:#f87171;font-size:12px;text-align:right;font-weight:600;';
-    pullMaxPriceInput.title = '每抽价格上限（元，0=不限制，默认5）';
-    pullFormulaRow.appendChild(pullMaxPriceInput);
-
-    var pullMaxPriceUnit = document.createElement('span');
-    pullMaxPriceUnit.textContent = '元'; pullMaxPriceUnit.style.cssText = 'color:#555;font-size:11px;';
-    pullFormulaRow.appendChild(pullMaxPriceUnit);
-
-    pullSection.appendChild(pullFormulaRow);
+    // 折线图
+    var pullChartBox = document.createElement('div');
+    pullChartBox.style.cssText = 'margin-top:10px;';
+    pullSection.appendChild(pullChartBox);
 
     // 预览
     var pullPreview = document.createElement('div');
-    pullPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(96,165,250,0.05);border-radius:6px;border:1px solid rgba(96,165,250,0.15);';
-    function updatePullPreview() {
-      var base = parseFloat(pullBaseInput.value) || 0;
-      var basePrice = parseFloat(pullBasePriceInput.value) || 0;
-      var stepPrice = parseFloat(pullStepPriceInput.value) || 0;
-      var maxPrice = parseFloat(pullMaxPriceInput.value) || 0;
-      var samples = [0, 50, 100, 150, base, base + 50, base + 100, base + 200, base + 400, base + 800];
-      samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
+    pullPreview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(96,165,250,0.05);border-radius:6px;border:1px solid rgba(96,165,250,0.15);margin-top:8px;';
+    pullSection.appendChild(pullPreview);
+
+    // 读取当前分段输入
+    function readPullSegInputs() {
+      var segs = [];
+      for (var i = 0; i < pullSegInputs.length; i++) {
+        var inp = pullSegInputs[i];
+        var b = parseFloat(inp.baseInp.value) || 0;
+        var t = inp.thresholdInp ? parseFloat(inp.thresholdInp.value) : null;
+        var s = (parseFloat(inp.stepInp.value) || 0) / 1000;
+        segs.push({
+          base: isNaN(b) ? 0 : b,
+          thr: (inp.thresholdInp && !isNaN(t)) ? t : null,
+          step: isNaN(s) ? 0 : s
+        });
+      }
+      return segs;
+    }
+
+    // 首尾相连递推
+    function pullConnectedStarts(segs) {
+      var sp = [], sb = [];
+      for (var i = 0; i < segs.length; i++) {
+        if (i === 0) {
+          sp[0] = 0;
+          sb[0] = segs.length > 0 ? segs[0].base : 0.6;
+        } else {
+          var pt = (segs[i - 1].thr != null) ? segs[i - 1].thr : sp[i - 1];
+          sp[i] = pt;
+          sb[i] = sb[i - 1] + (pt - sp[i - 1]) * segs[i - 1].step;
+        }
+      }
+      return { sp: sp, sb: sb };
+    }
+
+    // 构建曲线模型
+    function buildPullCurveModel() {
+      var maxP = parseFloat(pullMaxPriceInput.value);
+      if (isNaN(maxP) || maxP <= 0) maxP = 0;
+      var segs = readPullSegInputs();
+      var cs = pullConnectedStarts(segs);
+      function priceAt(p) {
+        for (var i = 0; i < segs.length; i++) {
+          if (segs[i].thr == null || p <= segs[i].thr) {
+            return { price: cs.sb[i] + (p - cs.sp[i]) * segs[i].step, idx: i };
+          }
+        }
+        if (segs.length > 0) {
+          var li = segs.length - 1;
+          return { price: cs.sb[li] + (p - cs.sp[li]) * segs[li].step, idx: li };
+        }
+        return { price: 0, idx: 0 };
+      }
+      function clamp(p) {
+        if (maxP > 0 && p > maxP) p = maxP;
+        if (p < 0) p = 0;
+        return p;
+      }
+      return { segs: segs, sp: cs.sp, sb: cs.sb, maxP: maxP, priceAt: priceAt, clamp: clamp };
+    }
+
+    function renderPullChart(m) {
+      if (!m.segs.length) {
+        pullChartBox.innerHTML = '<div style="font-size:11px;color:#666;padding:12px;text-align:center;background:#0a0a1a;border-radius:8px;border:1px solid #2a2a4a;">暂无分段，点击"+ 添加分段"</div>';
+        return;
+      }
+      var W = 512, H = 200, mL = 44, mR = 12, mT = 18, mB = 32;
+      var pw = W - mL - mR, ph = H - mT - mB;
+
+      var lastFinite = 0;
+      for (var i = 0; i < m.segs.length; i++) {
+        if (m.segs[i].thr != null && m.segs[i].thr > lastFinite) lastFinite = m.segs[i].thr;
+      }
+      var xmax = Math.max(200, Math.ceil((lastFinite + 200) / 200) * 200);
+
+      var ymax = 0.5;
+      for (var k = 0; k <= 160; k++) {
+        var ps2 = m.clamp(m.priceAt((xmax * k) / 160).price);
+        if (ps2 > ymax) ymax = ps2;
+      }
+      for (var i2 = 0; i2 < m.segs.length; i2++) {
+        if (m.segs[i2].thr == null) continue;
+        var bc2 = m.clamp(m.priceAt(m.segs[i2].thr).price);
+        if (bc2 > ymax) ymax = bc2;
+      }
+      ymax = Math.ceil(ymax * 1.15 * 10) / 10;
+      if (ymax < 1) ymax = 1;
+
+      function X(p) { return mL + (p / xmax) * pw; }
+      function Y(p) {
+        var yy = mT + ph - (p / ymax) * ph;
+        if (yy < mT) yy = mT;
+        return yy;
+      }
+
+      // Y轴刻度
+      var yTicks = 5;
+      var yTickHtml = '';
+      var yGridHtml = '';
+      for (var t = 0; t <= yTicks; t++) {
+        var yv = (ymax * t) / yTicks;
+        var yp = Y(yv);
+        yTickHtml += '<text x="' + (mL - 4) + '" y="' + (yp + 3) + '" text-anchor="end" fill="#666" font-size="9">' + yv.toFixed(1) + '元</text>';
+        yGridHtml += '<line x1="' + mL + '" y1="' + yp + '" x2="' + (W - mR) + '" y2="' + yp + '" stroke="#1a1a3a" stroke-dasharray="2,3"/>';
+      }
+      // X轴刻度
+      var xTicks = 5;
+      var xTickHtml = '';
+      var xGridHtml = '';
+      for (var tx = 0; tx <= xTicks; tx++) {
+        var xv = (xmax * tx) / xTicks;
+        var xp = X(xv);
+        xTickHtml += '<text x="' + xp + '" y="' + (H - mB + 14) + '" text-anchor="middle" fill="#666" font-size="9">' + xv.toFixed(0) + '抽</text>';
+        xGridHtml += '<line x1="' + xp + '" y1="' + mT + '" x2="' + xp + '" y2="' + (H - mB) + '" stroke="#1a1a3a" stroke-dasharray="2,3"/>';
+      }
+
+      // 折线
+      var segPaths = [];
+      for (var si = 0; si < m.segs.length; si++) {
+        var seg = m.segs[si];
+        var segColor = pullSegColors[si % pullSegColors.length];
+        var xStart = X(m.sp[si]);
+        var yStart = Y(m.clamp(m.sb[si]));
+        var endPull = seg.thr != null ? seg.thr : xmax;
+        var endPrice = m.priceAt(endPull).price;
+        var xEnd = X(endPull);
+        var yEnd = Y(m.clamp(endPrice));
+        segPaths.push('<line x1="' + xStart + '" y1="' + yStart + '" x2="' + xEnd + '" y2="' + yEnd + '" stroke="' + segColor + '" stroke-width="2" fill="none"/>');
+        // 分段端点圆点
+        if (seg.thr != null) {
+          segPaths.push('<circle cx="' + xEnd + '" cy="' + yEnd + '" r="3" fill="' + segColor + '"/>');
+        }
+      }
+
+      // 上限截断线
+      var capLine = '';
+      if (m.maxP > 0 && m.maxP <= ymax) {
+        var cy = Y(m.maxP);
+        capLine = '<line x1="' + mL + '" y1="' + cy + '" x2="' + (W - mR) + '" y2="' + cy + '" stroke="#f87171" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>';
+      }
+
+      var svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;background:#0a0a1a;border-radius:8px;border:1px solid #2a2a4a;">' +
+        yGridHtml + xGridHtml +
+        '<line x1="' + mL + '" y1="' + (H - mB) + '" x2="' + (W - mR) + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
+        '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
+        yTickHtml + xTickHtml +
+        capLine +
+        segPaths.join('') +
+        '<circle cx="' + X(0) + '" cy="' + Y(m.clamp(m.sb[0])) + '" r="3" fill="' + pullSegColors[0] + '"/>' +
+        '</svg>';
+      pullChartBox.innerHTML = svg;
+    }
+
+    function updatePullChartPreview() {
+      var m = buildPullCurveModel();
+      renderPullChart(m);
+
+      var samples = [0, 50, 100, 200, 300, 500, 800, 1000, 1500, 2000];
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var p = samples[si];
-        var perPull = basePrice + (p - base) * stepPrice;
-        if (perPull < 0) perPull = 0;
-        if (maxPrice > 0 && perPull > maxPrice) perPull = maxPrice;
-        html += p + '抽 → ' + (Math.round(perPull * 1000) / 1000) + '元/抽　';
+        var price = m.clamp(m.priceAt(p).price);
+        html += p + '抽 → ' + (Math.round(price * 1000) / 1000) + '元/抽　';
+      }
+      if (m.maxP > 0) {
+        html += '<br><span style="color:#f87171">每抽上限：' + m.maxP + '元</span>';
       }
       pullPreview.innerHTML = html;
     }
-    [pullBaseInput, pullBasePriceInput, pullStepPriceInput, pullMaxPriceInput].forEach(function(inp) {
-      inp.oninput = updatePullPreview;
-    });
-    updatePullPreview();
-    pullSection.appendChild(pullPreview);
+    pullMaxPriceInput.oninput = updatePullChartPreview;
+    updatePullChartPreview();
 
-    // 载入默认按钮
-    var pullDefaultRow = document.createElement('div');
-    pullDefaultRow.style.cssText = 'margin-top:8px;';
-    var loadPullDefaultBtn = document.createElement('button');
-    loadPullDefaultBtn.textContent = '载入默认（200抽基准1.0元，每抽浮动0.002元，上限5元）';
-    loadPullDefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#1a1a3a;color:#60a5fa;font-size:11px;cursor:pointer;';
-    loadPullDefaultBtn.onclick = function () {
-      pullBaseInput.value = (DEFAULT_WEIGHTS.pullBase != null) ? DEFAULT_WEIGHTS.pullBase : 200;
-      pullBasePriceInput.value = (DEFAULT_WEIGHTS.pullBasePrice != null) ? DEFAULT_WEIGHTS.pullBasePrice : 1.0;
-      pullStepPriceInput.value = (DEFAULT_WEIGHTS.pullStepPrice != null) ? DEFAULT_WEIGHTS.pullStepPrice : 0.002;
-      pullMaxPriceInput.value = (DEFAULT_WEIGHTS.pullMaxPrice != null) ? DEFAULT_WEIGHTS.pullMaxPrice : 5;
-      updatePullPreview();
-    };
-    pullDefaultRow.appendChild(loadPullDefaultBtn);
-    pullSection.appendChild(pullDefaultRow);
-
-    // 满命抽数加成（公式参数）
+    // 满命抽数加成（分段折线图模式）
     var pullC6Divider = document.createElement('div');
     pullC6Divider.style.cssText = 'border-top:1px dashed #2a2a4a;margin:16px 0 12px 0;';
     pullSection.appendChild(pullC6Divider);
 
     var pullC6Title = document.createElement('div');
     pullC6Title.style.cssText = 'font-size:13px;font-weight:600;color:#fbbf24;margin-bottom:4px;';
-    pullC6Title.textContent = '满命抽数加成（加权满命数 → 抽数价值加成）';
+    pullC6Title.textContent = '满命抽数加成（加权满命数 → 抽数价值加成，分段折线图）';
     pullSection.appendChild(pullC6Title);
 
     var pullC6Desc = document.createElement('p');
     pullC6Desc.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;';
-    pullC6Desc.innerHTML = '根据加权满命数（与满命溢价共用），对抽数价值额外加成。';
+    pullC6Desc.innerHTML = '根据加权满命数，对抽数价值额外加成。按加权满命数分段，分段首尾相连：后一段的起点 = 前一段终点的加成值，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
     pullSection.appendChild(pullC6Desc);
-
-    var pullC6FormRow = document.createElement('div');
-    pullC6FormRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
 
     function pc6Label(text) {
       var s = document.createElement('span');
-      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:10px;';
       return s;
     }
-    function pc6Input(val, step, color, title) {
+    function pc6Input(val, step, color, title, inpW) {
       var i = document.createElement('input');
       i.type = 'number'; i.value = val; i.step = step; i.min = '0';
       i.title = title;
-      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      i.style.cssText = 'width:' + (inpW||48) + 'px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:' + color + ';font-size:11px;text-align:center;font-weight:600;';
       return i;
     }
 
-    pullC6FormRow.appendChild(pc6Label('基准满命'));
-    var pullC6BaseInput = pc6Input(w.pullC6Base != null ? w.pullC6Base : DEFAULT_WEIGHTS.pullC6Base, '0.5', '#fbbf24', '此加权满命数对应的加成为基准加成');
-    pullC6FormRow.appendChild(pullC6BaseInput);
-    pullC6FormRow.appendChild(pc6Label('基准加成'));
-    var pullC6BaseBonusInput = pc6Input((w.pullC6BaseBonus != null ? w.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus) * 100, '1', '#4ade80', '基准满命数对应的加成百分比');
-    pullC6FormRow.appendChild(pullC6BaseBonusInput);
-    pullC6FormRow.appendChild(pc6Label('%，每'));
-    var pullC6StepInput = pc6Input(w.pullC6Step != null ? w.pullC6Step : DEFAULT_WEIGHTS.pullC6Step, '0.1', '#fbbf24', '每N命浮动一档');
-    pullC6FormRow.appendChild(pullC6StepInput);
-    pullC6FormRow.appendChild(pc6Label('命浮动'));
-    var pullC6StepBonusInput = pc6Input((w.pullC6StepBonus != null ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus) * 100, '0.1', '#4ade80', '每档浮动百分比');
-    pullC6FormRow.appendChild(pullC6StepBonusInput);
-    pullC6FormRow.appendChild(pc6Label('%'));
-    pullC6FormRow.appendChild(pc6Label('阈值'));
-    var pullC6ThresholdInput = pc6Input(w.pullC6Threshold != null ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400), '1', '#fbbf24', '抽数低于此值时不加成');
-    pullC6FormRow.appendChild(pullC6ThresholdInput);
-    pullC6FormRow.appendChild(pc6Label('抽'));
-    pullC6FormRow.appendChild(pc6Label('加权上限'));
-    var pullC6MaxWCInput = pc6Input(w.pullC6MaxWeightedConst != null ? w.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20), '1', '#fbbf24', '加权满命数超过此值后加成不再增加');
-    pullC6FormRow.appendChild(pullC6MaxWCInput);
-    pullC6FormRow.appendChild(pc6Label('每'));
-    var pullC6PullPerWCInput = pc6Input(w.pullPerWeightedConst != null ? w.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450), '1', '#f59e0b', '每N抽折算一次加权满命（0=不折算）');
-    pullC6FormRow.appendChild(pullC6PullPerWCInput);
-    pullC6FormRow.appendChild(pc6Label('抽+'));
-    var pullC6PullPerWCCountInput = pc6Input(w.pullPerWeightedConstCount != null ? w.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1), '1', '#4ade80', '每次折算多少个加权满命');
-    pullC6FormRow.appendChild(pullC6PullPerWCCountInput);
-    pullC6FormRow.appendChild(pc6Label('命'));
-    pullSection.appendChild(pullC6FormRow);
+    var pc6SegColors = ['#22c55e', '#f59e0b', '#e94560', '#3b82f6', '#a855f7', '#ec4899'];
+    var pc6SegInputs = [];
+    var pc6SegRows = [];
+
+    // 通用参数行：阈值、加权上限、抽折算、加成上限
+    var pc6CommonRow = document.createElement('div');
+    pc6CommonRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;padding:8px 10px;background:rgba(251,191,36,0.03);border-radius:6px;border:1px solid rgba(251,191,36,0.1);';
+    pc6CommonRow.appendChild(pc6Label('抽数阈值'));
+    var pullC6ThresholdInput = pc6Input(w.pullC6Threshold != null ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400), '1', '#fbbf24', '抽数低于此值时不加成', 48);
+    pc6CommonRow.appendChild(pullC6ThresholdInput);
+    pc6CommonRow.appendChild(pc6Label('抽 | 加权上限'));
+    var pullC6MaxWCInput = pc6Input(w.pullC6MaxWeightedConst != null ? w.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20), '1', '#fbbf24', '加权满命数超过此值后不再计算（0=不封顶）', 44);
+    pc6CommonRow.appendChild(pullC6MaxWCInput);
+    pc6CommonRow.appendChild(pc6Label('命 | 每'));
+    var pullC6PullPerWCInput = pc6Input(w.pullPerWeightedConst != null ? w.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450), '1', '#f59e0b', '每N抽折算一次加权满命（0=不折算）', 44);
+    pc6CommonRow.appendChild(pullC6PullPerWCInput);
+    pc6CommonRow.appendChild(pc6Label('抽+'));
+    var pullC6PullPerWCCountInput = pc6Input(w.pullPerWeightedConstCount != null ? w.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1), '0.1', '#4ade80', '每次折算多少个加权满命', 40);
+    pc6CommonRow.appendChild(pullC6PullPerWCCountInput);
+    pc6CommonRow.appendChild(pc6Label('命 | 加成上限'));
+    var pc6MaxBonusInp = pc6Input((w.pullC6MaxBonus != null ? w.pullC6MaxBonus : 3.0) * 100, '1', '#e94560', '加成系数最大值（百分比）', 48);
+    pc6CommonRow.appendChild(pc6MaxBonusInp);
+    pc6CommonRow.appendChild(pc6Label('%'));
+    pullSection.appendChild(pc6CommonRow);
+
+    var pc6SegsContainer = document.createElement('div');
+    pullSection.appendChild(pc6SegsContainer);
+
+    function renderPc6SegRows() {
+      pc6SegsContainer.innerHTML = '';
+      pc6SegInputs.length = 0;
+      pc6SegRows.length = 0;
+      var segs = w.pullC6Segments || [];
+      for (var si = 0; si < segs.length; si++) {
+        (function(si) {
+          var seg = segs[si];
+          var color = pc6SegColors[si % pc6SegColors.length];
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:' + color + '11;border-radius:6px;border:1px solid ' + color + '33;';
+          var isLast = (si === segs.length - 1);
+          var prevT = si > 0 ? segs[si-1].threshold : 0;
+          var label = isLast ? '第' + (si+1) + '段(' + prevT + '+命)' : '第' + (si+1) + '段(' + prevT + '~T' + (si+1) + '命)';
+          var title = document.createElement('span');
+          title.textContent = label;
+          title.style.cssText = 'color:' + color + ';font-size:11px;font-weight:600;margin-right:6px;min-width:100px;';
+          row.appendChild(title);
+
+          // 基准加成（第1段可编辑，后续段只读自动推算）
+          row.appendChild(pc6Label(si === 0 ? '基准加成' : '起点加成'));
+          var baseInp = pc6Input((seg.baseBonus != null ? seg.baseBonus : 0) * 100, '1', '#f59e0b', si === 0 ? '第1段起点加成（加权满命=0处）' : '由前面分段终点自动推算（首尾相连，只读）', 48);
+          baseInp.style.textAlign = 'right';
+          if (si > 0) {
+            baseInp.readOnly = true;
+            baseInp.style.background = '#06060f';
+            baseInp.style.color = '#b58a2e';
+            baseInp.style.borderStyle = 'dashed';
+          }
+          row.appendChild(baseInp);
+          row.appendChild(pc6Label('%'));
+
+          // 边界（最后一段无边界）
+          var thresholdInp = null;
+          if (!isLast) {
+            row.appendChild(pc6Label('|边界'));
+            thresholdInp = pc6Input(seg.threshold != null ? seg.threshold : 5, '0.5', color, '加权满命上界', 42);
+            thresholdInp.style.textAlign = 'right';
+            row.appendChild(thresholdInp);
+          }
+
+          // 每命浮动
+          row.appendChild(pc6Label('|每命浮动'));
+          var stepInp = pc6Input((seg.step != null ? seg.step : 0.1) * 100, '0.1', '#10b981', '每命浮动加成百分比', 52);
+          stepInp.style.textAlign = 'right';
+          row.appendChild(stepInp);
+          row.appendChild(pc6Label('%'));
+
+          // 删除按钮（至少保留1段）
+          if (segs.length > 1) {
+            var delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'margin-left:4px;padding:1px 6px;border:1px solid #444;border-radius:3px;background:#1a1a2e;color:#f87171;font-size:10px;cursor:pointer;line-height:1.4;';
+            delBtn.title = '删除此段';
+            delBtn.onclick = function() {
+              w.pullC6Segments.splice(si, 1);
+              renderPc6SegRows();
+              updatePullC6Preview();
+            };
+            row.appendChild(delBtn);
+          }
+
+          baseInp.addEventListener('input', updatePullC6Preview);
+          if (thresholdInp) thresholdInp.addEventListener('input', updatePullC6Preview);
+          stepInp.addEventListener('input', updatePullC6Preview);
+
+          pc6SegInputs.push({ baseInp: baseInp, thresholdInp: thresholdInp, stepInp: stepInp });
+          pc6SegRows.push(row);
+          pc6SegsContainer.appendChild(row);
+        })(si);
+      }
+    }
+    renderPc6SegRows();
+
+    // 添加分段 + 载入默认按钮
+    var pc6BtnRow = document.createElement('div');
+    pc6BtnRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;';
+    var addPc6SegBtn = document.createElement('button');
+    addPc6SegBtn.textContent = '+ 添加分段';
+    addPc6SegBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#22c55e;font-size:11px;cursor:pointer;';
+    addPc6SegBtn.onclick = function() {
+      var segs = w.pullC6Segments || [];
+      var prevT = segs.length > 0 ? (segs[segs.length-1].threshold || 10) : 10;
+      if (segs.length > 0 && segs[segs.length-1].threshold == null) {
+        segs[segs.length-1].threshold = prevT;
+      }
+      segs.push({ baseBonus: 1.0, threshold: null, step: 0.05 });
+      w.pullC6Segments = segs;
+      renderPc6SegRows();
+      updatePullC6Preview();
+    };
+    pc6BtnRow.appendChild(addPc6SegBtn);
+    var pc6DefaultBtn = document.createElement('button');
+    pc6DefaultBtn.textContent = '载入默认';
+    pc6DefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#fbbf24;font-size:11px;cursor:pointer;';
+    pc6DefaultBtn.onclick = function() {
+      var defSegs = (DEFAULT_WEIGHTS.pullC6Segments && DEFAULT_WEIGHTS.pullC6Segments.length > 0)
+        ? DEFAULT_WEIGHTS.pullC6Segments.map(function(s) { return { baseBonus: s.baseBonus, threshold: s.threshold, step: s.step }; })
+        : [
+          { baseBonus: 0, threshold: 5, step: 0.4 },
+          { baseBonus: 2.0, threshold: null, step: 0.1 }
+        ];
+      w.pullC6Segments = defSegs;
+      pc6MaxBonusInp.value = (DEFAULT_WEIGHTS.pullC6MaxBonus != null ? DEFAULT_WEIGHTS.pullC6MaxBonus : 3.0) * 100;
+      pullC6ThresholdInput.value = DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400;
+      pullC6MaxWCInput.value = DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20;
+      pullC6PullPerWCInput.value = DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450;
+      pullC6PullPerWCCountInput.value = DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1;
+      renderPc6SegRows();
+      updatePullC6Preview();
+    };
+    pc6BtnRow.appendChild(pc6DefaultBtn);
+    pullSection.appendChild(pc6BtnRow);
+
+    // 折线图
+    var pc6ChartBox = document.createElement('div');
+    pc6ChartBox.style.cssText = 'margin-top:10px;';
+    pullSection.appendChild(pc6ChartBox);
 
     // 预览
     var pullC6Preview = document.createElement('div');
-    pullC6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(251,191,36,0.05);border-radius:6px;border:1px solid rgba(251,191,36,0.15);';
+    pullC6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(251,191,36,0.05);border-radius:6px;border:1px solid rgba(251,191,36,0.15);margin-top:8px;';
+    pullSection.appendChild(pullC6Preview);
+
+    // 读取当前分段输入
+    function readPc6SegInputs() {
+      var segs = [];
+      for (var i = 0; i < pc6SegInputs.length; i++) {
+        var inp = pc6SegInputs[i];
+        var b = (parseFloat(inp.baseInp.value) || 0) / 100;
+        var t = inp.thresholdInp ? parseFloat(inp.thresholdInp.value) : null;
+        var s = (parseFloat(inp.stepInp.value) || 0) / 100;
+        segs.push({
+          base: isNaN(b) ? 0 : b,
+          thr: (inp.thresholdInp && !isNaN(t)) ? t : null,
+          step: isNaN(s) ? 0 : s
+        });
+      }
+      return segs;
+    }
+
+    // 首尾相连递推
+    function pc6ConnectedStarts(segs) {
+      var sw = [], sb = [];
+      for (var i = 0; i < segs.length; i++) {
+        if (i === 0) {
+          sw[0] = 0;
+          sb[0] = segs.length > 0 ? segs[0].base : 0;
+        } else {
+          var pt = (segs[i - 1].thr != null) ? segs[i - 1].thr : sw[i - 1];
+          sw[i] = pt;
+          sb[i] = sb[i - 1] + (pt - sw[i - 1]) * segs[i - 1].step;
+        }
+      }
+      return { sw: sw, sb: sb };
+    }
+
+    // 构建曲线模型
+    function buildPc6CurveModel() {
+      var capRaw = parseFloat(pc6MaxBonusInp.value) / 100;
+      var cap = isNaN(capRaw) ? 3.0 : capRaw;
+      var segs = readPc6SegInputs();
+      var cs = pc6ConnectedStarts(segs);
+      function bonusAt(wc) {
+        for (var i = 0; i < segs.length; i++) {
+          if (segs[i].thr == null || wc <= segs[i].thr) {
+            return { bonus: cs.sb[i] + (wc - cs.sw[i]) * segs[i].step, idx: i };
+          }
+        }
+        if (segs.length > 0) {
+          var li = segs.length - 1;
+          return { bonus: cs.sb[li] + (wc - cs.sw[li]) * segs[li].step, idx: li };
+        }
+        return { bonus: 0, idx: 0 };
+      }
+      function clamp(b) {
+        if (cap > 0 && b > cap) b = cap;
+        if (b < 0) b = 0;
+        return b;
+      }
+      return { segs: segs, sw: cs.sw, sb: cs.sb, cap: cap, bonusAt: bonusAt, clamp: clamp };
+    }
+
+    function renderPc6Chart(m) {
+      if (!m.segs.length) {
+        pc6ChartBox.innerHTML = '<div style="font-size:11px;color:#666;padding:12px;text-align:center;background:#0a0a1a;border-radius:8px;border:1px solid #2a2a4a;">暂无分段，点击"+ 添加分段"</div>';
+        return;
+      }
+      var W = 512, H = 200, mL = 44, mR = 12, mT = 18, mB = 32;
+      var pw = W - mL - mR, ph = H - mT - mB;
+
+      var lastFinite = 0;
+      for (var i = 0; i < m.segs.length; i++) {
+        if (m.segs[i].thr != null && m.segs[i].thr > lastFinite) lastFinite = m.segs[i].thr;
+      }
+      var xmax = Math.max(10, Math.ceil((lastFinite + 5) / 5) * 5);
+
+      var ymax = 0.1;
+      for (var k = 0; k <= 160; k++) {
+        var bs2 = m.clamp(m.bonusAt((xmax * k) / 160).bonus);
+        if (bs2 > ymax) ymax = bs2;
+      }
+      for (var i2 = 0; i2 < m.segs.length; i2++) {
+        if (m.segs[i2].thr == null) continue;
+        var bc2 = m.clamp(m.bonusAt(m.segs[i2].thr).bonus);
+        if (bc2 > ymax) ymax = bc2;
+      }
+      ymax = Math.ceil(ymax * 1.15 * 100) / 100;
+      if (ymax < 0.5) ymax = 0.5;
+
+      function X(wc) { return mL + (wc / xmax) * pw; }
+      function Y(b) {
+        var yy = mT + ph - (b / ymax) * ph;
+        if (yy < mT) yy = mT;
+        return yy;
+      }
+
+      // Y轴刻度
+      var yTicks = 5;
+      var yTickHtml = '';
+      var yGridHtml = '';
+      for (var t = 0; t <= yTicks; t++) {
+        var yv = (ymax * t) / yTicks;
+        var yp = Y(yv);
+        yTickHtml += '<text x="' + (mL - 4) + '" y="' + (yp + 3) + '" text-anchor="end" fill="#666" font-size="9">' + Math.round(yv * 100) + '%</text>';
+        yGridHtml += '<line x1="' + mL + '" y1="' + yp + '" x2="' + (W - mR) + '" y2="' + yp + '" stroke="#1a1a3a" stroke-dasharray="2,3"/>';
+      }
+      // X轴刻度
+      var xTicks = 5;
+      var xTickHtml = '';
+      var xGridHtml = '';
+      for (var tx = 0; tx <= xTicks; tx++) {
+        var xv = (xmax * tx) / xTicks;
+        var xp = X(xv);
+        xTickHtml += '<text x="' + xp + '" y="' + (H - mB + 14) + '" text-anchor="middle" fill="#666" font-size="9">' + xv.toFixed(0) + '命</text>';
+        xGridHtml += '<line x1="' + xp + '" y1="' + mT + '" x2="' + xp + '" y2="' + (H - mB) + '" stroke="#1a1a3a" stroke-dasharray="2,3"/>';
+      }
+
+      // 折线
+      var points = [];
+      var segPaths = [];
+      for (var si = 0; si < m.segs.length; si++) {
+        var seg = m.segs[si];
+        var segColor = pc6SegColors[si % pc6SegColors.length];
+        var xStart = X(m.sw[si]);
+        var yStart = Y(m.clamp(m.sb[si]));
+        var endWC = seg.thr != null ? seg.thr : xmax;
+        var endBonus = m.bonusAt(endWC).bonus;
+        var xEnd = X(endWC);
+        var yEnd = Y(m.clamp(endBonus));
+        segPaths.push('<line x1="' + xStart + '" y1="' + yStart + '" x2="' + xEnd + '" y2="' + yEnd + '" stroke="' + segColor + '" stroke-width="2" fill="none"/>');
+        // 分段端点圆点
+        if (seg.thr != null) {
+          segPaths.push('<circle cx="' + xEnd + '" cy="' + yEnd + '" r="3" fill="' + segColor + '"/>');
+        }
+      }
+
+      // 上限截断线
+      var capLine = '';
+      if (m.cap > 0 && m.cap <= ymax) {
+        var cy = Y(m.cap);
+        capLine = '<line x1="' + mL + '" y1="' + cy + '" x2="' + (W - mR) + '" y2="' + cy + '" stroke="#e94560" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>';
+      }
+
+      var svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;background:#0a0a1a;border-radius:8px;border:1px solid #2a2a4a;">' +
+        yGridHtml + xGridHtml +
+        '<line x1="' + mL + '" y1="' + (H - mB) + '" x2="' + (W - mR) + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
+        '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
+        yTickHtml + xTickHtml +
+        capLine +
+        segPaths.join('') +
+        '<circle cx="' + X(0) + '" cy="' + Y(m.clamp(m.sb[0])) + '" r="3" fill="' + pc6SegColors[0] + '"/>' +
+        '</svg>';
+      pc6ChartBox.innerHTML = svg;
+    }
+
     function updatePullC6Preview() {
-      var base = parseFloat(pullC6BaseInput.value) || 0;
-      var baseBonus = (parseFloat(pullC6BaseBonusInput.value) || 0) / 100;
-      var step = parseFloat(pullC6StepInput.value) || 1;
-      var stepBonus = (parseFloat(pullC6StepBonusInput.value) || 0) / 100;
+      var m = buildPc6CurveModel();
+      renderPc6Chart(m);
+
       var threshold = parseFloat(pullC6ThresholdInput.value);
       if (isNaN(threshold)) threshold = 400;
       var maxWC = parseFloat(pullC6MaxWCInput.value);
       if (isNaN(maxWC) || maxWC <= 0) maxWC = 0;
-      var samples = [0, 1, 2, 3, 4, base, base + step, base + step * 2, base + step * 5, base + step * 10, base + step * 20];
+      var samples = [0, 1, 2, 3, 5, 8, 10, 15, 20, 30];
       if (maxWC > 0) samples.push(maxWC, maxWC + 5);
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var c = samples[si];
         var effC = (maxWC > 0 && c > maxWC) ? maxWC : c;
-        var bonus = baseBonus + (effC - base) / step * stepBonus;
-        if (bonus < 0) bonus = 0;
+        var bonus = m.clamp(m.bonusAt(effC).bonus);
         var capped = (maxWC > 0 && c > maxWC);
         html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%' + (capped ? ' (封顶)' : '') + '　';
       }
-      html += '<br><span style="color:#fbbf24">注：抽数 ≥ ' + threshold + '时才生效，低于此值无加成' + (maxWC > 0 ? '；加权满命数超过' + maxWC + '后加成封顶' : '') + '</span>';
+      html += '<br><span style="color:#fbbf24">注：抽数 ≥ ' + threshold + '时才生效，低于此值无加成' + (maxWC > 0 ? '；加权满命数超过' + maxWC + '后按上限计算' : '') + '</span>';
       var pullPerWC = parseFloat(pullC6PullPerWCInput.value);
       var pullPerWCCount = parseFloat(pullC6PullPerWCCountInput.value);
       if (!isNaN(pullPerWC) && pullPerWC > 0 && !isNaN(pullPerWCCount)) {
@@ -996,31 +1497,10 @@
       }
       pullC6Preview.innerHTML = html;
     }
-    [pullC6BaseInput, pullC6BaseBonusInput, pullC6StepInput, pullC6StepBonusInput, pullC6ThresholdInput, pullC6MaxWCInput, pullC6PullPerWCInput, pullC6PullPerWCCountInput].forEach(function(inp) {
+    [pullC6ThresholdInput, pullC6MaxWCInput, pullC6PullPerWCInput, pullC6PullPerWCCountInput, pc6MaxBonusInp].forEach(function(inp) {
       inp.oninput = updatePullC6Preview;
     });
     updatePullC6Preview();
-    pullSection.appendChild(pullC6Preview);
-
-    // 载入默认按钮
-    var pullC6DefaultRow = document.createElement('div');
-    pullC6DefaultRow.style.cssText = 'margin-top:8px;';
-    var loadPullC6DefaultBtn = document.createElement('button');
-    loadPullC6DefaultBtn.textContent = '载入默认（5命基准50%，每0.1命浮动0.5%）';
-    loadPullC6DefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;';
-    loadPullC6DefaultBtn.onclick = function () {
-      pullC6BaseInput.value = DEFAULT_WEIGHTS.pullC6Base;
-      pullC6BaseBonusInput.value = DEFAULT_WEIGHTS.pullC6BaseBonus * 100;
-      pullC6StepInput.value = DEFAULT_WEIGHTS.pullC6Step;
-      pullC6StepBonusInput.value = DEFAULT_WEIGHTS.pullC6StepBonus * 100;
-      pullC6ThresholdInput.value = DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400;
-      pullC6MaxWCInput.value = DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20;
-      pullC6PullPerWCInput.value = DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450;
-      pullC6PullPerWCCountInput.value = DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1;
-      updatePullC6Preview();
-    };
-    pullC6DefaultRow.appendChild(loadPullC6DefaultBtn);
-    pullSection.appendChild(pullC6DefaultRow);
 
     dialog.appendChild(pullSection);
 
@@ -2048,23 +2528,25 @@
       newTeamMultiBonus.sort(function (a, b) { return a.count - b.count; });
       newW.teamMultiBonus = newTeamMultiBonus;
 
-      // 收集抽数公式参数（使用 isNaN 而非 || ，否则输入 0 会被当作 falsy 而被默认值覆盖）
-      var _pullBaseVal = parseFloat(pullBaseInput.value);
-      newW.pullBase = isNaN(_pullBaseVal) ? 200 : _pullBaseVal;
-      var _pullBasePriceVal = parseFloat(pullBasePriceInput.value);
-      newW.pullBasePrice = isNaN(_pullBasePriceVal) ? 1.0 : _pullBasePriceVal;
-      var _pullStepPriceVal = parseFloat(pullStepPriceInput.value);
-      newW.pullStepPrice = isNaN(_pullStepPriceVal) ? 0.002 : _pullStepPriceVal;
+      // 收集抽数定价（分段折线图模式）
       var _pullMaxPriceVal = parseFloat(pullMaxPriceInput.value);
-      newW.pullMaxPrice = isNaN(_pullMaxPriceVal) ? (DEFAULT_WEIGHTS.pullMaxPrice != null ? DEFAULT_WEIGHTS.pullMaxPrice : 5) : _pullMaxPriceVal;
+      newW.pullMaxPrice = isNaN(_pullMaxPriceVal) ? 5 : _pullMaxPriceVal;
+      // 收集分段数据
+      var newPullSegs = [];
+      for (var _psi = 0; _psi < pullSegInputs.length; _psi++) {
+        var _psinp = pullSegInputs[_psi];
+        var _pb = parseFloat(_psinp.baseInp.value) || 0;
+        var _pt = _psinp.thresholdInp ? parseFloat(_psinp.thresholdInp.value) : null;
+        var _ps = (parseFloat(_psinp.stepInp.value) || 0) / 1000;
+        newPullSegs.push({
+          basePrice: isNaN(_pb) ? 0 : _pb,
+          threshold: (_psinp.thresholdInp && !isNaN(_pt)) ? _pt : null,
+          stepPrice: isNaN(_ps) ? 0 : _ps
+        });
+      }
+      newW.pullSegments = newPullSegs;
 
-      // 收集满命抽数加成公式参数
-      var _pullC6BaseVal = parseFloat(pullC6BaseInput.value);
-      newW.pullC6Base = isNaN(_pullC6BaseVal) ? DEFAULT_WEIGHTS.pullC6Base : _pullC6BaseVal;
-      newW.pullC6BaseBonus = (parseFloat(pullC6BaseBonusInput.value) || 0) / 100;
-      var _pullC6StepVal = parseFloat(pullC6StepInput.value);
-      newW.pullC6Step = isNaN(_pullC6StepVal) ? DEFAULT_WEIGHTS.pullC6Step : _pullC6StepVal;
-      newW.pullC6StepBonus = (parseFloat(pullC6StepBonusInput.value) || 0) / 100;
+      // 收集满命抽数加成（分段折线图模式）
       var _pullC6ThresholdVal = parseFloat(pullC6ThresholdInput.value);
       newW.pullC6Threshold = isNaN(_pullC6ThresholdVal) ? (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400) : _pullC6ThresholdVal;
       var _pullC6MaxWCVal = parseFloat(pullC6MaxWCInput.value);
@@ -2073,6 +2555,22 @@
       newW.pullPerWeightedConst = isNaN(_pullC6PPWCVal) ? (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450) : _pullC6PPWCVal;
       var _pullC6PPWCCountVal = parseFloat(pullC6PullPerWCCountInput.value);
       newW.pullPerWeightedConstCount = isNaN(_pullC6PPWCCountVal) ? (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1) : _pullC6PPWCCountVal;
+      var _pc6MaxBonusVal = parseFloat(pc6MaxBonusInp.value) / 100;
+      newW.pullC6MaxBonus = isNaN(_pc6MaxBonusVal) ? 3.0 : _pc6MaxBonusVal;
+      // 收集分段数据
+      var newPc6Segs = [];
+      for (var _psi = 0; _psi < pc6SegInputs.length; _psi++) {
+        var _psinp = pc6SegInputs[_psi];
+        var _pb = (parseFloat(_psinp.baseInp.value) || 0) / 100;
+        var _pt = _psinp.thresholdInp ? parseFloat(_psinp.thresholdInp.value) : null;
+        var _ps = (parseFloat(_psinp.stepInp.value) || 0) / 100;
+        newPc6Segs.push({
+          baseBonus: isNaN(_pb) ? 0 : _pb,
+          threshold: (_psinp.thresholdInp && !isNaN(_pt)) ? _pt : null,
+          step: isNaN(_ps) ? 0 : _ps
+        });
+      }
+      newW.pullC6Segments = newPc6Segs;
 
       // 收集满命溢价公式参数
       var _c6BaseVal = parseFloat(c6BaseInp.value);

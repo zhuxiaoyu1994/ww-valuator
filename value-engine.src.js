@@ -157,6 +157,27 @@ function buildDefaultWeights(customWeights) {
   w.pullC6MaxWeightedConst = (saved.pullC6MaxWeightedConst != null) ? saved.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
   w.pullPerWeightedConst = (saved.pullPerWeightedConst != null) ? saved.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
   w.pullPerWeightedConstCount = (saved.pullPerWeightedConstCount != null) ? saved.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1);
+  // 满命抽数加成 - 分段折线图模式（优先）
+  w.pullC6MaxBonus = (saved.pullC6MaxBonus != null) ? saved.pullC6MaxBonus : (DEFAULT_WEIGHTS.pullC6MaxBonus != null ? DEFAULT_WEIGHTS.pullC6MaxBonus : 3.0);
+  if (saved.pullC6Segments && Array.isArray(saved.pullC6Segments) && saved.pullC6Segments.length > 0) {
+    w.pullC6Segments = saved.pullC6Segments.map(function(s) {
+      return { baseBonus: s.baseBonus, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+    });
+  } else if (DEFAULT_WEIGHTS.pullC6Segments && Array.isArray(DEFAULT_WEIGHTS.pullC6Segments) && DEFAULT_WEIGHTS.pullC6Segments.length > 0) {
+    w.pullC6Segments = DEFAULT_WEIGHTS.pullC6Segments.map(function(s) {
+      return { baseBonus: s.baseBonus, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+    });
+  } else {
+    // 向后兼容：从旧的扁平字段构建单段
+    var _pc6Base = (saved.pullC6Base != null) ? saved.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
+    var _pc6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
+    var _pc6Step = (saved.pullC6Step != null) ? saved.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
+    var _pc6StepBonus = (saved.pullC6StepBonus != null) ? saved.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
+    var _pc6MaxWC = (saved.pullC6MaxWeightedConst != null) ? saved.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
+    w.pullC6Segments = [
+      { baseBonus: _pc6BaseBonus, threshold: _pc6MaxWC > 0 ? _pc6MaxWC : null, step: _pc6Step > 0 ? (_pc6StepBonus / _pc6Step) : 0 }
+    ];
+  }
   w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
   w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
   w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
@@ -165,6 +186,27 @@ function buildDefaultWeights(customWeights) {
   w.pullBasePrice = (saved.pullBasePrice != null) ? saved.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
   w.pullStepPrice = (saved.pullStepPrice != null) ? saved.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
   w.pullMaxPrice = (saved.pullMaxPrice != null) ? saved.pullMaxPrice : (DEFAULT_PULL_FORMULA.pullMaxPrice != null ? DEFAULT_PULL_FORMULA.pullMaxPrice : 0);
+  // 抽数定价 - 分段折线图模式（优先）
+  if (saved.pullSegments && Array.isArray(saved.pullSegments) && saved.pullSegments.length > 0) {
+    w.pullSegments = saved.pullSegments.map(function(s) {
+      return { basePrice: s.basePrice, threshold: s.threshold != null ? s.threshold : null, stepPrice: s.stepPrice };
+    });
+  } else if (DEFAULT_PULL_FORMULA.pullSegments && Array.isArray(DEFAULT_PULL_FORMULA.pullSegments) && DEFAULT_PULL_FORMULA.pullSegments.length > 0) {
+    w.pullSegments = DEFAULT_PULL_FORMULA.pullSegments.map(function(s) {
+      return { basePrice: s.basePrice, threshold: s.threshold != null ? s.threshold : null, stepPrice: s.stepPrice };
+    });
+  } else {
+    // 向后兼容：从旧的扁平字段构建单段
+    var _pbBase = (saved.pullBase != null) ? saved.pullBase : DEFAULT_PULL_FORMULA.pullBase;
+    var _pbBasePrice = (saved.pullBasePrice != null) ? saved.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
+    var _pbStepPrice = (saved.pullStepPrice != null) ? saved.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
+    // 反推0抽处的价格：basePrice_at_0 = basePrice - base * stepPrice
+    var _pbStartPrice = _pbBasePrice - _pbBase * _pbStepPrice;
+    if (_pbStartPrice < 0) _pbStartPrice = 0;
+    w.pullSegments = [
+      { basePrice: _pbStartPrice, threshold: null, stepPrice: _pbStepPrice }
+    ];
+  }
   // 限定金系数公式参数
   w.yellowBase = (saved.yellowBase != null) ? saved.yellowBase : 40;
   w.yellowStep = (saved.yellowStep != null) ? saved.yellowStep : 1;
@@ -829,22 +871,65 @@ function getCharValue(char, hasSigWeapon, w) {
  * 计算抽数价值（公式：每抽价格 = 基准价格 + (抽数 - 基准抽数) × 每抽浮动，上限封顶）
  */
 function calculatePullValue(pulls) {
-  var base = (weights && weights.pullBase != null) ? weights.pullBase : DEFAULT_PULL_FORMULA.pullBase;
-  var basePrice = (weights && weights.pullBasePrice != null) ? weights.pullBasePrice : DEFAULT_PULL_FORMULA.pullBasePrice;
-  var stepPrice = (weights && weights.pullStepPrice != null) ? weights.pullStepPrice : DEFAULT_PULL_FORMULA.pullStepPrice;
-  var maxPrice = (weights && weights.pullMaxPrice != null) ? weights.pullMaxPrice : (DEFAULT_PULL_FORMULA.pullMaxPrice != null ? DEFAULT_PULL_FORMULA.pullMaxPrice : 0);
+  var w = weights || DEFAULT_WEIGHTS;
+  var maxPrice = (w.pullMaxPrice != null) ? w.pullMaxPrice : (DEFAULT_PULL_FORMULA.pullMaxPrice != null ? DEFAULT_PULL_FORMULA.pullMaxPrice : 0);
+  var segs = w.pullSegments || [
+    { basePrice: 0.6, threshold: null, stepPrice: 0.002 }
+  ];
 
-  var perPull = basePrice + (pulls - base) * stepPrice;
+  // 递推各段起点（首尾相连）
+  var steps = [];
+  var startPull = [];
+  var startPrice = [];
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    steps[i] = (seg.stepPrice != null) ? seg.stepPrice : 0.002;
+    if (i === 0) {
+      startPull[0] = 0;
+      startPrice[0] = (seg.basePrice != null) ? seg.basePrice : 0.6;
+    } else {
+      var prevT = segs[i - 1].threshold;
+      if (prevT == null) prevT = startPull[i - 1];
+      startPull[i] = prevT;
+      startPrice[i] = startPrice[i - 1] + (prevT - startPull[i - 1]) * steps[i - 1];
+    }
+  }
+
+  var perPull;
+  var segIdx = 0;
+  var segLabel;
+
+  for (var i = 0; i < segs.length; i++) {
+    var segThreshold = segs[i].threshold;
+    if (segThreshold == null || pulls <= segThreshold) {
+      perPull = startPrice[i] + (pulls - startPull[i]) * steps[i];
+      segIdx = i;
+      if (i === 0) {
+        segLabel = (segThreshold != null ? '0~' + segThreshold : '0+') + '抽';
+      } else {
+        segLabel = startPull[i] + (segThreshold != null ? '~' + segThreshold : '+') + '抽';
+      }
+      break;
+    }
+  }
+
+  if (perPull == null) {
+    var lastIdx = segs.length - 1;
+    perPull = startPrice[lastIdx] + (pulls - startPull[lastIdx]) * steps[lastIdx];
+    segIdx = lastIdx;
+    segLabel = startPull[lastIdx] + '+抽';
+  }
+
   if (perPull < 0) perPull = 0;
   if (maxPrice > 0 && perPull > maxPrice) perPull = maxPrice;
 
   var value = pulls * perPull;
-  var tierLabel = pulls + '抽';
 
   return {
     pulls: Math.round(pulls),
     perPull: Math.round(perPull * 1000) / 1000,
-    tierLabel: tierLabel,
+    tierLabel: segLabel,
+    segIdx: segIdx,
     total: Math.round(value),
   };
 }
@@ -975,6 +1060,75 @@ function getEffectiveYellowCoeff(effectiveYellow) {
   return {
     yellowCount: effectiveYellow,
     coefficient: Math.round(coeff * 1000) / 1000,
+    tierLabel: segLabel,
+    segIdx: segIdx,
+  };
+}
+
+/**
+ * 计算满命抽数加成系数（基于加权满命数分段，分段首尾相连）
+ * 每段线性公式：bonus = 段起点加成 + (加权满命数 - 段起点命数) × step
+ * 段起点加成递推：第1段 = baseBonus（加权满命=0处），后续段 = 前一段在其边界处的加成值
+ * 因此曲线连续不跳变：调整前一段的基准/边界/浮动会整体平移后续所有分段
+ * 后续段自身存储的 baseBonus 不参与计算（仅作展示参考）
+ */
+function getPullC6Multiplier(weightedConst) {
+  var w = weights || DEFAULT_WEIGHTS;
+  var segs = w.pullC6Segments || [
+    { baseBonus: 0, threshold: 5, step: 0.4 },
+    { baseBonus: 2.0, threshold: null, step: 0.1 }
+  ];
+  var maxBonus = (w.pullC6MaxBonus != null) ? w.pullC6MaxBonus : 3.0;
+
+  // 递推各段起点（首尾相连）
+  var steps = [];
+  var startWC = [];
+  var startBonus = [];
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    steps[i] = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.1);
+    if (i === 0) {
+      startWC[0] = 0;
+      startBonus[0] = (seg.baseBonus != null) ? seg.baseBonus : 0;
+    } else {
+      var prevT = segs[i - 1].threshold;
+      if (prevT == null) prevT = startWC[i - 1];
+      startWC[i] = prevT;
+      startBonus[i] = startBonus[i - 1] + (prevT - startWC[i - 1]) * steps[i - 1];
+    }
+  }
+
+  var bonus;
+  var segIdx = 0;
+  var segLabel;
+
+  for (var i = 0; i < segs.length; i++) {
+    var segThreshold = segs[i].threshold;
+    if (segThreshold == null || weightedConst <= segThreshold) {
+      bonus = startBonus[i] + (weightedConst - startWC[i]) * steps[i];
+      segIdx = i;
+      if (i === 0) {
+        segLabel = (segThreshold != null ? '0~' + segThreshold : '0+') + '命';
+      } else {
+        segLabel = startWC[i] + (segThreshold != null ? '~' + segThreshold : '+') + '命';
+      }
+      break;
+    }
+  }
+
+  if (bonus == null) {
+    var lastIdx = segs.length - 1;
+    bonus = startBonus[lastIdx] + (weightedConst - startWC[lastIdx]) * steps[lastIdx];
+    segIdx = lastIdx;
+    segLabel = startWC[lastIdx] + '+命';
+  }
+
+  if (maxBonus > 0 && bonus > maxBonus) bonus = maxBonus;
+  if (bonus < 0) bonus = 0;
+
+  return {
+    weightedConst: weightedConst,
+    multiplier: Math.round(bonus * 1000) / 1000,
     tierLabel: segLabel,
     segIdx: segIdx,
   };
@@ -1115,11 +1269,7 @@ function calculateValue(parsed, price) {
     c6BonusNotes.push('满命(' + tierSummary + ') 加权' + weightedFullConst.toFixed(1) + ' +' + Math.round(c6BonusMultiplier * 100) + '%');
   }
 
-  // 计算抽数满命加成系数（公式：基准加成 + (加权满命 - 基准) / 每档 × 每档浮动）
-  var pc6Base = (w.pullC6Base != null) ? w.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
-  var pc6BaseBonus = (w.pullC6BaseBonus != null) ? w.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
-  var pc6Step = (w.pullC6Step != null) ? w.pullC6Step : DEFAULT_WEIGHTS.pullC6Step;
-  var pc6StepBonus = (w.pullC6StepBonus != null) ? w.pullC6StepBonus : DEFAULT_WEIGHTS.pullC6StepBonus;
+  // 计算抽数满命加成系数（分段折线图模式）
   var pc6Threshold = (w.pullC6Threshold != null) ? w.pullC6Threshold : (DEFAULT_WEIGHTS.pullC6Threshold != null ? DEFAULT_WEIGHTS.pullC6Threshold : 400);
   var pc6MaxWC = (w.pullC6MaxWeightedConst != null) ? w.pullC6MaxWeightedConst : (DEFAULT_WEIGHTS.pullC6MaxWeightedConst != null ? DEFAULT_WEIGHTS.pullC6MaxWeightedConst : 20);
   var pc6PullPerWC = (w.pullPerWeightedConst != null && w.pullPerWeightedConst > 0) ? w.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
@@ -1129,11 +1279,15 @@ function calculateValue(parsed, price) {
   var pullBonusWeightedConst = Math.floor((parsed.pulls || 0) / pc6PullPerWC) * pc6PullPerWCCount;
   var adjustedWeightedConst = weightedFullConst + pullBonusWeightedConst;
 
+  // 加权满命上限（0=不封顶）
   var effWeightedConst = (pc6MaxWC > 0 && adjustedWeightedConst > pc6MaxWC) ? pc6MaxWC : adjustedWeightedConst;
-  var pullC6Multiplier = (parsed.pulls >= pc6Threshold && adjustedWeightedConst > 0)
-    ? pc6BaseBonus + (effWeightedConst - pc6Base) / pc6Step * pc6StepBonus
-    : 0;
-  if (pullC6Multiplier < 0) pullC6Multiplier = 0;
+  var pullC6Multiplier = 0;
+  var pullC6SegLabel = '';
+  if (parsed.pulls >= pc6Threshold && adjustedWeightedConst > 0) {
+    var pc6Result = getPullC6Multiplier(effWeightedConst);
+    pullC6Multiplier = pc6Result.multiplier;
+    pullC6SegLabel = pc6Result.tierLabel;
+  }
 
   // 3. 配队溢价（使用 weights.teams 和 teamMultiBonus）
   let teamPremium = 0;
@@ -1408,6 +1562,7 @@ function calculateValue(parsed, price) {
       baseTotal: Math.round(basePullValue * 100) / 100,
       c6Bonus: pullC6Bonus,
       c6Multiplier: pullC6Multiplier,
+      c6SegLabel: pullC6SegLabel,
       total: pullValue,
     },
     yellowInfo: yellowInfo,

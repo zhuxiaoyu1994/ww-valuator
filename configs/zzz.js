@@ -1,7 +1,7 @@
 'use strict';
 
 const ZZZ_CONFIG = {
-  configVersion: 5,
+  configVersion: 7,
   gameName: '绝区零',
   gameSlug: 'zzz',
 
@@ -46,6 +46,12 @@ const ZZZ_CONFIG = {
     c6Base: 3, c6BaseBonus: 1.0, c6Step: 0.1, c6StepBonus: 0.05, c6MaxWeightedConst: 0,
     outfit: 0, motoFrame: 0,
     pullC6Base: 5, pullC6BaseBonus: 0.5, pullC6Step: 0.1, pullC6StepBonus: 0.005, pullC6Threshold: 400, pullC6MaxWeightedConst: 20, pullPerWeightedConst: 450, pullPerWeightedConstCount: 1,
+    pullC6MaxBonus: 2.0,
+    pullC6Segments: [
+      { baseBonus: 0.2, threshold: 5, step: 0.06 },
+      { baseBonus: 0.5, threshold: 20, step: 0.05 },
+      { baseBonus: 1.25, threshold: null, step: 0.02 }
+    ],
     teamMultiBonus: [
       { count: 2, coef: 1.05 }, { count: 3, coef: 1.1 }, { count: 4, coef: 1.15 },
       { count: 5, coef: 1.2 }, { count: 6, coef: 1.25 }, { count: 7, coef: 1.3 },
@@ -74,7 +80,13 @@ const ZZZ_CONFIG = {
     ],
   },
 
-  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002, pullMaxPrice: 5 },
+  defaultPullFormula: { pullBase: 200, pullBasePrice: 1.0, pullStepPrice: 0.002, pullMaxPrice: 5,
+    pullSegments: [
+      { basePrice: 0.6, threshold: 200, stepPrice: 0.002 },
+      { basePrice: 1.0, threshold: 800, stepPrice: 0.0025 },
+      { basePrice: 2.5, threshold: null, stepPrice: 0.0015 }
+    ]
+  },
 
   defaultTeamMates: {},
 
