@@ -1002,9 +1002,27 @@ function getPageHTML(options) {
       transition: all 0.2s;
       box-shadow: 0 4px 16px var(--accent-glow);
       letter-spacing: 2px;
+      position: relative;
     }
     .eval-btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
-    .eval-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .eval-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .eval-btn.loading {
+      color: transparent !important;
+      pointer-events: none;
+    }
+    .eval-btn.loading::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      margin: -9px 0 0 -9px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
 
     .price-input {
       width: 130px !important;
@@ -1137,6 +1155,22 @@ function getPageHTML(options) {
       color: var(--text-dim);
       font-size: 14px;
       letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .loading::before {
+      content: '';
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     .error-msg {
       text-align: center;
@@ -4488,7 +4522,13 @@ function getPageHTML(options) {
         if (!silent) veShowError('请先添加至少一个角色');
         return;
       }
+      if (VE_EVALUATING) return;
       VE_EVALUATING = true;
+
+      // 所有估价按钮进入加载状态
+      var allEvalBtns = document.querySelectorAll('.eval-btn');
+      allEvalBtns.forEach(function(btn) { btn.classList.add('loading'); btn.disabled = true; });
+
       if (!silent) veShowLoading('估价中...');
 
       var info = veGetInfo();
@@ -4527,6 +4567,7 @@ function getPageHTML(options) {
         veShowError('网络错误：' + e.message);
       } finally {
         VE_EVALUATING = false;
+        allEvalBtns.forEach(function(btn) { btn.classList.remove('loading'); btn.disabled = false; });
       }
     }
 
