@@ -1538,10 +1538,16 @@ function getPageHTML(options) {
     }
     .side-summary .ss-calc-row .label {
       color: var(--text-muted);
+      flex: none;
+      white-space: nowrap;
     }
     .side-summary .ss-calc-row .val {
       font-weight: 600;
       color: var(--text);
+      min-width: 0;
+      margin-left: 10px;
+      text-align: right;
+      word-break: break-word;
     }
     .side-summary .ss-calc-row .val.neg { color: #f87171; }
     .side-summary .ss-calc-row .val.pos { color: #4ade80; }
@@ -2105,11 +2111,15 @@ function getPageHTML(options) {
       }
       #mobile-detail-content .ss-calc-row .label {
         min-width: 0;
+        flex: none;
+        white-space: nowrap;
         font-size: 12px;
         color: var(--text-dim);
       }
       #mobile-detail-content .ss-calc-row .val {
-        flex-shrink: 0;
+        min-width: 0;
+        text-align: right;
+        word-break: break-word;
         font-size: 13px;
         font-weight: 600;
         color: var(--text);
@@ -3595,10 +3605,14 @@ function getPageHTML(options) {
         if (sigCount > 0) items.push({ k: '专武', v: sigCount + ' 把', cls: 'warn' });
         if (info.pulls > 0) items.push({ k: '总抽数', v: info.pulls + ' 抽' });
         if (yi.effectiveYellow != null) {
-          items.push({ k: '有效金', v: fmtGold(yi.effectiveYellow) });
-        }
-        if (det.weightedFullConst > 0) {
-          items.push({ k: '加权满命', v: det.weightedFullConst.toFixed(1), cls: 'good' });
+          const limitedGold = yi.limitedYellow != null ? yi.limitedYellow : yi.yellowCount;
+          const totalGold = yi.totalYellow != null ? yi.totalYellow : (yi.rawYellowCount || 0);
+          items.push({
+            k: '有效金/限定金/总金数',
+            v: fmtGold(yi.effectiveYellow) + '/' + fmtGold(limitedGold) + '/' + fmtGold(totalGold),
+            cls: 'warn',
+            tip: '有效金＝计入命座与专武加成后的等效金数；限定金＝限定角色与专武的原始金数；总金数＝账号全部金数'
+          });
         }
         if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
           var teamNames = det.satisfiedTeams.map(function(t) { return t.name || t; }).join('、');
@@ -3643,18 +3657,18 @@ function getPageHTML(options) {
         if (det.resourceValue != null && det.resourceValue > 0) {
           calcRows.push({ label: '资源价值', val: '+' + det.resourceValue + ' 元', cls: 'pos' });
         }
-        // 强绑折扣
-        if (det.c6DepDiscount != null && det.c6DepDiscount > 0) {
-          calcRows.push({ label: '强绑折扣', val: '-' + det.c6DepDiscount + ' 元', cls: 'neg' });
+        // 强绑折扣（缺少强绑队友时角色价值打折，引擎只回传说明文案）
+        if (det.c6DepNotes && det.c6DepNotes.length > 0) {
+          calcRows.push({ label: '强绑折扣', val: det.c6DepNotes.join('；'), cls: 'neg', tip: '缺少强绑队友的角色，其价值按配置比例打折' });
         }
-        // 无专武折扣
-        if (det.sigDiscount != null && det.sigDiscount > 0) {
-          calcRows.push({ label: '无专武折扣', val: '-' + det.sigDiscount + ' 元', cls: 'neg' });
+        // 无专武折扣（必需专武的角色缺专武时价值打折，引擎只回传说明文案）
+        if (det.sigDiscountNotes && det.sigDiscountNotes.length > 0) {
+          calcRows.push({ label: '无专武折扣', val: det.sigDiscountNotes.join('；'), cls: 'neg', tip: '必需专武的角色缺少对应专武时，其价值按配置比例打折' });
         }
         // 低命折扣
-        const fd = det.fullConstDep || {};
+        const fd = det.flatDiscount || {};
         if (fd.value != null && fd.value < 1) {
-          calcRows.push({ label: '低命折扣', val: '× ' + fd.value, cls: 'neg' });
+          calcRows.push({ label: '低命折扣', val: '× ' + fd.value, cls: 'neg', tip: fd.notes && fd.notes.length > 0 ? fd.notes.join('；') : '全员低命时按配置系数打折' });
         }
         // 有效金系数
         const yi = det.yellowInfo || {};
