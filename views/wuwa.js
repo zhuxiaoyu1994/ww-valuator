@@ -33,9 +33,14 @@ function getPageHTML(options) {
       --bad: #f87171;
       --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
       --sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', -apple-system, sans-serif;
+      --nav-h: 60px;
+      --nav-total: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
     }
 
-    html { scroll-behavior: smooth; }
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: calc(var(--nav-total) + 12px);
+    }
     body {
       background: var(--bg);
       color: var(--text);
@@ -49,7 +54,9 @@ function getPageHTML(options) {
     /* ===== 顶部导航栏 ===== */
     .top-nav {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      height: 60px;
+      height: var(--nav-total);
+      padding-top: env(safe-area-inset-top, 0px);
+      box-sizing: border-box;
       background: rgba(10, 10, 20, 0.75);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
@@ -105,8 +112,8 @@ function getPageHTML(options) {
       background: #e63946;
       border-radius: 1px;
     }
-    /* 给页面内容留出导航栏高度 */
-    body { padding-top: 60px; }
+    /* 给页面内容留出导航栏高度（含刘海安全区） */
+    body { padding-top: var(--nav-total); }
     @media (max-width: 640px) {
       .top-nav-inner { padding: 0 10px; gap: 8px; }
       .nav-logo img { width: 28px; height: 28px; border-radius: 6px; }
@@ -568,6 +575,8 @@ function getPageHTML(options) {
     /* 顶部显眼的添加角色按钮（红色） */
     .ve-add-char-top {
       width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
       padding: 14px;
       border: 2px solid #ef4444;
       border-radius: 12px;
@@ -582,6 +591,8 @@ function getPageHTML(options) {
       align-items: center;
       justify-content: center;
       gap: 8px;
+      position: relative;
+      z-index: 2;
     }
     .ve-add-char-top:hover {
       background: linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.1));
@@ -1789,12 +1800,12 @@ function getPageHTML(options) {
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         border-top: 1px solid var(--line);
-        padding: 10px 16px;
-        display: flex;
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
         align-items: center;
         justify-content: space-between;
         transform: translateY(100%);
         transition: transform 0.3s ease;
+        cursor: pointer;
       }
       .mobile-float-bar.show {
         transform: translateY(0);
@@ -1807,13 +1818,13 @@ function getPageHTML(options) {
       }
       .mobile-float-bar .mfb-price .unit {
         font-size: 12px;
-        color: var(--text-secondary);
+        color: var(--text-dim);
         margin-left: 2px;
         font-weight: 400;
       }
       .mobile-float-bar .mfb-info {
         font-size: 11px;
-        color: var(--text-muted);
+        color: var(--text-faint);
       }
       .mobile-float-bar .mfb-ratio {
         font-size: 12px;
@@ -1824,235 +1835,355 @@ function getPageHTML(options) {
       .mobile-float-bar .mfb-ratio.good { background: rgba(34,197,94,0.15); color: #4ade80; }
       .mobile-float-bar .mfb-ratio.ok { background: rgba(251,191,36,0.15); color: #fbbf24; }
       .mobile-float-bar .mfb-ratio.bad { background: rgba(239,68,68,0.15); color: #f87171; }
-      .mobile-float-bar { cursor: pointer; }
       .mobile-float-bar .mfb-detail-hint {
         color: var(--accent);
         font-size: 11px;
         margin-left: 4px;
       }
       /* 移动端底部留出浮动条空间 */
-      body.has-float-bar { padding-bottom: 70px; }
+      body.has-float-bar { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 
-      /* 移动端估值详情弹窗 - 全屏优化 */
+      /* 移动端估值详情弹窗 - 单屏自适应（不超出屏幕边界） */
       #mobile-detail-modal {
-        background: rgba(0,0,0,0.9) !important;
+        background: rgba(0,0,0,0.92) !important;
         overflow: hidden !important;
       }
       .mobile-detail-container {
         width: 100% !important;
         max-width: 100% !important;
         height: 100vh !important;
+        height: 100dvh !important;
         margin: 0 !important;
         border-radius: 0 !important;
         border: none !important;
-        background: #0d0d1a !important;
+        background: var(--bg) !important;
         display: flex !important;
         flex-direction: column !important;
         padding: 0 !important;
+        overflow: hidden !important;
       }
       .mobile-detail-header {
-        flex-shrink: 0 !important;
+        flex: 0 0 auto !important;
         display: flex !important;
         justify-content: space-between !important;
         align-items: center !important;
-        padding: 16px 20px !important;
+        padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px !important;
         border-bottom: 1px solid var(--line) !important;
-        background: #0d0d1a !important;
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 2 !important;
+        background: rgba(13, 13, 26, 0.98) !important;
       }
       .mobile-detail-title {
-        font-size: 17px !important;
+        font-size: 16px !important;
         font-weight: 700 !important;
-        color: #fff !important;
+        color: var(--text) !important;
+        line-height: 1.2 !important;
       }
       .mobile-detail-subtitle {
         font-size: 11px !important;
-        color: #888 !important;
+        color: var(--text-faint) !important;
         margin-top: 2px !important;
       }
       .mobile-detail-close {
         background: none !important;
         border: none !important;
-        color: #888 !important;
-        font-size: 28px !important;
+        color: var(--text-dim) !important;
+        font-size: 26px !important;
+        line-height: 1 !important;
         cursor: pointer !important;
-        padding: 4px 12px !important;
+        padding: 2px 10px !important;
         font-family: inherit !important;
+        flex-shrink: 0 !important;
       }
       .mobile-detail-body {
-        flex: 1 !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
         overflow-y: auto !important;
+        overflow-x: hidden !important;
         -webkit-overflow-scrolling: touch !important;
         padding: 0 !important;
       }
       /* 移动端估值详情 - 内容区 */
       #mobile-detail-content {
-        padding: 16px;
+        padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px));
       }
-      /* 移动端预估价值大卡片 */
-      .md-value-card {
-        text-align: center;
-        padding: 28px 20px;
-        background: linear-gradient(160deg, rgba(74, 222, 128, 0.12), rgba(34, 197, 94, 0.04));
-        border: 1px solid rgba(74, 222, 128, 0.2);
-        border-radius: 16px;
-        margin-bottom: 16px;
+      /* 移动端预估价值卡片 */
+      .md-hero {
         position: relative;
+        padding: 14px 16px 12px;
+        border-radius: 14px;
+        background: linear-gradient(150deg, rgba(233,69,96,0.14), rgba(233,69,96,0.03));
+        border: 1px solid rgba(233,69,96,0.22);
+        margin-bottom: 10px;
         overflow: hidden;
       }
-      .md-value-card::before {
+      .md-hero::after {
         content: '';
         position: absolute;
-        top: -50%;
-        right: -30%;
-        width: 200px;
-        height: 200px;
-        background: radial-gradient(circle, rgba(74,222,128,0.08) 0%, transparent 70%);
+        top: -60px; right: -40px;
+        width: 160px; height: 160px;
         border-radius: 50%;
+        background: radial-gradient(circle, rgba(233,69,96,0.18), transparent 70%);
+        pointer-events: none;
       }
-      .md-value-card .label {
-        font-size: 12px;
-        color: rgba(255,255,255,0.5);
-        margin-bottom: 10px;
+      .md-hero-label {
         position: relative;
-        z-index: 1;
-      }
-      .md-value-card .price {
-        font-size: 44px;
-        font-weight: 800;
-        color: #4ade80;
-        font-variant-numeric: tabular-nums;
-        line-height: 1.1;
-        position: relative;
-        z-index: 1;
-        text-shadow: 0 0 30px rgba(74,222,128,0.3);
-      }
-      .md-value-card .range {
         font-size: 11px;
-        color: rgba(255,255,255,0.4);
-        margin-top: 10px;
-        position: relative;
-        z-index: 1;
+        letter-spacing: 1px;
+        color: var(--text-dim);
+        margin-bottom: 2px;
       }
-      .md-ratio {
-        display: inline-block;
-        margin-top: 14px;
-        padding: 5px 14px;
-        border-radius: 20px;
-        font-size: 12px;
+      .md-hero-price {
+        position: relative;
+        font-size: 36px;
+        font-weight: 800;
+        line-height: 1.05;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+      }
+      .md-hero-price .unit {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-dim);
+        margin-left: 3px;
+      }
+      .md-hero-foot {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 8px;
+        min-height: 22px;
+      }
+      .md-hero-range {
+        font-size: 11px;
+        color: #60a5fa;
+        font-weight: 500;
+      }
+      .md-hero-ratio {
+        flex-shrink: 0;
+        font-size: 11px;
         font-weight: 600;
-        position: relative;
-        z-index: 1;
+        padding: 3px 10px;
+        border-radius: 20px;
       }
-      .md-ratio.good { background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-      .md-ratio.ok { background: rgba(251,191,36,0.2); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
-      .md-ratio.bad { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+      .md-hero-ratio.good { background: rgba(34,197,94,0.15); color: #4ade80; }
+      .md-hero-ratio.ok { background: rgba(251,191,36,0.15); color: #fbbf24; }
+      .md-hero-ratio.bad { background: rgba(239,68,68,0.15); color: #f87171; }
 
-      /* 移动端详情 - 卡片容器 */
-      .md-card {
-        background: var(--bg-soft);
+      /* 移动端详情 - 区块卡片 */
+      .md-sec {
+        background: var(--card);
         border: 1px solid var(--line);
         border-radius: 12px;
-        padding: 14px 16px;
-        margin-bottom: 12px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
       }
-      .md-card-title {
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        margin-bottom: 12px;
+      .md-sec-title {
         display: flex;
         align-items: center;
         gap: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.8px;
+        color: var(--text-dim);
+        margin-bottom: 10px;
       }
-      .md-card-title::before {
+      .md-sec-title::before {
         content: '';
         width: 3px;
         height: 12px;
-        background: var(--accent);
         border-radius: 2px;
+        background: var(--accent);
+        flex-shrink: 0;
       }
+      .md-sec-title.md-collapse {
+        cursor: pointer;
+        margin-bottom: 0;
+      }
+      .md-sec-title.md-collapse > span:first-child { flex: 1; }
+      .md-arrow {
+        font-size: 10px;
+        color: var(--text-faint);
+        transition: transform 0.2s;
+      }
+      .md-arrow.open { transform: rotate(180deg); }
+      .md-sec-body { margin-top: 10px; }
 
       /* 移动端核心数据 - 覆盖 ss-highlights 样式 */
       #mobile-detail-content .ss-highlights {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
-        margin-bottom: 0;
       }
       #mobile-detail-content .ss-hl-item {
+        display: flex;
         flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 2px;
+        min-width: 0;
+        padding: 9px 11px;
+        background: var(--bg-soft);
+        border: 1px solid var(--line-soft);
+        border-radius: 9px;
+      }
+      #mobile-detail-content .ss-hl-item .k {
+        display: flex;
+        align-items: center;
         gap: 4px;
-        padding: 12px;
-        background: rgba(255,255,255,0.02);
-        border: 1px solid rgba(255,255,255,0.04);
-        border-radius: 10px;
-        text-align: left;
-      }
-      #mobile-detail-content .ss-hl-item:hover {
-        background: rgba(255,255,255,0.04);
-        transform: none;
-      }
-      #mobile-detail-content .ss-hl-item .num {
-        font-size: 20px;
-        font-weight: 700;
-        color: #fff;
-      }
-      #mobile-detail-content .ss-hl-item.good .num { color: #4ade80; }
-      #mobile-detail-content .ss-hl-item .label {
+        min-width: 0;
         font-size: 11px;
-        color: var(--text-muted);
         font-weight: 400;
+        color: var(--text-dim);
+      }
+      #mobile-detail-content .ss-hl-item .v {
+        font-size: 17px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      #mobile-detail-content .ss-hl-item .v.good { color: var(--good); }
+      #mobile-detail-content .ss-hl-item .v.warn { color: var(--warn); }
+      #mobile-detail-content .ss-hl-item .v.danger { color: var(--bad); }
+      #mobile-detail-content .hl-tip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: rgba(233,69,96,0.15);
+        color: var(--accent);
+        font-size: 9px;
+        font-style: normal;
+        flex-shrink: 0;
+      }
+      #mobile-detail-content .hl-tip .tooltip {
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        bottom: 150%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 180px;
+        padding: 8px 10px;
+        background: #1a1a2e;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 1.5;
+        color: var(--text-dim);
+        text-align: left;
+        white-space: normal;
+        z-index: 20;
+        transition: opacity 0.2s;
+      }
+      #mobile-detail-content .hl-tip:hover .tooltip,
+      #mobile-detail-content .hl-tip:active .tooltip {
+        visibility: visible;
+        opacity: 1;
       }
 
       /* 移动端估价计算 - 覆盖 ss-calc 样式 */
       #mobile-detail-content .ss-calc {
-        margin: 0;
-        padding: 0;
+        font-size: 12px;
+        line-height: 1.6;
       }
       #mobile-detail-content .ss-calc-row {
-        padding: 10px 0;
-        border-bottom: 1px solid rgba(255,255,255,0.04);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--line-soft);
       }
       #mobile-detail-content .ss-calc-row:last-child {
         border-bottom: none;
       }
       #mobile-detail-content .ss-calc-row .label {
-        font-size: 13px;
-        color: var(--text-secondary);
+        min-width: 0;
+        font-size: 12px;
+        color: var(--text-dim);
       }
       #mobile-detail-content .ss-calc-row .val {
-        font-size: 14px;
+        flex-shrink: 0;
+        font-size: 13px;
         font-weight: 600;
+        color: var(--text);
         font-variant-numeric: tabular-nums;
       }
+      #mobile-detail-content .ss-calc-row .val.neg { color: var(--bad); }
+      #mobile-detail-content .ss-calc-row .val.pos { color: var(--good); }
+      /* 移动端 tooltip 改为左对齐，避免居中时超出左边界 */
+      #mobile-detail-content .ss-calc-row .label .tooltip {
+        left: 0;
+        transform: none;
+        max-width: calc(100vw - 60px);
+      }
       #mobile-detail-content .ss-calc-total {
-        margin-top: 12px;
-        padding-top: 14px;
-        border-top: 2px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 9px;
+        margin-top: 2px;
+        border-top: 1px dashed var(--line);
+        font-weight: 700;
       }
       #mobile-detail-content .ss-calc-total span:first-child {
-        font-size: 14px;
-        color: var(--text-secondary);
-        font-weight: 500;
+        font-size: 12px;
+        color: var(--text-dim);
       }
       #mobile-detail-content .ss-calc-total .val {
-        font-size: 20px;
+        font-size: 17px;
         font-weight: 700;
-        color: #fbbf24;
+        color: var(--warn);
         font-variant-numeric: tabular-nums;
       }
 
       /* 移动端详情 - 底部操作区 */
       .md-actions {
-        margin-top: 4px;
         display: flex;
         flex-direction: column;
+        gap: 8px;
+      }
+      .md-stats {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 11px;
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--text-dim);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .md-afdian {
+        display: flex;
+        align-items: center;
         gap: 10px;
+        padding: 11px 12px;
+        background: linear-gradient(135deg, rgba(255,107,157,0.08), rgba(255,159,67,0.06));
+        border: 1px solid rgba(255,107,157,0.2);
+        border-radius: 12px;
+      }
+      .md-afdian-icon { font-size: 24px; flex-shrink: 0; }
+      .md-afdian-text { flex: 1; min-width: 0; }
+      .md-afdian-title { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+      .md-afdian-desc { font-size: 10.5px; color: var(--text-dim); }
+      .md-afdian-btn {
+        flex-shrink: 0;
+        padding: 7px 16px;
+        background: linear-gradient(135deg, #ff6b9d, #ff9f43);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 20px;
+        text-decoration: none;
       }
 
       /* 移动端买卖攻略 & 使用须知弹窗 - 全屏优化 */
@@ -2065,15 +2196,17 @@ function getPageHTML(options) {
         width: 100% !important;
         max-width: 100% !important;
         height: 100vh !important;
+        height: 100dvh !important;
         margin: 0 !important;
         border-radius: 0 !important;
         border: none !important;
+        overflow: hidden !important;
       }
       #tips-modal > div > div:first-child, #guide-modal > div > div:first-child {
         width: 100% !important;
         border-right: none !important;
         border-bottom: 1px solid var(--line) !important;
-        padding: 0 !important;
+        padding: calc(4px + env(safe-area-inset-top, 0px)) 0 4px !important;
         flex-shrink: 0 !important;
       }
       /* 移动端弹窗 - 目录标题隐藏 */
@@ -2143,6 +2276,24 @@ function getPageHTML(options) {
         padding: 4px 12px;
         color: #888;
       }
+
+      /* 移动端角色选择器 - 改为底部弹层，始终完整可见可点击 */
+      .char-picker {
+        position: fixed !important;
+        left: 10px !important;
+        right: 10px !important;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+        top: auto !important;
+        width: auto !important;
+        max-width: none !important;
+        max-height: 68vh !important;
+        border-radius: 16px !important;
+        padding: 14px !important;
+        box-shadow: 0 -8px 44px rgba(0, 0, 0, 0.7) !important;
+        z-index: 100002 !important;
+      }
+      .char-picker-grid { grid-template-columns: repeat(3, 1fr) !important; }
+      .char-picker-item .cp-price { font-size: 11px; }
     }
     /* 估值规则设置入口 */
     .settings-bar {
@@ -3547,53 +3698,53 @@ function getPageHTML(options) {
       const mobileDetailEl = document.getElementById('mobile-detail-content');
       if (mobileDetailEl) {
         let detailHtml = '';
-        // 预估价值大卡片
-        detailHtml += '<div class="md-value-card">';
-        detailHtml += '<div class="label">预估价值</div>';
-        detailHtml += '<div class="price">¥' + d.estimatedValue + '</div>';
+
+        // 预估价值主卡片
+        detailHtml += '<div class="md-hero">';
+        detailHtml += '<div class="md-hero-label">预估价值</div>';
+        detailHtml += '<div class="md-hero-price">' + d.estimatedValue + '<span class="unit">元</span></div>';
+        detailHtml += '<div class="md-hero-foot">';
         if (d.reasonableRange) {
-          detailHtml += '<div class="range">合理范围: ¥' + d.reasonableRange[0] + ' ~ ¥' + d.reasonableRange[1] + '</div>';
+          detailHtml += '<span class="md-hero-range">合理范围 ¥' + d.reasonableRange[0] + ' ~ ¥' + d.reasonableRange[1] + '</span>';
+        } else {
+          detailHtml += '<span></span>';
         }
         if (d.price && d.price > 0) {
           const ratioClass3 = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
           const ratioText3 = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(1) + '%' : d.costPerformance.toFixed(1) + '%';
-          detailHtml += '<div class="md-ratio ' + ratioClass3 + '">性价比 ' + ratioText3 + '</div>';
+          detailHtml += '<span class="md-hero-ratio ' + ratioClass3 + '">性价比 ' + ratioText3 + '</span>';
         }
         detailHtml += '</div>';
+        detailHtml += '</div>';
 
-        // 核心数据 - 直接复用PC端结构，保持一致
+        // 核心数据 - 复用PC端结构，保持一致
         const hlEl2 = document.getElementById('ss-highlights');
         if (hlEl2 && hlEl2.children.length) {
-          detailHtml += '<div class="md-card">';
-          detailHtml += '<div class="md-card-title">核心数据</div>';
+          detailHtml += '<div class="md-sec">';
+          detailHtml += '<div class="md-sec-title"><span>核心数据</span></div>';
           detailHtml += '<div class="ss-highlights">' + hlEl2.innerHTML + '</div>';
           detailHtml += '</div>';
         }
 
-        // 估价计算 - 直接复用PC端结构，保持一致
+        // 估价计算 - 默认收起，保证一屏内显示完整内容
         const calcEl2 = document.getElementById('ss-calc');
         if (calcEl2 && calcEl2.children.length) {
-          detailHtml += '<div class="md-card">';
-          detailHtml += '<div class="md-card-title">估价计算</div>';
-          detailHtml += '<div class="ss-calc">' + calcEl2.innerHTML + '</div>';
+          detailHtml += '<div class="md-sec">';
+          detailHtml += '<div class="md-sec-title md-collapse" onclick="toggleMobileSec(this)"><span>估价计算明细</span><span class="md-arrow">▼</span></div>';
+          detailHtml += '<div class="md-sec-body" style="display:none;"><div class="ss-calc">' + calcEl2.innerHTML + '</div></div>';
           detailHtml += '</div>';
         }
 
         // 底部操作区
         detailHtml += '<div class="md-actions">';
-        // 算法准确性报告入口
-        detailHtml += '<div onclick="closeMobileDetailModal();openStatsModal();" style="cursor:pointer;text-align:center;padding:14px;border:1px solid var(--line);border-radius:10px;color:var(--text-secondary);font-size:13px;background:var(--bg-soft);">';
-        detailHtml += '<span>📊</span> 估值准不准？查看算法准确性报告';
+        detailHtml += '<div class="md-stats" onclick="closeMobileDetailModal();openStatsModal();"><span>📊</span> 估值准不准？查看算法准确性报告</div>';
+        detailHtml += '<div class="md-afdian">';
+        detailHtml += '<div class="md-afdian-icon">☕</div>';
+        detailHtml += '<div class="md-afdian-text">';
+        detailHtml += '<div class="md-afdian-title">对你有帮助？请作者喝杯咖啡</div>';
+        detailHtml += '<div class="md-afdian-desc">你的支持是持续更新的动力</div>';
         detailHtml += '</div>';
-
-        // 爱发电支持
-        detailHtml += '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,rgba(255,107,157,0.1),rgba(255,159,67,0.08));border:1px solid rgba(255,107,157,0.25);border-radius:12px;">';
-        detailHtml += '<div style="font-size:32px;flex-shrink:0;">☕</div>';
-        detailHtml += '<div style="flex:1;min-width:0;">';
-        detailHtml += '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:3px;">对你有帮助？请作者喝杯咖啡</div>';
-        detailHtml += '<div style="font-size:11px;color:rgba(255,255,255,0.5);">你的支持是持续更新的动力</div>';
-        detailHtml += '</div>';
-        detailHtml += '<a href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener" style="flex-shrink:0;padding:8px 18px;background:linear-gradient(135deg,#ff6b9d,#ff9f43);color:#fff;font-size:13px;font-weight:600;border-radius:20px;text-decoration:none;box-shadow:0 2px 12px rgba(255,107,157,0.3);">支持</a>';
+        detailHtml += '<a class="md-afdian-btn" href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener">支持</a>';
         detailHtml += '</div>';
         detailHtml += '</div>';
 
@@ -3605,6 +3756,16 @@ function getPageHTML(options) {
       return '<div class="result-row"><span class="key">' + key + '</span><span class="val" style="color:' + (color || '#e0e0e0') + ';">' + val + '</span></div>';
     }
     function fmtGold(n) { if (n == null) return '-'; return n % 1 === 0 ? n : (Math.round(n * 10) / 10); }
+
+    // 移动端详情区块折叠/展开
+    function toggleMobileSec(titleEl) {
+      var bodyEl = titleEl.nextElementSibling;
+      if (!bodyEl) return;
+      var arrowEl = titleEl.querySelector('.md-arrow');
+      var expanding = bodyEl.style.display === 'none';
+      bodyEl.style.display = expanding ? '' : 'none';
+      if (arrowEl) arrowEl.classList.toggle('open', expanding);
+    }
 
     // 估价计算折叠/展开
     let calcCollapsed = true;
