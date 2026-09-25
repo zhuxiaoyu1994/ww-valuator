@@ -2055,112 +2055,6 @@ function getPageHTML(options) {
         gap: 10px;
       }
 
-      /* 移动端详情 - PC端样式适配 */
-      #mobile-detail-content .ss-action-section {
-        margin-bottom: 16px;
-      }
-      #mobile-detail-content .ss-price-input {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--bg-soft);
-        color: var(--text);
-        font-size: 16px;
-        font-weight: 600;
-        font-family: inherit;
-        outline: none;
-        text-align: center;
-        margin-bottom: 10px;
-        box-sizing: border-box;
-      }
-      #mobile-detail-content .ss-price-input:focus {
-        border-color: var(--accent);
-      }
-      #mobile-detail-content .ss-action-section .eval-btn {
-        width: 100%;
-        padding: 14px;
-        font-size: 15px;
-        box-sizing: border-box;
-      }
-      #mobile-detail-content .ss-action-section > div:last-child {
-        font-size: 11px;
-        color: #666;
-        text-align: center;
-        margin-top: 6px;
-      }
-      #mobile-detail-content .ss-price {
-        font-size: 40px;
-        margin-bottom: 6px;
-      }
-      #mobile-detail-content .ss-price .unit {
-        font-size: 18px;
-      }
-      #mobile-detail-content .ss-range {
-        font-size: 12px;
-        margin-bottom: 10px;
-      }
-      #mobile-detail-content .ss-ratio {
-        margin-bottom: 16px;
-        font-size: 12px;
-      }
-      #mobile-detail-content .ss-stats-link {
-        margin-bottom: 16px;
-        font-size: 12px;
-        padding: 12px;
-      }
-      #mobile-detail-content .ss-section-title {
-        font-size: 11px;
-        margin-bottom: 12px;
-      }
-      #mobile-detail-content .ss-collapse-title {
-        cursor: pointer;
-      }
-      #mobile-detail-content .ss-divider {
-        margin: 16px 0;
-      }
-      /* 移动端爱发电卡片完整样式 */
-      #mobile-detail-content .ss-afdian {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 14px;
-        background: linear-gradient(135deg, rgba(255, 107, 157, 0.08), rgba(255, 159, 67, 0.08));
-        border: 1px solid rgba(255, 107, 157, 0.2);
-        border-radius: 12px;
-        margin-top: 4px;
-      }
-      #mobile-detail-content .ss-afdian-icon {
-        font-size: 30px;
-        flex-shrink: 0;
-      }
-      #mobile-detail-content .ss-afdian-text {
-        flex: 1;
-        min-width: 0;
-      }
-      #mobile-detail-content .ss-afdian-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: #fff;
-        margin-bottom: 3px;
-      }
-      #mobile-detail-content .ss-afdian-desc {
-        font-size: 11px;
-        color: var(--text-muted);
-      }
-      #mobile-detail-content .ss-afdian-btn {
-        flex-shrink: 0;
-        padding: 8px 18px;
-        background: linear-gradient(135deg, #ff6b9d, #ff9f43);
-        color: #fff;
-        font-size: 13px;
-        font-weight: 600;
-        border-radius: 20px;
-        text-decoration: none;
-        transition: transform 0.2s, box-shadow 0.2s;
-        box-shadow: 0 2px 12px rgba(255, 107, 157, 0.3);
-      }
-
       /* 移动端买卖攻略 & 使用须知弹窗 - 全屏优化 */
       #tips-modal, #guide-modal {
         background: rgba(0,0,0,0.9) !important;
@@ -2816,32 +2710,10 @@ function getPageHTML(options) {
       // 同步到侧边栏
       var side = document.getElementById('ve-price-side');
       if (side) side.value = val;
-      // 同步到其他移动端输入框
-      ['ve-price-mobile-desc', 've-price-mobile', 've-price-mobile-detail'].forEach(function(id) {
-        var other = document.getElementById(id);
-        if (other && other !== el && document.activeElement !== other) {
-          other.value = val;
-        }
-      });
-    }
-    function syncMobileDetailPrice(el) {
-      syncMobilePrice(el);
-    }
-    // 移动端估价计算折叠/展开
-    let mobileCalcCollapsed = true;
-    function toggleMobileCalcCollapse() {
-      mobileCalcCollapsed = !mobileCalcCollapsed;
-      var calcEl = document.getElementById('mobile-ss-calc');
-      var arrowEl = document.getElementById('mobile-calc-collapse-arrow');
-      if (calcEl && arrowEl) {
-        if (mobileCalcCollapsed) {
-          calcEl.style.display = 'none';
-          arrowEl.classList.remove('open');
-        } else {
-          calcEl.style.display = '';
-          arrowEl.classList.add('open');
-        }
-      }
+      // 同步到另一个移动端输入框
+      var otherId = el.id === 've-price-mobile-desc' ? 've-price-mobile' : 've-price-mobile-desc';
+      var other = document.getElementById(otherId);
+      if (other && document.activeElement !== other) other.value = val;
     }
 
     // 顶部导航栏滚动效果
@@ -3671,78 +3543,61 @@ function getPageHTML(options) {
         mfbRatio.style.display = 'none';
       }
 
-      // 移动端详情弹窗内容 - 和PC端完全一致
+      // 移动端详情弹窗内容
       const mobileDetailEl = document.getElementById('mobile-detail-content');
       if (mobileDetailEl) {
         let detailHtml = '';
-
-        // 1. 标价 + 立即估价按钮（和PC端一致）
-        detailHtml += '<div class="ss-action-section">';
-        detailHtml += '<div class="ss-label" style="margin-bottom:6px;">标价（元）</div>';
-        detailHtml += '<input type="number" id="ve-price-mobile-detail" placeholder="选填" class="ss-price-input" oninput="syncMobileDetailPrice(this)">';
-        detailHtml += '<button class="ve-btn eval-btn" onclick="closeMobileDetailModal();veEvaluate();">立即估价</button>';
-        detailHtml += '<div style="font-size:11px;color:#666;text-align:center;margin-top:6px;">修改内容后点击重新估价</div>';
-        detailHtml += '</div>';
-
-        detailHtml += '<div class="ss-divider"></div>';
-
-        // 2. 预估价值（和PC端一致）
-        detailHtml += '<div class="ss-label">预估价值</div>';
-        detailHtml += '<div class="ss-price">' + d.estimatedValue + '<span class="unit">元</span></div>';
+        // 预估价值大卡片
+        detailHtml += '<div class="md-value-card">';
+        detailHtml += '<div class="label">预估价值</div>';
+        detailHtml += '<div class="price">¥' + d.estimatedValue + '</div>';
         if (d.reasonableRange) {
-          detailHtml += '<div class="ss-range">合理范围：¥' + d.reasonableRange[0] + ' ~ ¥' + d.reasonableRange[1] + '</div>';
+          detailHtml += '<div class="range">合理范围: ¥' + d.reasonableRange[0] + ' ~ ¥' + d.reasonableRange[1] + '</div>';
         }
         if (d.price && d.price > 0) {
-          const ratioClass4 = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
-          const ratioText4 = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(1) + '%' : d.costPerformance.toFixed(1) + '%';
-          const ratioLabel4 = d.costPerformance >= 30 ? '性价比极高' : (d.costPerformance >= 0 ? '性价比合理' : '性价比偏低');
-          detailHtml += '<div class="ss-ratio ' + ratioClass4 + '">性价比 ' + ratioText4 + ' · ' + ratioLabel4 + '</div>';
+          const ratioClass3 = d.costPerformance >= 30 ? 'good' : (d.costPerformance >= 0 ? 'ok' : 'bad');
+          const ratioText3 = d.costPerformance >= 0 ? '+' + d.costPerformance.toFixed(1) + '%' : d.costPerformance.toFixed(1) + '%';
+          detailHtml += '<div class="md-ratio ' + ratioClass3 + '">性价比 ' + ratioText3 + '</div>';
+        }
+        detailHtml += '</div>';
+
+        // 核心数据 - 直接复用PC端结构，保持一致
+        const hlEl2 = document.getElementById('ss-highlights');
+        if (hlEl2 && hlEl2.children.length) {
+          detailHtml += '<div class="md-card">';
+          detailHtml += '<div class="md-card-title">核心数据</div>';
+          detailHtml += '<div class="ss-highlights">' + hlEl2.innerHTML + '</div>';
+          detailHtml += '</div>';
         }
 
-        // 3. 算法准确性报告（和PC端一致）
-        detailHtml += '<div class="ss-stats-link" onclick="closeMobileDetailModal();openStatsModal();">';
+        // 估价计算 - 直接复用PC端结构，保持一致
+        const calcEl2 = document.getElementById('ss-calc');
+        if (calcEl2 && calcEl2.children.length) {
+          detailHtml += '<div class="md-card">';
+          detailHtml += '<div class="md-card-title">估价计算</div>';
+          detailHtml += '<div class="ss-calc">' + calcEl2.innerHTML + '</div>';
+          detailHtml += '</div>';
+        }
+
+        // 底部操作区
+        detailHtml += '<div class="md-actions">';
+        // 算法准确性报告入口
+        detailHtml += '<div onclick="closeMobileDetailModal();openStatsModal();" style="cursor:pointer;text-align:center;padding:14px;border:1px solid var(--line);border-radius:10px;color:var(--text-secondary);font-size:13px;background:var(--bg-soft);">';
         detailHtml += '<span>📊</span> 估值准不准？查看算法准确性报告';
         detailHtml += '</div>';
 
-        // 4. 核心数据（复用PC端内容）
-        const hlEl2 = document.getElementById('ss-highlights');
-        if (hlEl2 && hlEl2.children.length) {
-          detailHtml += '<div class="ss-section-title">核心数据</div>';
-          detailHtml += '<div class="ss-highlights">' + hlEl2.innerHTML + '</div>';
-        }
-
-        detailHtml += '<div class="ss-divider"></div>';
-
-        // 5. 估价计算（可折叠，和PC端一致）
-        const calcEl2 = document.getElementById('ss-calc');
-        if (calcEl2 && calcEl2.children.length) {
-          detailHtml += '<div class="ss-section-title ss-collapse-title" onclick="toggleMobileCalcCollapse()">';
-          detailHtml += '<span>估价计算</span>';
-          detailHtml += '<span class="ss-collapse-arrow" id="mobile-calc-collapse-arrow">▶</span>';
-          detailHtml += '</div>';
-          detailHtml += '<div class="ss-calc" id="mobile-ss-calc" style="display:none;">' + calcEl2.innerHTML + '</div>';
-        }
-
-        detailHtml += '<div class="ss-divider"></div>';
-
-        // 6. 爱发电支持（和PC端一致）
-        detailHtml += '<div class="ss-afdian">';
-        detailHtml += '<div class="ss-afdian-icon">☕</div>';
-        detailHtml += '<div class="ss-afdian-text">';
-        detailHtml += '<div class="ss-afdian-title">对你有帮助？请作者喝杯咖啡</div>';
-        detailHtml += '<div class="ss-afdian-desc">你的支持是持续更新的动力</div>';
+        // 爱发电支持
+        detailHtml += '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,rgba(255,107,157,0.1),rgba(255,159,67,0.08));border:1px solid rgba(255,107,157,0.25);border-radius:12px;">';
+        detailHtml += '<div style="font-size:32px;flex-shrink:0;">☕</div>';
+        detailHtml += '<div style="flex:1;min-width:0;">';
+        detailHtml += '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:3px;">对你有帮助？请作者喝杯咖啡</div>';
+        detailHtml += '<div style="font-size:11px;color:rgba(255,255,255,0.5);">你的支持是持续更新的动力</div>';
         detailHtml += '</div>';
-        detailHtml += '<a href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener" class="ss-afdian-btn">支持</a>';
+        detailHtml += '<a href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener" style="flex-shrink:0;padding:8px 18px;background:linear-gradient(135deg,#ff6b9d,#ff9f43);color:#fff;font-size:13px;font-weight:600;border-radius:20px;text-decoration:none;box-shadow:0 2px 12px rgba(255,107,157,0.3);">支持</a>';
+        detailHtml += '</div>';
         detailHtml += '</div>';
 
         mobileDetailEl.innerHTML = detailHtml;
-
-        // 同步标价输入框的值
-        const priceSide = document.getElementById('ve-price-side');
-        const priceMobileDetail = document.getElementById('ve-price-mobile-detail');
-        if (priceSide && priceMobileDetail) {
-          priceMobileDetail.value = priceSide.value;
-        }
       }
     }
 
