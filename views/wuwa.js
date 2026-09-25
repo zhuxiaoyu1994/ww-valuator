@@ -2440,7 +2440,7 @@ function getPageHTML(options) {
       <!-- 移动端估价按钮（账号描述下方，仅移动端显示） -->
       <div class="ve-mobile-eval ve-mobile-eval-desc">
         <input type="number" id="ve-price-mobile-desc" placeholder="标价(元)" min="0" oninput="syncMobilePrice(this)" />
-        <button class="ve-btn eval-btn" onclick="veEvaluate()">立即估价</button>
+        <button class="ve-btn eval-btn ve-eval-main" onclick="veEvaluate()">立即估价</button>
       </div>
 
       <!-- 角色列表 + 资源 -->
@@ -2484,7 +2484,7 @@ function getPageHTML(options) {
           <div class="ss-action-section">
             <div class="ss-label" style="margin-bottom:6px;">标价（元）</div>
             <input type="number" id="ve-price-side" placeholder="选填" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--text);font-size:16px;font-weight:600;font-family:inherit;outline:none;text-align:center;margin-bottom:10px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'" oninput="syncPriceInput(this)">
-            <button class="ve-btn eval-btn" onclick="veEvaluate()">立即估价</button>
+            <button class="ve-btn eval-btn ve-eval-main" onclick="veEvaluate()">立即估价</button>
             <div style="font-size:11px;color:#666;text-align:center;margin-top:6px;">修改内容后点击重新估价</div>
           </div>
           
@@ -4083,6 +4083,8 @@ function getPageHTML(options) {
     var VE_CHARS = [];      // 角色列表 [{name, tier, price, const, hasSig, sigRefine}]
     var VE_DEBOUNCE = null;
     var VE_EVALUATING = false;
+    var VE_PARSING = false; // 账号描述解析中（角色列表尚未加载完成）
+    var VE_PARSE_SEQ = 0;   // 解析请求序号，用于丢弃过期响应
     var VE_SYNC_DESC = true; // 是否同步描述文本（防止双向触发死循环）
 
     // 从当前生效的权重配置动态构建角色列表（支持服务端默认+用户自定义双层覆盖）
@@ -4575,11 +4577,18 @@ function getPageHTML(options) {
     var VE_DESC_DEBOUNCE = null;
     function veOnDescInput() {
       if (VE_DESC_DEBOUNCE) clearTimeout(VE_DESC_DEBOUNCE);
+      // 描述有内容时立即锁住估价按钮，直到角色列表解析完成
+      var peekInput = document.getElementById('ve-desc-input');
+      if (peekInput && peekInput.value.trim()) {
+        VE_PARSING = true;
+        veSetEvalLoading(true);
+      }
       VE_DESC_DEBOUNCE = setTimeout(function() {
         var descInput = document.getElementById('ve-desc-input');
         if (!descInput) return;
         var text = descInput.value.trim();
         if (!text) {
+          VE_PARSE_SEQ++; // 作废进行中的解析请求
           VE_CHARS = [];
           // 清空资源
           ['ve-starsound','ve-moonphase','ve-coral','ve-floatgold','ve-casttide','ve-yellow','ve-outfit','ve-frame','ve-pulls'].forEach(function(id) {
@@ -4587,6 +4596,9 @@ function getPageHTML(options) {
             if (el) el.value = '';
           });
           veRenderChars();
+          VE_PARSING = false;
+          VE_SYNC_DESC = true;
+          veSetEvalLoading(false);
           return;
         }
         
@@ -4595,6 +4607,7 @@ function getPageHTML(options) {
         // 显示解析中加载动画
         var charGrid = document.getElementById('ve-char-grid');
         if (charGrid) charGrid.classList.add('parsing');
+        var seq = ++VE_PARSE_SEQ;
         
         fetch('/api/x9k2-eval', {
           method: 'POST',
@@ -4602,6 +4615,7 @@ function getPageHTML(options) {
           body: JSON.stringify({ showTitle: text, priceInCents: 0, game: 'wuwa' })
         }).then(function(r) { return r.json(); })
           .then(function(result) {
+            if (seq !== VE_PARSE_SEQ) return; // 丢弃过期响应，避免覆盖最新角色列表
             if (result.success && result.data) {
               var info = result.data.info || {};
               var det = result.data.details || {};
@@ -4674,7 +4688,10 @@ function getPageHTML(options) {
           })
           .catch(function() {})
           .finally(function() {
+            if (seq !== VE_PARSE_SEQ) return; // 已有更新的解析请求，由其负责解锁
             if (charGrid) charGrid.classList.remove('parsing');
+            VE_PARSING = false;
+            veSetEvalLoading(false);
             setTimeout(function() { VE_SYNC_DESC = true; }, 50);
           });
       }, 400);
@@ -4706,18 +4723,34 @@ function getPageHTML(options) {
       return info;
     }
 
+    // 估价按钮加载态（描述解析中 / 估价中 共用）
+    function veSetEvalLoading(on) {
+      document.querySelectorAll('.ve-eval-main').forEach(function(btn) {
+        if (on) {
+          btn.classList.add('loading');
+          btn.disabled = true;
+        } else if (!VE_EVALUATING && !VE_PARSING) {
+          btn.classList.remove('loading');
+          btn.disabled = false;
+        }
+      });
+    }
+
     // 估价
     async function veEvaluate(silent) {
       if (VE_CHARS.length === 0) {
         if (!silent) veShowError('请先添加至少一个角色');
         return;
       }
+      if (VE_PARSING && !silent) {
+        veShowError('正在识别账号描述，请稍候…');
+        return;
+      }
       if (VE_EVALUATING) return;
       VE_EVALUATING = true;
 
-      // 所有估价按钮进入加载状态
-      var allEvalBtns = document.querySelectorAll('.eval-btn');
-      allEvalBtns.forEach(function(btn) { btn.classList.add('loading'); btn.disabled = true; });
+      // 估价按钮进入加载状态
+      veSetEvalLoading(true);
 
       if (!silent) veShowLoading('估价中...');
 
@@ -4757,7 +4790,7 @@ function getPageHTML(options) {
         veShowError('网络错误：' + e.message);
       } finally {
         VE_EVALUATING = false;
-        allEvalBtns.forEach(function(btn) { btn.classList.remove('loading'); btn.disabled = false; });
+        veSetEvalLoading(false);
       }
     }
 
