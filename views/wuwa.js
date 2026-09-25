@@ -301,11 +301,35 @@ function getPageHTML(options) {
     }
 
     .ve-char-grid {
+      position: relative;
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       margin-bottom: 18px;
       min-height: 60px;
+    }
+    .ve-char-grid.parsing::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 10, 20, 0.6);
+      backdrop-filter: blur(2px);
+      border-radius: 12px;
+      z-index: 10;
+    }
+    .ve-char-grid.parsing::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 28px;
+      height: 28px;
+      margin: -14px 0 0 -14px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      z-index: 11;
     }
     .ve-char-card {
       position: relative;
@@ -4407,6 +4431,10 @@ function getPageHTML(options) {
         
         // 调用估价接口（同时返回解析后的结构化数据）
         VE_SYNC_DESC = false; // 防止反向触发
+        // 显示解析中加载动画
+        var charGrid = document.getElementById('ve-char-grid');
+        if (charGrid) charGrid.classList.add('parsing');
+        
         fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4485,6 +4513,7 @@ function getPageHTML(options) {
           })
           .catch(function() {})
           .finally(function() {
+            if (charGrid) charGrid.classList.remove('parsing');
             setTimeout(function() { VE_SYNC_DESC = true; }, 50);
           });
       }, 400);
