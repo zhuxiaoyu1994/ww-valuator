@@ -166,7 +166,7 @@ function getPageHTML(options) {
     }
 
     /* ===== Hero 封面头部 ===== */
-    .hero { position: relative; height: 330px; margin: 0 -20px; overflow: hidden; }
+    .hero { position: relative; height: 330px; margin: 0 -20px 18px; overflow: hidden; }
     .hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 28%; }
     .hero-shade {
       position: absolute; inset: 0;
