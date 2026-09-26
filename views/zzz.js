@@ -1015,7 +1015,7 @@ function getPageHTML(options) {
 
     @media (max-width: 600px) {
       .container { padding: 0 12px 32px; }
-      .hero { height: 250px; margin: 0 -12px; }
+      .hero { height: 250px; margin: 0 -12px 14px; }
       .hero-body { padding: 0 18px; bottom: 20px; }
       .hero-title h1 { font-size: 25px; }
       .hero-title .en { font-size: 10px; }
@@ -1432,6 +1432,50 @@ function getPageHTML(options) {
     html[data-theme="light"] .mobile-float-bar .mfb-ratio.good { background: rgba(23,145,79,0.12); color: var(--good); }
     html[data-theme="light"] .mobile-float-bar .mfb-ratio.ok { background: rgba(183,121,31,0.12); color: var(--warn); }
     html[data-theme="light"] .mobile-float-bar .mfb-ratio.bad { background: rgba(207,53,53,0.12); color: var(--bad); }
+    /* ===== 浅色模式：弹窗内容（内联样式需 !important 覆盖） ===== */
+    html[data-theme="light"] [id$="-modal"] { background: rgba(18,20,38,0.42) !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="background:#0d0d1a"],
+    html[data-theme="light"] [id$="-modal"] [style*="background:#101020"] { background: #ffffff !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="background:#12121f"] { background: #f6f7fb !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="border:1px solid #1e1e33"],
+    html[data-theme="light"] [id$="-modal"] [style*="border:1px solid #2c2c48"] { border-color: #e4e6ef !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#fff"] { color: #1b1c23 !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#ccc"] { color: #3f414c !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#bbb"] { color: #4a4c58 !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#aaa"] { color: #55576a !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#999"] { color: #63656f !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#888"] { color: #6b6d7d !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#666"] { color: #7c7e8c !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#ffcf8a"],
+    html[data-theme="light"] [id$="-modal"] [style*="color:#fbbf24"],
+    html[data-theme="light"] [id$="-modal"] [style*="color:#f59e0b"] { color: #b45309 !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#4ade80"] { color: #15803d !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#60a5fa"],
+    html[data-theme="light"] [id$="-modal"] [style*="color:#4a90d9"] { color: #2563eb !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#f87171"] { color: #dc2626 !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#c084fc"] { color: #9333ea !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#818cf8"] { color: #4f46e5 !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#2dd4bf"] { color: #0d9488 !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#f472b6"] { color: #db2777 !important; }
+    html[data-theme="light"] [id$="-modal"] [style*="color:#e65100"] { color: #c2410c !important; }
+    /* ===== 浅色模式：结果区高亮标签（内联深色底） ===== */
+    html[data-theme="light"] #result-highlights [style*="background:#16162a"] { background: #eef0f7 !important; border-color: #d5d8e4 !important; }
+    html[data-theme="light"] #result-highlights [style*="background:#1a2e1a"] { background: rgba(21,128,61,0.08) !important; }
+    html[data-theme="light"] #result-highlights [style*="background:#2e1a1a"] { background: rgba(220,38,38,0.08) !important; }
+    html[data-theme="light"] #result-highlights [style*="background:#2e2a1a"] { background: rgba(180,83,9,0.09) !important; }
+    html[data-theme="light"] #result-highlights [style*="background:#2e241a"] { background: rgba(194,65,12,0.09) !important; }
+    html[data-theme="light"] #result-highlights [style*="background:#1a2a2e"] { background: rgba(13,148,136,0.08) !important; }
+    html[data-theme="light"] #result-highlights [style*="background:#2a1a2e"] { background: rgba(124,58,237,0.08) !important; }
+    html[data-theme="light"] #result-highlights [style*="background:#2e1a2a"] { background: rgba(219,39,119,0.08) !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#ccc"] { color: #3f414c !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#4ade80"] { color: #15803d !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#f87171"] { color: #dc2626 !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#fbbf24"],
+    html[data-theme="light"] #result-highlights [style*="color:#f59e0b"] { color: #b45309 !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#2dd4bf"] { color: #0d9488 !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#c084fc"] { color: #9333ea !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#f472b6"] { color: #db2777 !important; }
+    html[data-theme="light"] #result-highlights [style*="color:#818cf8"] { color: #4f46e5 !important; }
   </style>
   <script>
     /* 尽早应用已保存的主题，避免刷新时闪白/闪黑 */
