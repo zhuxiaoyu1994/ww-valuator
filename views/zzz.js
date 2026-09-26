@@ -1239,6 +1239,94 @@ function getPageHTML(options) {
       .mobile-float-bar .mfb-ratio.bad { background: rgba(239,68,68,0.15); color: #f87171; }
       /* 移动端底部留出浮动条空间 */
       body.has-float-bar { padding-bottom: 70px; }
+
+      /* 移动端买卖攻略 & 使用须知弹窗 - 全屏优化 */
+      #tips-modal, #guide-modal {
+        background: rgba(0,0,0,0.9) !important;
+        overflow: hidden !important;
+      }
+      #tips-modal > div, #guide-modal > div {
+        flex-direction: column !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+        overflow: hidden !important;
+      }
+      #tips-modal > div > div:first-child, #guide-modal > div > div:first-child {
+        width: 100% !important;
+        border-right: none !important;
+        border-bottom: 1px solid var(--line) !important;
+        padding: calc(4px + env(safe-area-inset-top, 0px)) 0 4px !important;
+        flex-shrink: 0 !important;
+      }
+      #tips-modal > div > div:first-child > div:first-child,
+      #guide-modal > div > div:first-child > div:first-child {
+        display: none !important;
+      }
+      .tips-sidenav {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        padding: 10px 16px !important;
+        gap: 8px !important;
+        scrollbar-width: none;
+        width: 100% !important;
+        box-sizing: border-box;
+      }
+      .tips-sidenav::-webkit-scrollbar { display: none; }
+      .tips-nav-item {
+        padding: 8px 16px !important;
+        font-size: 13px !important;
+        border-left: none !important;
+        border-radius: 20px !important;
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        background: rgba(255,255,255,0.04) !important;
+        color: rgba(255,255,255,0.6) !important;
+        margin: 0 !important;
+      }
+      .tips-nav-item.active {
+        border-left: none !important;
+        background: rgba(230, 57, 70, 0.15) !important;
+        color: #e63946 !important;
+        font-weight: 600 !important;
+      }
+      #tips-modal > div > div:last-child, #guide-modal > div > div:last-child {
+        flex: 1 !important;
+        max-height: none !important;
+        height: 0 !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        padding: 0 20px 30px !important;
+      }
+      #tips-modal > div > div:last-child > div:first-child,
+      #guide-modal > div > div:last-child > div:first-child {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #0d0d1a;
+        margin: -16px -20px 12px;
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+      }
+      #tips-modal > div > div:last-child > div:first-child > div,
+      #guide-modal > div > div:last-child > div:first-child > div {
+        flex: 1;
+      }
+      #tips-modal > div > div:last-child > div:first-child button,
+      #guide-modal > div > div:last-child > div:first-child button {
+        font-size: 22px;
+        padding: 4px 12px;
+        color: #888;
+      }
     }
     /* 估值规则设置入口 */
     .settings-bar {
@@ -1498,9 +1586,9 @@ function getPageHTML(options) {
       </a>
       <div class="nav-links">
         <a href="/zzz" class="nav-link active">估价</a>
-        <a href="/zzz/guide" class="nav-link">使用须知</a>
-        <a href="/zzz/news" class="nav-link">角色资讯</a>
-        <a href="/zzz/tips" class="nav-link">买卖攻略</a>
+        <a href="javascript:void(0)" class="nav-link" onclick="openGuideModal()">使用须知</a>
+        <a href="javascript:void(0)" class="nav-link" onclick="openNewsModal()">角色资讯</a>
+        <a href="javascript:void(0)" class="nav-link" onclick="openTipsModal()">买卖攻略</a>
       </div>
       <button class="theme-toggle" id="theme-toggle" type="button" onclick="toggleTheme()" title="切换浅色模式" aria-label="切换主题">☀️</button>
     </div>
@@ -1702,6 +1790,232 @@ function getPageHTML(options) {
         <button onclick="closeStatsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:4px 8px;">×</button>
       </div>
       <div id="stats-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- 角色资讯弹窗（占位，待头像资源齐备后补图鉴） -->
+  <div id="news-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeNewsModal()">
+    <div style="max-width:720px;margin:40px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;padding:28px;min-height:300px;position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#fff;">角色资讯</div>
+          <div style="font-size:12px;color:#888;margin-top:2px;">绝区零角色强度与配队参考</div>
+        </div>
+        <button onclick="closeNewsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:4px 10px;">×</button>
+      </div>
+      <div style="color:#aaa;font-size:13px;line-height:1.8;">
+        <div style="text-align:center;padding:40px 20px;color:#666;">
+          <div style="font-size:32px;margin-bottom:12px;">📰</div>
+          <div style="font-size:14px;">内容建设中，敬请期待</div>
+          <div style="font-size:12px;color:#555;margin-top:6px;">后续将更新角色图鉴、强度排行、配队推荐等内容</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 买卖攻略弹窗 -->
+  <div id="tips-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeTipsModal()">
+    <div style="max-width:800px;margin:30px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;min-height:300px;position:relative;display:flex;">
+      <!-- 左侧目录 -->
+      <div style="width:180px;flex-shrink:0;border-right:1px solid var(--line);padding:20px 0;">
+        <div style="padding:0 20px 12px;font-size:13px;font-weight:600;color:#fff;">目录</div>
+        <div class="tips-sidenav">
+          <div class="tips-nav-item active" data-tab="safety" onclick="switchTipsTab('safety')">账号安全解析</div>
+          <div class="tips-nav-item" data-tab="buy" onclick="switchTipsTab('buy')">买号注意事项</div>
+          <div class="tips-nav-item" data-tab="sell" onclick="switchTipsTab('sell')">卖号注意事项</div>
+          <div class="tips-nav-item" data-tab="tech" onclick="switchTipsTab('tech')">科技号判断</div>
+          <div class="tips-nav-item" data-tab="platform" onclick="switchTipsTab('platform')">平台优惠</div>
+        </div>
+      </div>
+      <!-- 右侧内容 -->
+      <div style="flex:1;padding:24px 28px;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:#fff;" id="tips-title">绝区零买卖号注意事项</div>
+            <div style="font-size:12px;color:#888;margin-top:4px;">为降低交易风险、避免踩坑，建议在交易前仔细阅读本指南。</div>
+          </div>
+          <button onclick="closeTipsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:0 10px;flex-shrink:0;">×</button>
+        </div>
+
+        <!-- 账号安全 -->
+        <div class="tips-content" id="tips-safety">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#4ade80;">🛡</span> 账号安全
+          </h3>
+          <div style="padding:12px 14px;background:rgba(239,68,68,0.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;font-size:13px;color:#f87171;margin-bottom:16px;line-height:1.7;">
+            <strong>核心提示：</strong>虚拟财产交易本身存在风险。任何私下、无担保的交易都可能导致钱号两空，建议优先选择有保障的第三方平台进行交易。
+          </div>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 实名认证与换绑：</strong>实名信息一经绑定通常无法更换，换绑需通过官方渠道完成验证。具体规则以游戏官方说明为准。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 防范封号风险：</strong>自抽号、科技号存在封号风险，购买前请务必确认账号类型。若有意购买科技号，请自行权衡风险（买别怕，怕别买）。此外，目前多数平台的包赔服务不涵盖封号情形，部分平台支持封号赔付，具体以平台规则及客服说明为准，本站不做平台推荐。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 第三方绑定：</strong>所有第三方绑定在开启新设备验证后都可能无法上号，账号绑定过多也不利于后续流转。购买前请务必确认账号当前的绑定情况。</p>
+          </div>
+        </div>
+
+        <!-- 买号注意 -->
+        <div class="tips-content" id="tips-buy" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#60a5fa;">🛒</span> 买号注意事项
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 仔细验号：</strong>进号后请逐项核对：角色、音擎、资源等是否与卖家描述或截图一致，是否为科技号，角色练度是否合理。尤其注意资源与抽数：不少商家会以「准多少抽」等话术宣传，请自行根据游戏内数据计算，勿轻信口头承诺。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 第三方绑定查看：</strong>在游戏内依次打开「设置 → 账户设置 → 用户中心」，确认关联账号中是否存在第三方绑定。务必亲自核对，部分卖家页面标注无绑定，实际账号内仍有绑定。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 换绑后及时修改密码：</strong>换绑完成后，建议立即修改账号密码并清除其他设备的登录权限，以降低被盗风险。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">4. 买号后慎绑第三方：</strong>购号后尽量避免绑定第三方，以免影响日后转卖。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">5. 切勿私下交易：</strong>切勿脱离平台进行私下交易，谨防诈骗（贴吧等渠道尤其多发）。若在线下看中账号，可与卖家协商通过平台中介完成交易（手续费较低），并确保全程在官方 APP 内操作。</p>
+          </div>
+          <div style="padding:12px 14px;background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;font-size:12px;color:#d4a84b;margin-top:16px;line-height:1.7;">
+            <strong>小贴士：</strong>建议验号时全程录屏，保留凭证，以便在出现描述不符时维权。
+          </div>
+        </div>
+
+        <!-- 卖号注意 -->
+        <div class="tips-content" id="tips-sell" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#fbbf24;">💰</span> 卖号注意事项
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 切勿线下/私下交易：</strong>私下交易风险极高，易导致钱号两空。换绑需通过短信等官方验证，若有人以「登录游戏」等理由要求你发送验证码，均为诈骗，请勿理会。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 上架前先清理绑定：</strong>尽量先解除不必要的第三方绑定再挂售，更容易出手，也减少买家顾虑。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 定价前先询价：</strong>不要凭感觉定价，以免卖亏。建议先向多家号商询价，再在此基础上适当加价作为参考，多问几家更稳妥。</p>
+          </div>
+          <div style="padding:12px 14px;background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;font-size:12px;color:#d4a84b;margin-top:16px;line-height:1.7;">
+            <strong>小贴士：</strong>若账号上架后几秒内就被拍下，多为脚本秒单，说明标价偏低，可取消订单并重新定价。价格合理时，1～7 天内成交属正常情况，请勿急躁。
+          </div>
+        </div>
+
+        <!-- 科技号判断 -->
+        <div class="tips-content" id="tips-tech" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#f87171;">⚠</span> 科技号识别
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 看建号时间与进度：</strong>结合成就/生涯记录查看建号日期，若建号首日即完成大量高难度内容，基本可判定为科技号（首日资源不足以正常通关）。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 看练度与角色搭配是否合理：</strong>科技号常出现「低练度却高进度」「角色阵容与关卡需求明显不匹配」等异常组合。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 看卖家话术：</strong>以「速通」「全通」「首日号」等宣传、且价格明显低于同配置行情的，需提高警惕。</p>
+          </div>
+          <div style="padding:12px 14px;background:rgba(239,68,68,0.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;font-size:12px;color:#f87171;margin-top:16px;line-height:1.7;">
+            <strong>提醒：</strong>科技号未必被封，但存在封号风险；当前虽封禁较少，但无法排除个案。请自行权衡：买别怕，怕别买。
+          </div>
+        </div>
+
+        <!-- 平台优惠 -->
+        <div class="tips-content" id="tips-platform" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#4ade80;">🎁</span> 平台优惠指南
+          </h3>
+          <div style="padding:12px 14px;background:rgba(74,222,128,0.06);border-left:3px solid #4ade80;border-radius:0 8px 8px 0;font-size:13px;color:#86efac;margin-bottom:16px;line-height:1.7;">
+            螃蟹平台优惠：每月可在京东 APP 领取专属优惠券，买卖号时记得先领券再下单，能省一笔就是一笔。
+          </div>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 打开京东 APP 搜索「螃蟹账号」：</strong>在首页搜索栏输入「螃蟹账号」，找到并进入螃蟹账号官方旗舰店。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 进入店铺领取优惠券：</strong>进入店铺后，关注首页顶部或活动横幅中的「领券」入口，每月可领取一批优惠券，下单前务必先领券再拍单。</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 使用须知弹窗 -->
+  <div id="guide-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeGuideModal()">
+    <div style="max-width:800px;margin:30px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;min-height:300px;position:relative;display:flex;">
+      <!-- 左侧目录 -->
+      <div style="width:180px;flex-shrink:0;border-right:1px solid var(--line);padding:20px 0;">
+        <div style="padding:0 20px 12px;font-size:13px;font-weight:600;color:#fff;">目录</div>
+        <div class="tips-sidenav">
+          <div class="tips-nav-item active" data-tab="guide-usage" onclick="switchGuideTab('usage')">使用方法</div>
+          <div class="tips-nav-item" data-tab="guide-notice" onclick="switchGuideTab('notice')">重要提示</div>
+          <div class="tips-nav-item" data-tab="guide-tips" onclick="switchGuideTab('tips')">使用小贴士</div>
+          <div class="tips-nav-item" data-tab="guide-data" onclick="switchGuideTab('data')">数据说明</div>
+        </div>
+      </div>
+      <!-- 右侧内容 -->
+      <div style="flex:1;padding:24px 28px;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:#fff;">使用须知</div>
+            <div style="font-size:12px;color:#888;margin-top:4px;">使用前请仔细阅读以下内容</div>
+          </div>
+          <button onclick="closeGuideModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:0 10px;flex-shrink:0;">×</button>
+        </div>
+
+        <!-- 使用方法 -->
+        <div class="guide-content" id="guide-usage">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#60a5fa;">📖</span> 使用方法
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:12px;"><strong style="color:#fff;">方法一：粘贴账号描述（推荐，最快）</strong></p>
+            <ol style="margin-left:20px;margin-bottom:16px;">
+              <li style="margin-bottom:6px;">从螃蟹网、盼之、氪金兽等平台复制账号描述文本</li>
+              <li style="margin-bottom:6px;">粘贴到页面顶部的"账号描述"输入框</li>
+              <li style="margin-bottom:6px;">系统自动识别角色、命座、音擎、资源等信息</li>
+              <li style="margin-bottom:6px;">在右侧输入标价（选填），点击"立即估价"查看结果</li>
+            </ol>
+
+            <p style="margin-bottom:12px;"><strong style="color:#fff;">方法二：手动添加角色</strong></p>
+            <ol style="margin-left:20px;margin-bottom:16px;">
+              <li style="margin-bottom:6px;">点击红色的"＋ 添加角色"按钮</li>
+              <li style="margin-bottom:6px;">在弹窗中选择要添加的角色（支持搜索）</li>
+              <li style="margin-bottom:6px;">在角色卡片上调整命座和音擎精炼等级</li>
+              <li style="margin-bottom:6px;">在"其他资源"中填写星声、月相等资源数量</li>
+              <li style="margin-bottom:6px;">点击右侧"立即估价"按钮查看结果</li>
+            </ol>
+
+            <p style="margin-bottom:12px;"><strong style="color:#fff;">查看估价结果</strong></p>
+            <ul style="margin-left:20px;margin-bottom:10px;">
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">桌面端</strong>：右侧摘要卡显示预估总价、性价比、核心数据亮点</li>
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">移动端</strong>：点击底部浮动条查看完整估值详情</li>
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">详细结果</strong>：向下滚动查看角色明细、音擎明细、资源明细</li>
+              <li style="margin-bottom:6px;"><strong style="color:#ddd;">算法准确性</strong>：点击"查看准确性报告"了解模型误差分布</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 重要提示 -->
+        <div class="guide-content" id="guide-notice" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#fbbf24;">⚠️</span> 重要提示
+          </h3>
+          <div style="padding:12px 14px;background:rgba(239,68,68,0.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;font-size:13px;color:#f87171;margin-bottom:16px;line-height:1.7;">
+            <strong>核心提示：</strong>本工具仅提供行情参考，不构成任何交易建议。估价结果基于历史成交数据和算法模型测算，实际交易价格受市场供需、账号稀有度、平台政策等多种因素影响，仅供参考。
+          </div>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 交易风险：</strong>游戏官方禁止账号交易，交易有封禁风险。请勿在非官方平台交易，谨防诈骗。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 隐私安全：</strong>本工具不收集任何账号密码和实名隐私信息，描述解析在本地浏览器进行，数据安全。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 仅供参考：</strong>估价结果为算法测算值，实际成交价可能因账号细节、市场行情等因素有所波动。</p>
+          </div>
+        </div>
+
+        <!-- 使用小贴士 -->
+        <div class="guide-content" id="guide-tips" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#4ade80;">💡</span> 使用小贴士
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">1. 描述越详细越准确：</strong>描述文本越详细，识别越准确，尽量包含完整的角色命座和音擎信息。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">2. 角色列表排序：</strong>角色列表按等级排序（S/A/B/C/D），方便快速查看高价值角色。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">3. 自动同步：</strong>修改角色或资源后，描述文本会自动同步更新。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">4. 性价比查看：</strong>输入标价后可查看性价比，正值表示物超所值。</p>
+          </div>
+        </div>
+
+        <!-- 数据说明 -->
+        <div class="guide-content" id="guide-data" style="display:none;">
+          <h3 style="color:#fff;font-size:16px;margin:20px 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#a78bfa;">📊</span> 数据说明
+          </h3>
+          <div style="font-size:13px;color:#aaa;line-height:1.8;">
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">数据来源：</strong>估价模型基于螃蟹网、盼之等平台的历史成交数据训练，定期更新行情参数。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">算法准确性：</strong>算法准确性报告可查看当前模型的误差分布，帮助你了解估价的可靠程度。</p>
+          </div>
+          <div style="margin-top:20px;padding:14px 16px;background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;font-size:12px;color:#d4a84b;line-height:1.7;">
+            如有问题或建议，可加入QQ群反馈：<strong style="color:#fbbf24;">1064412729</strong>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 
@@ -2416,6 +2730,56 @@ function getPageHTML(options) {
       document.getElementById('stats-modal').style.display = 'none';
       document.body.style.overflow = '';
     }
+
+    // 使用须知 / 买卖攻略 / 角色资讯 弹窗
+    function openGuideModal() {
+      document.getElementById('guide-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeGuideModal() {
+      document.getElementById('guide-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    function switchGuideTab(tab) {
+      document.querySelectorAll('.guide-content').forEach(function(c) { c.style.display = 'none'; });
+      var target = document.getElementById('guide-' + tab);
+      if (target) target.style.display = 'block';
+      document.querySelectorAll('#guide-modal .tips-nav-item').forEach(function(item) {
+        item.classList.toggle('active', item.getAttribute('data-tab') === 'guide-' + tab);
+      });
+    }
+    function openTipsModal() {
+      document.getElementById('tips-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeTipsModal() {
+      document.getElementById('tips-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    function switchTipsTab(tab) {
+      document.querySelectorAll('.tips-content').forEach(function(c) { c.style.display = 'none'; });
+      var target = document.getElementById('tips-' + tab);
+      if (target) target.style.display = 'block';
+      document.querySelectorAll('#tips-modal .tips-nav-item').forEach(function(item) {
+        item.classList.toggle('active', item.getAttribute('data-tab') === tab);
+      });
+    }
+    function openNewsModal() {
+      document.getElementById('news-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeNewsModal() {
+      document.getElementById('news-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // ESC 关闭弹窗
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Escape') return;
+      closeGuideModal();
+      closeTipsModal();
+      closeNewsModal();
+      closeStatsModal();
+    });
 
     // 帮助弹窗内容
     var HELP_CONTENTS = {
