@@ -45,6 +45,15 @@ const WUWA_CONFIG = {
     '露西': '蜃影', '洛可可': '悲喜剧', '清宵': '云琅',
   },
 
+  // 角色攻略外链（角色图鉴「攻略」入口，仅前端展示用，不影响估值，无需同步油猴脚本）
+  // 链接默认拼接：guideBase + WIKI 词条名（词条名默认等于角色名）
+  // charGuides 只登记「WIKI 词条名与角色名不一致」的例外，其余走默认拼接
+  guideBase: 'https://wiki.biligame.com/wutheringwaves/共鸣者/',
+  charGuides: {
+    '秧秧玄翎': '秧秧·玄翎',
+    '陆赫斯': '陆·赫斯',
+  },
+
   fullConstWeight: { S: 1.0, A: 0.5, B: 0.15, C: 0.1, D: 0.05, E: 0 },
 
   defaultWeights: {

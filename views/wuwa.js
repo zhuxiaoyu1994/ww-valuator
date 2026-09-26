@@ -5,6 +5,8 @@ function getPageHTML(options) {
   const pxb7Proxies = options.pxb7Proxies || [];
   const charList = options.charList || [];
   const sigWeapons = options.sigWeapons || {};
+  const guideBase = options.guideBase || '';
+  const charGuides = options.charGuides || {};
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -810,6 +812,55 @@ function getPageHTML(options) {
       border-left-color: var(--accent);
       font-weight: 600;
     }
+
+    /* 角色图鉴（角色资讯弹窗） */
+    .cg-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .cg-chip {
+      padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px;
+      background: transparent; color: var(--text-dim); font-size: 12px;
+      font-family: inherit; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .cg-chip:hover { color: var(--text); border-color: var(--accent); }
+    .cg-chip.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+    .cg-group { margin-bottom: 22px; }
+    .cg-group:last-child { margin-bottom: 0; }
+    .cg-group-head {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line-soft);
+    }
+    .cg-group-title { font-size: 14px; font-weight: 700; color: var(--text); }
+    .cg-group-count { font-size: 11px; color: var(--text-faint); font-family: var(--mono); }
+    .cg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); gap: 10px; }
+    .cg-card {
+      display: flex; align-items: center; gap: 10px; padding: 10px;
+      border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+      transition: border-color 0.2s, transform 0.2s;
+      text-decoration: none; color: inherit;
+    }
+    .cg-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .cg-avatar {
+      position: relative; width: 44px; height: 44px; flex-shrink: 0;
+      border-radius: 50%; border: 2px solid var(--line); overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: var(--text-dim); background: var(--card);
+    }
+    .cg-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cg-avatar.S { border-color: #e94560; }
+    .cg-avatar.A { border-color: #fbbf24; }
+    .cg-avatar.B { border-color: #60a5fa; }
+    .cg-avatar.C { border-color: #4ade80; }
+    .cg-avatar.D { border-color: #9ca3af; }
+    .cg-avatar.E { border-color: #6b7280; }
+    .cg-meta { min-width: 0; flex: 1; }
+    .cg-name-row { display: flex; align-items: center; gap: 4px; }
+    .cg-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cg-hot { font-size: 10px; flex-shrink: 0; }
+    .cg-sig { font-size: 11px; color: var(--text-faint); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cg-price { font-size: 12px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+    .cg-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 2px; }
+    .cg-guide { font-size: 11px; color: var(--text-faint); white-space: nowrap; transition: color 0.2s; }
+    .cg-card:hover .cg-guide { color: var(--accent); }
+    .cg-empty { text-align: center; padding: 50px 20px; color: var(--text-faint); font-size: 13px; }
 
     /* 角色编辑弹窗（命座/专武） */
     .char-edit-modal {
@@ -2808,23 +2859,18 @@ function getPageHTML(options) {
     </div>
   </div>
 
-  <!-- 角色资讯弹窗 -->
+  <!-- 角色资讯弹窗（角色图鉴） -->
   <div id="news-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeNewsModal()">
-    <div style="max-width:720px;margin:40px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;padding:28px;min-height:300px;position:relative;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <div style="max-width:860px;margin:40px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;padding:24px 26px;min-height:300px;position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
         <div>
-          <div style="font-size:20px;font-weight:700;color:#fff;">角色资讯</div>
-          <div style="font-size:12px;color:#888;margin-top:2px;">最新角色动态、版本更新、强度排行</div>
+          <div style="font-size:20px;font-weight:700;color:#fff;">角色图鉴</div>
+          <div style="font-size:12px;color:#888;margin-top:2px;">按强度分级整理，价格为当前估值规则下的参考值</div>
         </div>
         <button onclick="closeNewsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:4px 10px;">×</button>
       </div>
-      <div style="color:#aaa;font-size:13px;line-height:1.8;">
-        <div style="text-align:center;padding:40px 20px;color:#666;">
-          <div style="font-size:32px;margin-bottom:12px;">📰</div>
-          <div style="font-size:14px;">内容建设中，敬请期待</div>
-          <div style="font-size:12px;color:#555;margin-top:6px;">后续将更新角色强度榜、版本更新资讯、配队推荐等内容</div>
-        </div>
-      </div>
+      <div class="cg-filter" id="cg-filter"></div>
+      <div id="cg-body"></div>
     </div>
   </div>
 
@@ -3177,10 +3223,118 @@ function getPageHTML(options) {
       document.getElementById('mobile-detail-modal').style.display = 'none';
       document.body.style.overflow = '';
     }
-    // 角色资讯弹窗
+    // 角色资讯弹窗（角色图鉴）
+    var CG_TIER_ORDER = ['S', 'A', 'B', 'C', 'D', 'E'];
+    var CG_TIER_LABEL = { S: 'S 级', A: 'A 级', B: 'B 级', C: 'C 级', D: 'D 级', E: 'E 级' };
+    var CG_FILTER = 'all';
+
+    // 图鉴数据：复用当前生效的角色列表（用户自定义 > 服务端默认 > 内置默认）
+    function cgGetData() {
+      var list = (typeof veGetCharList === 'function') ? veGetCharList() : (window._charList || []);
+      var sigMap = (typeof veGetSigWeapons === 'function') ? veGetSigWeapons() : (window._sigWeapons || {});
+      return list.map(function (c) {
+        return {
+          name: c.name,
+          tier: c.tier || 'E',
+          price: c.price || 0,
+          // 与估值引擎一致：S/A/B 视为热门
+          isHot: c.tier === 'S' || c.tier === 'A' || c.tier === 'B',
+          sig: sigMap[c.name] || '',
+        };
+      });
+    }
+
+    // 攻略外链：默认按 guideBase + 角色名拼接；charGuides 中的例外优先（支持写完整 URL）
+    function cgGuideUrl(name) {
+      var override = (window._charGuides || {})[name];
+      var title = override || name;
+      if (/^https?:/i.test(title)) return title;
+      var base = window._guideBase || '';
+      return base ? base + encodeURIComponent(title) : '';
+    }
+
+    function cgBuildChips() {
+      var wrap = document.getElementById('cg-filter');
+      if (!wrap || wrap.dataset.built) return;
+      var chips = [{ key: 'all', label: '全部' }, { key: 'hot', label: '🔥 热门' }];
+      CG_TIER_ORDER.forEach(function (t) { chips.push({ key: t, label: CG_TIER_LABEL[t] }); });
+      wrap.innerHTML = chips.map(function (c) {
+        return '<button type="button" class="cg-chip' + (c.key === CG_FILTER ? ' active' : '') +
+          '" data-key="' + c.key + '" onclick="cgSetFilter(\\'' + c.key + '\\')">' + c.label + '</button>';
+      }).join('');
+      wrap.dataset.built = '1';
+    }
+
+    function cgSetFilter(key) {
+      CG_FILTER = key;
+      var wrap = document.getElementById('cg-filter');
+      if (wrap) {
+        var chips = wrap.querySelectorAll('.cg-chip');
+        for (var i = 0; i < chips.length; i++) {
+          chips[i].classList.toggle('active', chips[i].getAttribute('data-key') === key);
+        }
+      }
+      cgRender();
+    }
+
+    function cgRender() {
+      var body = document.getElementById('cg-body');
+      if (!body) return;
+      var data = cgGetData();
+      var groups = [];
+      if (CG_FILTER === 'hot') {
+        groups = [{ tier: 'hot', label: '🔥 热门角色', chars: data.filter(function (c) { return c.isHot; }) }];
+      } else {
+        CG_TIER_ORDER.forEach(function (t) {
+          if (CG_FILTER !== 'all' && CG_FILTER !== t) return;
+          groups.push({ tier: t, label: CG_TIER_LABEL[t], chars: data.filter(function (c) { return c.tier === t; }) });
+        });
+      }
+      groups = groups.filter(function (g) { return g.chars.length > 0; });
+
+      if (!groups.length) {
+        body.innerHTML = '<div class="cg-empty">暂无角色数据</div>';
+        return;
+      }
+
+      body.innerHTML = groups.map(function (g) {
+        var cards = g.chars.map(function (c) {
+          var tier = CG_TIER_ORDER.indexOf(c.tier) >= 0 ? c.tier : 'E';
+          var url = cgGuideUrl(c.name);
+          var inner =
+            '<div class="cg-avatar ' + tier + '">' +
+              '<img src="/public/avatars/' + encodeURIComponent(c.name) + '.png" alt="' + c.name + '" data-name="' + c.name + '" onerror="onAvatarError(this)">' +
+            '</div>' +
+            '<div class="cg-meta">' +
+              '<div class="cg-name-row">' +
+                '<span class="cg-name">' + c.name + '</span>' +
+                (c.isHot ? '<span class="cg-hot">🔥</span>' : '') +
+              '</div>' +
+              (c.sig ? '<div class="cg-sig" title="' + c.sig + '">' + c.sig + '</div>' : '') +
+              '<div class="cg-foot">' +
+                '<span class="cg-price">' + (c.price > 0 ? '¥' + c.price : '¥--') + '</span>' +
+                (url ? '<span class="cg-guide">攻略 ↗</span>' : '') +
+              '</div>' +
+            '</div>';
+          return url
+            ? '<a class="cg-card" href="' + url + '" target="_blank" rel="noopener noreferrer" title="查看 ' + c.name + ' 攻略">' + inner + '</a>'
+            : '<div class="cg-card">' + inner + '</div>';
+        }).join('');
+        return '<div class="cg-group">' +
+          '<div class="cg-group-head">' +
+            '<span class="cg-group-title">' + g.label + '</span>' +
+            '<span class="cg-group-count">' + g.chars.length + ' 名</span>' +
+          '</div>' +
+          '<div class="cg-grid">' + cards + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
     function openNewsModal() {
       document.getElementById('news-modal').style.display = 'block';
       document.body.style.overflow = 'hidden';
+      cgBuildChips();
+      cgRender();
     }
     function closeNewsModal() {
       document.getElementById('news-modal').style.display = 'none';
@@ -3222,6 +3376,9 @@ function getPageHTML(options) {
     // 可视化编辑器用：角色列表 + 专武映射
     window._charList = ${JSON.stringify(charList)};
     window._sigWeapons = ${JSON.stringify(sigWeapons)};
+    // 角色图鉴用：攻略外链（前缀 + 词条名例外映射）
+    window._guideBase = ${JSON.stringify(guideBase)};
+    window._charGuides = ${JSON.stringify(charGuides)};
   </script>
   <script>
     // ============================================================

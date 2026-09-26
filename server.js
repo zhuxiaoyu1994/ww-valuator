@@ -1337,7 +1337,7 @@ app.get('/wuwa', (req, res) => {
   const engine = getEngine('wuwa');
   const defaults = engine.getDefaults();
   const charList = buildCharList(defaults);
-  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {} }));
+  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, guideBase: WUWA_CONFIG.guideBase, charGuides: WUWA_CONFIG.charGuides }));
 });
 
 // 鸣潮 - 角色资讯、买卖攻略已改为站内弹窗，不再提供独立页面
