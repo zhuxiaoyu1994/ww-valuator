@@ -1325,7 +1325,124 @@ function getPageHTML(options) {
       border-left:5px solid transparent;border-right:5px solid transparent;
       border-bottom:5px solid #1a1a2e;
     }
+    /* ===== 主题切换按钮 ===== */
+    .theme-toggle {
+      flex-shrink: 0;
+      margin-left: 8px;
+      width: 34px; height: 34px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 9px;
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      font-size: 15px; line-height: 1;
+      cursor: pointer; font-family: inherit;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .theme-toggle:hover { background: rgba(255,255,255,0.14); }
+    .theme-toggle:active { transform: scale(0.94); }
+
+    /* ===== 浅色模式（白色模式） ===== */
+    html[data-theme="light"] {
+      --bg: #f4f5f9;
+      --bg-soft: #ffffff;
+      --card: #ffffff;
+      --card-glass: rgba(255, 255, 255, 0.86);
+      --line: #e4e6ef;
+      --line-soft: #eef0f6;
+      --text: #1b1c23;
+      --text-dim: #5b5d6d;
+      --text-faint: #8b8d9c;
+      --accent: #c07d16;
+      --accent-deep: #9c6210;
+      --accent-soft: rgba(192, 125, 22, 0.12);
+      --accent-glow: rgba(192, 125, 22, 0.22);
+      --good: #17914f;
+      --warn: #b7791f;
+      --bad: #cf3535;
+    }
+    html[data-theme="light"] .bg-grid {
+      background-image:
+        linear-gradient(rgba(20,20,45,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20,20,45,0.05) 1px, transparent 1px);
+    }
+    html[data-theme="light"] .bg-noise { opacity: 0.025; }
+    /* Hero 封面：保持深色压暗，白色标题才可读 */
+    html[data-theme="light"] .hero-shade {
+      background:
+        linear-gradient(180deg, rgba(8,8,15,0.30) 0%, rgba(8,8,15,0.16) 32%, rgba(8,8,15,0.72) 70%, rgba(8,8,15,0.88) 100%),
+        linear-gradient(100deg, rgba(8,8,15,0.45) 0%, transparent 48%);
+    }
+    /* 导航栏 */
+    html[data-theme="light"] .top-nav {
+      background: rgba(255,255,255,0.82);
+      border-bottom-color: rgba(20,20,45,0.08);
+    }
+    html[data-theme="light"] .top-nav.scrolled {
+      background: rgba(255,255,255,0.95);
+      box-shadow: 0 2px 18px rgba(20,20,50,0.08);
+    }
+    html[data-theme="light"] .nav-logo { color: var(--text); }
+    html[data-theme="light"] .nav-logo img { border-color: rgba(20,20,45,0.1); }
+    html[data-theme="light"] .nav-link { color: rgba(27,28,35,0.68); }
+    html[data-theme="light"] .nav-link.active { color: var(--accent); }
+    html[data-theme="light"] .theme-toggle {
+      border-color: rgba(20,20,45,0.12);
+      background: rgba(20,20,45,0.04);
+      color: var(--text);
+    }
+    html[data-theme="light"] .theme-toggle:hover { background: rgba(20,20,45,0.09); }
+    /* 输入区 / 解析中遮罩 */
+    html[data-theme="light"] .input-row textarea { background: #ffffff; }
+    html[data-theme="light"] .ve-char-grid.parsing::after { background: rgba(255,255,255,0.65); }
+    html[data-theme="light"] .ve-char-grid.parsing::before { border-color: rgba(20,20,45,0.08); }
+    html[data-theme="light"] .loading::before { border-color: rgba(20,20,45,0.12); }
+    /* 角色标签配色 */
+    html[data-theme="light"] .ve-char-meta .tag.const { color: var(--warn); }
+    html[data-theme="light"] .ve-char-meta .tag.sig,
+    html[data-theme="light"] .qq-group-card .info .group-id .num,
+    html[data-theme="light"] .side-summary .ss-range { color: #2563c9; }
+    html[data-theme="light"] .ve-char-meta .tag.price { color: var(--good); }
+    /* 侧边摘要卡 */
+    html[data-theme="light"] .side-summary .ss-ratio.good { color: var(--good); }
+    html[data-theme="light"] .side-summary .ss-ratio.ok { color: var(--warn); }
+    html[data-theme="light"] .side-summary .ss-ratio.bad { color: var(--bad); }
+    /* tooltip 在浅色下改为白底 */
+    html[data-theme="light"] .ss-calc-row .label .tooltip {
+      background: #ffffff;
+      border-color: var(--line);
+      color: var(--text-dim);
+      box-shadow: 0 6px 20px rgba(20,20,50,0.14);
+    }
+    html[data-theme="light"] .help-popup {
+      background: #ffffff;
+      border-color: var(--line);
+      color: var(--text-dim);
+      box-shadow: 0 8px 28px rgba(20,20,50,0.16);
+    }
+    html[data-theme="light"] .help-popup::before { border-bottom-color: var(--line); }
+    html[data-theme="light"] .help-popup::after { border-bottom-color: #ffffff; }
+    html[data-theme="light"] .adjust-link { background: #ffffff; }
+    /* 移动端底部浮动条 */
+    html[data-theme="light"] .mobile-float-bar {
+      background: rgba(255,255,255,0.97);
+      box-shadow: 0 -6px 24px rgba(20,20,50,0.12);
+    }
+    html[data-theme="light"] .mobile-float-bar .mfb-ratio.good { background: rgba(23,145,79,0.12); color: var(--good); }
+    html[data-theme="light"] .mobile-float-bar .mfb-ratio.ok { background: rgba(183,121,31,0.12); color: var(--warn); }
+    html[data-theme="light"] .mobile-float-bar .mfb-ratio.bad { background: rgba(207,53,53,0.12); color: var(--bad); }
   </style>
+  <script>
+    /* 尽早应用已保存的主题，避免刷新时闪白/闪黑 */
+    (function () {
+      try {
+        if (localStorage.getItem('site_theme') === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <!-- 顶部导航栏 -->
@@ -1341,8 +1458,29 @@ function getPageHTML(options) {
         <a href="/zzz/news" class="nav-link">角色资讯</a>
         <a href="/zzz/tips" class="nav-link">买卖攻略</a>
       </div>
+      <button class="theme-toggle" id="theme-toggle" type="button" onclick="toggleTheme()" title="切换浅色模式" aria-label="切换主题">☀️</button>
     </div>
   </nav>
+  <script>
+    (function () {
+      var KEY = 'site_theme';
+      var btn = document.getElementById('theme-toggle');
+      function sync() {
+        if (!btn) return;
+        var light = document.documentElement.getAttribute('data-theme') === 'light';
+        btn.textContent = light ? '🌙' : '☀️';
+        btn.title = light ? '切换到深色模式' : '切换到浅色模式';
+      }
+      window.toggleTheme = function () {
+        var light = document.documentElement.getAttribute('data-theme') === 'light';
+        if (light) document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', 'light');
+        try { localStorage.setItem(KEY, light ? 'dark' : 'light'); } catch (e) {}
+        sync();
+      };
+      sync();
+    })();
+  </script>
   <div class="bg-atmos">
     <div class="bg-grid"></div>
     <div class="bg-orb a"></div>

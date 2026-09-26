@@ -1383,15 +1383,9 @@ function getPageHTML(options) {
       display: none;
     }
     /* 内容区内部滚动：卡片高度锁在视口内，标价/估价按钮常驻，其余内容在卡内滚动 */
-    .ss-scroll-area::-webkit-scrollbar { width: 6px; }
-    .ss-scroll-area::-webkit-scrollbar-track { background: transparent; }
-    .ss-scroll-area::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.12);
-      border-radius: 3px;
-    }
-    .ss-scroll-area::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.24);
-    }
+    /* 隐藏滚动条（仍可滚动），避免细滚动条在卡片里显得杂乱 */
+    .ss-scroll-area { scrollbar-width: none; -ms-overflow-style: none; }
+    .ss-scroll-area::-webkit-scrollbar { display: none; }
     @media (min-width: 1024px) {
       .side-summary {
         display: flex;
@@ -1502,10 +1496,11 @@ function getPageHTML(options) {
       display: flex;
       align-items: center;
       gap: 4px;
-      flex: none;
-      white-space: nowrap;
+      flex: 0 1 auto;
+      min-width: 0;
     }
     .side-summary .ss-hl-item .v {
+      flex: 1 1 auto;
       min-width: 0;
       margin-left: 10px;
       text-align: right;
@@ -2415,7 +2410,166 @@ function getPageHTML(options) {
       border-left:5px solid transparent;border-right:5px solid transparent;
       border-bottom:5px solid #1a1a2e;
     }
+    /* ===== 主题切换按钮 ===== */
+    .theme-toggle {
+      flex-shrink: 0;
+      margin-left: 8px;
+      width: 34px; height: 34px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 9px;
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      font-size: 15px; line-height: 1;
+      cursor: pointer; font-family: inherit;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .theme-toggle:hover { background: rgba(255,255,255,0.14); }
+    .theme-toggle:active { transform: scale(0.94); }
+
+    /* ===== 浅色模式（白色模式） ===== */
+    html[data-theme="light"] {
+      --bg: #f4f5f9;
+      --bg-soft: #ffffff;
+      --card: #ffffff;
+      --card-glass: rgba(255, 255, 255, 0.86);
+      --line: #e4e6ef;
+      --line-soft: #eef0f6;
+      --text: #1b1c23;
+      --text-dim: #5b5d6d;
+      --text-faint: #8b8d9c;
+      --accent: #d92b47;
+      --accent-deep: #b81f39;
+      --accent-soft: rgba(217, 43, 71, 0.10);
+      --accent-glow: rgba(217, 43, 71, 0.22);
+      --good: #17914f;
+      --warn: #b7791f;
+      --bad: #cf3535;
+    }
+    /* 氛围装饰在浅色下减弱 */
+    html[data-theme="light"] .bg-grid {
+      background-image:
+        linear-gradient(rgba(20,20,45,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20,20,45,0.05) 1px, transparent 1px);
+    }
+    html[data-theme="light"] .bg-noise { opacity: 0.025; }
+    /* Hero 封面：保持深色压暗，白色标题才可读 */
+    html[data-theme="light"] .hero-shade {
+      background:
+        linear-gradient(180deg, rgba(8,8,15,0.30) 0%, rgba(8,8,15,0.16) 32%, rgba(8,8,15,0.72) 70%, rgba(8,8,15,0.88) 100%),
+        linear-gradient(100deg, rgba(8,8,15,0.45) 0%, transparent 48%);
+    }
+    /* 导航栏 */
+    html[data-theme="light"] .top-nav {
+      background: rgba(255,255,255,0.82);
+      border-bottom-color: rgba(20,20,45,0.08);
+    }
+    html[data-theme="light"] .top-nav.scrolled {
+      background: rgba(255,255,255,0.95);
+      box-shadow: 0 2px 18px rgba(20,20,50,0.08);
+    }
+    html[data-theme="light"] .nav-logo { color: var(--text); }
+    html[data-theme="light"] .nav-logo img { border-color: rgba(20,20,45,0.1); }
+    html[data-theme="light"] .nav-link { color: rgba(27,28,35,0.68); }
+    html[data-theme="light"] .theme-toggle {
+      border-color: rgba(20,20,45,0.12);
+      background: rgba(20,20,45,0.04);
+      color: var(--text);
+    }
+    html[data-theme="light"] .theme-toggle:hover { background: rgba(20,20,45,0.09); }
+    /* 输入区 / 解析中遮罩 */
+    html[data-theme="light"] .input-row textarea { background: #ffffff; }
+    html[data-theme="light"] .ve-char-grid.parsing::after { background: rgba(255,255,255,0.65); }
+    html[data-theme="light"] .ve-char-grid.parsing::before { border-color: rgba(20,20,45,0.08); }
+    html[data-theme="light"] .loading::before { border-color: rgba(20,20,45,0.12); }
+    /* 角色卡片上的价格 / 标签配色 */
+    html[data-theme="light"] .ve-char-card .ve-char-price,
+    html[data-theme="light"] .ve-char-price,
+    html[data-theme="light"] .ve-char-meta .tag.const { color: var(--warn); }
+    html[data-theme="light"] .ve-char-meta .tag.sig,
+    html[data-theme="light"] .qq-group-card .info .group-id .num,
+    html[data-theme="light"] .side-summary .ss-range,
+    html[data-theme="light"] .md-hero-range { color: #2563c9; }
+    html[data-theme="light"] .ve-char-meta .tag.price { color: var(--good); }
+    html[data-theme="light"] .ve-add-char-top { color: var(--bad); border-color: var(--bad); }
+    html[data-theme="light"] .ve-add-char-top:hover { color: #a82222; }
+    /* 侧边摘要卡 */
+    html[data-theme="light"] .side-summary .hl-tip { color: var(--good); background: rgba(23,145,79,0.12); }
+    html[data-theme="light"] .side-summary .ss-ratio.good { color: var(--good); }
+    html[data-theme="light"] .side-summary .ss-ratio.ok { color: var(--warn); }
+    html[data-theme="light"] .side-summary .ss-ratio.bad { color: var(--bad); }
+    html[data-theme="light"] .side-summary .ss-calc-total .val { color: var(--warn); }
+    html[data-theme="light"] .side-summary .ss-afdian-title { color: var(--text); }
+    html[data-theme="light"] .side-summary .ss-stats-link:hover { background: rgba(20,20,45,0.04); }
+    /* tooltip 在浅色下改为白底 */
+    html[data-theme="light"] .side-summary .hl-tip .tooltip,
+    html[data-theme="light"] .ss-calc-row .label .tooltip,
+    html[data-theme="light"] #mobile-detail-content .hl-tip .tooltip {
+      background: #ffffff;
+      border-color: var(--line);
+      color: var(--text-dim);
+      box-shadow: 0 6px 20px rgba(20,20,50,0.14);
+    }
+    html[data-theme="light"] .help-popup {
+      background: #ffffff;
+      border-color: var(--line);
+      color: var(--text-dim);
+      box-shadow: 0 8px 28px rgba(20,20,50,0.16);
+    }
+    html[data-theme="light"] .help-popup::before { border-bottom-color: var(--line); }
+    html[data-theme="light"] .help-popup::after { border-bottom-color: #ffffff; }
+    /* 估值规则提示按钮 */
+    html[data-theme="light"] .adjust-link { background: #ffffff; }
+    /* 移动端底部浮动条 */
+    html[data-theme="light"] .mobile-float-bar {
+      background: rgba(255,255,255,0.97);
+      box-shadow: 0 -6px 24px rgba(20,20,50,0.12);
+    }
+    html[data-theme="light"] .mobile-float-bar .mfb-ratio.good { background: rgba(23,145,79,0.12); color: var(--good); }
+    html[data-theme="light"] .mobile-float-bar .mfb-ratio.ok { background: rgba(183,121,31,0.12); color: var(--warn); }
+    html[data-theme="light"] .mobile-float-bar .mfb-ratio.bad { background: rgba(207,53,53,0.12); color: var(--bad); }
+    /* 移动端估值详情弹窗 */
+    html[data-theme="light"] .mobile-detail-container {
+      background: #ffffff;
+      border-color: var(--line);
+    }
+    html[data-theme="light"] .mobile-detail-header {
+      background: rgba(255,255,255,0.98) !important;
+      border-bottom-color: var(--line);
+    }
+    html[data-theme="light"] .mobile-detail-title { color: var(--text); }
+    html[data-theme="light"] .mobile-detail-subtitle,
+    html[data-theme="light"] .mobile-detail-close { color: var(--text-dim); }
+    /* 使用须知 / 买卖攻略弹窗（移动端导航胶囊） */
+    html[data-theme="light"] .tips-nav-item {
+      color: rgba(27,28,35,0.65) !important;
+      background: rgba(20,20,45,0.03) !important;
+    }
+    html[data-theme="light"] .tips-nav-item.active {
+      color: var(--accent) !important;
+      background: rgba(217,43,71,0.10) !important;
+    }
+    html[data-theme="light"] .tips-nav-item:hover { background: rgba(20,20,45,0.06) !important; }
+    html[data-theme="light"] #tips-modal > div > div:last-child > div:first-child,
+    html[data-theme="light"] #guide-modal > div > div:last-child > div:first-child {
+      background: #ffffff;
+    }
+    html[data-theme="light"] #tips-modal > div > div:last-child > div:first-child button,
+    html[data-theme="light"] #guide-modal > div > div:last-child > div:first-child button {
+      color: var(--text-dim);
+    }
   </style>
+  <script>
+    /* 尽早应用已保存的主题，避免刷新时闪白/闪黑 */
+    (function () {
+      try {
+        if (localStorage.getItem('site_theme') === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <!-- 顶部导航栏 -->
@@ -2431,8 +2585,29 @@ function getPageHTML(options) {
         <a href="javascript:void(0)" class="nav-link" onclick="openTipsModal()">买卖攻略</a>
         <a href="javascript:void(0)" class="nav-link" onclick="openQQGroupModal()">加群交流</a>
       </div>
+      <button class="theme-toggle" id="theme-toggle" type="button" onclick="toggleTheme()" title="切换浅色模式" aria-label="切换主题">☀️</button>
     </div>
   </nav>
+  <script>
+    (function () {
+      var KEY = 'site_theme';
+      var btn = document.getElementById('theme-toggle');
+      function sync() {
+        if (!btn) return;
+        var light = document.documentElement.getAttribute('data-theme') === 'light';
+        btn.textContent = light ? '🌙' : '☀️';
+        btn.title = light ? '切换到深色模式' : '切换到浅色模式';
+      }
+      window.toggleTheme = function () {
+        var light = document.documentElement.getAttribute('data-theme') === 'light';
+        if (light) document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', 'light');
+        try { localStorage.setItem(KEY, light ? 'dark' : 'light'); } catch (e) {}
+        sync();
+      };
+      sync();
+    })();
+  </script>
   <div class="bg-atmos">
     <div class="bg-grid"></div>
     <div class="bg-orb a"></div>

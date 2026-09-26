@@ -499,9 +499,96 @@ function getPlatformPage() {
       .rise, .bg-orb, .cover-badge .pulse-dot { animation: none; opacity: 1; }
       .game-card, .cover-img, .enter-arrow { transition: none; }
     }
+    /* ===== 主题切换按钮 ===== */
+    .theme-toggle {
+      width: 38px; height: 38px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 16px; line-height: 1;
+      cursor: pointer; font-family: inherit;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .theme-toggle:hover { background: rgba(255,255,255,0.14); }
+    .theme-toggle:active { transform: scale(0.94); }
+    .theme-toggle-fixed { position: fixed; top: 18px; right: 20px; z-index: 50; }
+
+    /* ===== 浅色模式（白色模式） ===== */
+    html[data-theme="light"] {
+      --bg: #f4f5f9;
+      --bg-soft: #ffffff;
+      --card: #ffffff;
+      --line: #e4e6ef;
+      --text: #1b1c23;
+      --text-dim: #5b5d6d;
+      --text-faint: #8b8d9c;
+    }
+    html[data-theme="light"] .bg-grid {
+      background-image:
+        linear-gradient(rgba(20,20,45,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20,20,45,0.05) 1px, transparent 1px);
+    }
+    html[data-theme="light"] .bg-noise { opacity: 0.025; }
+    /* 站名渐变文字在浅色下改用深色渐变 */
+    html[data-theme="light"] .site-name {
+      background: linear-gradient(92deg, #1b1c23 15%, #d92b47 50%, #b8781a 85%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    /* 页面级面板改为浅色（封面卡片内的文字压在图片上，保持原样） */
+    html[data-theme="light"] .stats-row { background: rgba(255,255,255,0.78); }
+    html[data-theme="light"] .feature-card {
+      background: linear-gradient(165deg, #ffffff 0%, #f6f7fb 100%);
+    }
+    html[data-theme="light"] .soon-chip { background: rgba(255,255,255,0.7); }
+    html[data-theme="light"] .soon-chip:hover { border-color: var(--line); background: #ffffff; }
+    html[data-theme="light"] .soon-name { color: var(--text-dim); }
+    html[data-theme="light"] .stat-cell:nth-child(2) .stat-num { color: #b8781a; }
+    html[data-theme="light"] .theme-toggle {
+      border-color: rgba(20,20,45,0.12);
+      background: rgba(20,20,45,0.04);
+      color: var(--text);
+    }
+    html[data-theme="light"] .theme-toggle:hover { background: rgba(20,20,45,0.09); }
   </style>
+  <script>
+    /* 尽早应用已保存的主题，避免刷新时闪白/闪黑 */
+    (function () {
+      try {
+        if (localStorage.getItem('site_theme') === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
+  <button class="theme-toggle theme-toggle-fixed" id="theme-toggle" type="button" onclick="toggleTheme()" title="切换浅色模式" aria-label="切换主题">☀️</button>
+  <script>
+    (function () {
+      var KEY = 'site_theme';
+      var btn = document.getElementById('theme-toggle');
+      function sync() {
+        if (!btn) return;
+        var light = document.documentElement.getAttribute('data-theme') === 'light';
+        btn.textContent = light ? '🌙' : '☀️';
+        btn.title = light ? '切换到深色模式' : '切换到浅色模式';
+      }
+      window.toggleTheme = function () {
+        var light = document.documentElement.getAttribute('data-theme') === 'light';
+        if (light) document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', 'light');
+        try { localStorage.setItem(KEY, light ? 'dark' : 'light'); } catch (e) {}
+        sync();
+      };
+      sync();
+    })();
+  </script>
   <div class="bg-atmos">
     <div class="bg-grid"></div>
     <div class="bg-orb wuwa"></div>

@@ -35,8 +35,6 @@ const getPageHTML = require('./views/wuwa');
 const getZZZPage = require('./views/zzz');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
-const getNewsPageHTML = require('./views/wuwa-news');
-const getTipsPageHTML = require('./views/wuwa-tips');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1342,15 +1340,7 @@ app.get('/wuwa', (req, res) => {
   res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {} }));
 });
 
-// 鸣潮 - 角色资讯
-app.get('/wuwa/news', (req, res) => {
-  res.send(getNewsPageHTML());
-});
-
-// 鸣潮 - 买卖攻略
-app.get('/wuwa/tips', (req, res) => {
-  res.send(getTipsPageHTML());
-});
+// 鸣潮 - 角色资讯、买卖攻略已改为站内弹窗，不再提供独立页面
 
 app.get('/zzz', (req, res) => {
   const engine = getEngine('zzz');
