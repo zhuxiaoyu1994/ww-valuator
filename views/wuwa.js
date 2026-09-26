@@ -1382,8 +1382,29 @@ function getPageHTML(options) {
       padding: 24px;
       display: none;
     }
+    /* 内容区内部滚动：卡片高度锁在视口内，标价/估价按钮常驻，其余内容在卡内滚动 */
+    .ss-scroll-area::-webkit-scrollbar { width: 6px; }
+    .ss-scroll-area::-webkit-scrollbar-track { background: transparent; }
+    .ss-scroll-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+    }
+    .ss-scroll-area::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.24);
+    }
     @media (min-width: 1024px) {
-      .side-summary { display: block; }
+      .side-summary {
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 104px);
+      }
+      .side-summary .ss-action-section { flex: none; }
+      .ss-scroll-area {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
     }
     .side-summary .ss-label {
       font-size: 11px;
@@ -1470,6 +1491,7 @@ function getPageHTML(options) {
       align-items: center;
       justify-content: space-between;
       font-size: 12px;
+      position: relative;
     }
     .side-summary .ss-hl-item .k { color: var(--text-muted); }
     .side-summary .ss-hl-item .v { color: var(--text); font-weight: 600; }
@@ -1480,9 +1502,16 @@ function getPageHTML(options) {
       display: flex;
       align-items: center;
       gap: 4px;
+      flex: none;
+      white-space: nowrap;
+    }
+    .side-summary .ss-hl-item .v {
+      min-width: 0;
+      margin-left: 10px;
+      text-align: right;
+      word-break: break-word;
     }
     .side-summary .hl-tip {
-      position: relative;
       display: inline-block;
       width: 14px;
       height: 14px;
@@ -1496,30 +1525,27 @@ function getPageHTML(options) {
       font-style: normal;
       flex-shrink: 0;
     }
+    /* 锚定到整行而非图标，给固定宽度留出空间；文案用 <br> 分三行 */
     .side-summary .hl-tip .tooltip {
       visibility: hidden;
       opacity: 0;
       position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      margin-bottom: 6px;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
       padding: 6px 10px;
       background: #1a1a2e;
       border: 1px solid var(--line);
       border-radius: 6px;
+      width: 240px;
       font-size: 11px;
+      line-height: 1.6;
       color: var(--text-secondary);
-      white-space: nowrap;
+      white-space: normal;
       z-index: 100;
       transition: all 0.2s;
       pointer-events: none;
       font-weight: 400;
-      bottom: auto;
-      top: 100%;
-      left: 0;
-      transform: none;
-      margin-top: 4px;
     }
     .side-summary .hl-tip:hover .tooltip {
       visibility: visible;
@@ -1620,8 +1646,7 @@ function getPageHTML(options) {
       opacity: 0;
       position: absolute;
       bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 0;
       margin-bottom: 6px;
       padding: 8px 10px;
       background: #1a1a2e;
@@ -2497,7 +2522,9 @@ function getPageHTML(options) {
             <button class="ve-btn eval-btn ve-eval-main" onclick="veEvaluate()">立即估价</button>
             <div style="font-size:11px;color:#666;text-align:center;margin-top:6px;">修改内容后点击重新估价</div>
           </div>
-          
+
+          <!-- 可滚动内容区（标价与估价按钮常驻在卡片顶部） -->
+          <div class="ss-scroll-area">
           <div class="ss-divider" style="display:none;" id="ss-divider-top"></div>
           
           <div class="ss-empty" id="side-summary-empty">
@@ -2539,6 +2566,7 @@ function getPageHTML(options) {
               </a>
             </div>
           </div>
+          </div><!-- /ss-scroll-area -->
         </div>
       </div><!-- /main-right -->
     </div><!-- /main-layout -->
@@ -3611,12 +3639,12 @@ function getPageHTML(options) {
             k: '有效金/限定金/总金数',
             v: fmtGold(yi.effectiveYellow) + '/' + fmtGold(limitedGold) + '/' + fmtGold(totalGold),
             cls: 'warn',
-            tip: '有效金＝计入命座与专武加成后的等效金数；限定金＝限定角色与专武的原始金数；总金数＝账号全部金数'
+            tip: '有效金：命座+专武加成折算<br>限定金：限定角色与专武原金数<br>总金数：账号全部金数'
           });
         }
         if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
           var teamNames = det.satisfiedTeams.map(function(t) { return t.name || t; }).join('、');
-          items.push({ k: '成型配队', v: det.satisfiedTeams.length + ' 组', cls: 'good', tip: teamNames });
+          items.push({ k: '成型配队', v: teamNames, cls: 'good' });
         }
         if (fd.value < 1) {
           items.push({ k: '低命折扣', v: '×' + fd.value, cls: 'warn' });
