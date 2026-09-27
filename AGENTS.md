@@ -15,7 +15,10 @@
     ├── server.js                    # Express 主服务入口
     ├── configs/                     # 各游戏默认配置（configVersion 所在处）
     │   ├── wuwa.js                  # 鸣潮配置（charTiers/sigWeapons/资源换算等）
+    │   ├── wuwa-events.json         # 版本活动数据快照（由 scripts/sync-wiki.js 生成）
     │   └── zzz.js                   # 绝区零配置
+    ├── scripts/
+    │   └── sync-wiki.js             # 从 B站鸣潮 WIKI 同步活动日历（npm run sync:events）
     ├── value-engine.src.js          # 估值引擎源码（可读，含所有默认常量）
     ├── value-engine.js              # 混淆版估值引擎（由 build-engine.js 生成，勿手改）
     ├── build-engine.js              # 混淆构建脚本
@@ -75,6 +78,18 @@
 5. 验证各处常量一致（可用 `grep` 对比关键值）
 6. 提交改动文件（含 `public/value-settings.js`，如设置面板 UI 有新增项）
 7. 推送到 GitHub，Vercel 自动部署（油猴脚本随部署自动发布，无需额外操作）
+
+## 版本活动数据同步（手动，勿自动化）
+
+网站「版本活动」弹窗的数据来自本地快照 `configs/wuwa-events.json`（由 `server.js` 在渲染 `/wuwa` 时注入 `window._events`），**运行时零网络请求**。快照不会自动更新，需要手动执行：
+
+```bash
+npm run sync:events        # 等价于 node scripts/sync-wiki.js
+```
+
+脚本会请求 B站鸣潮 WIKI 的 MediaWiki API、解析 `{{活动日历|...}}` 模板后覆盖写回 JSON，跑完会打印各活动状态和下一步的 git 命令。更新完记得 commit + push，Vercel 部署后线上才生效（本地改完需重启服务，因 `require()` 有缓存）。
+
+**不要在服务端做定时任务或后台按钮触发**：该站有 EdgeOne WAF，且 Vercel 为海外 IP 且无持久化文件系统，运行时写 JSON 不生效、连续请求还会被封 IP。若哪天确实需要后台更新，走「粘贴 wikitext → 服务端只解析入库」的思路，不要从服务器出网拉取。
 
 ## 构建
 

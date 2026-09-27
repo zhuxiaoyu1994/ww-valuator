@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "vercel-dev": "vercel dev"
+    "vercel-dev": "vercel dev",
+    "sync:events": "node scripts/sync-wiki.js"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

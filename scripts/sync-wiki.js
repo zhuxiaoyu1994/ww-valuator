@@ -94,6 +94,7 @@ function main() {
     const codes = e.codes.length ? `  [兑换码 ${e.codes.join(' ')}]` : '';
     console.log(`  [${state}] ${e.name}${e.tag ? ' · ' + e.tag : ''}${codes}`);
   }
+  console.log('\n下一步：git add configs/wuwa-events.json && git commit -m "chore: 同步版本活动数据"');
 }
 
 main();
