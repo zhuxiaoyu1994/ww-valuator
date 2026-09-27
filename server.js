@@ -12,6 +12,7 @@ const https = require('https');
 const { createEngine } = require('./value-engine');
 const WUWA_CONFIG = require('./configs/wuwa');
 const ZZZ_CONFIG = require('./configs/zzz');
+const WUWA_EVENTS = require('./configs/wuwa-events.json');
 const db = require('./db');
 
 // 多游戏引擎实例
@@ -1337,7 +1338,7 @@ app.get('/wuwa', (req, res) => {
   const engine = getEngine('wuwa');
   const defaults = engine.getDefaults();
   const charList = buildCharList(defaults);
-  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, guideBase: WUWA_CONFIG.guideBase, charGuides: WUWA_CONFIG.charGuides }));
+  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, guideBase: WUWA_CONFIG.guideBase, charGuides: WUWA_CONFIG.charGuides, events: WUWA_EVENTS }));
 });
 
 // 鸣潮 - 角色资讯、买卖攻略已改为站内弹窗，不再提供独立页面

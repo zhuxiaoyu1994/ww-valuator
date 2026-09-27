@@ -7,6 +7,7 @@ function getPageHTML(options) {
   const sigWeapons = options.sigWeapons || {};
   const guideBase = options.guideBase || '';
   const charGuides = options.charGuides || {};
+  const events = options.events || { events: [] };
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -861,6 +862,46 @@ function getPageHTML(options) {
     .cg-guide { font-size: 11px; color: var(--text-faint); white-space: nowrap; transition: color 0.2s; }
     .cg-card:hover .cg-guide { color: var(--accent); }
     .cg-empty { text-align: center; padding: 50px 20px; color: var(--text-faint); font-size: 13px; }
+
+    /* 版本活动（导航栏弹窗） */
+    .ev-list { display: flex; flex-direction: column; gap: 8px; }
+    .ev-item {
+      display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+      border: 1px solid var(--line); border-radius: 9px; background: var(--line-soft);
+    }
+    .ev-item.is-ended { opacity: 0.45; }
+    .ev-bar { width: 3px; align-self: stretch; border-radius: 2px; background: var(--line); flex: none; }
+    .ev-item.is-live .ev-bar { background: var(--good); }
+    .ev-item.is-soon .ev-bar { background: var(--bad); }
+    .ev-body { flex: 1; min-width: 0; }
+    .ev-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .ev-tag {
+      display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+      font-size: 10px; font-weight: 500; color: var(--text-dim); background: var(--line);
+    }
+    .ev-time { font-size: 11px; color: var(--text-faint); margin-top: 3px; font-family: var(--mono); }
+    .ev-codes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .ev-code {
+      padding: 2px 8px; border: 1px dashed var(--accent); border-radius: 5px;
+      font-size: 11px; font-family: var(--mono); color: var(--accent);
+      cursor: pointer; transition: background 0.2s;
+    }
+    .ev-code:hover { background: var(--line); }
+    .ev-state { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--text-dim); font-family: var(--mono); }
+    .ev-item.is-live .ev-state { color: var(--good); }
+    .ev-item.is-soon .ev-state { color: var(--bad); }
+    .ev-more {
+      margin-top: 10px; text-align: center; font-size: 12px; color: var(--text-dim);
+      cursor: pointer; user-select: none;
+    }
+    .ev-more:hover { color: var(--accent); }
+    .ev-foot { margin-top: 12px; font-size: 11px; color: var(--text-faint); text-align: right; }
+    .ev-foot a { color: var(--text-dim); text-decoration: none; }
+    .ev-foot a:hover { color: var(--accent); }
+    @media (max-width: 1023px) {
+      .ev-item { gap: 9px; padding: 9px 10px; }
+      .ev-state { font-size: 11px; }
+    }
 
     /* 角色编辑弹窗（命座/专武） */
     .char-edit-modal {
@@ -2671,6 +2712,7 @@ function getPageHTML(options) {
       <div class="nav-links">
         <a href="javascript:void(0)" class="nav-link" onclick="openGuideModal()">使用须知</a>
         <a href="javascript:void(0)" class="nav-link" onclick="openNewsModal()">角色资讯</a>
+        <a href="javascript:void(0)" class="nav-link" onclick="openEventsModal()">版本活动</a>
         <a href="javascript:void(0)" class="nav-link" onclick="openTipsModal()">买卖攻略</a>
         <a href="javascript:void(0)" class="nav-link" onclick="openQQGroupModal()">加群交流</a>
       </div>
@@ -2871,6 +2913,23 @@ function getPageHTML(options) {
       </div>
       <div class="cg-filter" id="cg-filter"></div>
       <div id="cg-body"></div>
+    </div>
+  </div>
+
+  <!-- 版本活动弹窗（数据来自 B站鸣潮WIKI，由 scripts/sync-wiki.js 同步的本地快照） -->
+  <div id="events-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;overflow-y:auto;" onclick="if(event.target===this)closeEventsModal()">
+    <div style="max-width:720px;margin:40px auto;background:#0d0d1a;border:1px solid #1e1e33;border-radius:14px;padding:24px 26px;min-height:300px;position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#fff;">版本活动</div>
+          <div style="font-size:12px;color:#888;margin-top:2px;" id="ev-meta"></div>
+        </div>
+        <button onclick="closeEventsModal()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;padding:4px 10px;">×</button>
+      </div>
+      <div class="ev-list" id="ev-list"></div>
+      <div class="ev-foot">
+        数据来源 <a href="https://wiki.biligame.com/wutheringwaves/首页/活动日历" target="_blank" rel="noopener">B站鸣潮WIKI</a>
+      </div>
     </div>
   </div>
 
@@ -3340,6 +3399,141 @@ function getPageHTML(options) {
       document.getElementById('news-modal').style.display = 'none';
       document.body.style.overflow = '';
     }
+
+    // ============================================================
+    // 版本活动（数据源：scripts/sync-wiki.js 同步的本地快照）
+    // ============================================================
+    var EV_SHOW_ENDED = false;
+
+    // wiki 是外部数据源，渲染前统一转义，避免内容里带标签被执行
+    function evEsc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function evState(e, now) {
+      if (!e.end) return 'permanent';
+      var left = new Date(e.end).getTime() - now;
+      if (left <= 0) return 'ended';
+      return left <= 3 * 86400000 ? 'soon' : 'live';
+    }
+
+    function evCountdown(e, now) {
+      if (!e.end) return '常驻';
+      var left = new Date(e.end).getTime() - now;
+      if (left <= 0) return '已结束';
+      var d = Math.floor(left / 86400000);
+      var h = Math.floor(left % 86400000 / 3600000);
+      var m = Math.floor(left % 3600000 / 60000);
+      if (d > 0) return '剩 ' + d + ' 天 ' + h + ' 时';
+      if (h > 0) return '剩 ' + h + ' 时 ' + m + ' 分';
+      return '剩 ' + m + ' 分';
+    }
+
+    function evFmt(iso) {
+      if (!iso) return '常驻';
+      var d = new Date(iso);
+      var p = function(n) { return String(n).padStart(2, '0'); };
+      return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    function evCopy(code) {
+      var tip = document.createElement('div');
+      tip.textContent = '已复制 ' + code;
+      tip.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);' +
+        'padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;' +
+        'font-size:13px;z-index:1000010;pointer-events:none;';
+      document.body.appendChild(tip);
+      setTimeout(function() { tip.remove(); }, 1600);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).catch(function() {});
+      }
+    }
+
+    function evItemHTML(e, now) {
+      var cls = { live: ' is-live', soon: ' is-soon', ended: ' is-ended' }[e._s] || '';
+      var codes = (e.codes || []).length
+        ? '<div class="ev-codes">' + e.codes.map(function(c) {
+            return '<span class="ev-code" title="点击复制" data-code="' + evEsc(c) + '">' + evEsc(c) + '</span>';
+          }).join('') + '</div>'
+        : '';
+      var tag = e.tag ? '<span class="ev-tag">' + evEsc(e.tag) + '</span>' : '';
+      return '<div class="ev-item' + cls + '">' +
+        '<div class="ev-bar"></div>' +
+        '<div class="ev-body">' +
+          '<div class="ev-name">' + evEsc(e.name) + tag + '</div>' +
+          '<div class="ev-time">' + evFmt(e.start) + ' ~ ' + (e.end ? evFmt(e.end) : '常驻') + '</div>' +
+          codes +
+        '</div>' +
+        '<div class="ev-state">' + evCountdown(e, now) + '</div>' +
+      '</div>';
+    }
+
+    function evRender() {
+      var box = document.getElementById('ev-list');
+      if (!box) return;
+      var data = window._events || {};
+      var list = (data.events || []).slice();
+      if (!list.length) {
+        box.innerHTML = '<div class="cg-empty">暂无活动数据</div>';
+        return;
+      }
+
+      var now = Date.now();
+      var rank = { live: 0, soon: 0, permanent: 1, ended: 2 };
+      list.forEach(function(e) { e._s = evState(e, now); });
+      list.sort(function(a, b) {
+        if (rank[a._s] !== rank[b._s]) return rank[a._s] - rank[b._s];
+        var ae = a.end ? new Date(a.end).getTime() : Infinity;
+        var be = b.end ? new Date(b.end).getTime() : Infinity;
+        return a._s === 'ended' ? be - ae : ae - be;
+      });
+
+      var active = list.filter(function(e) { return e._s !== 'ended'; });
+      var ended = list.filter(function(e) { return e._s === 'ended'; });
+      var shown = EV_SHOW_ENDED ? active.concat(ended) : active;
+
+      box.innerHTML = shown.map(function(e) { return evItemHTML(e, now); }).join('');
+      if (ended.length) {
+        var more = document.createElement('div');
+        more.className = 'ev-more';
+        more.textContent = EV_SHOW_ENDED ? '收起已结束活动 ▲' : '展开已结束活动 (' + ended.length + ') ▼';
+        box.appendChild(more);
+      }
+
+      var meta = document.getElementById('ev-meta');
+      if (meta && data.updatedAt) {
+        var u = new Date(data.updatedAt);
+        meta.textContent = '更新于 ' + (u.getMonth() + 1) + '月' + u.getDate() + '日 · 共 ' + list.length + ' 项';
+      }
+    }
+
+    function openEventsModal() {
+      document.getElementById('events-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+      evRender();
+    }
+
+    function closeEventsModal() {
+      document.getElementById('events-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+
+    function evInit() {
+      var box = document.getElementById('ev-list');
+      if (!box) return;
+      box.addEventListener('click', function(ev) {
+        var code = ev.target.closest('.ev-code');
+        if (code) { evCopy(code.getAttribute('data-code')); return; }
+        if (ev.target.closest('.ev-more')) { EV_SHOW_ENDED = !EV_SHOW_ENDED; evRender(); }
+      });
+      // 弹窗打开时刷新倒计时，关闭时不做无谓重绘
+      setInterval(function() {
+        var m = document.getElementById('events-modal');
+        if (m && m.style.display !== 'none') evRender();
+      }, 60000);
+    }
     // 买卖攻略弹窗
     function openTipsModal() {
       document.getElementById('tips-modal').style.display = 'block';
@@ -3365,6 +3559,7 @@ function getPageHTML(options) {
         closeGuideModal();
         closeQQGroupModal();
         closeNewsModal();
+        closeEventsModal();
         closeTipsModal();
         closeStatsModal();
       }
@@ -3379,6 +3574,9 @@ function getPageHTML(options) {
     // 角色图鉴用：攻略外链（前缀 + 词条名例外映射）
     window._guideBase = ${JSON.stringify(guideBase)};
     window._charGuides = ${JSON.stringify(charGuides)};
+    // 版本活动（由 scripts/sync-wiki.js 同步的本地快照）
+    // 外部来源数据，转义 < 防止内容提前闭合脚本块
+    window._events = ${JSON.stringify(events).replace(/</g, '\\u003c')};
   </script>
   <script>
     // ============================================================
@@ -4474,7 +4672,7 @@ function getPageHTML(options) {
     // ============================================================
     // 初始化
     // ============================================================
-    renderHistory();
+    evInit();
 
     // QQ群图片点击放大
     (function() {
