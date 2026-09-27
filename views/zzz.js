@@ -870,41 +870,6 @@ function getPageHTML(options) {
     .char-tag .const { color: var(--text-dim); margin-left: 2px; }
     .char-tag .sig { color: var(--good); }
 
-    /* History */
-    .history {
-      margin-top: 22px;
-    }
-    .history-title {
-      color: var(--text-faint);
-      font-size: 12px;
-      margin-bottom: 10px;
-      letter-spacing: 2px;
-    }
-    .history-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .history-tag {
-      display: inline-block;
-      padding: 5px 12px;
-      border-radius: 999px;
-      background: var(--card);
-      border: 1px solid var(--line);
-      color: var(--text-dim);
-      font-size: 12px;
-      font-family: var(--mono);
-      cursor: pointer;
-      transition: all 0.2s;
-      max-width: 100%;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      vertical-align: bottom;
-    }
-    .history-tag:hover { border-color: var(--accent); color: var(--text); }
-
     .loading {
       text-align: center;
       padding: 22px;
@@ -1759,15 +1724,6 @@ function getPageHTML(options) {
     <!-- Loading/Error -->
     <div id="status-msg"></div>
 
-    <!-- History -->
-    <div class="history" id="history-section" style="display:none;">
-      <div class="history-title" style="display:flex;align-items:center;">
-        <span>最近查询</span>
-        <span style="margin-left:auto;letter-spacing:0;color:var(--bad);cursor:pointer;font-size:12px;" onclick="clearHistory()">清空历史</span>
-      </div>
-      <div class="history-tags" id="history-tags"></div>
-    </div>
-
     <!-- 合规声明 -->
     <div class="footer-section rise d3">
       <div class="disclaimer">
@@ -2307,7 +2263,6 @@ function getPageHTML(options) {
               result.data.url = 'https://www.pxb7.com/buy/10304/detail?productId=' + parsed.productId;
               clientSuccess = true;
               showResult(result.data);
-              saveHistory(productId, result.data);
             }
           } catch (e) {
             clientError = e.message;
@@ -2345,7 +2300,6 @@ function getPageHTML(options) {
           }
 
           showResult(result.data);
-          saveHistory(productId, result.data);
         }
       } catch (err) {
         document.getElementById('status-msg').innerHTML = '<div class="error-msg">查询失败: ' + err.message + '</div>';
@@ -2980,56 +2934,6 @@ function getPageHTML(options) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    // ============================================================
-    // 历史记录
-    // ============================================================
-    function saveHistory(productId, data) {
-      let history = [];
-      try { history = JSON.parse(localStorage.getItem('zzz_history') || '[]'); } catch(e) {}
-      // 去重
-      history = history.filter(h => h.id !== productId);
-      history.unshift({
-        id: productId,
-        ratio: data.costPerformance,
-        value: data.estimatedValue,
-      });
-      history = history.slice(0, 10);
-      localStorage.setItem('zzz_history', JSON.stringify(history));
-      renderHistory();
-    }
-
-    function renderHistory() {
-      let history = [];
-      try { history = JSON.parse(localStorage.getItem('zzz_history') || '[]'); } catch(e) {}
-      if (history.length === 0) {
-        document.getElementById('history-section').style.display = 'none';
-        return;
-      }
-      document.getElementById('history-section').style.display = '';
-      let html = '';
-      history.forEach(h => {
-        const ratioText = h.ratio >= 0 ? '+' + h.ratio + '%' : h.ratio + '%';
-        html += '<span class="history-tag" title="' + escStatsHtml(h.id) + '" onclick="loadHistory(\\'' + h.id + '\\')">' + h.id + ' (' + ratioText + ')</span>';
-      });
-      document.getElementById('history-tags').innerHTML = html;
-    }
-
-    function clearHistory() {
-      if (!confirm('确定清空全部查询历史？')) return;
-      localStorage.removeItem('zzz_history');
-      renderHistory();
-    }
-
-    function loadHistory(productId) {
-      document.getElementById('product-id').value = productId;
-      switchTab('lookup');
-      doLookup();
-    }
-
-    // ============================================================
-    // 初始化
-    // ============================================================
-    renderHistory();
     // ============================================================
     // 可视化编辑器
     // ============================================================

@@ -284,6 +284,21 @@ function getPageHTML(options) {
       color: var(--accent);
       font-weight: 600;
     }
+    .ve-clear-btn {
+      flex: none;
+      padding: 3px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .ve-clear-btn:hover { border-color: var(--bad); color: var(--bad); }
+    html[data-theme="light"] .ve-clear-btn { border-color: #cfd2de; color: #4a4c5a; }
+    @media (max-width: 1023px) { .ve-desc-hint { display: none; } }
     /* 可视化编辑左右布局 */
     .ve-main-row {
       display: grid;
@@ -1240,41 +1255,6 @@ function getPageHTML(options) {
     .char-tag.E { background: rgba(156, 163, 175, 0.07); color: #6b6b80; border-color: rgba(156,163,175,0.18); }
     .char-tag .const { color: var(--text-dim); margin-left: 2px; }
     .char-tag .sig { color: var(--good); }
-
-    /* History */
-    .history {
-      margin-top: 22px;
-    }
-    .history-title {
-      color: var(--text-faint);
-      font-size: 12px;
-      margin-bottom: 10px;
-      letter-spacing: 2px;
-    }
-    .history-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .history-tag {
-      display: inline-block;
-      padding: 5px 12px;
-      border-radius: 999px;
-      background: var(--card);
-      border: 1px solid var(--line);
-      color: var(--text-dim);
-      font-size: 12px;
-      font-family: var(--mono);
-      cursor: pointer;
-      transition: all 0.2s;
-      max-width: 100%;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      vertical-align: bottom;
-    }
-    .history-tag:hover { border-color: var(--accent); color: var(--text); }
 
     .loading {
       text-align: center;
@@ -2772,7 +2752,10 @@ function getPageHTML(options) {
       <!-- 描述输入框 -->
       <div class="ve-section-title">
         <span>账号描述</span>
-        <span style="font-size:11px;color:#888;font-weight:400;">输入描述自动识别，修改角色自动同步</span>
+        <span style="display:flex;align-items:center;gap:12px;min-width:0;">
+          <span class="ve-desc-hint" style="font-size:11px;color:#888;font-weight:400;">输入描述自动识别，修改角色自动同步</span>
+          <button class="ve-clear-btn" onclick="veClearDesc()">清空</button>
+        </span>
       </div>
       <div style="margin-bottom:14px;">
         <textarea id="ve-desc-input" placeholder="粘贴账号描述，如：50级，10黄，星声16000，1命今汐+专武..." style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--text);font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:180px;line-height:1.6;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'" oninput="veOnDescInput()"></textarea>
@@ -2879,15 +2862,6 @@ function getPageHTML(options) {
 
     <!-- Loading/Error -->
     <div id="status-msg"></div>
-
-    <!-- History -->
-    <div class="history" id="history-section" style="display:none;">
-      <div class="history-title" style="display:flex;align-items:center;">
-        <span>最近查询</span>
-        <span style="margin-left:auto;letter-spacing:0;color:var(--bad);cursor:pointer;font-size:12px;" onclick="clearHistory()">清空历史</span>
-      </div>
-      <div class="history-tags" id="history-tags"></div>
-    </div>
 
     <!-- QQ群弹窗 -->
     <div id="qqgroup-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:100001;" onclick="if(event.target===this)closeQQGroupModal()">
@@ -3836,7 +3810,6 @@ function getPageHTML(options) {
               result.data.url = 'https://www.pxb7.com/buy/10302/detail?productId=' + parsed.productId;
               clientSuccess = true;
               showResult(result.data);
-              saveHistory(productId, result.data);
             }
           } catch (e) {
             clientError = e.message;
@@ -3874,7 +3847,6 @@ function getPageHTML(options) {
           }
 
           showResult(result.data);
-          saveHistory(productId, result.data);
         }
       } catch (err) {
         document.getElementById('status-msg').innerHTML = '<div class="error-msg">查询失败: ' + err.message + '</div>';
@@ -4624,52 +4596,6 @@ function getPageHTML(options) {
     }
 
     // ============================================================
-    // 历史记录
-    // ============================================================
-    function saveHistory(productId, data) {
-      let history = [];
-      try { history = JSON.parse(localStorage.getItem('mw_history') || '[]'); } catch(e) {}
-      // 去重
-      history = history.filter(h => h.id !== productId);
-      history.unshift({
-        id: productId,
-        ratio: data.costPerformance,
-        value: data.estimatedValue,
-      });
-      history = history.slice(0, 10);
-      localStorage.setItem('mw_history', JSON.stringify(history));
-      renderHistory();
-    }
-
-    function renderHistory() {
-      let history = [];
-      try { history = JSON.parse(localStorage.getItem('mw_history') || '[]'); } catch(e) {}
-      if (history.length === 0) {
-        document.getElementById('history-section').style.display = 'none';
-        return;
-      }
-      document.getElementById('history-section').style.display = '';
-      let html = '';
-      history.forEach(h => {
-        const ratioText = h.ratio >= 0 ? '+' + h.ratio + '%' : h.ratio + '%';
-        html += '<span class="history-tag" title="' + escStatsHtml(h.id) + '" onclick="loadHistory(\\'' + h.id + '\\')">' + h.id + ' (' + ratioText + ')</span>';
-      });
-      document.getElementById('history-tags').innerHTML = html;
-    }
-
-    function clearHistory() {
-      if (!confirm('确定清空全部查询历史？')) return;
-      localStorage.removeItem('mw_history');
-      renderHistory();
-    }
-
-    function loadHistory(productId) {
-      document.getElementById('product-id').value = productId;
-      switchTab('lookup');
-      doLookup();
-    }
-
-    // ============================================================
     // 初始化
     // ============================================================
     evInit();
@@ -5181,6 +5107,15 @@ function getPageHTML(options) {
           descInput.value = desc;
         }
       }
+    }
+
+    // 清空账号描述：走 veOnDescInput 的空值分支，一并重置角色列表与资源
+    function veClearDesc() {
+      var ta = document.getElementById('ve-desc-input');
+      if (!ta || !ta.value) return;
+      ta.value = '';
+      veOnDescInput();
+      ta.focus();
     }
 
     // 描述输入框变化：解析描述到角色列表
