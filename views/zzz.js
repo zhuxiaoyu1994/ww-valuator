@@ -3016,8 +3016,8 @@ function getPageHTML(options) {
     function veGetSigWeapons() {
       var serverConfig = window._serverDefaultConfig || {};
       var userConfig = (typeof getSavedWeights === 'function') ? (getSavedWeights() || {}) : {};
-      // 用户自定义 > 服务端默认 > 基础
-      return Object.assign({}, window._sigWeapons || {}, serverConfig.sigWeapons || {}, userConfig.sigWeapons || {});
+      // 用户自定义 > 服务端默认 > 基础（自定义专武字段名为 sigWeaponsOverride）
+      return Object.assign({}, window._sigWeapons || {}, serverConfig.sigWeaponsOverride || {}, userConfig.sigWeaponsOverride || {});
     }
 
     // 渲染角色卡片列表
