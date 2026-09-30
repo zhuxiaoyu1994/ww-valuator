@@ -137,6 +137,16 @@ function buildDefaultTeamPremiums() {
 // 构建默认权重（合并所有默认配置，等价于油猴脚本 loadWeights() 无用户配置时的结果）
 function buildDefaultWeights(customWeights) {
   const saved = customWeights || {};
+  // 重建角色查找表（内置角色 + 别名），避免多次调用间残留上一次的自定义角色
+  for (const _k in CHAR_LOOKUP) delete CHAR_LOOKUP[_k];
+  for (const [_tier, _info] of Object.entries(CHAR_TIERS)) {
+    for (const _name of _info.chars) {
+      CHAR_LOOKUP[_name] = { tier: _tier, price: _info.price, isHot: _info.isHot };
+    }
+  }
+  for (const [_alias, _canonical] of Object.entries(CHAR_ALIASES)) {
+    if (CHAR_LOOKUP[_canonical]) CHAR_LOOKUP[_alias] = CHAR_LOOKUP[_canonical];
+  }
   const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
   w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
   // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
@@ -548,42 +558,43 @@ function findCharsInText(text) {
     }
   }
   const chars = [];
-  for (const [tier, info] of Object.entries(CHAR_TIERS)) {
-    for (const name of info.chars) {
-      // 检查正名和所有别名
-      const namesToCheck = [name];
-      for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
-        if (canonical === name) namesToCheck.push(alias);
-      }
-      let found = false;
-      for (const checkName of namesToCheck) {
-        // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
-        for (const unit of CONST_UNITS) {
-          if (cleanText.includes('满' + unit + checkName)) {
-            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-            found = true; break;
-          }
-          const m = cleanText.match(new RegExp('(\\d+)' + unit + checkName));
-          if (m) {
-            chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
-            found = true; break;
-          }
-          if (cleanText.includes(checkName + '(满' + unit + ')')) {
-            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-            found = true; break;
-          }
-          const m2 = cleanText.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
-          if (m2) {
-            chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
-            found = true; break;
-          }
-        }
-        if (found) break;
-        // 仅出现名字
-        if (cleanText.includes(checkName)) {
-          chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
+  // 遍历运行时查找表（含内置角色 + 管理后台/用户新增角色），别名键跳过（与正名共用同一记录）
+  for (const [name, info] of Object.entries(CHAR_LOOKUP)) {
+    if (CHAR_ALIASES[name] && CHAR_ALIASES[name] !== name) continue;
+    const tier = info.tier;
+    // 检查正名和所有别名
+    const namesToCheck = [name];
+    for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
+      if (canonical === name) namesToCheck.push(alias);
+    }
+    let found = false;
+    for (const checkName of namesToCheck) {
+      // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
+      for (const unit of CONST_UNITS) {
+        if (cleanText.includes('满' + unit + checkName)) {
+          chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
           found = true; break;
         }
+        const m = cleanText.match(new RegExp('(\\d+)' + unit + checkName));
+        if (m) {
+          chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
+          found = true; break;
+        }
+        if (cleanText.includes(checkName + '(满' + unit + ')')) {
+          chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+          found = true; break;
+        }
+        const m2 = cleanText.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
+        if (m2) {
+          chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
+          found = true; break;
+        }
+      }
+      if (found) break;
+      // 仅出现名字
+      if (cleanText.includes(checkName)) {
+        chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
+        found = true; break;
       }
     }
   }

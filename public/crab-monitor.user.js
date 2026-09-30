@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.21.0
+// @version      3.21.1
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -1638,42 +1638,43 @@
       }
     }
     const chars = [];
-    for (const [tier, info] of Object.entries(CHAR_TIERS)) {
-      for (const name of info.chars) {
-        // 检查正名和所有别名
-        const namesToCheck = [name];
-        for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
-          if (canonical === name) namesToCheck.push(alias);
-        }
-        let found = false;
-        for (const checkName of namesToCheck) {
-          // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
-          for (const unit of G().constUnits) {
-            if (cleanText.includes('满' + unit + checkName)) {
-              chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-              found = true; break;
-            }
-            const m = cleanText.match(new RegExp('(\\d+)' + unit + checkName));
-            if (m) {
-              chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
-              found = true; break;
-            }
-            if (cleanText.includes(checkName + '(满' + unit + ')')) {
-              chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
-              found = true; break;
-            }
-            const m2 = cleanText.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
-            if (m2) {
-              chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
-              found = true; break;
-            }
-          }
-          if (found) break;
-          // 仅出现名字
-          if (cleanText.includes(checkName)) {
-            chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
+    // 遍历运行时查找表（含内置角色 + 管理后台/用户新增角色），别名键跳过（与正名共用同一记录）
+    for (const [name, info] of Object.entries(CHAR_LOOKUP)) {
+      if (CHAR_ALIASES[name] && CHAR_ALIASES[name] !== name) continue;
+      const tier = info.tier;
+      // 检查正名和所有别名
+      const namesToCheck = [name];
+      for (const [alias, canonical] of Object.entries(CHAR_ALIASES)) {
+        if (canonical === name) namesToCheck.push(alias);
+      }
+      let found = false;
+      for (const checkName of namesToCheck) {
+        // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
+        for (const unit of G().constUnits) {
+          if (cleanText.includes('满' + unit + checkName)) {
+            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
             found = true; break;
           }
+          const m = cleanText.match(new RegExp('(\\d+)' + unit + checkName));
+          if (m) {
+            chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          if (cleanText.includes(checkName + '(满' + unit + ')')) {
+            chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          const m2 = cleanText.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
+          if (m2) {
+            chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+        }
+        if (found) break;
+        // 仅出现名字
+        if (cleanText.includes(checkName)) {
+          chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
+          found = true; break;
         }
       }
     }
@@ -1684,13 +1685,7 @@
         charMap[c.name] = c;
       }
     }
-    // 级别按查找表重映射（用户改级别后 CHAR_TIERS 遍历来源仍是旧级别）
-    const result = Object.values(charMap);
-    for (const c of result) {
-      const lkInfo = CHAR_LOOKUP[c.name];
-      if (lkInfo) { c.tier = lkInfo.tier; c.price = lkInfo.price; c.isHot = lkInfo.isHot; }
-    }
-    return result;
+    return Object.values(charMap);
   }
 
   /**
