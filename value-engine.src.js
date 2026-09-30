@@ -545,6 +545,36 @@ function parseCharacters(section) {
 }
 
 /**
+ * 判断 name 在文本中的每次出现是否都落在更长的角色名内部（如「心」落在「鉴心」里）
+ * 用于回退匹配时避免短名（单字名）被更长角色名误触发
+ */
+function isNameCoveredByLonger(text, name, longerNames) {
+  if (!longerNames || longerNames.length === 0) return false;
+  const spans = [];
+  for (const m of longerNames) {
+    let from = 0;
+    for (;;) {
+      const i = text.indexOf(m, from);
+      if (i < 0) break;
+      spans.push([i, i + m.length]);
+      from = i + 1;
+    }
+  }
+  if (spans.length === 0) return false;
+  let hit = false;
+  let from = 0;
+  for (;;) {
+    const i = text.indexOf(name, from);
+    if (i < 0) break;
+    hit = true;
+    const end = i + name.length;
+    if (!spans.some(s => i >= s[0] && end <= s[1])) return false;
+    from = i + 1;
+  }
+  return hit;
+}
+
+/**
  * 从完整文本中查找角色（无明确段落时的回退方案）
  */
 function findCharsInText(text) {
@@ -555,6 +585,15 @@ function findCharsInText(text) {
     const sec = extractSection(text, kw);
     if (sec) {
       cleanText = cleanText.replace(sec, '');
+    }
+  }
+  // 预计算：哪些角色名被另一个更长的角色名包含（如「心」被「鉴心」包含）
+  const _allNames = Object.keys(CHAR_LOOKUP);
+  const _containedBy = {};
+  for (const _n of _allNames) {
+    for (const _m of _allNames) {
+      if (_m === _n || _m.length <= _n.length || _m.indexOf(_n) < 0) continue;
+      (_containedBy[_n] = _containedBy[_n] || []).push(_m);
     }
   }
   const chars = [];
@@ -591,8 +630,8 @@ function findCharsInText(text) {
         }
       }
       if (found) break;
-      // 仅出现名字
-      if (cleanText.includes(checkName)) {
+      // 仅出现名字（若该名字的每次出现都落在更长角色名内部，则视为误触发跳过）
+      if (cleanText.includes(checkName) && !isNameCoveredByLonger(cleanText, checkName, _containedBy[checkName])) {
         chars.push({ name, const: 0, tier, price: info.price, isHot: info.isHot });
         found = true; break;
       }
