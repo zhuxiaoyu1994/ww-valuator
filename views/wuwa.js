@@ -5157,7 +5157,7 @@ function getPageHTML(options) {
         fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: text, priceInCents: 0, game: 'wuwa' })
+          body: JSON.stringify({ showTitle: text, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'wuwa' })
         }).then(function(r) { return r.json(); })
           .then(function(result) {
             if (seq !== VE_PARSE_SEQ) return; // 丢弃过期响应，避免覆盖最新角色列表
