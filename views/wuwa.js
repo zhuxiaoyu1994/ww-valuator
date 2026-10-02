@@ -1695,12 +1695,125 @@ function getPageHTML(options) {
       font-size: 12px;
       font-weight: 600;
       border-radius: 20px;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
       text-decoration: none;
       transition: transform 0.2s, box-shadow 0.2s;
     }
     .side-summary .ss-afdian-btn:hover {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(255, 107, 157, 0.4);
+    }
+    /* 支持作者弹窗（微信/支付宝收款码） */
+    #donate-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.82);
+      z-index: 100002;
+      overflow-y: auto;
+    }
+    .dm-card {
+      position: relative;
+      max-width: 520px;
+      margin: 8vh auto 40px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 26px 24px 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+    .dm-close {
+      position: absolute;
+      top: 10px; right: 12px;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px 8px;
+      font-family: inherit;
+      transition: color 0.2s;
+    }
+    .dm-close:hover { color: var(--text); }
+    .dm-head { text-align: center; margin-bottom: 20px; }
+    .dm-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .dm-sub {
+      font-size: 12.5px;
+      color: var(--text-dim);
+      line-height: 1.6;
+      padding: 0 10px;
+    }
+    .dm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .dm-item {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 14px 12px;
+      text-align: center;
+    }
+    .dm-qr {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+      background: #fff;
+      border-radius: 8px;
+      padding: 6px;
+      box-sizing: border-box;
+    }
+    .dm-name {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 10px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .dm-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dm-dot.wx { background: #07c160; }
+    .dm-dot.ali { background: #1677ff; }
+    .dm-tip {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-faint);
+    }
+    .dm-foot {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px dashed var(--line);
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+    @media (max-width: 1023px) {
+      #donate-modal { background: rgba(0, 0, 0, 0.9); }
+      .dm-card {
+        max-width: none;
+        margin: 0;
+        min-height: 100%;
+        border: none;
+        border-radius: 0;
+        padding: calc(env(safe-area-inset-top, 0px) + 20px) 18px 32px;
+        box-shadow: none;
+      }
+      .dm-grid { grid-template-columns: 1fr; gap: 12px; }
+      .dm-qr { padding: 10px; }
     }
     /* tooltip 样式 */
     .ss-calc-row .label {
@@ -1744,6 +1857,49 @@ function getPageHTML(options) {
       font-size: 32px;
       margin-bottom: 8px;
       opacity: 0.5;
+    }
+    /* 结果过期态：内容变更后旧结果置灰提示，重新估价后恢复 */
+    .side-summary .ve-stale-hint {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      color: var(--warn);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    #side-summary-content.ve-stale .ve-stale-hint { display: flex; }
+    #side-summary-content.ve-stale > *:not(.ve-stale-hint):not(.ss-afdian) {
+      opacity: 0.38;
+      filter: grayscale(0.7);
+      transition: opacity 0.2s ease;
+    }
+    .mobile-float-bar.ve-stale .mfb-price,
+    .mobile-float-bar.ve-stale .mfb-ratio {
+      opacity: 0.45;
+      filter: grayscale(0.7);
+    }
+    .mobile-float-bar .mfb-stale-tag { display: none; }
+    .mobile-float-bar.ve-stale .mfb-stale-tag {
+      display: inline;
+      color: var(--warn);
+      font-weight: 600;
+    }
+    #mobile-detail-modal .md-stale-hint { display: none; }
+    #mobile-detail-modal.ve-stale .md-stale-hint {
+      display: block;
+      margin: 0 16px 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      color: var(--warn);
+      font-size: 12px;
+      line-height: 1.4;
     }
     .side-summary .ss-action-btn {
       width: 100%;
@@ -2285,6 +2441,9 @@ function getPageHTML(options) {
         font-size: 12px;
         font-weight: 600;
         border-radius: 20px;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
         text-decoration: none;
       }
 
@@ -2821,6 +2980,9 @@ function getPageHTML(options) {
             输入账号信息后查看估价结果
           </div>
           <div id="side-summary-content" style="display:none;">
+            <div class="ve-stale-hint" id="ve-stale-hint">
+              <span>⚠️</span><span>内容已变更，点击「立即估价」重新计算</span>
+            </div>
             <div class="ss-label">预估价值</div>
             <div class="ss-price" id="ss-price">--<span class="unit">元</span></div>
             <div class="ss-range" id="ss-range" style="display:none;"></div>
@@ -2850,9 +3012,9 @@ function getPageHTML(options) {
                 <div class="ss-afdian-title">对你有帮助？请作者喝杯咖啡</div>
                 <div class="ss-afdian-desc">你的支持是持续更新的动力</div>
               </div>
-              <a href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener" class="ss-afdian-btn">
+              <button type="button" class="ss-afdian-btn" onclick="openDonateModal()">
                 支持
-              </a>
+              </button>
             </div>
           </div>
           </div><!-- /ss-scroll-area -->
@@ -2872,6 +3034,30 @@ function getPageHTML(options) {
         <div style="font-size:13px;color:#aaa;">群号：<span style="color:#fbbf24;font-weight:600;">1064412729</span></div>
         <button onclick="closeQQGroupModal()" style="margin-top:16px;background:none;border:1px solid var(--line);color:#888;font-size:13px;cursor:pointer;padding:6px 20px;border-radius:6px;">关闭</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 支持作者弹窗（微信/支付宝收款码） -->
+  <div id="donate-modal" onclick="if(event.target===this)closeDonateModal()">
+    <div class="dm-card">
+      <button class="dm-close" onclick="closeDonateModal()" aria-label="关闭">×</button>
+      <div class="dm-head">
+        <div class="dm-title">☕ 支持作者</div>
+        <div class="dm-sub">如果这个工具帮你省下了时间，欢迎扫码请作者喝杯咖啡</div>
+      </div>
+      <div class="dm-grid">
+        <div class="dm-item">
+          <img class="dm-qr" src="/public/donate/wechat.png" alt="微信收款码" loading="lazy">
+          <div class="dm-name"><span class="dm-dot wx"></span>微信</div>
+          <div class="dm-tip">长按识别，或截图后扫码</div>
+        </div>
+        <div class="dm-item">
+          <img class="dm-qr" src="/public/donate/alipay.jpg" alt="支付宝收钱码" loading="lazy">
+          <div class="dm-name"><span class="dm-dot ali"></span>支付宝</div>
+          <div class="dm-tip">长按识别，或截图后扫码</div>
+        </div>
+      </div>
+      <div class="dm-foot">你的支持是持续更新的动力，感谢每一份心意 ❤️</div>
     </div>
   </div>
 
@@ -3044,7 +3230,7 @@ function getPageHTML(options) {
   <div class="mobile-float-bar" id="mobile-float-bar" onclick="openMobileDetailModal()">
     <div>
       <div class="mfb-price" id="mfb-price">--<span class="unit">元</span></div>
-      <div class="mfb-info" id="mfb-info">预估价值 <span class="mfb-detail-hint">查看详情 ▸</span></div>
+      <div class="mfb-info" id="mfb-info">预估价值 <span class="mfb-detail-hint">查看详情 ▸</span><span class="mfb-stale-tag" id="mfb-stale-tag">· 内容已变更</span></div>
     </div>
     <div class="mfb-ratio" id="mfb-ratio" style="display:none;"></div>
   </div>
@@ -3059,6 +3245,7 @@ function getPageHTML(options) {
         </div>
         <button onclick="closeMobileDetailModal()" class="mobile-detail-close">×</button>
       </div>
+      <div class="md-stale-hint" id="md-stale-hint">⚠️ 内容已变更，关闭后点击「立即估价」重新计算</div>
       <div class="mobile-detail-body">
         <div id="mobile-detail-content">
           <div style="text-align:center;padding:60px 20px;color:#666;">暂无数据</div>
@@ -3195,6 +3382,17 @@ function getPageHTML(options) {
       var otherId = el.id === 've-price-mobile-desc' ? 've-price-mobile' : 've-price-mobile-desc';
       var other = document.getElementById(otherId);
       if (other && document.activeElement !== other) other.value = val;
+      veMarkStale(); // 标价变更会影响性价比，旧结果标记为过期
+    }
+
+    // 桌面端价格输入同步（反向同步到移动端输入框）
+    function syncPriceInput(el) {
+      var val = el.value;
+      ['ve-price-mobile-desc', 've-price-mobile'].forEach(function(id) {
+        var other = document.getElementById(id);
+        if (other && document.activeElement !== other) other.value = val;
+      });
+      veMarkStale(); // 标价变更会影响性价比，旧结果标记为过期
     }
 
     // 顶部导航栏滚动效果
@@ -3245,6 +3443,15 @@ function getPageHTML(options) {
     }
     function closeQQGroupModal() {
       document.getElementById('qqgroup-modal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    // 支持作者弹窗（微信/支付宝收款码）
+    function openDonateModal() {
+      document.getElementById('donate-modal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeDonateModal() {
+      document.getElementById('donate-modal').style.display = 'none';
       document.body.style.overflow = '';
     }
     // 移动端估值详情弹窗
@@ -3536,6 +3743,7 @@ function getPageHTML(options) {
         closeEventsModal();
         closeTipsModal();
         closeStatsModal();
+        closeDonateModal();
       }
     });
   </script>
@@ -4118,6 +4326,7 @@ function getPageHTML(options) {
 
     // 更新侧边摘要卡和移动端浮动条
     function updateSideSummary(d) {
+      veClearStale(); // 新结果已渲染，解除过期态
       const det = d.details || {};
       const info = d.info || {};
 
@@ -4326,7 +4535,7 @@ function getPageHTML(options) {
         detailHtml += '<div class="md-afdian-title">对你有帮助？请作者喝杯咖啡</div>';
         detailHtml += '<div class="md-afdian-desc">你的支持是持续更新的动力</div>';
         detailHtml += '</div>';
-        detailHtml += '<a class="md-afdian-btn" href="https://ifdian.net/a/youxigujia" target="_blank" rel="noopener">支持</a>';
+        detailHtml += '<button type="button" class="md-afdian-btn" onclick="closeMobileDetailModal();openDonateModal();">支持</button>';
         detailHtml += '</div>';
         detailHtml += '</div>';
 
@@ -5097,8 +5306,30 @@ function getPageHTML(options) {
       }
     }
 
+    // 结果过期态：内容变更后旧结果置灰提示，重新估价后恢复
+    var VE_RESULT_STALE = false;
+    function veMarkStale() {
+      var contentEl = document.getElementById('side-summary-content');
+      if (!contentEl || contentEl.style.display === 'none') return; // 尚无结果，无需标记
+      if (VE_RESULT_STALE) return;
+      VE_RESULT_STALE = true;
+      ['side-summary-content', 'mobile-float-bar', 'mobile-detail-modal'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.add('ve-stale');
+      });
+    }
+    function veClearStale() {
+      if (!VE_RESULT_STALE) return;
+      VE_RESULT_STALE = false;
+      ['side-summary-content', 'mobile-float-bar', 'mobile-detail-modal'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('ve-stale');
+      });
+    }
+
     // 数据变动时防抖触发估价
     function veOnChange() {
+      veMarkStale(); // 角色/资源变更，旧结果标记为过期
       // 同步更新描述文本
       if (VE_SYNC_DESC) {
         var descInput = document.getElementById('ve-desc-input');
@@ -5121,6 +5352,7 @@ function getPageHTML(options) {
     // 描述输入框变化：解析描述到角色列表
     var VE_DESC_DEBOUNCE = null;
     function veOnDescInput() {
+      veMarkStale(); // 描述变更，旧结果立即标记为过期
       if (VE_DESC_DEBOUNCE) clearTimeout(VE_DESC_DEBOUNCE);
       // 描述有内容时立即锁住估价按钮，直到角色列表解析完成
       var peekInput = document.getElementById('ve-desc-input');
