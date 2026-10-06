@@ -1480,9 +1480,9 @@
 
     function updatePullC6Preview() {
       var m = buildPc6CurveModel();
-      // 同步只读起点输入框（第2段起自动推算，首尾相连）
+      // 同步只读起点输入框（第2段起自动推算，首尾相连；输入框单位为百分比）
       for (var i = 1; i < pc6SegInputs.length && i < m.sb.length; i++) {
-        pc6SegInputs[i].baseInp.value = Math.round(m.sb[i] * 1000) / 1000;
+        pc6SegInputs[i].baseInp.value = Math.round(m.sb[i] * 100 * 1000) / 1000;
       }
       renderPc6Chart(m);
 
