@@ -394,12 +394,15 @@ function getPageHTML(options) {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      min-width: 0;
     }
     .ve-resource-item label {
       font-size: 11px;
       color: var(--text-dim);
     }
     .ve-resource-item input {
+      width: 100%;
+      min-width: 0;
       padding: 8px 10px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -1018,6 +1021,7 @@ function getPageHTML(options) {
     @media (max-width: 375px) {
       .result-summary .big-value { font-size: 26px; }
       .hero-title h1 { font-size: 22px; }
+      .ve-resource-grid { grid-template-columns: 1fr; }
     }
 
     /* ===== 桌面端双栏布局 ===== */
@@ -2482,6 +2486,18 @@ function getPageHTML(options) {
           });
           detailHtml += '<div style="padding:4px 0 8px 0;">' + bdItems.join('') + '</div>';
         }
+      }
+      // 角色数量加成
+      if (det.charCountBonus > 0) {
+        detailHtml += resultRow('角色数量加成', '+' + det.charCountBonus + ' 元', '#4ade80');
+      }
+      // 武器数量加成
+      if (det.weaponCountBonus > 0) {
+        detailHtml += resultRow('武器数量加成', '+' + det.weaponCountBonus + ' 元', '#4ade80');
+      }
+      // 皮肤数量加成
+      if (det.outfitCountBonus > 0) {
+        detailHtml += resultRow('皮肤数量加成', '+' + det.outfitCountBonus + ' 元', '#4ade80');
       }
       // 最终价值
       detailHtml += '<div class="result-row" style="border-top:1px solid #1e1e33;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.21.2
+// @version      3.24.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 29;
+  const CONFIG_VERSION = 31;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -509,6 +509,12 @@
       ],
       // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
       effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
+      // 角色数量加成：五星角色数 ≥ threshold 时，最终估值加 bonus 元（threshold/bonus 为 0 时不生效）
+      charCountBonus: { threshold: 0, bonus: 0 },
+      // 武器数量加成：识别到的武器数 ≥ threshold 时，最终估值加 bonus 元（threshold/bonus 为 0 时不生效）
+      weaponCountBonus: { threshold: 0, bonus: 0 },
+      // 皮肤数量加成：识别到的服饰/皮肤数 ≥ threshold 时，最终估值加 bonus 元（threshold/bonus 为 0 时不生效）
+      outfitCountBonus: { threshold: 0, bonus: 0 },
       // 估值交易范围（按估值价位段的百分比计算区间半宽）
       priceRangeSegments: [
         { upTo: 500, percent: 0.20, minAmount: 30 },
@@ -869,8 +875,8 @@
     refreshInterval: 60000,      // 列表刷新间隔 60秒
     detailInterval: 4000,        // 详情API调用间隔 4秒
     detailRateLimit: 15,         // 详情API每分钟限制
-    maxTableRows: 1200,           // 表格最大行数
-    maxSeenIds: 2000,              // 已见ID最大数量
+    maxTableRows: 3000,           // 表格最大行数
+    maxSeenIds: 5000,              // 已见ID最大数量（需大于 maxTableRows，避免表内数据被反复重新解析）
     maxNotifiedIds: 500,         // 已通知ID最大数量
     scanPages: 1,                // 默认扫描页数（每页20条，15秒刷新间隔下1页足够覆盖新增）
   };
@@ -923,6 +929,7 @@
   };
   let alertBannerEl = null;     // 页面内大横幅提醒
   let titleBlinkTimer = null;   // 标题闪烁定时器
+  let titleBlinkStopHandler = null; // 标题闪烁的 visibilitychange 监听（需保存引用以便移除）
   let repeatAlertTimer = null;  // 重复提醒定时器
   let interceptCount = 0;        // 拦截计数
   let lastInterceptTime = null;  // 最后拦截时间
@@ -1754,7 +1761,18 @@
       }
       if (name && !/^\d+$/.test(name)) weapons.push({ name, refine });
     }
-    return weapons;
+    // 按武器名去重：同名武器只保留一条（精炼取最大值），避免重复条目导致数量虚高
+    const deduped = [];
+    const nameIndex = {};
+    for (const wp of weapons) {
+      if (nameIndex[wp.name] == null) {
+        nameIndex[wp.name] = deduped.length;
+        deduped.push(wp);
+      } else if (wp.refine > deduped[nameIndex[wp.name]].refine) {
+        deduped[nameIndex[wp.name]].refine = wp.refine;
+      }
+    }
+    return deduped;
   }
 
   /**
@@ -2718,7 +2736,35 @@
     // 低命折扣系数与有效金系数取较低值（不重复计算）
     // 仅当低命折扣规则匹配（flatDiscount < 1）时才取较低值，否则直接用有效金系数
     const finalCoeff = flatDiscount < 1 ? Math.min(yellowCoeff, flatDiscount) : yellowCoeff;
-    const totalValue = totalBeforeYellow * finalCoeff;
+
+    // 角色数量加成：五星角色数 ≥ 阈值时，最终估值加 M 元（不参与系数，直接加到最终值）
+    const _ccb = w.charCountBonus || {};
+    const _ccbThreshold = Number(_ccb.threshold) || 0;
+    const _ccbBonus = Number(_ccb.bonus) || 0;
+    let charCountBonus = 0;
+    if (_ccbThreshold > 0 && _ccbBonus > 0 && fiveStarChars >= _ccbThreshold) {
+      charCountBonus = _ccbBonus;
+    }
+
+    // 武器数量加成：角色专武数量 ≥ 阈值时，最终估值加 M 元（只统计拥有专武的角色，普通武器不计）
+    const _wcb = w.weaponCountBonus || {};
+    const _wcbThreshold = Number(_wcb.threshold) || 0;
+    const _wcbBonus = Number(_wcb.bonus) || 0;
+    let weaponCountBonus = 0;
+    if (_wcbThreshold > 0 && _wcbBonus > 0 && hasSignatureWeapons.length >= _wcbThreshold) {
+      weaponCountBonus = _wcbBonus;
+    }
+
+    // 皮肤数量加成：识别到的服饰/皮肤数 ≥ 阈值时，最终估值加 M 元
+    const _ocb = w.outfitCountBonus || {};
+    const _ocbThreshold = Number(_ocb.threshold) || 0;
+    const _ocbBonus = Number(_ocb.bonus) || 0;
+    let outfitCountBonus = 0;
+    if (_ocbThreshold > 0 && _ocbBonus > 0 && outfits.length >= _ocbThreshold) {
+      outfitCountBonus = _ocbBonus;
+    }
+
+    const totalValue = totalBeforeYellow * finalCoeff + charCountBonus + weaponCountBonus + outfitCountBonus;
 
     // 性价比
     const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
@@ -2732,6 +2778,9 @@
       teamPremium: Math.round(teamPremium * 100) / 100,
       pullValue: Math.round(pullValue * 100) / 100,
       otherResources,
+      charCountBonus: Math.round(charCountBonus * 100) / 100,
+      weaponCountBonus: Math.round(weaponCountBonus * 100) / 100,
+      outfitCountBonus: Math.round(outfitCountBonus * 100) / 100,
       yellowCoeff,
       weightedFullConst,
       satisfiedTeams: satisfiedTeams.map(t => t.name),
@@ -5721,11 +5770,17 @@
   }
 
   /**
-   * 截断表格数据：达到上限时综合排序移除 TRIM_BATCH 条（差价低+时间旧优先，30分钟内保护）
+   * 截断表格数据：超过 maxTableRows 时综合排序移除（差价低+时间旧优先，30分钟内保护）
+   * 按需循环清理至上限，硬上限 500 批兜底；全部处于保护期时提前退出
    */
   function trimTableData() {
-    // 无上限模式：不再主动删除数据，仅在 saveTableData 写入失败时由降级链处理
-    return;
+    if (tableData.length <= CONFIG.maxTableRows) return;
+    // 需要的批次上限 + 冗余；再加硬上限兜底，避免异常数据导致死循环
+    var need = Math.ceil((tableData.length - CONFIG.maxTableRows) / TRIM_BATCH) + 2;
+    var maxIter = Math.min(need, 500);
+    for (var i = 0; i < maxIter && tableData.length > CONFIG.maxTableRows; i++) {
+      if (removeLowDiffRows() === 0) break;
+    }
   }
 
   // 排序状态：默认按差价降序
@@ -7887,6 +7942,16 @@
       '<div style="font-size:12px;color:#a78bfa;font-weight:600;">低命折扣系数：× ' + flatDiscount.value + '</div>' +
       '<div style="font-size:11px;color:#888;margin-top:2px;">' + flatDiscount.notes.join('，') + '，最终估值乘以此系数</div></div>' : '';
 
+    // 数量加成（角色/武器/皮肤，达到阈值后直接加在最终估值上，不参与系数）
+    const countBonusItems = [];
+    if (v.charCountBonus > 0) countBonusItems.push('角色数量加成 +' + Math.round(v.charCountBonus) + '元');
+    if (v.weaponCountBonus > 0) countBonusItems.push('武器数量加成 +' + Math.round(v.weaponCountBonus) + '元');
+    if (v.outfitCountBonus > 0) countBonusItems.push('皮肤数量加成 +' + Math.round(v.outfitCountBonus) + '元');
+    const countBonusHTML = (countBonusItems.length > 0) ?
+      '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(74,222,128,0.1);border-radius:6px;border-left:3px solid #4ade80;">' +
+      '<div style="font-size:12px;color:#4ade80;font-weight:600;">数量加成</div>' +
+      '<div style="font-size:11px;color:#888;margin-top:2px;">' + countBonusItems.join('，') + '（达到阈值后直接加在最终估值上）</div></div>' : '';
+
     return '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'Noto Sans CJK SC\',sans-serif;">' +
       // 标题栏
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #0f3460;">' +
@@ -7957,6 +8022,7 @@
         '</tr></thead><tbody>' + resRowsHTML + '</tbody></table></div>' : '') +
       yellowHTML +
       flatDiscountHTML +
+      countBonusHTML +
       '</div>';
   }
 
@@ -9046,6 +9112,10 @@ function openSettings() {
 
     function updatePullChartPreview() {
       var m = buildPullCurveModel();
+      // 同步只读起点输入框（第2段起自动推算，首尾相连）
+      for (var i = 1; i < pullSegInputs.length && i < m.sb.length; i++) {
+        pullSegInputs[i].baseInp.value = Math.round(m.sb[i] * 1000) / 1000;
+      }
       renderPullChart(m);
 
       var samples = [0, 50, 100, 200, 300, 500, 800, 1000, 1500, 2000];
@@ -9396,6 +9466,10 @@ function openSettings() {
 
     function updatePullC6Preview() {
       var m = buildPc6CurveModel();
+      // 同步只读起点输入框（第2段起自动推算，首尾相连）
+      for (var i = 1; i < pc6SegInputs.length && i < m.sb.length; i++) {
+        pc6SegInputs[i].baseInp.value = Math.round(m.sb[i] * 1000) / 1000;
+      }
       renderPc6Chart(m);
 
       var threshold = parseFloat(pullC6ThresholdInput.value);
@@ -10291,7 +10365,7 @@ function openSettings() {
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, c6MaxWeightedConst: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true };
+    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, c6MaxWeightedConst: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true, charCountBonus: true, weaponCountBonus: true, outfitCountBonus: true };
     for (var wk of Object.keys(DEFAULT_WEIGHTS)) {
       if (skipKeys[wk]) continue;
       var meta = WEIGHT_LABELS[wk] || { label: wk, desc: '' };
@@ -10310,6 +10384,57 @@ function openSettings() {
       weightsSection.appendChild(wRow);
     }
     dialog.appendChild(weightsSection);
+
+    // ===== 10. 数量加成（角色/武器/皮肤）=====
+    function buildCountBonusSection(title, prefixText, descText, cfg) {
+      var c = cfg || { threshold: 0, bonus: 0 };
+      var section = document.createElement('div');
+      section.style.cssText = 'margin-bottom:20px;';
+      var titleEl = document.createElement('div');
+      titleEl.style.cssText = 'font-size:14px;font-weight:600;color:#e94560;margin-bottom:12px;border-bottom:1px solid #0f3460;padding-bottom:6px;';
+      titleEl.textContent = title;
+      section.appendChild(titleEl);
+
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:#e0e0e0;';
+      var prefix = document.createElement('span');
+      prefix.textContent = prefixText;
+      row.appendChild(prefix);
+      var thresholdInput = document.createElement('input');
+      thresholdInput.type = 'number'; thresholdInput.min = '0'; thresholdInput.step = '1';
+      thresholdInput.value = c.threshold != null ? c.threshold : 0;
+      thresholdInput.style.cssText = 'width:72px;padding:6px 8px;border:1px solid #0f3460;border-radius:6px;background:#0a0a1a;color:#e0e0e0;font-size:14px;text-align:right;';
+      row.appendChild(thresholdInput);
+      var mid = document.createElement('span');
+      mid.textContent = '个时，最终估值加';
+      row.appendChild(mid);
+      var bonusInput = document.createElement('input');
+      bonusInput.type = 'number'; bonusInput.min = '0'; bonusInput.step = '1';
+      bonusInput.value = c.bonus != null ? c.bonus : 0;
+      bonusInput.style.cssText = 'width:72px;padding:6px 8px;border:1px solid #0f3460;border-radius:6px;background:#0a0a1a;color:#e0e0e0;font-size:14px;text-align:right;';
+      row.appendChild(bonusInput);
+      var suffix = document.createElement('span');
+      suffix.textContent = '元';
+      row.appendChild(suffix);
+      section.appendChild(row);
+
+      var desc = document.createElement('p');
+      desc.style.cssText = 'font-size:11px;color:#888;margin-top:8px;line-height:1.5;';
+      desc.textContent = descText;
+      section.appendChild(desc);
+
+      return { section: section, thresholdInput: thresholdInput, bonusInput: bonusInput };
+    }
+
+    var _ccbUi = buildCountBonusSection('角色数量加成', '五星角色数量 ≥',
+      '按账号中的五星角色数量计算，达到阈值后直接在最终估值上加固定金额（不参与系数）。阈值或金额填 0 表示不启用。', w.charCountBonus);
+    dialog.appendChild(_ccbUi.section);
+    var _wcbUi = buildCountBonusSection('武器数量加成', '角色专武数量 ≥',
+      '按账号中拥有专武的角色数量计算（只统计角色专武，普通武器不计入），达到阈值后直接在最终估值上加固定金额（不参与系数）。阈值或金额填 0 表示不启用。', w.weaponCountBonus);
+    dialog.appendChild(_wcbUi.section);
+    var _ocbUi = buildCountBonusSection('皮肤数量加成', '服饰/皮肤数量 ≥',
+      '按账号中识别到的服饰/皮肤数量计算，达到阈值后直接在最终估值上加固定金额（不参与系数）。阈值或金额填 0 表示不启用。', w.outfitCountBonus);
+    dialog.appendChild(_ocbUi.section);
 
     // ===== 按钮区 =====
     var btnArea = document.createElement('div');
@@ -10685,6 +10810,16 @@ function openSettings() {
           newW.teams.push({ name: tn, members: td2.chars || [], multiplier: td2.multiplier || 1.0 });
         }
       }
+
+      // 数量加成（角色/武器/皮肤，达到阈值时最终估值加固定金额）
+      function readCountBonus(ui) {
+        var t = parseFloat(ui.thresholdInput.value);
+        var b = parseFloat(ui.bonusInput.value);
+        return { threshold: isNaN(t) ? 0 : t, bonus: isNaN(b) ? 0 : b };
+      }
+      newW.charCountBonus = readCountBonus(_ccbUi);
+      newW.weaponCountBonus = readCountBonus(_wcbUi);
+      newW.outfitCountBonus = readCountBonus(_ocbUi);
 
       // 保存并刷新
       if (!saveWeights(newW)) {
@@ -11163,6 +11298,16 @@ function openSettings() {
       } else {
         calcLines.push('×有效金系数: ×' + yc.toFixed(3) + yellowLabel);
       }
+      // 数量加成（角色/武器/皮肤，达到阈值后直接加在最终估值上，不参与系数）
+      if (valuation.charCountBonus > 0) {
+        calcLines.push('+角色数量加成: +¥' + Math.round(valuation.charCountBonus));
+      }
+      if (valuation.weaponCountBonus > 0) {
+        calcLines.push('+武器数量加成: +¥' + Math.round(valuation.weaponCountBonus));
+      }
+      if (valuation.outfitCountBonus > 0) {
+        calcLines.push('+皮肤数量加成: +¥' + Math.round(valuation.outfitCountBonus));
+      }
       calcLines.push('=最终估值: ¥' + Math.round(valuation.totalValue || 0));
     }
 
@@ -11387,6 +11532,8 @@ function openSettings() {
       osc.type = 'sine';
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      // 播放结束后关闭 AudioContext，否则每次提醒都会泄漏一个上下文（浏览器上限约6个）
+      osc.onended = function () { try { ctx.close(); } catch (e) { } };
       osc.start();
       osc.stop(ctx.currentTime + 0.5);
     } catch (e) { }
@@ -11404,19 +11551,23 @@ function openSettings() {
       isAlert = !isAlert;
     }, 800);
     // 用户切回页面时停止闪烁
-    const stopHandler = function () {
+    titleBlinkStopHandler = function () {
       if (document.visibilityState === 'visible') {
         stopTitleBlink();
-        document.removeEventListener('visibilitychange', stopHandler);
       }
     };
-    document.addEventListener('visibilitychange', stopHandler);
+    document.addEventListener('visibilitychange', titleBlinkStopHandler);
   }
 
   function stopTitleBlink() {
     if (titleBlinkTimer) {
       clearInterval(titleBlinkTimer);
       titleBlinkTimer = null;
+    }
+    // 移除 visibilitychange 监听，否则每次闪烁都会残留一个监听器（长跑下累积）
+    if (titleBlinkStopHandler) {
+      document.removeEventListener('visibilitychange', titleBlinkStopHandler);
+      titleBlinkStopHandler = null;
     }
     // 恢复标题（移除🔔前缀）
     if (document.title.startsWith('🔔 ')) {
@@ -12672,6 +12823,11 @@ function openSettings() {
   function init() {
     // 加载存储数据
     tableData = loadStorage(STORAGE_KEYS.table, []);
+    // 历史数据可能因旧版"无上限模式"累积过大，启动时先裁剪，避免逐行迁移时内存爆炸/卡死
+    if (tableData.length > CONFIG.maxTableRows) {
+      console.warn('[鸣潮监控] 启动检测到表格数据过多(' + tableData.length + '条)，先裁剪至上限');
+      trimTableData();
+    }
     // 为旧数据补充 fingerprint（去重功能升级前的数据没有此字段）
     let migrated = 0;
     for (const row of tableData) {

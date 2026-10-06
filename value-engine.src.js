@@ -667,7 +667,18 @@ function parseWeapons(section) {
     }
     if (name) weapons.push({ name, refine });
   }
-  return weapons;
+  // 按武器名去重：同名武器只保留一条（精炼取最大值），避免重复条目导致数量虚高
+  const deduped = [];
+  const nameIndex = {};
+  for (const wp of weapons) {
+    if (nameIndex[wp.name] == null) {
+      nameIndex[wp.name] = deduped.length;
+      deduped.push(wp);
+    } else if (wp.refine > deduped[nameIndex[wp.name]].refine) {
+      deduped[nameIndex[wp.name]].refine = wp.refine;
+    }
+  }
+  return deduped;
 }
 
 /**
@@ -1390,7 +1401,7 @@ function calculateValue(parsed, price) {
   const pullValue = basePullValue + pullC6Bonus;
 
   // 5. 其他资源
-  const outfits = extractListItems(parsed.rawText, '服饰');
+  const outfits = OUTFIT_SECTION_KEYWORDS.reduce((arr, kw) => arr.concat(extractListItems(parsed.rawText, kw)), []);
   const motoFrames = extractListItems(parsed.rawText, '车架模组').concat(extractListItems(parsed.rawText, '车架'));
 
   const outfitValue = outfits.length * (w.outfit || 0);
@@ -1578,7 +1589,35 @@ function calculateValue(parsed, price) {
   }
 
   const finalCoeff = flatDiscount < 1 ? Math.min(yellowCoeff, flatDiscount) : yellowCoeff;
-  const totalValue = totalBeforeYellow * finalCoeff;
+
+  // 角色数量加成：五星角色数 ≥ 阈值时，最终估值加 M 元（不参与系数，直接加到最终值）
+  const _ccb = w.charCountBonus || {};
+  const _ccbThreshold = Number(_ccb.threshold) || 0;
+  const _ccbBonus = Number(_ccb.bonus) || 0;
+  let charCountBonus = 0;
+  if (_ccbThreshold > 0 && _ccbBonus > 0 && fiveStarChars >= _ccbThreshold) {
+    charCountBonus = _ccbBonus;
+  }
+
+  // 武器数量加成：角色专武数量 ≥ 阈值时，最终估值加 M 元（只统计拥有专武的角色，普通武器不计）
+  const _wcb = w.weaponCountBonus || {};
+  const _wcbThreshold = Number(_wcb.threshold) || 0;
+  const _wcbBonus = Number(_wcb.bonus) || 0;
+  let weaponCountBonus = 0;
+  if (_wcbThreshold > 0 && _wcbBonus > 0 && hasSignatureWeapons.length >= _wcbThreshold) {
+    weaponCountBonus = _wcbBonus;
+  }
+
+  // 皮肤数量加成：识别到的服饰/皮肤数 ≥ 阈值时，最终估值加 M 元
+  const _ocb = w.outfitCountBonus || {};
+  const _ocbThreshold = Number(_ocb.threshold) || 0;
+  const _ocbBonus = Number(_ocb.bonus) || 0;
+  let outfitCountBonus = 0;
+  if (_ocbThreshold > 0 && _ocbBonus > 0 && outfits.length >= _ocbThreshold) {
+    outfitCountBonus = _ocbBonus;
+  }
+
+  const totalValue = totalBeforeYellow * finalCoeff + charCountBonus + weaponCountBonus + outfitCountBonus;
 
   const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
   const diff = Math.round((totalValue - price) * 100) / 100;
@@ -1591,6 +1630,9 @@ function calculateValue(parsed, price) {
     teamPremium: Math.round(teamPremium * 100) / 100,
     pullValue: Math.round(pullValue * 100) / 100,
     otherResources: otherResources,
+    charCountBonus: Math.round(charCountBonus * 100) / 100,
+    weaponCountBonus: Math.round(weaponCountBonus * 100) / 100,
+    outfitCountBonus: Math.round(outfitCountBonus * 100) / 100,
     yellowCoeff: yellowCoeff,
     weightedFullConst,
     satisfiedTeams: satisfiedTeams.map(t => t.name),

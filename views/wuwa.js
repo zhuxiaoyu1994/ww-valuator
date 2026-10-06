@@ -631,6 +631,7 @@ function getPageHTML(options) {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      min-width: 0;
     }
     .ve-resource-item label {
       font-size: 11px;
@@ -643,6 +644,8 @@ function getPageHTML(options) {
       font-size: 13px;
     }
     .ve-resource-item input {
+      width: 100%;
+      min-width: 0;
       padding: 8px 10px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -1421,6 +1424,7 @@ function getPageHTML(options) {
     @media (max-width: 375px) {
       .result-summary .big-value { font-size: 26px; }
       .hero-title h1 { font-size: 22px; }
+      .ve-resource-grid { grid-template-columns: 1fr; }
     }
 
     /* ===== 桌面端双栏布局 ===== */
@@ -4240,6 +4244,16 @@ function getPageHTML(options) {
           detailHtml += '<div style="padding:4px 0 8px 0;">' + bdItems.join('') + '</div>';
         }
       }
+      // 数量加成（角色/武器/皮肤，达到阈值后直接加在最终估值上，不参与系数）
+      if (det.charCountBonus > 0) {
+        detailHtml += resultRow('角色数量加成', '+' + det.charCountBonus + ' 元', '#4ade80');
+      }
+      if (det.weaponCountBonus > 0) {
+        detailHtml += resultRow('武器数量加成', '+' + det.weaponCountBonus + ' 元', '#4ade80');
+      }
+      if (det.outfitCountBonus > 0) {
+        detailHtml += resultRow('皮肤数量加成', '+' + det.outfitCountBonus + ' 元', '#4ade80');
+      }
       // 最终价值
       detailHtml += '<div class="result-row" style="border-top:1px solid #1e1e33;padding-top:6px;margin-top:4px;"><span class="key" style="color:#ccc;font-weight:bold;">最终估值</span><span class="val" style="color:#4ade80;font-weight:bold;font-size:16px;">' + det.finalValue + ' 元</span></div>';
       // 交易范围
@@ -4433,6 +4447,18 @@ function getPageHTML(options) {
         // 资源价值
         if (det.resourceValue != null && det.resourceValue > 0) {
           calcRows.push({ label: '资源价值', val: '+' + det.resourceValue + ' 元', cls: 'pos' });
+        }
+        // 角色数量加成
+        if (det.charCountBonus != null && det.charCountBonus > 0) {
+          calcRows.push({ label: '角色数量加成', val: '+' + det.charCountBonus + ' 元', cls: 'pos', tip: '账号五星角色数量达到设定阈值时的额外加成' });
+        }
+        // 武器数量加成
+        if (det.weaponCountBonus != null && det.weaponCountBonus > 0) {
+          calcRows.push({ label: '武器数量加成', val: '+' + det.weaponCountBonus + ' 元', cls: 'pos', tip: '账号角色专武数量达到设定阈值时的额外加成（只统计角色专武）' });
+        }
+        // 皮肤数量加成
+        if (det.outfitCountBonus != null && det.outfitCountBonus > 0) {
+          calcRows.push({ label: '皮肤数量加成', val: '+' + det.outfitCountBonus + ' 元', cls: 'pos', tip: '账号服饰/皮肤数量达到设定阈值时的额外加成' });
         }
         // 强绑折扣（缺少强绑队友时角色价值打折，引擎只回传说明文案）
         if (det.c6DepNotes && det.c6DepNotes.length > 0) {

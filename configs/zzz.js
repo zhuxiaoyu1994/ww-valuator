@@ -1,7 +1,7 @@
 'use strict';
 
 const ZZZ_CONFIG = {
-  configVersion: 7,
+  configVersion: 9,
   gameName: '绝区零',
   gameSlug: 'zzz',
 
@@ -71,6 +71,12 @@ const ZZZ_CONFIG = {
       { baseCoeff: 2.0, threshold: null, step: 0.008 }
     ],
     effTierWeights: { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 },
+    // 角色数量加成：五星角色数 ≥ threshold 时，最终估值加 bonus 元（threshold/bonus 为 0 时不生效）
+    charCountBonus: { threshold: 0, bonus: 0 },
+    // 武器数量加成：识别到的武器数 ≥ threshold 时，最终估值加 bonus 元（threshold/bonus 为 0 时不生效）
+    weaponCountBonus: { threshold: 0, bonus: 0 },
+    // 皮肤数量加成：识别到的服饰/皮肤数 ≥ threshold 时，最终估值加 bonus 元（threshold/bonus 为 0 时不生效）
+    outfitCountBonus: { threshold: 0, bonus: 0 },
     // 估值交易范围（按估值价位段的百分比计算区间半宽）
     priceRangeSegments: [
       { upTo: 500, percent: 0.20, minAmount: 30 },
