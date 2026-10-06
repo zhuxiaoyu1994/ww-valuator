@@ -3540,7 +3540,7 @@ function getPageHTML(options) {
         fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'zzz' }),
+          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'zzz', parseOnly: true }),
         }).then(function(r) { return r.json(); }).then(function(result) {
           if (result.success && result.data && result.data.info) {
             var info = result.data.info;

@@ -139,6 +139,7 @@ function normalizeIp(ip) {
 // 限流 + 自动封禁
 // ============================================================
 const RATE_LIMIT_PER_MINUTE = 15;     // 每分钟最多 15 次查询
+const PARSE_ONLY_PER_MINUTE = 60;     // 纯解析请求每分钟最多 60 次（仅本地计算，不参与自动封禁）
 const RATE_LIMIT_WINDOW = 60 * 1000;  // 限流窗口 1 分钟
 const AUTO_BAN_THRESHOLD = 60;        // 5 分钟内超过 60 次自动封禁
 const AUTO_BAN_WINDOW = 5 * 60 * 1000;// 自动封禁统计窗口 5 分钟
@@ -158,52 +159,63 @@ function get5MinKey(ts) {
 
 /**
  * 检查限流并计数（优先使用数据库，确保跨实例准确）
+ * opts.perMinute  每分钟上限（默认 RATE_LIMIT_PER_MINUTE）
+ * opts.keyPrefix  计数键前缀，用于区分不同限流通道
+ * opts.autoBan    是否参与 5 分钟自动封禁统计（默认 true）
  * 返回 { limited: boolean, count: number, autoBanned: boolean, count5min: number, dbBacked: boolean }
  */
-async function checkRateLimit(clientIp) {
+async function checkRateLimit(clientIp, opts) {
+  opts = opts || {};
+  const perMinute = opts.perMinute || RATE_LIMIT_PER_MINUTE;
+  const keyPrefix = opts.keyPrefix || '';
+  const enableAutoBan = opts.autoBan !== false;
   const now = Date.now();
-  const minuteKey = '1m:' + getMinuteKey(now);
-  const fiveMinKey = '5m:' + get5MinKey(now);
+  const minuteKey = keyPrefix + '1m:' + getMinuteKey(now);
+  const fiveMinKey = keyPrefix + '5m:' + get5MinKey(now);
 
   // 尝试使用数据库计数（准确，支持跨实例）
   const count1min = await db.incrementRateCounter(clientIp, minuteKey);
   if (count1min !== null) {
     // 数据库模式
-    const count5min = await db.incrementRateCounter(clientIp, fiveMinKey);
-
-    // 定期清理过期计数（每 100 次清理一次）
-    if (!checkRateLimit._cleanupCounter) checkRateLimit._cleanupCounter = 0;
-    checkRateLimit._cleanupCounter++;
-    if (checkRateLimit._cleanupCounter >= 100) {
-      checkRateLimit._cleanupCounter = 0;
-      db.cleanupRateCounters(600).catch(() => {}); // 异步清理，不阻塞
-    }
-
-    // 检查自动封禁
+    let count5min = 0;
     let autoBanned = false;
-    if (count5min > AUTO_BAN_THRESHOLD) {
-      await loadBlockedIps(); // 确保封禁列表是最新的
-      const existing = blockedIps.find(b => b.ip === clientIp);
-      if (!existing) {
-        blockedIps.push({
-          ip: clientIp,
-          type: 'auto',
-          reason: `5分钟内查询${count5min}次，超过阈值${AUTO_BAN_THRESHOLD}次`,
-          createdAt: now,
-          expiresAt: now + AUTO_BAN_DURATION,
-        });
-        await saveBlockedIps();
-        autoBanned = true;
-        console.log(`[RateLimit] 自动封禁 IP: ${clientIp}, 5分钟${count5min}次 (DB模式)`);
+    if (enableAutoBan) {
+      count5min = await db.incrementRateCounter(clientIp, fiveMinKey);
+
+      // 定期清理过期计数（每 100 次清理一次）
+      if (!checkRateLimit._cleanupCounter) checkRateLimit._cleanupCounter = 0;
+      checkRateLimit._cleanupCounter++;
+      if (checkRateLimit._cleanupCounter >= 100) {
+        checkRateLimit._cleanupCounter = 0;
+        db.cleanupRateCounters(600).catch(() => {}); // 异步清理，不阻塞
+      }
+
+      // 检查自动封禁
+      if (count5min > AUTO_BAN_THRESHOLD) {
+        await loadBlockedIps(); // 确保封禁列表是最新的
+        const existing = blockedIps.find(b => b.ip === clientIp);
+        if (!existing) {
+          blockedIps.push({
+            ip: clientIp,
+            type: 'auto',
+            reason: `5分钟内查询${count5min}次，超过阈值${AUTO_BAN_THRESHOLD}次`,
+            createdAt: now,
+            expiresAt: now + AUTO_BAN_DURATION,
+          });
+          await saveBlockedIps();
+          autoBanned = true;
+          console.log(`[RateLimit] 自动封禁 IP: ${clientIp}, 5分钟${count5min}次 (DB模式)`);
+        }
       }
     }
 
-    const limited = count1min > RATE_LIMIT_PER_MINUTE;
+    const limited = count1min > perMinute;
     return { limited, count: count1min, autoBanned, count5min, dbBacked: true };
   }
 
   // 降级：内存计数（单实例不准确，仅本地开发用）
-  const entry = rateLimitMap.get(clientIp) || { minuteKey: 0, count: 0, count5min: 0, windowStart5min: now };
+  const mapKey = clientIp + '|' + keyPrefix;
+  const entry = rateLimitMap.get(mapKey) || { minuteKey: 0, count: 0, count5min: 0, windowStart5min: now };
 
   // 5分钟窗口重置
   if (now - entry.windowStart5min > AUTO_BAN_WINDOW) {
@@ -219,12 +231,12 @@ async function checkRateLimit(clientIp) {
   }
 
   entry.count++;
-  entry.count5min++;
-  rateLimitMap.set(clientIp, entry);
+  if (enableAutoBan) entry.count5min++;
+  rateLimitMap.set(mapKey, entry);
 
   // 检查是否需要自动封禁
   let autoBanned = false;
-  if (entry.count5min > AUTO_BAN_THRESHOLD) {
+  if (enableAutoBan && entry.count5min > AUTO_BAN_THRESHOLD) {
     const existing = blockedIps.find(b => b.ip === clientIp);
     if (!existing) {
       blockedIps.push({
@@ -240,7 +252,7 @@ async function checkRateLimit(clientIp) {
     }
   }
 
-  const limited = entry.count > RATE_LIMIT_PER_MINUTE;
+  const limited = entry.count > perMinute;
   return { limited, count: entry.count, autoBanned, count5min: entry.count5min, dbBacked: false };
 }
 
@@ -365,9 +377,13 @@ app.use(async (req, res, next) => {
   }
 
   // 限流检查（查询接口 + 配置接口）
+  // 纯解析请求（parseOnly，前端识别描述用）仅做本地计算：走独立的宽松上限，且不参与自动封禁
   const isRateLimitedApi = req.path === '/api/x9k2-find' || req.path === '/api/x9k2-eval' || req.path === '/api/config/default';
+  const isParseOnly = req.path === '/api/x9k2-eval' && req.body && req.body.parseOnly === true;
   if (isRateLimitedApi) {
-    const result = await checkRateLimit(clientIp);
+    const result = isParseOnly
+      ? await checkRateLimit(clientIp, { perMinute: PARSE_ONLY_PER_MINUTE, keyPrefix: 'parse:', autoBan: false })
+      : await checkRateLimit(clientIp);
     if (result.autoBanned) {
       console.log(`[RateLimit] 自动封禁 ${clientIp}，5分钟内 ${result.count5min} 次`);
       return res.json({
@@ -378,9 +394,10 @@ app.use(async (req, res, next) => {
       });
     }
     if (result.limited) {
+      const limit = isParseOnly ? PARSE_ONLY_PER_MINUTE : RATE_LIMIT_PER_MINUTE;
       return res.json({
         success: false,
-        error: `请求过于频繁，请稍后再试（每分钟最多${RATE_LIMIT_PER_MINUTE}次）。`,
+        error: `请求过于频繁，请稍后再试（每分钟最多${limit}次）。`,
         rateLimited: true,
         retryAfter: 60,
       });
@@ -422,33 +439,35 @@ app.get('/api/defaults', async (req, res) => {
  * 估值接口 - 输入文本返回估值
  */
 app.post('/api/x9k2-eval', (req, res) => {
-  const { showTitle, priceInCents, customWeights, game } = req.body;
+  const { showTitle, priceInCents, customWeights, game, parseOnly } = req.body;
   if (!showTitle) {
     return res.status(400).json({ success: false, error: 'showTitle is required' });
   }
   const engine = getEngine(game);
   const result = engine.evaluateWithPrice(showTitle, priceInCents || 0, customWeights || null);
-  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
 
-  // 记录查询日志
-  const logEntry = {
-    time: new Date().toISOString(),
-    type: '粘贴估价',
-    ip: clientIp.split(',')[0].trim(),
-    input: showTitle.substring(0, 200),
-    price: (priceInCents || 0) / 100,
-    estimatedValue: result.details.finalValue,
-    ratio: result.costPerformance,
-    game: game || 'wuwa',
-    yellowCount: result.info.yellowCount,
-    pulls: result.info.pulls,
-    success: true,
-    details: result.details,
-    characters: result.details.characters || [],
-  };
-  queryLogs.unshift(logEntry);
-  if (queryLogs.length > MAX_LOGS) queryLogs.pop();
-  db.insertLog(logEntry); // 异步写入数据库
+  // 纯解析请求（前端识别描述用）不计入查询日志，避免一次估价产生两条记录
+  if (!parseOnly) {
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const logEntry = {
+      time: new Date().toISOString(),
+      type: '粘贴估价',
+      ip: clientIp.split(',')[0].trim(),
+      input: showTitle.substring(0, 200),
+      price: (priceInCents || 0) / 100,
+      estimatedValue: result.details.finalValue,
+      ratio: result.costPerformance,
+      game: game || 'wuwa',
+      yellowCount: result.info.yellowCount,
+      pulls: result.info.pulls,
+      success: true,
+      details: result.details,
+      characters: result.details.characters || [],
+    };
+    queryLogs.unshift(logEntry);
+    if (queryLogs.length > MAX_LOGS) queryLogs.pop();
+    db.insertLog(logEntry); // 异步写入数据库
+  }
 
   res.json({
     success: true,

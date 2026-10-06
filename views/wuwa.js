@@ -1582,6 +1582,43 @@ function getPageHTML(options) {
       text-align: right;
       word-break: break-word;
     }
+    /* 成型配队：独占一行，标题带队伍数，队名以标签形式左对齐换行 */
+    .side-summary .ss-hl-item.ss-hl-teams {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+    .side-summary .ss-hl-item.ss-hl-teams .k {
+      flex: none;
+      white-space: nowrap;
+    }
+    .side-summary .ss-hl-item.ss-hl-teams .k .cnt {
+      margin-left: 6px;
+      font-style: normal;
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+    .side-summary .ss-hl-item.ss-hl-teams .v {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-left: 0;
+      text-align: left;
+      word-break: normal;
+    }
+    .side-summary .ss-hl-item.ss-hl-teams .tag {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-style: normal;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.6;
+      color: var(--good);
+      background: rgba(74, 222, 128, 0.12);
+      border: 1px solid rgba(74, 222, 128, 0.28);
+    }
     .side-summary .hl-tip {
       display: inline-block;
       width: 14px;
@@ -2304,6 +2341,41 @@ function getPageHTML(options) {
       #mobile-detail-content .ss-hl-item .v.good { color: var(--good); }
       #mobile-detail-content .ss-hl-item .v.warn { color: var(--warn); }
       #mobile-detail-content .ss-hl-item .v.danger { color: var(--bad); }
+      /* 成型配队：跨两列独占一行，队名以标签形式左对齐换行 */
+      #mobile-detail-content .ss-hl-item.ss-hl-teams {
+        grid-column: 1 / -1;
+        gap: 6px;
+      }
+      #mobile-detail-content .ss-hl-item.ss-hl-teams .k {
+        white-space: nowrap;
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+      #mobile-detail-content .ss-hl-item.ss-hl-teams .k .cnt {
+        margin-left: 6px;
+        font-style: normal;
+        font-size: 10px;
+        font-weight: 400;
+        color: var(--text-dim);
+      }
+      #mobile-detail-content .ss-hl-item.ss-hl-teams .v {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        font-size: 12px;
+      }
+      #mobile-detail-content .ss-hl-item.ss-hl-teams .tag {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-style: normal;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.6;
+        color: var(--good);
+        background: rgba(74, 222, 128, 0.12);
+        border: 1px solid rgba(74, 222, 128, 0.28);
+      }
       #mobile-detail-content .hl-tip {
         position: relative;
         display: inline-flex;
@@ -4406,8 +4478,8 @@ function getPageHTML(options) {
           });
         }
         if (det.satisfiedTeams && det.satisfiedTeams.length > 0) {
-          var teamNames = det.satisfiedTeams.map(function(t) { return t.name || t; }).join('、');
-          items.push({ k: '成型配队', v: teamNames, cls: 'good' });
+          var teamNames = det.satisfiedTeams.map(function(t) { return t.name || t; });
+          items.push({ k: '成型配队', v: teamNames, cls: 'good', tags: true });
         }
         if (fd.value < 1) {
           items.push({ k: '低命折扣', v: '×' + fd.value, cls: 'warn' });
@@ -4415,6 +4487,14 @@ function getPageHTML(options) {
 
         let html = '';
         items.slice(0, 8).forEach(item => {
+          if (item.tags) {
+            html += '<div class="ss-hl-item ss-hl-teams">'
+              + '<span class="k">' + item.k + '<span class="cnt">共 ' + item.v.length + ' 队</span></span>'
+              + '<span class="v ' + (item.cls || '') + '">'
+              + item.v.map(function(n) { return '<i class="tag">' + n + '</i>'; }).join('')
+              + '</span></div>';
+            return;
+          }
           var kHtml = item.k;
           if (item.tip) {
             kHtml = item.k + '<span class="hl-tip">ⓘ<span class="tooltip">' + item.tip + '</span></span>';
@@ -5415,7 +5495,7 @@ function getPageHTML(options) {
         fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: text, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'wuwa' })
+          body: JSON.stringify({ showTitle: text, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'wuwa', parseOnly: true })
         }).then(function(r) { return r.json(); })
           .then(function(result) {
             if (seq !== VE_PARSE_SEQ) return; // 丢弃过期响应，避免覆盖最新角色列表
@@ -5714,7 +5794,7 @@ function getPageHTML(options) {
         fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'wuwa' }),
+          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'wuwa', parseOnly: true }),
         }).then(function(r) { return r.json(); }).then(function(result) {
           if (result.success && result.data && result.data.info) {
             var info = result.data.info;
