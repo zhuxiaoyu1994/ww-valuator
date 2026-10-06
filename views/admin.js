@@ -35,7 +35,7 @@ function getAdminPage() {
   .tab-content.active { display: block; }
 
   /* Logs Tab */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
   .stat-card { background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 10px; padding: 20px; text-align: center; }
   .stat-card .num { font-size: 28px; font-weight: 700; color: #4ade80; }
   .stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
@@ -48,7 +48,6 @@ function getAdminPage() {
   .log-table-wrap tr:hover { background: #1f1f3f; }
   .tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
   .tag-eval { background: #1e3a1e; color: #4ade80; }
-  .tag-lookup { background: #1e2a3a; color: #60a5fa; }
   .tag-fail { background: #3a1e1e; color: #ef4444; }
   .ratio-good { color: #4ade80; }
   .ratio-bad { color: #ef4444; }
@@ -246,18 +245,19 @@ function getAdminPage() {
         <span class="refresh-btn" onclick="refreshLogs()" id="refresh-btn" style="color:#4ade80;cursor:pointer;font-size:13px;user-select:none;">↻ 刷新</span>
       </div>
       <div class="stats">
-        <div class="stat-card"><div class="num" id="stat-total">0</div><div class="label">总查询数</div></div>
+        <div class="stat-card"><div class="num" id="stat-total">0</div><div class="label">累计查询数</div></div>
+        <div class="stat-card"><div class="num" id="stat-today">0</div><div class="label">今日查询数</div></div>
+        <div class="stat-card"><div class="num" id="stat-people">0</div><div class="label">查询人数</div></div>
+        <div class="stat-card"><div class="num" id="stat-today-people">0</div><div class="label">今日人数</div></div>
         <div class="stat-card"><div class="num" id="stat-success">0</div><div class="label">成功</div></div>
-        <div class="stat-card"><div class="num" id="stat-lookup">0</div><div class="label">编号查询</div></div>
         <div class="stat-card"><div class="num" id="stat-eval">0</div><div class="label">粘贴估价</div></div>
       </div>
       <div class="filters">
         <select id="filter-type" onchange="renderTable()">
           <option value="">全部类型</option>
-          <option value="编号查询">编号查询</option>
           <option value="粘贴估价">粘贴估价</option>
         </select>
-        <input type="text" id="filter-search" placeholder="搜索编号/描述/IP..." oninput="renderTable()">
+        <input type="text" id="filter-search" placeholder="搜索描述/IP..." oninput="renderTable()">
       </div>
       <div class="log-table-wrap">
         <table>
@@ -858,8 +858,10 @@ function getAdminPage() {
   async function loadLogs() {
     // 显示加载中
     document.getElementById('stat-total').textContent = '...';
+    document.getElementById('stat-today').textContent = '...';
+    document.getElementById('stat-people').textContent = '...';
+    document.getElementById('stat-today-people').textContent = '...';
     document.getElementById('stat-success').textContent = '...';
-    document.getElementById('stat-lookup').textContent = '...';
     document.getElementById('stat-eval').textContent = '...';
     const tbody = document.getElementById('log-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#666;">加载中...</td></tr>';
@@ -953,8 +955,10 @@ function getAdminPage() {
       if (result.success) {
         allLogs = result.data.logs;
         document.getElementById('stat-total').textContent = result.data.stats.totalQueries;
+        document.getElementById('stat-today').textContent = result.data.stats.todayQueries;
+        document.getElementById('stat-people').textContent = result.data.stats.peopleCount;
+        document.getElementById('stat-today-people').textContent = result.data.stats.todayPeople;
         document.getElementById('stat-success').textContent = result.data.stats.successCount;
-        document.getElementById('stat-lookup').textContent = result.data.stats.lookupCount;
         document.getElementById('stat-eval').textContent = result.data.stats.evalCount;
         renderTable();
       }
@@ -988,7 +992,7 @@ function getAdminPage() {
       tbody.innerHTML = pageLogs.map((l, i) => {
         const time = new Date(l.time).toLocaleString('zh-CN');
         const typeTag = l.success
-          ? (l.type === '编号查询' ? '<span class="tag tag-lookup">编号</span>' : '<span class="tag tag-eval">粘贴</span>')
+          ? '<span class="tag tag-eval">粘贴</span>'
           : '<span class="tag tag-fail">失败</span>';
         const ratio = l.ratio != null
           ? '<span class="' + (l.ratio >= 0 ? 'ratio-good' : 'ratio-bad') + '">' + (l.ratio >= 0 ? '+' : '') + l.ratio.toFixed(1) + '%</span>'

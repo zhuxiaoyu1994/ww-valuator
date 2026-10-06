@@ -1745,8 +1745,10 @@ app.post('/admin/api/logs', async (req, res) => {
         stats: {
           totalQueries: dbStats.total,
           successCount: dbStats.success,
-          lookupCount: dbStats.lookup,
           evalCount: dbStats.eval,
+          peopleCount: dbStats.people,
+          todayQueries: dbStats.todayQueries,
+          todayPeople: dbStats.todayPeople,
         },
       },
     });
@@ -1754,6 +1756,10 @@ app.post('/admin/api/logs', async (req, res) => {
 
   // 回退到内存（按游戏过滤）
   const gameLogs = queryLogs.filter(l => (l.game || 'wuwa') === logGame);
+  const _ipOf = (l) => String(l.ip || '').split(',')[0].trim();
+  const _dayOf = (iso) => new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const _today = _dayOf(new Date().toISOString());
+  const _todayLogs = gameLogs.filter(l => _dayOf(l.time) === _today);
   res.json({
     success: true,
     data: {
@@ -1762,8 +1768,10 @@ app.post('/admin/api/logs', async (req, res) => {
       stats: {
         totalQueries: gameLogs.length,
         successCount: gameLogs.filter(l => l.success).length,
-        lookupCount: gameLogs.filter(l => l.type === '编号查询').length,
         evalCount: gameLogs.filter(l => l.type === '粘贴估价').length,
+        peopleCount: new Set(gameLogs.map(_ipOf).filter(Boolean)).size,
+        todayQueries: _todayLogs.length,
+        todayPeople: new Set(_todayLogs.map(_ipOf).filter(Boolean)).size,
       },
     },
   });

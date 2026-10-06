@@ -20,6 +20,13 @@ const DEALS_RETENTION_DAYS = 7;
 // 内存配置存储（当未配置数据库时作为降级方案，重启后丢失）
 const memoryConfigStore = new Map();
 
+// 按东八区（Asia/Shanghai）计算日期字符串 YYYY-MM-DD
+function localDay(iso) {
+  const t = iso ? Date.parse(iso) : Date.now();
+  const d = new Date((isNaN(t) ? Date.now() : t) + 8 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
  * 初始化数据库连接
  */
@@ -80,9 +87,70 @@ async function ensureTable() {
     } catch (e) {
       // 列已存在，忽略
     }
+    // 累计统计表（独立于 query_logs 的滚动裁剪，用于统计历史总量与人数）
+    await dbClient.execute(`
+      CREATE TABLE IF NOT EXISTS query_stats_daily (
+        day TEXT NOT NULL,
+        game TEXT NOT NULL,
+        queries INTEGER NOT NULL DEFAULT 0,
+        success INTEGER NOT NULL DEFAULT 0,
+        eval_count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, game)
+      )
+    `);
+    await dbClient.execute(`
+      CREATE TABLE IF NOT EXISTS query_ips (
+        game TEXT NOT NULL,
+        ip TEXT NOT NULL,
+        first_seen TEXT,
+        last_seen TEXT,
+        queries INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (game, ip)
+      )
+    `);
+    await dbClient.execute(`
+      CREATE TABLE IF NOT EXISTS query_ips_daily (
+        day TEXT NOT NULL,
+        game TEXT NOT NULL,
+        ip TEXT NOT NULL,
+        queries INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, game, ip)
+      )
+    `);
+    console.log('[DB] 累计统计表已就绪');
+    await backfillStats();
     console.log('[DB] 日志表已就绪');
   } catch (e) {
     console.error('[DB] 建表失败:', e.message);
+  }
+}
+
+/**
+ * 首次建表时用现有 query_logs 回填累计统计（仅执行一次）
+ */
+async function backfillStats() {
+  try {
+    const r = await dbClient.execute('SELECT COUNT(*) AS cnt FROM query_stats_daily');
+    if (Number(r.rows[0].cnt) > 0) return;
+    await dbClient.execute(`
+      INSERT INTO query_stats_daily (day, game, queries, success, eval_count)
+      SELECT date(time, '+8 hours') AS day, game, COUNT(*), SUM(success),
+             SUM(CASE WHEN type = '粘贴估价' THEN 1 ELSE 0 END)
+      FROM query_logs GROUP BY day, game
+    `);
+    await dbClient.execute(`
+      INSERT OR IGNORE INTO query_ips (game, ip, first_seen, last_seen, queries)
+      SELECT game, ip, MIN(time), MAX(time), COUNT(*) FROM query_logs
+      WHERE ip IS NOT NULL AND ip != '' GROUP BY game, ip
+    `);
+    await dbClient.execute(`
+      INSERT OR IGNORE INTO query_ips_daily (day, game, ip, queries)
+      SELECT date(time, '+8 hours'), game, ip, COUNT(*) FROM query_logs
+      WHERE ip IS NOT NULL AND ip != '' GROUP BY date(time, '+8 hours'), game, ip
+    `);
+    console.log('[DB] 累计统计已从现有日志回填');
+  } catch (e) {
+    console.error('[DB] 累计统计回填失败:', e.message);
   }
 }
 
@@ -122,6 +190,36 @@ async function insertLog(log) {
         log.game || 'wuwa',
       ],
     });
+
+    // 累加统计（独立于 query_logs 裁剪，保证历史总量与人数不丢失）
+    const day = localDay(log.time);
+    const game = log.game || 'wuwa';
+    const ip = (log.ip || '').trim();
+    const stmts = [{
+      sql: `INSERT INTO query_stats_daily (day, game, queries, success, eval_count)
+            VALUES (?, ?, 1, ?, ?)
+            ON CONFLICT(day, game) DO UPDATE SET
+              queries = queries + 1,
+              success = success + excluded.success,
+              eval_count = eval_count + excluded.eval_count`,
+      args: [day, game, log.success ? 1 : 0, log.type === '粘贴估价' ? 1 : 0],
+    }];
+    if (ip) {
+      stmts.push({
+        sql: `INSERT INTO query_ips (game, ip, first_seen, last_seen, queries)
+              VALUES (?, ?, ?, ?, 1)
+              ON CONFLICT(game, ip) DO UPDATE SET
+                last_seen = excluded.last_seen, queries = queries + 1`,
+        args: [game, ip, log.time, log.time],
+      });
+      stmts.push({
+        sql: `INSERT INTO query_ips_daily (day, game, ip, queries)
+              VALUES (?, ?, ?, 1)
+              ON CONFLICT(day, game, ip) DO UPDATE SET queries = queries + 1`,
+        args: [day, game, ip],
+      });
+    }
+    await dbClient.batch(stmts, 'write');
   } catch (e) {
     console.error('[DB] 写入失败:', e.message);
   }
@@ -208,15 +306,22 @@ async function getStats(game = '') {
   if (!dbClient) return null;
   try {
     const g = game || 'wuwa';
-    const total = await dbClient.execute({ sql: 'SELECT COUNT(*) as cnt FROM query_logs WHERE game = ?', args: [g] });
-    const success = await dbClient.execute({ sql: 'SELECT COUNT(*) as cnt FROM query_logs WHERE success = 1 AND game = ?', args: [g] });
-    const lookup = await dbClient.execute({ sql: "SELECT COUNT(*) as cnt FROM query_logs WHERE type = '编号查询' AND game = ?", args: [g] });
-    const evalCount = await dbClient.execute({ sql: "SELECT COUNT(*) as cnt FROM query_logs WHERE type = '粘贴估价' AND game = ?", args: [g] });
+    const today = localDay();
+    const rows = await dbClient.batch([
+      { sql: 'SELECT COALESCE(SUM(queries),0) AS cnt FROM query_stats_daily WHERE game = ?', args: [g] },
+      { sql: 'SELECT COALESCE(SUM(success),0) AS cnt FROM query_stats_daily WHERE game = ?', args: [g] },
+      { sql: 'SELECT COALESCE(SUM(eval_count),0) AS cnt FROM query_stats_daily WHERE game = ?', args: [g] },
+      { sql: 'SELECT COUNT(*) AS cnt FROM query_ips WHERE game = ?', args: [g] },
+      { sql: 'SELECT COALESCE(SUM(queries),0) AS cnt FROM query_stats_daily WHERE game = ? AND day = ?', args: [g, today] },
+      { sql: 'SELECT COUNT(*) AS cnt FROM query_ips_daily WHERE game = ? AND day = ?', args: [g, today] },
+    ], 'read');
     return {
-      total: total.rows[0].cnt,
-      success: success.rows[0].cnt,
-      lookup: lookup.rows[0].cnt,
-      eval: evalCount.rows[0].cnt,
+      total: Number(rows[0].rows[0].cnt),
+      success: Number(rows[1].rows[0].cnt),
+      eval: Number(rows[2].rows[0].cnt),
+      people: Number(rows[3].rows[0].cnt),
+      todayQueries: Number(rows[4].rows[0].cnt),
+      todayPeople: Number(rows[5].rows[0].cnt),
     };
   } catch (e) {
     console.error('[DB] 统计失败:', e.message);
