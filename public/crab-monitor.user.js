@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.24.2
+// @version      3.25.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -893,7 +893,6 @@
     maxTableRows: 3000,           // 表格最大行数
     maxSeenIds: 5000,              // 已见ID最大数量（需大于 maxTableRows，避免表内数据被反复重新解析）
     maxNotifiedIds: 500,         // 已通知ID最大数量
-    scanPages: 1,                // 默认扫描页数（每页20条，15秒刷新间隔下1页足够覆盖新增）
   };
 
   // ============================================================
@@ -921,6 +920,7 @@
   let notifyMaxPrice = 20000;    // 通知标价上限(元)，高于此值不通知（0=不限制）
   let autoBuyMaxPrice = 6000;    // 自动抢购标价上限(元)，高于此值不抢购（0=不限制）
   let refreshIntervalSec = 15;   // 刷新间隔（秒），可设置
+  let scanPages = 3;             // 螃蟹网增量翻页的最大页数（每页20条，遇到已见ID即停止翻页）
   let flashSaleEnabled = true;   // 秒杀库池监控开关
   let pzdsEnabled = false;      // 盼之平台监控开关
   let kjsEnabled = false;       // 氪金兽平台监控开关
@@ -1904,6 +1904,7 @@
       if (r.div > 1) result.pulls += (result[r.key] || 0) / r.div;
       else if (r.div === 1) result.pulls += (result[r.key] || 0);
     }
+    result.pulls = Math.round(result.pulls);
 
     // 防护：过滤掉无主专武（有专武但对应角色不在角色列表中，则忽略这把专武）
     var charNameSet = {};
@@ -5147,8 +5148,13 @@
       }
     }
 
-    // 自主截图账号不记录
-    if (/自主截图/.test(showTitle)) return;
+    // 自主截图账号不记录（仍需标记已见，否则增量翻页会把它们当新号反复翻页）
+    if (/自主截图/.test(showTitle)) {
+      seenIds.push(productId);
+      if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      return;
+    }
 
     // 秒杀池商品：即使已见过也处理（价格更低）
     if (fromFlashSale) {
@@ -6447,8 +6453,10 @@
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">刷新间隔（秒）</label>' +
         '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="5" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">最大扫描页数</label>' +
+        '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">自动刷新列表的时间间隔，建议10~60秒</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
         // 秒杀库池监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
@@ -6912,6 +6920,7 @@
             box.querySelector('#mwAutoBuyMaxPrice').value = autoBuyMaxPrice || 0;
             // 监控设置
             box.querySelector('#mwRefreshInterval').value = refreshIntervalSec || 60;
+            box.querySelector('#mwScanPages').value = scanPages || 3;
             box.querySelector('#mwFlashSaleEnabled').checked = !!flashSaleEnabled;
             box.querySelector('#mwPzdsEnabled').checked = !!pzdsEnabled;
             box.querySelector('#mwKjsEnabled').checked = !!kjsEnabled;
@@ -6937,6 +6946,10 @@
         if (newInterval > 3600) newInterval = 3600;
         var intervalChanged = newInterval !== refreshIntervalSec;
         refreshIntervalSec = newInterval;
+        var newScanPages = parseInt(box.querySelector('#mwScanPages').value) || 3;
+        if (newScanPages < 1) newScanPages = 1;
+        if (newScanPages > 10) newScanPages = 10;
+        scanPages = newScanPages;
         flashSaleEnabled = box.querySelector('#mwFlashSaleEnabled').checked;
         pzdsEnabled = box.querySelector('#mwPzdsEnabled').checked;
         kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
@@ -11818,6 +11831,7 @@ function openSettings() {
       autoBuyMaxPrice: autoBuyMaxPrice != null ? autoBuyMaxPrice : 0,
       // 监控设置
       refreshIntervalSec: refreshIntervalSec != null ? refreshIntervalSec : 60,
+      scanPages: scanPages != null ? scanPages : 3,
       flashSaleEnabled: flashSaleEnabled || false,
       pzdsEnabled: pzdsEnabled != null ? pzdsEnabled : true,
       kjsEnabled: kjsEnabled != null ? kjsEnabled : true,
@@ -11889,6 +11903,7 @@ function openSettings() {
             if (remote.autoBuyMaxPrice != null) autoBuyMaxPrice = remote.autoBuyMaxPrice;
             // 监控设置
             if (remote.refreshIntervalSec != null) refreshIntervalSec = remote.refreshIntervalSec;
+            if (remote.scanPages != null) scanPages = remote.scanPages;
             if (remote.flashSaleEnabled != null) flashSaleEnabled = remote.flashSaleEnabled;
             if (remote.pzdsEnabled != null) pzdsEnabled = remote.pzdsEnabled;
             if (remote.kjsEnabled != null) kjsEnabled = remote.kjsEnabled;
@@ -12617,6 +12632,7 @@ function openSettings() {
       notifyMinPrice: notifyMinPrice,
       notifyMaxPrice: notifyMaxPrice,
       refreshIntervalSec: refreshIntervalSec,
+      scanPages: scanPages,
       flashSaleEnabled: flashSaleEnabled,
       pzdsEnabled: pzdsEnabled,
       kjsEnabled: kjsEnabled,
@@ -12691,36 +12707,64 @@ function openSettings() {
   async function doRefresh() {
     lastRefreshTime = Date.now();
 
-    // 螃蟹网API扫描（独立try-catch，失败不影响其他平台）
+    // 螃蟹网API扫描（增量翻页，独立try-catch，失败不影响其他平台）
     var pxb7Error = null;
     try {
-      // 扫描第1页
-      const data = await fetchListWithRetry(1);
-      // 兼容多种响应格式：data.data.list 或 data.data（数组）
-      let list = null;
-      if (data && data.success && data.data) {
-        list = Array.isArray(data.data) ? data.data : (data.data.list || null);
-      }
-      if (list) {
-        handleListResponse(list, false);
-        lastRefreshError = '';  // 刷新成功，清除错误
-      } else if (data && !data.success) {
-        lastRefreshError = '螃蟹网API: ' + (data.message || data.msg || '未知错误');
-      } else if (!data) {
-        lastRefreshError = '螃蟹网API被WAF拦截（依赖拦截+其他平台正常）';
-      }
+      // 从第1页起逐页拉取，遇到已见ID（说明已追平上次扫描区间）或达到页数上限即停
+      const maxPages = Math.max(1, scanPages);
+      const collected = [];
+      let pagesScanned = 0;
+      let caughtUp = false;
+      let firstPageEmpty = false;
 
-      // 可选：扫描第2-3页
-      for (let page = 2; page <= CONFIG.scanPages; page++) {
+      for (let page = 1; page <= maxPages; page++) {
+        let data = null;
         try {
-          const pageData = await fetchListWithRetry(page);
-          if (pageData && pageData.success && pageData.data) {
-            const pageList = Array.isArray(pageData.data) ? pageData.data : (pageData.data.list || null);
-            if (pageList) handleListResponse(pageList, false);
-          }
+          data = await fetchListWithRetry(page);
         } catch (e) {
           console.error('[鸣潮监控] 第' + page + '页获取失败:', e);
+          break;
         }
+
+        // 兼容多种响应格式：data.data.list 或 data.data（数组）
+        let list = null;
+        if (data && data.success && data.data) {
+          list = Array.isArray(data.data) ? data.data : (data.data.list || null);
+        }
+
+        if (page === 1 && !list) {
+          if (data && !data.success) {
+            lastRefreshError = '螃蟹网API: ' + (data.message || data.msg || '未知错误');
+          } else if (!data) {
+            lastRefreshError = '螃蟹网API被WAF拦截（依赖拦截+其他平台正常）';
+          }
+        }
+
+        if (!list) break;  // 请求失败（WAF/错误），错误信息已在上面记录
+        if (list.length === 0) {
+          if (page === 1) firstPageEmpty = true;
+          break;
+        }
+
+        // 本页是否出现已见ID：出现即代表已翻到上次扫过的区间，更旧的无需再翻
+        const hasSeen = list.some(function (it) {
+          const pid = it.productId || it.id;
+          return pid && seenIds.indexOf(pid) >= 0;
+        });
+
+        collected.push(...list);
+        pagesScanned++;
+
+        if (hasSeen) { caughtUp = true; break; }
+      }
+
+      if (collected.length > 0) {
+        handleListResponse(collected, false);
+        lastRefreshError = '';  // 刷新成功，清除错误
+        console.log('[鸣潮监控] 螃蟹网增量扫描: ' + pagesScanned + '页/' + collected.length + '条' +
+          (caughtUp ? '（已追平上次）' : '（达页数上限' + maxPages + '）'));
+      } else if (firstPageEmpty) {
+        console.log('[鸣潮监控] 螃蟹网增量扫描: 列表为空');
       }
 
       // 秒杀库池扫描（还价后卖家同意的低价商品）
@@ -12889,6 +12933,7 @@ function openSettings() {
     notifyMinPrice = savedState.notifyMinPrice != null ? savedState.notifyMinPrice : 0;
     notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 20000;
     refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 15;
+    scanPages = savedState.scanPages != null ? savedState.scanPages : 3;
     // 迁移：旧默认值20秒 → 新默认值15秒（用户手动设过其他值则保留）
     if (refreshIntervalSec === 20 && savedState._intervalMigrated !== true) {
       refreshIntervalSec = 15;

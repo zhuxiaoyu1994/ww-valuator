@@ -733,7 +733,7 @@ function isDescriptiveJunk(s) {
 function extractListItems(text, keyword) {
   const section = extractSection(text, keyword);
   if (!section) return [];
-  return section.split(/[,，、\s]+/).filter(s => s.length > 0).filter(s => !isDescriptiveJunk(s));
+  return section.split(/[,，、\s;；]+/).filter(s => s.length > 0).filter(s => !isDescriptiveJunk(s));
 }
 
 // ============================================================
@@ -815,6 +815,7 @@ function parseAccountInfo(text) {
     if (r.div > 1) result.pulls += (result[r.key] || 0) / r.div;
     else if (r.div === 1) result.pulls += (result[r.key] || 0);
   }
+  result.pulls = Math.round(result.pulls);
 
   // 防护：过滤掉无主专武（有专武但对应角色不在角色列表中，则忽略这把专武）
   const charNameSet = new Set(result.characters.map(c => c.name));
