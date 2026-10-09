@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 32,
+  configVersion: 33,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
@@ -216,7 +216,7 @@ const WUWA_CONFIG = {
     '露西', '心',
   ],
 
-  charAliases: { '爱弥丝': '爱弥斯' },
+  charAliases: { '爱弥丝': '爱弥斯', '心月狐': '心' },
 
   sectionKeywords: [
     '五星角色', '四星角色', '五星武器', '金色武器', '地图探索度',

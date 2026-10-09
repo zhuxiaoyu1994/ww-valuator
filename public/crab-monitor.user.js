@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.25.0
+// @version      3.27.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 32;
+  const CONFIG_VERSION = 33;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -120,7 +120,7 @@
         '维里奈': '维', '卡卡罗': '罗', '安可': '安', '凌阳': '凌', '鉴心': '鉴',
         '景燃': '景', '心': '心',
       },
-      charAliases: { '爱弥丝': '爱弥斯' },
+      charAliases: { '爱弥丝': '爱弥斯', '心月狐': '心' },
       fullConstWeight: { S: 1.5, A: 0.3, B: 0.2, C: 0.1, D: 0.05, E: 0 },
       defaultCharPrices: {
         '爱弥斯': 28, '绯雪': 33, '秧秧玄翎': 28, '清宵': 28, '心': 38,
@@ -959,10 +959,9 @@
   let priceFilter = { min: null, max: null };       // 标价筛选
   let valueFilter = { min: null, max: null };       // 估值筛选
   let diffFilter = { min: null, max: null };        // 差价筛选
-  let ratioFilter = { min: null, max: null };       // 性价比筛选
   let searchKeyword = '';                           // 商品编号/文字搜索
+  let platformFilter = 'all';                       // 平台筛选（all=所有平台）
   let showOnlySold = false;                         // 是否只显示已售账号
-  let showOnlyFlashSale = false;                    // 是否只显示秒杀账号
   const PAGE_SIZE = 100;                            // 表格分页每页行数
   let currentPage = 1;                              // 当前页码（1-based）
   let monitorTimeout = null;     // 监控定时器
@@ -5942,7 +5941,7 @@
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 6px 12px;
+          padding: 6px 34px 6px 12px;
           background: #12122a;
           border-bottom: 1px solid #2a2a4a;
           flex-shrink: 0;
@@ -6015,9 +6014,14 @@
         }
         .mw-select:focus { outline: none; border-color: #e94560; }
         .mw-collapse-btn {
-          padding: 3px 8px;
+          position: absolute;
+          top: 5px;
+          right: 8px;
+          z-index: 20;
+          padding: 2px 8px;
           cursor: pointer;
           font-size: 14px;
+          line-height: 1;
           color: #8888aa;
           border: none;
           background: none;
@@ -6199,17 +6203,14 @@
           <button class="mw-btn" id="mwBtnNotifySettings">通知设置</button>
           <button class="mw-btn" id="mwBtnRefresh">立即刷新</button>
           <button class="mw-btn" id="mwBtnSettings">估值设置</button>
-          <button class="mw-btn" id="mwBtnClearTable">清空表格</button>
           <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
           <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端（每天也会自动备份一次）">云端备份</button>
           <button class="mw-btn" id="mwBtnCloudRestore" title="从云端恢复监控列表（与本地合并，不覆盖本地已有行）">云端恢复</button>
           <button class="mw-btn" id="mwBtnMigrate" title="跨脚本管理器/跨浏览器迁移：导出或导入全部数据（监控列表+配置+通知设置）">迁移</button>
-          <span class="mw-input-label">≥</span>
-          <input type="number" class="mw-input" id="mwInputThreshold" value="20" min="0" max="999">%
-          <button class="mw-collapse-btn" id="mwBtnCollapse" title="折叠/展开">—</button>
         </div>
       </div>
+      <button class="mw-collapse-btn" id="mwBtnCollapse" title="折叠/展开">—</button>
       <div class="mw-filter-bar" id="mwFilterBar" style="display:flex;">
         <span>筛选角色: </span><span id="mwFilterCharTags" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;"></span>
         <span class="mw-filter-clear" id="mwFilterAddChar" style="color:#10b981;" title="添加角色筛选（可搜索全部角色，含未显示的低级别角色）">＋角色</span>
@@ -6218,6 +6219,14 @@
       <div class="mw-filter-bar" id="mwNumFilterBar" style="display:flex;">
         <span style="color:#8888aa;">筛选:</span>
         <input type="text" id="mwSearchInput" placeholder="搜编号/角色" style="width:90px;padding:2px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;">
+        <select class="mw-select" id="mwPlatformFilter" title="按平台筛选">
+          <option value="all">所有平台</option>
+          <option value="pxb7">螃蟹网</option>
+          <option value="pzds">盼之</option>
+          <option value="kjs">氪金兽</option>
+          <option value="qy">7881</option>
+          <option value="ysy">易手游</option>
+        </select>
         <span class="mw-input-label">标价</span>
         <input type="number" class="mw-input" id="mwFilterPriceMin" placeholder="最小" style="width:50px;">
         <span style="color:#555;">~</span>
@@ -6230,15 +6239,10 @@
         <input type="number" class="mw-input" id="mwFilterDiffMin" placeholder="最小" style="width:50px;">
         <span style="color:#555;">~</span>
         <input type="number" class="mw-input" id="mwFilterDiffMax" placeholder="最大" style="width:50px;">
-        <span class="mw-input-label">性价比%</span>
-        <input type="number" class="mw-input" id="mwFilterRatioMin" placeholder="最小" style="width:50px;">
-        <span style="color:#555;">~</span>
-        <input type="number" class="mw-input" id="mwFilterRatioMax" placeholder="最大" style="width:50px;">
         <span class="mw-filter-clear" id="mwNumFilterClear">重置</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:0 4px;">
         <label style="color:#8888aa;font-size:12px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="mwShowOnlySold" style="vertical-align:middle;">只显示已售</label>
-        <label style="color:#e94560;font-size:12px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="mwShowOnlyFlashSale" style="vertical-align:middle;">只显示秒杀</label>
       </div>
       <div class="mw-table-container">
         <table class="mw-table" id="mwTable">
@@ -6279,13 +6283,11 @@
     dom.btnNotifySettings = document.getElementById('mwBtnNotifySettings');
     dom.btnRefresh = document.getElementById('mwBtnRefresh');
     dom.btnSettings = document.getElementById('mwBtnSettings');
-    dom.btnClearTable = document.getElementById('mwBtnClearTable');
     dom.btnCleanData = document.getElementById('mwBtnCleanData');
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
     dom.btnCloudBackup = document.getElementById('mwBtnCloudBackup');
     dom.btnCloudRestore = document.getElementById('mwBtnCloudRestore');
     dom.btnMigrate = document.getElementById('mwBtnMigrate');
-    dom.inputThreshold = document.getElementById('mwInputThreshold');
     dom.tableBody = document.getElementById('mwTableBody');
     dom.filterBar = document.getElementById('mwFilterBar');
     dom.filterCharTags = document.getElementById('mwFilterCharTags');
@@ -7003,19 +7005,6 @@
       openSettings();
     });
 
-    dom.btnClearTable.addEventListener('click', function () {
-      if (confirm('确定清空表格记录？')) {
-        tableData = [];
-        seenIds = [];  // 同时清空已见ID，否则清空后旧商品无法重新加入
-        notifiedIds = [];
-        saveTableData();
-        saveStorage(STORAGE_KEYS.seen, seenIds);
-        saveStorage(STORAGE_KEYS.notified, notifiedIds);
-        refreshTableDisplay();
-        updateStatusText();
-      }
-    });
-
     dom.btnCleanData.addEventListener('click', openCleanDataDialog);
 
     // 检查已售
@@ -7027,13 +7016,6 @@
 
     // 跨管理器/跨浏览器迁移
     if (dom.btnMigrate) dom.btnMigrate.addEventListener('click', openMigrateDialog);
-
-    dom.inputThreshold.addEventListener('change', function () {
-      threshold = parseInt(dom.inputThreshold.value) || 20;
-      saveState();
-      updateStatusText();
-      refreshTableDisplay();
-    });
 
     dom.filterClear.addEventListener('click', function () {
       charFilter = [];
@@ -7069,14 +7051,21 @@
         refreshTableDisplay();
       });
     }
+    // 平台筛选下拉框事件
+    const platformFilterEl = document.getElementById('mwPlatformFilter');
+    if (platformFilterEl) {
+      platformFilterEl.addEventListener('change', function () {
+        platformFilter = this.value || 'all';
+        currentPage = 1;
+        refreshTableDisplay();
+      });
+    }
     bindNumFilter('mwFilterPriceMin', priceFilter, 'min');
     bindNumFilter('mwFilterPriceMax', priceFilter, 'max');
     bindNumFilter('mwFilterValueMin', valueFilter, 'min');
     bindNumFilter('mwFilterValueMax', valueFilter, 'max');
     bindNumFilter('mwFilterDiffMin', diffFilter, 'min');
     bindNumFilter('mwFilterDiffMax', diffFilter, 'max');
-    bindNumFilter('mwFilterRatioMin', ratioFilter, 'min');
-    bindNumFilter('mwFilterRatioMax', ratioFilter, 'max');
 
     // 清除数值筛选
     const numFilterClear = document.getElementById('mwNumFilterClear');
@@ -7089,17 +7078,17 @@
         valueFilter.max = null;
         diffFilter.min = null;
         diffFilter.max = null;
-        ratioFilter.min = null;
-        ratioFilter.max = null;
         searchKeyword = '';
+        platformFilter = 'all';
         currentPage = 1;
         ['mwFilterPriceMin', 'mwFilterPriceMax', 'mwFilterValueMin', 'mwFilterValueMax',
-         'mwFilterDiffMin', 'mwFilterDiffMax', 'mwFilterRatioMin', 'mwFilterRatioMax'].forEach(function (id) {
+         'mwFilterDiffMin', 'mwFilterDiffMax'].forEach(function (id) {
           const el = document.getElementById(id);
           if (el) el.value = '';
         });
         const sEl = document.getElementById('mwSearchInput');
         if (sEl) sEl.value = '';
+        if (platformFilterEl) platformFilterEl.value = 'all';
         refreshTableDisplay();
       });
     }
@@ -7109,16 +7098,6 @@
     if (showOnlySoldEl) {
       showOnlySoldEl.addEventListener('change', function () {
         showOnlySold = this.checked;
-        currentPage = 1;
-        refreshTableDisplay();
-      });
-    }
-
-    // 只显示秒杀复选框事件
-    const showOnlyFlashSaleEl = document.getElementById('mwShowOnlyFlashSale');
-    if (showOnlyFlashSaleEl) {
-      showOnlyFlashSaleEl.addEventListener('change', function () {
-        showOnlyFlashSale = this.checked;
         currentPage = 1;
         refreshTableDisplay();
       });
@@ -7549,35 +7528,31 @@
         });
       });
     }
-    // 隐藏已售
     // 只显示已售
     if (showOnlySold) {
       displayData = displayData.filter(row => row.status === '已售');
     }
-    // 只显示秒杀
-    if (showOnlyFlashSale) {
-      displayData = displayData.filter(row => row.status === '秒杀');
+    // 平台筛选（无 platform 字段的视为螃蟹网）
+    if (platformFilter !== 'all') {
+      displayData = displayData.filter(row => (row.platform || 'pxb7') === platformFilter);
     }
     // 数值筛选
     displayData = displayData.filter(row => {
       const price = row.price || 0;
       const value = row.value || 0;
       const diff = value - getDiffBasePrice(row);
-      const ratio = row.ratio || 0;
       if (priceFilter.min != null && price < priceFilter.min) return false;
       if (priceFilter.max != null && price > priceFilter.max) return false;
       if (valueFilter.min != null && value < valueFilter.min) return false;
       if (valueFilter.max != null && value > valueFilter.max) return false;
       if (diffFilter.min != null && diff < diffFilter.min) return false;
       if (diffFilter.max != null && diff > diffFilter.max) return false;
-      if (ratioFilter.min != null && ratio < ratioFilter.min) return false;
-      if (ratioFilter.max != null && ratio > ratioFilter.max) return false;
       return true;
     });
 
     if (displayData.length === 0) {
       dom.tableBody.innerHTML = '<tr><td colspan="11" class="mw-empty">' +
-        (charFilter && charFilter.length > 0 ? '当前筛选无数据' : '暂无数据，等待监控...') + '</td></tr>';
+        ((charFilter && charFilter.length > 0) || platformFilter !== 'all' ? '当前筛选无数据' : '暂无数据，等待监控...') + '</td></tr>';
       renderPaginationBar(0);
       return;
     }
@@ -11030,10 +11005,6 @@ function openSettings() {
         dom.btnNotify.textContent = '开启通知';
         dom.btnNotify.classList.remove('mw-btn-green');
       }
-    }
-
-    if (dom.inputThreshold) {
-      dom.inputThreshold.value = threshold;
     }
   }
 
