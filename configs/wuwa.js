@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 33,
+  configVersion: 34,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
@@ -29,7 +29,7 @@ const WUWA_CONFIG = {
     B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '陆赫斯', '洛瑟菈', '千咲', '露西'] },
     C: { price: 5, isHot: false, chars: ['露帕', '菲比', '坎特蕾拉', '赞妮', '布兰特', '守岸人', '奥古斯塔', '嘉贝莉娜', '仇远', '尤诺'] },
     D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡', '珂莱塔', '椿'] },
-    E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心', '秧秧'] },
+    E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心'] },
   },
 
   sigWeapons: {
@@ -165,7 +165,7 @@ const WUWA_CONFIG = {
     '尤诺': 12, '椿': 9, '嘉贝莉娜': 13, '仇远': 10,
     '忌炎': 2, '吟霖': 2, '相里要': 2, '今汐': 2,
     '长离': 2, '折枝': 2, '洛可可': 2, '丽贝卡': 1,
-    '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0, '秧秧': 0,
+    '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0,
   },
 
   defaultConstPremiums: {

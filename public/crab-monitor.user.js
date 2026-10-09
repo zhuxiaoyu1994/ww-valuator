@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.27.0
+// @version      3.28.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 33;
+  const CONFIG_VERSION = 34;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -95,7 +95,7 @@
         B: { price: 25, isHot: true, chars: ['达妮娅', '夏空', '陆赫斯', '洛瑟菈', '千咲', '露西'] },
         C: { price: 5, isHot: false, chars: ['露帕', '菲比', '坎特蕾拉', '赞妮', '布兰特', '守岸人', '奥古斯塔', '嘉贝莉娜', '仇远', '尤诺'] },
         D: { price: 3, isHot: false, chars: ['忌炎', '吟霖', '相里要', '今汐', '长离', '折枝', '洛可可', '丽贝卡', '珂莱塔', '椿'] },
-        E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心', '秧秧'] },
+        E: { price: 2, isHot: false, chars: ['维里奈', '卡卡罗', '安可', '凌阳', '鉴心'] },
       },
       sigWeapons: {
         '忌炎': '苍鳞千嶂', '吟霖': '掣傀之手', '今汐': '时和岁稔', '长离': '赫奕流明',
@@ -132,7 +132,7 @@
         '布兰特': 10, '守岸人': 10, '珂莱塔': 8, '奥古斯塔': 13,
         '尤诺': 12, '椿': 9, '嘉贝莉娜': 13, '仇远': 10,
         '忌炎': 2, '吟霖': 2, '相里要': 2, '今汐': 2, '长离': 2, '折枝': 2, '洛可可': 2,
-        '丽贝卡': 1, '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0, '秧秧': 0,
+        '丽贝卡': 1, '维里奈': 0, '卡卡罗': 0, '安可': 0, '凌阳': 0, '鉴心': 0,
       },
       defaultConstPremiums: {
         '爱弥斯': { '1': 22, '2': 42, '3': 92, '4': 97, '5': 102, '6': 232 },
@@ -1359,13 +1359,12 @@
       ];
     }
 
+    // 数据迁移：'秧秧'是四星角色，已从五星角色配置中移除。清除历史遗留项，
+    // 否则 applyCharTierOverrides 会把它当自定义角色重新加回 CHAR_LOOKUP（筛选列表又冒出来）
+    if (saved.charPrices) delete saved.charPrices['秧秧'];
+    if (saved.charTierOverride) delete saved.charTierOverride['秧秧'];
     // 改进5：角色价格表（按角色名，合并默认值与用户自定义）
     w.charPrices = Object.assign({}, buildDefaultCharPrices(), saved.charPrices || {});
-    // 数据迁移：旧的'秧秧'是五星角色(价格35)，现已改名为'秧秧玄翎'
-    // 四星'秧秧'价格应为0，如果旧配置中'秧秧'价格>0说明是旧数据，重置为0
-    if (saved.charPrices && saved.charPrices['秧秧'] != null && saved.charPrices['秧秧'] > 0) {
-      w.charPrices['秧秧'] = 0;
-    }
     // 命座溢价表（使用默认值合并用户自定义，向后兼容）
     w.constPremiums = Object.assign({}, DEFAULT_CONST_PREMIUMS, saved.constPremiums || {});
     // 命座绝对定价表：优先使用用户保存的constPrices，否则从constPremiums转换
@@ -7276,6 +7275,8 @@
       // 从 CHAR_LOOKUP 构建列表，包含内置角色 + 用户自定义添加的角色
       var lookup = CHAR_LOOKUP || {};
       Object.keys(lookup).forEach(function (name) {
+        // 别名（如「爱弥丝」「心月狐」）不作为可选角色展示，仅保留正名
+        if (CHAR_ALIASES && CHAR_ALIASES[name]) return;
         if (kw && name.toLowerCase().indexOf(kw) < 0) return;
         var info = lookup[name] || {};
         items.push({ name: name, tier: info.tier || 'C', price: info.price || 0 });
