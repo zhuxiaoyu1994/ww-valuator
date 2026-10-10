@@ -2424,13 +2424,6 @@ function getPageHTML(options) {
       let detailHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">估价计算</div>';
       // 基础价值
       detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#e0e0e0');
-      // 满命溢价
-      const c6Bonus = det.c6Bonus || {};
-      if (det.c6Premium > 0) {
-        let c6Label = det.c6Premium + ' 元';
-        if (c6Bonus.notes && c6Bonus.notes.length > 0) c6Label += '（' + c6Bonus.notes.join('，') + '）';
-        detailHtml += resultRow('满命溢价', c6Label, '#4ade80');
-      }
       // 配队溢价
       const teamBonus = det.teamBonus || {};
       if (det.teamPremium > 0) {
@@ -2446,15 +2439,14 @@ function getPageHTML(options) {
       if (det.sigDiscountNotes && det.sigDiscountNotes.length > 0) {
         detailHtml += resultRow('无专武折扣', det.sigDiscountNotes.join('；'), '#fbbf24');
       }
-      // 抽数价值
+      // 抽数价值（仅基础抽数价值参与有效金系数；满命抽数加成在系数后单独相加）
       const pi = det.pullInfo || {};
-      if (det.pullValue > 0 || pi.pulls > 0) {
-        let pullLabel = det.pullValue + ' 元';
+      const basePullValue = (pi.baseTotal != null) ? pi.baseTotal : Math.max(0, (det.pullValue || 0) - (pi.c6Bonus || 0));
+      if (basePullValue > 0 || pi.pulls > 0) {
+        let pullLabel = basePullValue + ' 元';
         if (pi.pulls > 0) {
           pullLabel += '（' + pi.pulls + '抽';
           if (pi.perPull != null) pullLabel += '·每抽' + pi.perPull + '元';
-          if (pi.baseTotal > 0) pullLabel += '·基础' + pi.baseTotal + '元';
-          if (pi.c6Bonus > 0) pullLabel += '·满命加成+' + pi.c6Bonus + '元';
           pullLabel += '）';
         }
         detailHtml += resultRow('抽数价值', pullLabel, '#2dd4bf');
@@ -2463,8 +2455,8 @@ function getPageHTML(options) {
       if (det.resourceValue > 0) {
         detailHtml += resultRow('资源价值', det.resourceValue + ' 元', '#fbbf24');
       }
-      // 小计
-      const totalBeforeCoeff = det.characterValue + det.c6Premium + det.teamPremium + det.pullValue + det.resourceValue;
+      // 小计（满命多角色溢价、满命抽数加成不参与系数，系数后单独相加）
+      const totalBeforeCoeff = det.characterValue + det.teamPremium + basePullValue + det.resourceValue;
       detailHtml += resultRow('基础小计', totalBeforeCoeff.toFixed(2) + ' 元', '#aaa');
       // 生效系数
       const flatActive = (fd.value < 1 && fd.notes && fd.notes.length > 0 && fd.value < (yi.coefficient || 1));
@@ -2486,6 +2478,19 @@ function getPageHTML(options) {
           });
           detailHtml += '<div style="padding:4px 0 8px 0;">' + bdItems.join('') + '</div>';
         }
+      }
+      // 满命溢价（不参与有效金系数，系数计算后直接相加）
+      const c6Bonus = det.c6Bonus || {};
+      if (det.c6Premium > 0) {
+        let c6Label = '+' + det.c6Premium + ' 元';
+        if (c6Bonus.notes && c6Bonus.notes.length > 0) c6Label += '（' + c6Bonus.notes.join('，') + '）';
+        detailHtml += resultRow('满命溢价', c6Label, '#4ade80');
+      }
+      // 满命抽数加成（不参与有效金系数，系数计算后直接相加）
+      if (pi.c6Bonus > 0) {
+        let c6PullLabel = '+' + pi.c6Bonus + ' 元';
+        if (pi.c6Multiplier != null) c6PullLabel += '（+' + Math.round(pi.c6Multiplier * 100) + '%）';
+        detailHtml += resultRow('满命抽数加成', c6PullLabel, '#4ade80');
       }
       // 角色数量加成
       if (det.charCountBonus > 0) {

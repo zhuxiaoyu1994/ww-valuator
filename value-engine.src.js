@@ -158,6 +158,28 @@ function buildDefaultWeights(customWeights) {
   w.c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
   w.c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
   w.c6MaxWeightedConst = (saved.c6MaxWeightedConst != null) ? saved.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
+  // 满命多角色溢价 - 分段折线图模式（优先）
+  w.c6MaxBonus = (saved.c6MaxBonus != null) ? saved.c6MaxBonus : (DEFAULT_WEIGHTS.c6MaxBonus != null ? DEFAULT_WEIGHTS.c6MaxBonus : 0);
+  if (saved.c6Segments && Array.isArray(saved.c6Segments) && saved.c6Segments.length > 0) {
+    w.c6Segments = saved.c6Segments.map(function(s) {
+      return { baseBonus: s.baseBonus, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+    });
+  } else if (DEFAULT_WEIGHTS.c6Segments && Array.isArray(DEFAULT_WEIGHTS.c6Segments) && DEFAULT_WEIGHTS.c6Segments.length > 0) {
+    w.c6Segments = DEFAULT_WEIGHTS.c6Segments.map(function(s) {
+      return { baseBonus: s.baseBonus, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+    });
+  } else {
+    // 向后兼容：从旧的扁平公式字段构建单段
+    var _c6Base = (saved.c6Base != null) ? saved.c6Base : DEFAULT_WEIGHTS.c6Base;
+    var _c6BaseBonus = (saved.c6BaseBonus != null) ? saved.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
+    var _c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
+    var _c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+    var _c6MaxWC = (saved.c6MaxWeightedConst != null) ? saved.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
+    var _c6Slope = _c6Step > 0 ? (_c6StepBonus / _c6Step) : 0;
+    w.c6Segments = [
+      { baseBonus: _c6BaseBonus - _c6Base * _c6Slope, threshold: _c6MaxWC > 0 ? _c6MaxWC : null, step: _c6Slope }
+    ];
+  }
   // 满命抽数加成公式参数
   w.pullC6Base = (saved.pullC6Base != null) ? saved.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
   w.pullC6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
@@ -1128,6 +1150,74 @@ function getEffectiveYellowCoeff(effectiveYellow) {
 }
 
 /**
+ * 计算满命多角色溢价系数（基于加权满命数分段，分段首尾相连）
+ * 每段线性公式：bonus = 段起点加成 + (加权满命数 - 段起点命数) × step
+ * 段起点加成递推：第1段 = baseBonus（加权满命=0处），后续段 = 前一段在其边界处的加成值
+ * 因此曲线连续不跳变：调整前一段的基准/边界/浮动会整体平移后续所有分段
+ * 后续段自身存储的 baseBonus 不参与计算（仅作展示参考）
+ */
+function getC6Multiplier(weightedConst) {
+  var w = weights || DEFAULT_WEIGHTS;
+  var segs = w.c6Segments || [
+    { baseBonus: 0, threshold: null, step: 0.1 }
+  ];
+  var maxBonus = (w.c6MaxBonus != null) ? w.c6MaxBonus : 0;
+
+  // 递推各段起点（首尾相连）
+  var steps = [];
+  var startWC = [];
+  var startBonus = [];
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    steps[i] = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.1);
+    if (i === 0) {
+      startWC[0] = 0;
+      startBonus[0] = (seg.baseBonus != null) ? seg.baseBonus : 0;
+    } else {
+      var prevT = segs[i - 1].threshold;
+      if (prevT == null) prevT = startWC[i - 1];
+      startWC[i] = prevT;
+      startBonus[i] = startBonus[i - 1] + (prevT - startWC[i - 1]) * steps[i - 1];
+    }
+  }
+
+  var bonus;
+  var segIdx = 0;
+  var segLabel;
+
+  for (var i = 0; i < segs.length; i++) {
+    var segThreshold = segs[i].threshold;
+    if (segThreshold == null || weightedConst <= segThreshold) {
+      bonus = startBonus[i] + (weightedConst - startWC[i]) * steps[i];
+      segIdx = i;
+      if (i === 0) {
+        segLabel = (segThreshold != null ? '0~' + segThreshold : '0+') + '命';
+      } else {
+        segLabel = startWC[i] + (segThreshold != null ? '~' + segThreshold : '+') + '命';
+      }
+      break;
+    }
+  }
+
+  if (bonus == null) {
+    var lastIdx = segs.length - 1;
+    bonus = startBonus[lastIdx] + (weightedConst - startWC[lastIdx]) * steps[lastIdx];
+    segIdx = lastIdx;
+    segLabel = startWC[lastIdx] + '+命';
+  }
+
+  if (maxBonus > 0 && bonus > maxBonus) bonus = maxBonus;
+  if (bonus < 0) bonus = 0;
+
+  return {
+    weightedConst: weightedConst,
+    multiplier: Math.round(bonus * 1000) / 1000,
+    tierLabel: segLabel,
+    segIdx: segIdx,
+  };
+}
+
+/**
  * 计算满命抽数加成系数（基于加权满命数分段，分段首尾相连）
  * 每段线性公式：bonus = 段起点加成 + (加权满命数 - 段起点命数) × step
  * 段起点加成递推：第1段 = baseBonus（加权满命=0处），后续段 = 前一段在其边界处的加成值
@@ -1303,7 +1393,7 @@ function calculateValue(parsed, price) {
     }
   }
 
-  // 2. 满命溢价（公式：基准溢价 + (加权满命 - 基准) / 每档 × 每档浮动）
+  // 2. 满命溢价（分段折线图模式：加权满命数 → 角色价值溢价系数）
   let fullConstPremium = 0;
   const c6BonusNotes = [];
   const allC6Chars = charBreakdown.filter(cb => cb.const >= 6 && cb.tier && cb.tier !== 'E');
@@ -1311,17 +1401,11 @@ function calculateValue(parsed, price) {
   for (const cb of allC6Chars) {
     tierCounts[cb.tier] = (tierCounts[cb.tier] || 0) + 1;
   }
-  var c6Base = (w.c6Base != null) ? w.c6Base : DEFAULT_WEIGHTS.c6Base;
-  var c6BaseBonus = (w.c6BaseBonus != null) ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
-  var c6Step = (w.c6Step != null) ? w.c6Step : DEFAULT_WEIGHTS.c6Step;
-  var c6StepBonus = (w.c6StepBonus != null) ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
   var c6MaxWC = (w.c6MaxWeightedConst != null) ? w.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
 
   // 加权满命上限（0=不封顶）：超过上限后按上限值计算溢价
   var c6EffWC = (c6MaxWC > 0 && weightedFullConst > c6MaxWC) ? c6MaxWC : weightedFullConst;
-  let c6BonusMultiplier = weightedFullConst > 0
-    ? c6BaseBonus + (c6EffWC - c6Base) / c6Step * c6StepBonus
-    : 0;
+  let c6BonusMultiplier = weightedFullConst > 0 ? getC6Multiplier(c6EffWC).multiplier : 0;
   if (c6BonusMultiplier < 0) c6BonusMultiplier = 0;
   if (c6BonusMultiplier > 0) {
     fullConstPremium = charValue * c6BonusMultiplier;
@@ -1548,7 +1632,8 @@ function calculateValue(parsed, price) {
   }
 
   // 6. 有效金系数（基于有效金数分段计算，不同段使用不同步长）
-  const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
+  // 满命多角色溢价(fullConstPremium)与满命抽数加成(pullC6Bonus)不参与有效金系数，在系数计算后直接相加
+  const totalBeforeYellow = charValue + teamPremium + basePullValue + otherResources;
   const yellowInfo = getEffectiveYellowCoeff(effectiveYellow);
   yellowInfo.rawYellowCount = parsed.yellowCount;
   yellowInfo.effectiveYellow = effectiveYellow;
@@ -1618,7 +1703,7 @@ function calculateValue(parsed, price) {
     outfitCountBonus = _ocbBonus;
   }
 
-  const totalValue = totalBeforeYellow * finalCoeff + charCountBonus + weaponCountBonus + outfitCountBonus;
+  const totalValue = totalBeforeYellow * finalCoeff + fullConstPremium + pullC6Bonus + charCountBonus + weaponCountBonus + outfitCountBonus;
 
   const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
   const diff = Math.round((totalValue - price) * 100) / 100;

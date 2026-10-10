@@ -1,7 +1,7 @@
 'use strict';
 
 const WUWA_CONFIG = {
-  configVersion: 34,
+  configVersion: 36,
   gameName: '鸣潮',
   gameSlug: 'wuwa',
 
@@ -60,6 +60,11 @@ const WUWA_CONFIG = {
     c6TierWeights: { S: 1.5, A: 0.3, B: 0.2, C: 0.1, D: 0.05, E: 0 },
     c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
     c6Base: 0, c6BaseBonus: 0, c6Step: 0.1, c6StepBonus: 0.01, c6MaxWeightedConst: 5.5,
+    // 满命多角色溢价 - 分段折线图模式（加权满命数 → 角色价值溢价系数，首尾相连）
+    c6MaxBonus: 0,
+    c6Segments: [
+      { baseBonus: 0, threshold: null, step: 0.1 }
+    ],
     outfit: 0, motoFrame: 0,
     pullC6Base: 0, pullC6BaseBonus: 0, pullC6Step: 1, pullC6StepBonus: 0.2, pullC6Threshold: 400, pullC6MaxWeightedConst: 5, pullPerWeightedConst: 450, pullPerWeightedConstCount: 1,
     pullC6MaxBonus: 5,
@@ -216,7 +221,7 @@ const WUWA_CONFIG = {
     '露西', '心',
   ],
 
-  charAliases: { '爱弥丝': '爱弥斯', '心月狐': '心' },
+  charAliases: { '爱弥丝': '爱弥斯', '心月狐': '心', '清霄': '清宵' },
 
   sectionKeywords: [
     '五星角色', '四星角色', '五星武器', '金色武器', '地图探索度',

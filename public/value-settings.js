@@ -159,6 +159,28 @@
     w.c6Step = (s.c6Step != null) ? s.c6Step : (DEFAULT_WEIGHTS.c6Step != null ? DEFAULT_WEIGHTS.c6Step : 0.1);
     w.c6StepBonus = (s.c6StepBonus != null) ? s.c6StepBonus : (DEFAULT_WEIGHTS.c6StepBonus != null ? DEFAULT_WEIGHTS.c6StepBonus : 0.05);
     w.c6MaxWeightedConst = (s.c6MaxWeightedConst != null) ? s.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
+    // 满命多角色溢价 - 分段折线图模式
+    w.c6MaxBonus = (s.c6MaxBonus != null) ? s.c6MaxBonus : (DEFAULT_WEIGHTS.c6MaxBonus != null ? DEFAULT_WEIGHTS.c6MaxBonus : 0);
+    if (s.c6Segments && Array.isArray(s.c6Segments) && s.c6Segments.length > 0) {
+      w.c6Segments = s.c6Segments.map(function(seg) {
+        return { baseBonus: seg.baseBonus, threshold: seg.threshold != null ? seg.threshold : null, step: seg.step };
+      });
+    } else if (DEFAULT_WEIGHTS.c6Segments && Array.isArray(DEFAULT_WEIGHTS.c6Segments) && DEFAULT_WEIGHTS.c6Segments.length > 0) {
+      w.c6Segments = DEFAULT_WEIGHTS.c6Segments.map(function(seg) {
+        return { baseBonus: seg.baseBonus, threshold: seg.threshold != null ? seg.threshold : null, step: seg.step };
+      });
+    } else {
+      // 向后兼容：从旧的扁平公式字段构建单段
+      var _c6Base2 = (s.c6Base != null) ? s.c6Base : (DEFAULT_WEIGHTS.c6Base != null ? DEFAULT_WEIGHTS.c6Base : 0);
+      var _c6BaseBonus2 = (s.c6BaseBonus != null) ? s.c6BaseBonus : (DEFAULT_WEIGHTS.c6BaseBonus != null ? DEFAULT_WEIGHTS.c6BaseBonus : 0);
+      var _c6Step2 = (s.c6Step != null) ? s.c6Step : (DEFAULT_WEIGHTS.c6Step != null ? DEFAULT_WEIGHTS.c6Step : 0.1);
+      var _c6StepBonus2 = (s.c6StepBonus != null) ? s.c6StepBonus : (DEFAULT_WEIGHTS.c6StepBonus != null ? DEFAULT_WEIGHTS.c6StepBonus : 0.01);
+      var _c6MaxWC2 = (s.c6MaxWeightedConst != null) ? s.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
+      var _c6Slope2 = _c6Step2 > 0 ? (_c6StepBonus2 / _c6Step2) : 0;
+      w.c6Segments = [
+        { baseBonus: _c6BaseBonus2 - _c6Base2 * _c6Slope2, threshold: _c6MaxWC2 > 0 ? _c6MaxWC2 : null, step: _c6Slope2 }
+      ];
+    }
     w.pullC6Base = (s.pullC6Base != null) ? s.pullC6Base : (DEFAULT_WEIGHTS.pullC6Base != null ? DEFAULT_WEIGHTS.pullC6Base : 5);
     w.pullC6BaseBonus = (s.pullC6BaseBonus != null) ? s.pullC6BaseBonus : (DEFAULT_WEIGHTS.pullC6BaseBonus != null ? DEFAULT_WEIGHTS.pullC6BaseBonus : 0.5);
     w.pullC6Step = (s.pullC6Step != null) ? s.pullC6Step : (DEFAULT_WEIGHTS.pullC6Step != null ? DEFAULT_WEIGHTS.pullC6Step : 0.1);
@@ -1363,6 +1385,8 @@
     function buildPc6CurveModel() {
       var capRaw = parseFloat(pc6MaxBonusInp.value) / 100;
       var cap = isNaN(capRaw) ? 3.0 : capRaw;
+      var maxWCRaw = parseFloat(pullC6MaxWCInput.value);
+      var maxWC = (isNaN(maxWCRaw) || maxWCRaw < 0) ? 0 : maxWCRaw;
       var segs = readPc6SegInputs();
       var cs = pc6ConnectedStarts(segs);
       function bonusAt(wc) {
@@ -1382,7 +1406,7 @@
         if (b < 0) b = 0;
         return b;
       }
-      return { segs: segs, sw: cs.sw, sb: cs.sb, cap: cap, bonusAt: bonusAt, clamp: clamp };
+      return { segs: segs, sw: cs.sw, sb: cs.sb, cap: cap, maxWC: maxWC, bonusAt: bonusAt, clamp: clamp };
     }
 
     function renderPc6Chart(m) {
@@ -1398,6 +1422,7 @@
         if (m.segs[i].thr != null && m.segs[i].thr > lastFinite) lastFinite = m.segs[i].thr;
       }
       var xmax = Math.max(10, Math.ceil((lastFinite + 5) / 5) * 5);
+      if (m.maxWC > xmax) xmax = Math.ceil((m.maxWC + 1) / 5) * 5;
 
       var ymax = 0.1;
       for (var k = 0; k <= 160; k++) {
@@ -1466,12 +1491,22 @@
         capLine = '<line x1="' + mL + '" y1="' + cy + '" x2="' + (W - mR) + '" y2="' + cy + '" stroke="#e94560" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>';
       }
 
+      // 加权上限竖线
+      var wcLine = '';
+      if (m.maxWC > 0 && m.maxWC <= xmax) {
+        var wx = X(m.maxWC);
+        var wcAnchor = wx < mL + 34 ? 'start' : (wx > W - mR - 34 ? 'end' : 'middle');
+        wcLine = '<line x1="' + wx + '" y1="' + mT + '" x2="' + wx + '" y2="' + (H - mB) + '" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4,2" opacity="0.85"/>' +
+          '<text x="' + wx + '" y="' + (mT - 5) + '" text-anchor="' + wcAnchor + '" fill="#f59e0b" font-size="9">加权上限 ' + m.maxWC + '命</text>';
+      }
+
       var svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;background:#0a0a1a;border-radius:8px;border:1px solid #2a2a4a;">' +
         yGridHtml + xGridHtml +
         '<line x1="' + mL + '" y1="' + (H - mB) + '" x2="' + (W - mR) + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
         '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
         yTickHtml + xTickHtml +
         capLine +
+        wcLine +
         segPaths.join('') +
         '<circle cx="' + X(0) + '" cy="' + Y(m.clamp(m.sb[0])) + '" r="3" fill="' + pc6SegColors[0] + '"/>' +
         '</svg>';
@@ -1557,86 +1592,354 @@
     c6WeightInfo.appendChild(c6WeightRow);
     c6Section.appendChild(c6WeightInfo);
 
-    // 满命溢价公式配置
-    var c6FormulaRow = document.createElement('div');
-    c6FormulaRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
+    // 满命溢价配置（分段折线图模式：加权满命数 → 角色价值溢价系数）
+    var c6SubTitle = document.createElement('div');
+    c6SubTitle.style.cssText = 'font-size:13px;font-weight:600;color:#fbbf24;margin-bottom:4px;';
+    c6SubTitle.textContent = '满命溢价（加权满命数 → 角色价值溢价系数，分段折线图）';
+    c6Section.appendChild(c6SubTitle);
+    var c6SubDesc = document.createElement('p');
+    c6SubDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;';
+    c6SubDesc.innerHTML = '根据加权满命数，对角色价值额外加成。按加权满命数分段，分段首尾相连：后一段的起点 = 前一段终点的加成值，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
+    c6Section.appendChild(c6SubDesc);
 
-    function c6fLabel(text) {
+    function c6sLabel(text) {
       var s = document.createElement('span');
-      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:10px;';
       return s;
     }
-    function c6fInput(val, step, color, title) {
+    function c6sInput(val, step, color, title, inpW) {
       var i = document.createElement('input');
       i.type = 'number'; i.value = val; i.step = step; i.min = '0';
       i.title = title;
-      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #2a2a4a;border-radius:4px;background:#0a0a1a;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      i.style.cssText = 'width:' + (inpW||48) + 'px;padding:2px 3px;border:1px solid #2a2a4a;border-radius:3px;background:#0a0a1a;color:' + color + ';font-size:11px;text-align:center;font-weight:600;';
       return i;
     }
 
-    c6FormulaRow.appendChild(c6fLabel('基准满命'));
-    var c6BaseInp = c6fInput(w.c6Base != null ? w.c6Base : DEFAULT_WEIGHTS.c6Base, '0.5', '#e94560', '此加权满命数对应的溢价为基准溢价');
-    c6FormulaRow.appendChild(c6BaseInp);
-    c6FormulaRow.appendChild(c6fLabel('基准溢价'));
-    var c6BaseBonusInp = c6fInput((w.c6BaseBonus != null ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus) * 100, '5', '#4ade80', '基准满命数对应的溢价百分比');
-    c6FormulaRow.appendChild(c6BaseBonusInp);
-    c6FormulaRow.appendChild(c6fLabel('%，每'));
-    var c6StepInp = c6fInput(w.c6Step != null ? w.c6Step : DEFAULT_WEIGHTS.c6Step, '0.1', '#e94560', '每N命浮动一档');
-    c6FormulaRow.appendChild(c6StepInp);
-    c6FormulaRow.appendChild(c6fLabel('命浮动'));
-    var c6StepBonusInp = c6fInput((w.c6StepBonus != null ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus) * 100, '0.5', '#4ade80', '每档浮动百分比');
-    c6FormulaRow.appendChild(c6StepBonusInp);
-    c6FormulaRow.appendChild(c6fLabel('%，加权上限'));
-    var c6MaxWCInp = c6fInput(w.c6MaxWeightedConst != null ? w.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0), '0.5', '#fbbf24', '加权满命数超过此值后溢价不再增加（0=不封顶）');
-    c6FormulaRow.appendChild(c6MaxWCInp);
-    c6FormulaRow.appendChild(c6fLabel('（0=不封顶）'));
-    c6Section.appendChild(c6FormulaRow);
+    var c6SegColors = ['#22c55e', '#f59e0b', '#e94560', '#3b82f6', '#a855f7', '#ec4899'];
+    var c6SegInputs = [];
+    var c6SegRows = [];
+
+    // 通用参数行：加权上限、加成上限
+    var c6CommonRow = document.createElement('div');
+    c6CommonRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;padding:8px 10px;background:rgba(233,69,96,0.03);border-radius:6px;border:1px solid rgba(233,69,96,0.1);';
+    c6CommonRow.appendChild(c6sLabel('加权上限'));
+    var c6MaxWCInp = c6sInput(w.c6MaxWeightedConst != null ? w.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0), '0.5', '#fbbf24', '加权满命数超过此值后溢价不再增加（0=不封顶）', 48);
+    c6CommonRow.appendChild(c6MaxWCInp);
+    c6CommonRow.appendChild(c6sLabel('命 | 加成上限'));
+    var c6MaxBonusInp = c6sInput((w.c6MaxBonus != null ? w.c6MaxBonus : 0) * 100, '1', '#e94560', '溢价系数最大值（百分比，0=不封顶）', 48);
+    c6CommonRow.appendChild(c6MaxBonusInp);
+    c6CommonRow.appendChild(c6sLabel('%'));
+    c6Section.appendChild(c6CommonRow);
+
+    var c6SegsContainer = document.createElement('div');
+    c6Section.appendChild(c6SegsContainer);
+
+    function renderC6SegRows() {
+      c6SegsContainer.innerHTML = '';
+      c6SegInputs.length = 0;
+      c6SegRows.length = 0;
+      var segs = w.c6Segments || [];
+      for (var si = 0; si < segs.length; si++) {
+        (function(si) {
+          var seg = segs[si];
+          var color = c6SegColors[si % c6SegColors.length];
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:' + color + '11;border-radius:6px;border:1px solid ' + color + '33;';
+          var isLast = (si === segs.length - 1);
+          var prevT = si > 0 ? segs[si-1].threshold : 0;
+          var label = isLast ? '第' + (si+1) + '段(' + prevT + '+命)' : '第' + (si+1) + '段(' + prevT + '~T' + (si+1) + '命)';
+          var title = document.createElement('span');
+          title.textContent = label;
+          title.style.cssText = 'color:' + color + ';font-size:11px;font-weight:600;margin-right:6px;min-width:100px;';
+          row.appendChild(title);
+
+          // 基准加成（第1段可编辑，后续段只读自动推算）
+          row.appendChild(c6sLabel(si === 0 ? '基准加成' : '起点加成'));
+          var baseInp = c6sInput((seg.baseBonus != null ? seg.baseBonus : 0) * 100, '1', '#f59e0b', si === 0 ? '第1段起点加成（加权满命=0处）' : '由前面分段终点自动推算（首尾相连，只读）', 48);
+          baseInp.style.textAlign = 'right';
+          if (si > 0) {
+            baseInp.readOnly = true;
+            baseInp.style.background = '#06060f';
+            baseInp.style.color = '#b58a2e';
+            baseInp.style.borderStyle = 'dashed';
+          }
+          row.appendChild(baseInp);
+          row.appendChild(c6sLabel('%'));
+
+          // 边界（最后一段无边界）
+          var thresholdInp = null;
+          if (!isLast) {
+            row.appendChild(c6sLabel('|边界'));
+            thresholdInp = c6sInput(seg.threshold != null ? seg.threshold : 1, '0.5', color, '加权满命上界', 42);
+            thresholdInp.style.textAlign = 'right';
+            row.appendChild(thresholdInp);
+          }
+
+          // 每命浮动
+          row.appendChild(c6sLabel('|每命浮动'));
+          var stepInp = c6sInput((seg.step != null ? seg.step : 0.1) * 100, '0.1', '#10b981', '每命浮动加成百分比', 52);
+          stepInp.style.textAlign = 'right';
+          row.appendChild(stepInp);
+          row.appendChild(c6sLabel('%'));
+
+          // 删除按钮（至少保留1段）
+          if (segs.length > 1) {
+            var delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'margin-left:4px;padding:1px 6px;border:1px solid #444;border-radius:3px;background:#1a1a2e;color:#f87171;font-size:10px;cursor:pointer;line-height:1.4;';
+            delBtn.title = '删除此段';
+            delBtn.onclick = function() {
+              w.c6Segments.splice(si, 1);
+              renderC6SegRows();
+              updateC6Preview();
+            };
+            row.appendChild(delBtn);
+          }
+
+          baseInp.addEventListener('input', updateC6Preview);
+          if (thresholdInp) thresholdInp.addEventListener('input', updateC6Preview);
+          stepInp.addEventListener('input', updateC6Preview);
+
+          c6SegInputs.push({ baseInp: baseInp, thresholdInp: thresholdInp, stepInp: stepInp });
+          c6SegRows.push(row);
+          c6SegsContainer.appendChild(row);
+        })(si);
+      }
+    }
+    renderC6SegRows();
+
+    // 添加分段 + 载入默认按钮
+    var c6BtnRow = document.createElement('div');
+    c6BtnRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;';
+    var addC6SegBtn = document.createElement('button');
+    addC6SegBtn.textContent = '+ 添加分段';
+    addC6SegBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#22c55e;font-size:11px;cursor:pointer;';
+    addC6SegBtn.onclick = function() {
+      var segs = w.c6Segments || [];
+      var prevT = segs.length > 0 ? (segs[segs.length-1].threshold || 5) : 5;
+      if (segs.length > 0 && segs[segs.length-1].threshold == null) {
+        segs[segs.length-1].threshold = prevT;
+      }
+      segs.push({ baseBonus: 0, threshold: null, step: 0.05 });
+      w.c6Segments = segs;
+      renderC6SegRows();
+      updateC6Preview();
+    };
+    c6BtnRow.appendChild(addC6SegBtn);
+    var c6DefaultBtn = document.createElement('button');
+    c6DefaultBtn.textContent = '载入默认';
+    c6DefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #2a2a4a;border-radius:4px;background:#1a1a2e;color:#fbbf24;font-size:11px;cursor:pointer;';
+    c6DefaultBtn.onclick = function() {
+      var defSegs = (DEFAULT_WEIGHTS.c6Segments && DEFAULT_WEIGHTS.c6Segments.length > 0)
+        ? DEFAULT_WEIGHTS.c6Segments.map(function(s) { return { baseBonus: s.baseBonus, threshold: s.threshold, step: s.step }; })
+        : [{ baseBonus: 0, threshold: null, step: 0.1 }];
+      w.c6Segments = defSegs;
+      c6MaxBonusInp.value = (DEFAULT_WEIGHTS.c6MaxBonus != null ? DEFAULT_WEIGHTS.c6MaxBonus : 0) * 100;
+      c6MaxWCInp.value = DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0;
+      renderC6SegRows();
+      updateC6Preview();
+    };
+    c6BtnRow.appendChild(c6DefaultBtn);
+    c6Section.appendChild(c6BtnRow);
+
+    // 折线图
+    var c6ChartBox = document.createElement('div');
+    c6ChartBox.style.cssText = 'margin-top:10px;';
+    c6Section.appendChild(c6ChartBox);
 
     // 预览
     var c6Preview = document.createElement('div');
-    c6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(233,69,96,0.05);border-radius:6px;border:1px solid rgba(233,69,96,0.15);';
+    c6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(233,69,96,0.05);border-radius:6px;border:1px solid rgba(233,69,96,0.15);margin-top:8px;';
+    c6Section.appendChild(c6Preview);
+
+    // 读取当前分段输入
+    function readC6SegInputs() {
+      var segs = [];
+      for (var i = 0; i < c6SegInputs.length; i++) {
+        var inp = c6SegInputs[i];
+        var b = (parseFloat(inp.baseInp.value) || 0) / 100;
+        var t = inp.thresholdInp ? parseFloat(inp.thresholdInp.value) : null;
+        var s = (parseFloat(inp.stepInp.value) || 0) / 100;
+        segs.push({
+          base: isNaN(b) ? 0 : b,
+          thr: (inp.thresholdInp && !isNaN(t)) ? t : null,
+          step: isNaN(s) ? 0 : s
+        });
+      }
+      return segs;
+    }
+
+    // 首尾相连递推
+    function c6ConnectedStarts(segs) {
+      var sw = [], sb = [];
+      for (var i = 0; i < segs.length; i++) {
+        if (i === 0) {
+          sw[0] = 0;
+          sb[0] = segs.length > 0 ? segs[0].base : 0;
+        } else {
+          var pt = (segs[i - 1].thr != null) ? segs[i - 1].thr : sw[i - 1];
+          sw[i] = pt;
+          sb[i] = sb[i - 1] + (pt - sw[i - 1]) * segs[i - 1].step;
+        }
+      }
+      return { sw: sw, sb: sb };
+    }
+
+    // 构建曲线模型
+    function buildC6CurveModel() {
+      var capRaw = parseFloat(c6MaxBonusInp.value) / 100;
+      var cap = isNaN(capRaw) ? 0 : capRaw;
+      var maxWCRaw = parseFloat(c6MaxWCInp.value);
+      var maxWC = (isNaN(maxWCRaw) || maxWCRaw < 0) ? 0 : maxWCRaw;
+      var segs = readC6SegInputs();
+      var cs = c6ConnectedStarts(segs);
+      function bonusAt(wc) {
+        for (var i = 0; i < segs.length; i++) {
+          if (segs[i].thr == null || wc <= segs[i].thr) {
+            return { bonus: cs.sb[i] + (wc - cs.sw[i]) * segs[i].step, idx: i };
+          }
+        }
+        if (segs.length > 0) {
+          var li = segs.length - 1;
+          return { bonus: cs.sb[li] + (wc - cs.sw[li]) * segs[li].step, idx: li };
+        }
+        return { bonus: 0, idx: 0 };
+      }
+      function clamp(b) {
+        if (cap > 0 && b > cap) b = cap;
+        if (b < 0) b = 0;
+        return b;
+      }
+      return { segs: segs, sw: cs.sw, sb: cs.sb, cap: cap, maxWC: maxWC, bonusAt: bonusAt, clamp: clamp };
+    }
+
+    function renderC6Chart(m) {
+      if (!m.segs.length) {
+        c6ChartBox.innerHTML = '<div style="font-size:11px;color:#666;padding:12px;text-align:center;background:#0a0a1a;border-radius:8px;border:1px solid #2a2a4a;">暂无分段，点击"+ 添加分段"</div>';
+        return;
+      }
+      var W = 512, H = 200, mL = 44, mR = 12, mT = 18, mB = 32;
+      var pw = W - mL - mR, ph = H - mT - mB;
+
+      var lastFinite = 0;
+      for (var i = 0; i < m.segs.length; i++) {
+        if (m.segs[i].thr != null && m.segs[i].thr > lastFinite) lastFinite = m.segs[i].thr;
+      }
+      var xmax = Math.max(6, Math.ceil((lastFinite + 3) / 3) * 3);
+      if (m.maxWC > xmax) xmax = Math.ceil((m.maxWC + 1) / 3) * 3;
+
+      var ymax = 0.1;
+      for (var k = 0; k <= 160; k++) {
+        var bs2 = m.clamp(m.bonusAt((xmax * k) / 160).bonus);
+        if (bs2 > ymax) ymax = bs2;
+      }
+      for (var i2 = 0; i2 < m.segs.length; i2++) {
+        if (m.segs[i2].thr == null) continue;
+        var bc2 = m.clamp(m.bonusAt(m.segs[i2].thr).bonus);
+        if (bc2 > ymax) ymax = bc2;
+      }
+      ymax = Math.ceil(ymax * 1.15 * 100) / 100;
+      if (ymax < 0.5) ymax = 0.5;
+
+      function X(wc) { return mL + (wc / xmax) * pw; }
+      function Y(b) {
+        var yy = mT + ph - (b / ymax) * ph;
+        if (yy < mT) yy = mT;
+        return yy;
+      }
+
+      var yTicks = 5;
+      var yTickHtml = '';
+      var yGridHtml = '';
+      for (var t = 0; t <= yTicks; t++) {
+        var yv = (ymax * t) / yTicks;
+        var yp = Y(yv);
+        yTickHtml += '<text x="' + (mL - 4) + '" y="' + (yp + 3) + '" text-anchor="end" fill="#666" font-size="9">' + Math.round(yv * 100) + '%</text>';
+        yGridHtml += '<line x1="' + mL + '" y1="' + yp + '" x2="' + (W - mR) + '" y2="' + yp + '" stroke="#1a1a3a" stroke-dasharray="2,3"/>';
+      }
+      var xTicks = 5;
+      var xTickHtml = '';
+      var xGridHtml = '';
+      for (var tx = 0; tx <= xTicks; tx++) {
+        var xv = (xmax * tx) / xTicks;
+        var xp = X(xv);
+        xTickHtml += '<text x="' + xp + '" y="' + (H - mB + 14) + '" text-anchor="middle" fill="#666" font-size="9">' + xv.toFixed(0) + '命</text>';
+        xGridHtml += '<line x1="' + xp + '" y1="' + mT + '" x2="' + xp + '" y2="' + (H - mB) + '" stroke="#1a1a3a" stroke-dasharray="2,3"/>';
+      }
+
+      var segPaths = [];
+      for (var si = 0; si < m.segs.length; si++) {
+        var seg = m.segs[si];
+        var segColor = c6SegColors[si % c6SegColors.length];
+        var xStart = X(m.sw[si]);
+        var yStart = Y(m.clamp(m.sb[si]));
+        var endWC = seg.thr != null ? seg.thr : xmax;
+        var endBonus = m.bonusAt(endWC).bonus;
+        var xEnd = X(endWC);
+        var yEnd = Y(m.clamp(endBonus));
+        segPaths.push('<line x1="' + xStart + '" y1="' + yStart + '" x2="' + xEnd + '" y2="' + yEnd + '" stroke="' + segColor + '" stroke-width="2" fill="none"/>');
+        if (seg.thr != null) {
+          segPaths.push('<circle cx="' + xEnd + '" cy="' + yEnd + '" r="3" fill="' + segColor + '"/>');
+        }
+      }
+
+      var capLine = '';
+      if (m.cap > 0 && m.cap <= ymax) {
+        var cy = Y(m.cap);
+        capLine = '<line x1="' + mL + '" y1="' + cy + '" x2="' + (W - mR) + '" y2="' + cy + '" stroke="#e94560" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>';
+      }
+
+      // 加权上限竖线
+      var wcLine = '';
+      if (m.maxWC > 0 && m.maxWC <= xmax) {
+        var wx = X(m.maxWC);
+        var wcAnchor = wx < mL + 34 ? 'start' : (wx > W - mR - 34 ? 'end' : 'middle');
+        wcLine = '<line x1="' + wx + '" y1="' + mT + '" x2="' + wx + '" y2="' + (H - mB) + '" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4,2" opacity="0.85"/>' +
+          '<text x="' + wx + '" y="' + (mT - 5) + '" text-anchor="' + wcAnchor + '" fill="#f59e0b" font-size="9">加权上限 ' + m.maxWC + '命</text>';
+      }
+
+      var svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;background:#0a0a1a;border-radius:8px;border:1px solid #2a2a4a;">' +
+        yGridHtml + xGridHtml +
+        '<line x1="' + mL + '" y1="' + (H - mB) + '" x2="' + (W - mR) + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
+        '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (H - mB) + '" stroke="#2a2a4a"/>' +
+        yTickHtml + xTickHtml +
+        capLine +
+        wcLine +
+        segPaths.join('') +
+        '<circle cx="' + X(0) + '" cy="' + Y(m.clamp(m.sb[0])) + '" r="3" fill="' + c6SegColors[0] + '"/>' +
+        '</svg>';
+      c6ChartBox.innerHTML = svg;
+    }
+
     function updateC6Preview() {
-      var base = parseFloat(c6BaseInp.value) || 0;
-      var baseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
-      var step = parseFloat(c6StepInp.value) || 1;
-      var stepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var m = buildC6CurveModel();
+      // 同步只读起点输入框（第2段起自动推算，首尾相连；输入框单位为百分比）
+      for (var i = 1; i < c6SegInputs.length && i < m.sb.length; i++) {
+        c6SegInputs[i].baseInp.value = Math.round(m.sb[i] * 100 * 1000) / 1000;
+      }
+      renderC6Chart(m);
+
       var maxWC = parseFloat(c6MaxWCInp.value);
       if (isNaN(maxWC) || maxWC <= 0) maxWC = 0;
-      var samples = [0, 1, 2, base, base + step, base + step * 5, base + step * 10, base + step * 20, base + step * 50];
-      if (maxWC > 0) samples.push(maxWC, maxWC + step, maxWC + step * 5);
+      var samples = [0, 1, 2, 3, 4, 5, 6, 8, 10, 15];
+      if (maxWC > 0) samples.push(maxWC, maxWC + 3);
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var c = samples[si];
         var effC = (maxWC > 0 && c > maxWC) ? maxWC : c;
-        var bonus = baseBonus + (effC - base) / step * stepBonus;
-        if (bonus < 0) bonus = 0;
-        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
+        var bonus = m.clamp(m.bonusAt(effC).bonus);
+        var capped = (maxWC > 0 && c > maxWC);
+        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%' + (capped ? ' (封顶)' : '') + '　';
       }
+      html += '<br><span style="color:#fbbf24">注：加权满命数超过' + (maxWC > 0 ? maxWC : '∞') + '后按上限计算</span>';
+      if (m.cap > 0) html += '；溢价系数上限 +' + Math.round(m.cap * 100) + '%';
       c6Preview.innerHTML = html;
     }
-    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp, c6MaxWCInp].forEach(function(inp) {
-      inp.oninput = updateC6Preview;
+    [c6MaxWCInp, c6MaxBonusInp].forEach(function(inp) {
+      inp.addEventListener('input', updateC6Preview);
     });
     updateC6Preview();
-    c6Section.appendChild(c6Preview);
-
-    // 载入默认按钮
-    var c6DefaultRow = document.createElement('div');
-    c6DefaultRow.style.cssText = 'margin-top:8px;';
-    var loadC6DefaultBtn = document.createElement('button');
-    loadC6DefaultBtn.textContent = '载入默认（3命基准100%，每0.1命浮动5%）';
-    loadC6DefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#1a1a3a;color:#fbbf24;font-size:11px;cursor:pointer;';
-    loadC6DefaultBtn.onclick = function () {
-      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
-      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
-      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
-      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
-      c6MaxWCInp.value = DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0;
-      updateC6Preview();
-    };
-    c6DefaultRow.appendChild(loadC6DefaultBtn);
-    c6Section.appendChild(c6DefaultRow);
     dialog.appendChild(c6Section);
 
     // ===== 5. 有效金系数（按有效金数分段，动态分段） =====
@@ -2382,7 +2685,7 @@
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true, charCountBonus: true, weaponCountBonus: true, outfitCountBonus: true };
+    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, needSigWeapons: true, teamMates: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullC6MaxBonus: true, pullC6Segments: true, pullSegments: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Segments: true, c6MaxBonus: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true, charCountBonus: true, weaponCountBonus: true, outfitCountBonus: true, priceRangeSegments: true };
     for (var wk in DEFAULT_WEIGHTS) {
       if (!DEFAULT_WEIGHTS.hasOwnProperty(wk) || skipKeys[wk]) continue;
       var meta = (WEIGHT_LABELS && WEIGHT_LABELS[wk]) || { label: wk, desc: '' };
@@ -2635,15 +2938,24 @@
       }
       newW.pullC6Segments = newPc6Segs;
 
-      // 收集满命溢价公式参数
-      var _c6BaseVal = parseFloat(c6BaseInp.value);
-      newW.c6Base = isNaN(_c6BaseVal) ? DEFAULT_WEIGHTS.c6Base : _c6BaseVal;
-      newW.c6BaseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
-      var _c6StepVal = parseFloat(c6StepInp.value);
-      newW.c6Step = isNaN(_c6StepVal) ? DEFAULT_WEIGHTS.c6Step : _c6StepVal;
-      newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      // 收集满命多角色溢价（分段折线图模式）
       var _c6MaxWCVal = parseFloat(c6MaxWCInp.value);
       newW.c6MaxWeightedConst = isNaN(_c6MaxWCVal) ? (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0) : _c6MaxWCVal;
+      var _c6MaxBonusVal = parseFloat(c6MaxBonusInp.value) / 100;
+      newW.c6MaxBonus = isNaN(_c6MaxBonusVal) ? 0 : _c6MaxBonusVal;
+      var newC6Segs = [];
+      for (var _c6si = 0; _c6si < c6SegInputs.length; _c6si++) {
+        var _c6sinp = c6SegInputs[_c6si];
+        var _c6sb = (parseFloat(_c6sinp.baseInp.value) || 0) / 100;
+        var _c6st = _c6sinp.thresholdInp ? parseFloat(_c6sinp.thresholdInp.value) : null;
+        var _c6ss = (parseFloat(_c6sinp.stepInp.value) || 0) / 100;
+        newC6Segs.push({
+          baseBonus: isNaN(_c6sb) ? 0 : _c6sb,
+          threshold: (_c6sinp.thresholdInp && !isNaN(_c6st)) ? _c6st : null,
+          step: isNaN(_c6ss) ? 0 : _c6ss
+        });
+      }
+      newW.c6Segments = newC6Segs;
 
       // 保留默认满命溢价档位（引擎使用，UI 不编辑）
       newW.c6MultiBonus = DEFAULT_WEIGHTS.c6MultiBonus;

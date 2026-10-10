@@ -2250,8 +2250,19 @@ function getAdminPage() {
       sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">C6命座级别系数</h4><div style="font-size:12px;color:#ccc;">' + tw + '</div>');
     }
 
-    // C6满命加成公式
-    if (config.c6Base != null) {
+    // C6满命多角色溢价（分段折线图）
+    if (config.c6Segments && config.c6Segments.length) {
+      var c6SegRows = config.c6Segments.map(function(s, i) {
+        var range = (s.threshold != null) ? (i === 0 ? '0~' + s.threshold : '~' + s.threshold) : (i === 0 ? '0+' : '+');
+        var base = (s.baseBonus != null ? (s.baseBonus * 100) : 0);
+        var step = (s.step != null ? (s.step * 100) : 0);
+        return '第' + (i + 1) + '段(' + range + '命): 基准+' + base + '%, 每命+' + step + '%';
+      }).join('　');
+      sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">C6满命多角色溢价（分段折线图）</h4><div style="font-size:12px;color:#ccc;">' +
+        c6SegRows +
+        '<br>加权上限: <span style="color:#fbbf24;">' + (config.c6MaxWeightedConst != null ? config.c6MaxWeightedConst : 0) + '</span>（0=不封顶）　' +
+        '加成上限: <span style="color:#fbbf24;">' + (config.c6MaxBonus != null ? Math.round(config.c6MaxBonus * 100) : 0) + '%</span>（0=不封顶）</div>');
+    } else if (config.c6Base != null) {
       sections.push('<h4 style="color:#8ecdf5;margin:0 0 6px 0;">C6满命加成公式</h4><div style="font-size:12px;color:#ccc;">' +
         '基准加成: <span style="color:#fbbf24;">' + config.c6Base + '</span>　' +
         '基准满命: <span style="color:#fbbf24;">' + config.c6BaseBonus + '</span>　' +

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.28.0
+// @version      3.32.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 34;
+  const CONFIG_VERSION = 36;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -120,7 +120,7 @@
         '维里奈': '维', '卡卡罗': '罗', '安可': '安', '凌阳': '凌', '鉴心': '鉴',
         '景燃': '景', '心': '心',
       },
-      charAliases: { '爱弥丝': '爱弥斯', '心月狐': '心' },
+      charAliases: { '爱弥丝': '爱弥斯', '心月狐': '心', '清霄': '清宵' },
       fullConstWeight: { S: 1.5, A: 0.3, B: 0.2, C: 0.1, D: 0.05, E: 0 },
       defaultCharPrices: {
         '爱弥斯': 28, '绯雪': 33, '秧秧玄翎': 28, '清宵': 28, '心': 38,
@@ -458,6 +458,11 @@
       c6Step: 0.1,         // 每档满命数
       c6StepBonus: 0.01,   // 每档浮动（1%）
       c6MaxWeightedConst: 5.5, // 加权满命数上限，超过此值溢价不再增加（0=不封顶）
+      // 满命多角色溢价 - 分段折线图模式（加权满命数 → 角色价值溢价系数，首尾相连）
+      c6MaxBonus: 0,
+      c6Segments: [
+        { baseBonus: 0, threshold: null, step: 0.1 },
+      ],
       // 资源定价
       outfit: 0,             // 服饰/皮肤单价
       motoFrame: 0,          // 车架模组/邦布单价
@@ -930,7 +935,8 @@
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
   let pushConfig = {
-    serverChanKey: 'SCT383470T7x9zy1jphllnHLuo7vpw0WA4\nSCT378977TClEq1lr2mRcBmHgadFxK6CVr\nSCT383733TlGLAHCEQaaGqSxiCi0FHEDMU', // Server酱SendKey（微信）
+    serverChanKey: 'SCT383470T7x9zy1jphllnHLuo7vpw0WA4\nSCT378977TClEq1lr2mRcBmHgadFxK6CVr\nSCT383733TlGLAHCEQaaGqSxiCi0FHEDMU', // Server酱SendKey（旧格式，首次启动自动迁移为具名接收人）
+    serverChanSubscribers: [], // Server酱具名接收人 [{name, key, global}]，global=true 接收全部通知
     pushPlusToken: '',     // 旧格式：PushPlus Token字符串（兼容）
     pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt, priority}]
     syncPassword: '',    // 云端同步密码（管理后台密码）
@@ -1247,6 +1253,28 @@
     w.c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
     w.c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
     w.c6MaxWeightedConst = (saved.c6MaxWeightedConst != null) ? saved.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
+    // 满命多角色溢价 - 分段折线图模式（优先）
+    w.c6MaxBonus = (saved.c6MaxBonus != null) ? saved.c6MaxBonus : (DEFAULT_WEIGHTS.c6MaxBonus != null ? DEFAULT_WEIGHTS.c6MaxBonus : 0);
+    if (saved.c6Segments && Array.isArray(saved.c6Segments) && saved.c6Segments.length > 0) {
+      w.c6Segments = saved.c6Segments.map(function(s) {
+        return { baseBonus: s.baseBonus, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+      });
+    } else if (DEFAULT_WEIGHTS.c6Segments && Array.isArray(DEFAULT_WEIGHTS.c6Segments) && DEFAULT_WEIGHTS.c6Segments.length > 0) {
+      w.c6Segments = DEFAULT_WEIGHTS.c6Segments.map(function(s) {
+        return { baseBonus: s.baseBonus, threshold: s.threshold != null ? s.threshold : null, step: s.step };
+      });
+    } else {
+      // 向后兼容：从旧的扁平公式字段构建单段
+      var _c6Base = (saved.c6Base != null) ? saved.c6Base : DEFAULT_WEIGHTS.c6Base;
+      var _c6BaseBonus = (saved.c6BaseBonus != null) ? saved.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
+      var _c6Step = (saved.c6Step != null) ? saved.c6Step : DEFAULT_WEIGHTS.c6Step;
+      var _c6StepBonus = (saved.c6StepBonus != null) ? saved.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
+      var _c6MaxWC = (saved.c6MaxWeightedConst != null) ? saved.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
+      var _c6Slope = _c6Step > 0 ? (_c6StepBonus / _c6Step) : 0;
+      w.c6Segments = [
+        { baseBonus: _c6BaseBonus - _c6Base * _c6Slope, threshold: _c6MaxWC > 0 ? _c6MaxWC : null, step: _c6Slope }
+      ];
+    }
     // 满命抽数加成公式参数
     w.pullC6Base = (saved.pullC6Base != null) ? saved.pullC6Base : DEFAULT_WEIGHTS.pullC6Base;
     w.pullC6BaseBonus = (saved.pullC6BaseBonus != null) ? saved.pullC6BaseBonus : DEFAULT_WEIGHTS.pullC6BaseBonus;
@@ -2256,6 +2284,74 @@
   }
 
   /**
+   * 计算满命多角色溢价系数（基于加权满命数分段，分段首尾相连）
+   * 每段线性公式：bonus = 段起点加成 + (加权满命数 - 段起点命数) × step
+   * 段起点加成递推：第1段 = baseBonus（加权满命=0处），后续段 = 前一段在其边界处的加成值
+   * 因此曲线连续不跳变：调整前一段的基准/边界/浮动会整体平移后续所有分段
+   * 后续段自身存储的 baseBonus 不参与计算（仅作展示参考）
+   */
+  function getC6Multiplier(weightedConst) {
+    var w = weights || DEFAULT_WEIGHTS;
+    var segs = w.c6Segments || [
+      { baseBonus: 0, threshold: null, step: 0.1 }
+    ];
+    var maxBonus = (w.c6MaxBonus != null) ? w.c6MaxBonus : 0;
+
+    // 递推各段起点（首尾相连）
+    var steps = [];
+    var startWC = [];
+    var startBonus = [];
+    for (var i = 0; i < segs.length; i++) {
+      var seg = segs[i];
+      steps[i] = (seg.step != null && seg.step !== 0) ? seg.step : (seg.step === 0 ? 0 : 0.1);
+      if (i === 0) {
+        startWC[0] = 0;
+        startBonus[0] = (seg.baseBonus != null) ? seg.baseBonus : 0;
+      } else {
+        var prevT = segs[i - 1].threshold;
+        if (prevT == null) prevT = startWC[i - 1];
+        startWC[i] = prevT;
+        startBonus[i] = startBonus[i - 1] + (prevT - startWC[i - 1]) * steps[i - 1];
+      }
+    }
+
+    var bonus;
+    var segIdx = 0;
+    var segLabel;
+
+    for (var i = 0; i < segs.length; i++) {
+      var segThreshold = segs[i].threshold;
+      if (segThreshold == null || weightedConst <= segThreshold) {
+        bonus = startBonus[i] + (weightedConst - startWC[i]) * steps[i];
+        segIdx = i;
+        if (i === 0) {
+          segLabel = (segThreshold != null ? '0~' + segThreshold : '0+') + '命';
+        } else {
+          segLabel = startWC[i] + (segThreshold != null ? '~' + segThreshold : '+') + '命';
+        }
+        break;
+      }
+    }
+
+    if (bonus == null) {
+      var lastIdx = segs.length - 1;
+      bonus = startBonus[lastIdx] + (weightedConst - startWC[lastIdx]) * steps[lastIdx];
+      segIdx = lastIdx;
+      segLabel = startWC[lastIdx] + '+命';
+    }
+
+    if (maxBonus > 0 && bonus > maxBonus) bonus = maxBonus;
+    if (bonus < 0) bonus = 0;
+
+    return {
+      weightedConst: weightedConst,
+      multiplier: Math.round(bonus * 1000) / 1000,
+      tierLabel: segLabel,
+      segIdx: segIdx,
+    };
+  }
+
+  /**
    * 计算满命抽数加成系数（基于加权满命数分段，分段首尾相连）
    * 每段线性公式：bonus = 段起点加成 + (加权满命数 - 段起点命数) × step
    * 段起点加成递推：第1段 = baseBonus（加权满命=0处），后续段 = 前一段在其边界处的加成值
@@ -2459,7 +2555,7 @@
       }
     }
 
-    // 2. 满命溢价（公式：基准溢价 + (加权满命 - 基准) / 每档 × 每档浮动）
+    // 2. 满命溢价（分段折线图模式：加权满命数 → 角色价值溢价系数）
     // 注意：保持与原版一致，溢价以全部角色价值 charValue 为基数
     let fullConstPremium = 0;
     const c6BonusNotes = [];
@@ -2468,18 +2564,11 @@
     for (const cb of allC6Chars) {
       tierCounts[cb.tier] = (tierCounts[cb.tier] || 0) + 1;
     }
-    // 计算满命加成系数（公式）
-    var c6Base = (w.c6Base != null) ? w.c6Base : DEFAULT_WEIGHTS.c6Base;
-    var c6BaseBonus = (w.c6BaseBonus != null) ? w.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus;
-    var c6Step = (w.c6Step != null) ? w.c6Step : DEFAULT_WEIGHTS.c6Step;
-    var c6StepBonus = (w.c6StepBonus != null) ? w.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus;
     var c6MaxWC = (w.c6MaxWeightedConst != null) ? w.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
 
     // 加权满命上限（0=不封顶）：超过上限后按上限值计算溢价
     var c6EffWC = (c6MaxWC > 0 && weightedFullConst > c6MaxWC) ? c6MaxWC : weightedFullConst;
-    let c6BonusMultiplier = weightedFullConst > 0
-      ? c6BaseBonus + (c6EffWC - c6Base) / c6Step * c6StepBonus
-      : 0;
+    let c6BonusMultiplier = weightedFullConst > 0 ? getC6Multiplier(c6EffWC).multiplier : 0;
     if (c6BonusMultiplier < 0) c6BonusMultiplier = 0;
     if (c6BonusMultiplier > 0) {
       fullConstPremium = charValue * c6BonusMultiplier;
@@ -2705,7 +2794,8 @@
     }
 
     // 6. 有效金系数（基于有效金数分段计算，不同段使用不同步长）
-    const totalBeforeYellow = charValue + fullConstPremium + teamPremium + pullValue + otherResources;
+    // 满命多角色溢价(fullConstPremium)与满命抽数加成(pullC6Bonus)不参与有效金系数，在系数计算后直接相加
+    const totalBeforeYellow = charValue + teamPremium + basePullValue + otherResources;
     const yellowInfo = getEffectiveYellowCoeff(effectiveYellow);
     yellowInfo.rawYellowCount = parsed.yellowCount;
     yellowInfo.effectiveYellow = effectiveYellow;
@@ -2778,7 +2868,7 @@
       outfitCountBonus = _ocbBonus;
     }
 
-    const totalValue = totalBeforeYellow * finalCoeff + charCountBonus + weaponCountBonus + outfitCountBonus;
+    const totalValue = totalBeforeYellow * finalCoeff + fullConstPremium + pullC6Bonus + charCountBonus + weaponCountBonus + outfitCountBonus;
 
     // 性价比
     const ratio = price > 0 ? (totalValue - price) / price * 100 : 0;
@@ -5436,7 +5526,7 @@
       platform: platform === '秒杀' ? '' : (productId.indexOf('pz_') === 0 ? 'pzds' : (productId.indexOf('kjs_') === 0 ? 'kjs' : (productId.indexOf('qy_') === 0 ? 'qy' : (productId.indexOf('ysy_') === 0 ? 'ysy' : '')))),
     };
     const { title, body, mdBody } = buildNotifyContent(prefix, notifyRow, null, price, matchedCharNames || undefined);
-    notify(productId, title, body, mdBody);
+    notify(productId, title, body, mdBody, triggeredRule ? triggeredRule.recipients : null);
     notifiedIds.push(productId);
     if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
     saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -5629,7 +5719,7 @@
               platform: item.productId.indexOf('pz_') === 0 ? 'pzds' : (item.productId.indexOf('kjs_') === 0 ? 'kjs' : (item.productId.indexOf('qy_') === 0 ? 'qy' : (item.productId.indexOf('ysy_') === 0 ? 'ysy' : ''))),
             };
             const { title: notifyTitle, body: notifyBody, mdBody: notifyMd } = buildNotifyContent(prefix, notifyRow, null, notifyPrice, matchedCharNames || undefined);
-            notify(item.productId, notifyTitle, notifyBody, notifyMd);
+            notify(item.productId, notifyTitle, notifyBody, notifyMd, triggeredRule ? triggeredRule.recipients : null);
             notifiedIds.push(item.productId);
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
             saveStorage(STORAGE_KEYS.notified, notifiedIds);
@@ -6202,6 +6292,7 @@
           <button class="mw-btn" id="mwBtnNotifySettings">通知设置</button>
           <button class="mw-btn" id="mwBtnRefresh">立即刷新</button>
           <button class="mw-btn" id="mwBtnSettings">估值设置</button>
+          <button class="mw-btn" id="mwBtnTestEval" title="手动粘贴账号描述测试估值（结果不录入列表，仅供调参）">测试估价</button>
           <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
           <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端（每天也会自动备份一次）">云端备份</button>
@@ -6282,6 +6373,7 @@
     dom.btnNotifySettings = document.getElementById('mwBtnNotifySettings');
     dom.btnRefresh = document.getElementById('mwBtnRefresh');
     dom.btnSettings = document.getElementById('mwBtnSettings');
+    dom.btnTestEval = document.getElementById('mwBtnTestEval');
     dom.btnCleanData = document.getElementById('mwBtnCleanData');
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
     dom.btnCloudBackup = document.getElementById('mwBtnCloudBackup');
@@ -6517,7 +6609,7 @@
         '<div style="font-size:11px;color:#f59e0b;margin-bottom:16px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">差价超过阈值且标价不超过上限时自动打开商品页并点击"立即购买"跳转到确认页，你只需手动扫码支付。需保持螃蟹网登录状态。标价上限填0表示不限制。</div>' +
         // 指定账号通知
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">指定账号通知（须满足全部角色条件）</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，且差价超过阈值才通知</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，且差价超过阈值才通知；可勾选 Server酱 接收人，只推给指定的人</div>' +
         '<div id="mwCharNotifyList" style="margin-bottom:8px;"></div>' +
         '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">' +
         '<select id="mwCharNotifyName" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;">' +
@@ -6539,10 +6631,12 @@
         '<button id="mwCharNotifyAddChar" style="padding:6px 12px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:12px;cursor:pointer;">添加角色</button>' +
         '</div>' +
         '<div id="mwCharNotifyPending" style="margin-bottom:8px;"></div>' +
+        '<div id="mwCharNotifyRecipients" style="margin-bottom:8px;"></div>' +
         '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;">' +
         '<label style="font-size:12px;color:#888;">最低差价(元)</label>' +
         '<input type="number" id="mwCharNotifyDiff" value="0" min="0" style="width:80px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
         '<button id="mwCharNotifyAddRule" style="padding:6px 12px;border:none;border-radius:4px;background:#f59e0b;color:#1a1a2e;font-size:12px;font-weight:600;cursor:pointer;">保存规则</button>' +
+        '<button id="mwCharNotifyCancelEdit" style="display:none;padding:6px 12px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#aaa;font-size:12px;cursor:pointer;">取消编辑</button>' +
         '</div>' +
         // 最低限制
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">最低限制</div>' +
@@ -6563,11 +6657,20 @@
         // 手机推送
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">手机推送</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:12px;">配置后可发送推送到手机，即使浏览器关闭也能收到</div>' +
-        // Server酱
+        // Server酱（具名接收人）
         '<div style="margin-bottom:12px;padding:10px;background:#16213e;border-radius:8px;">' +
           '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">Server酱（微信推送）</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 sct.ftqq.com 登录后获取 SendKey，多个Key用逗号或换行分隔</div>' +
-          '<textarea id="mwServerChanKey" placeholder="SendKey1,SendKey2 或每行一个" style="width:100%;height:60px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;resize:vertical;">' + (pushConfig.serverChanKey || '') + '</textarea>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">访问 sct.ftqq.com 登录后获取 SendKey，添加为具名接收人；指定账号规则可只推给勾选的人</div>' +
+          '<div id="mwServerChanList" style="margin-bottom:8px;"></div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">' +
+          '<div style="flex:1;min-width:70px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">备注</label>' +
+          '<input type="text" id="mwScName" placeholder="如：张三" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<div style="flex:2;min-width:120px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">SendKey</label>' +
+          '<input type="text" id="mwScKey" placeholder="SCT..." style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<label style="font-size:10px;color:#888;display:flex;align-items:center;gap:4px;padding-bottom:7px;cursor:pointer;white-space:nowrap;">' +
+          '<input type="checkbox" id="mwScGlobal" checked style="cursor:pointer;" /> 收全部通知</label>' +
+          '<button id="mwScAddBtn" style="padding:5px 10px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">添加</button>' +
+          '</div>' +
         '</div>' +
         // PushPlus
         '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;">' +
@@ -6620,7 +6723,7 @@
         // 云端同步
         '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;border:1px solid #1e3a5f;">' +
           '<div style="font-size:12px;font-weight:600;color:#6a9fff;margin-bottom:4px;">推送配置云端同步</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">同步PushPlus订阅者和Server酱Key到服务器，换电脑不丢失</div>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">同步PushPlus订阅者和Server酱接收人到服务器，换电脑不丢失</div>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
           '<input type="password" id="mwSyncPassword" placeholder="管理后台密码" value="' + (pushConfig.syncPassword || '') + '" style="flex:1;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
           '<button id="mwSyncUpload" style="padding:5px 10px;border:none;border-radius:4px;background:#3b82f6;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">上传</button>' +
@@ -6637,6 +6740,7 @@
       var charNotifyListEl = box.querySelector('#mwCharNotifyList');
       var charNotifyPendingEl = box.querySelector('#mwCharNotifyPending');
       var pendingChars = []; // 当前正在编辑的角色条件
+      var editingRuleIdx = -1; // 正在编辑的规则索引，-1=新建模式
 
       function renderPendingChars() {
         charNotifyPendingEl.innerHTML = '';
@@ -6675,15 +6779,53 @@
             row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;background:#16213e;border-radius:6px;margin-bottom:4px;flex-wrap:wrap;';
             var charStr = r.chars.map(function (c) { return c.name + (c.minConst > 0 ? c.minConst + '命+' : ''); }).join(' + ');
             var diffStr = r.minDiff !== 0 ? ('差价>' + r.minDiff + '元') : '不限差价';
+            var recStr = (r.recipients && r.recipients.length) ? ('→ 推给 ' + r.recipients.map(scEsc).join('、')) : '→ 推给全部接收人';
             row.innerHTML = '<span style="color:#e94560;font-weight:600;">规则' + (idx + 1) + ':</span>' +
               '<span style="color:#6a9fff;">' + charStr + '</span>' +
               '<span style="color:#888;">' + diffStr + '</span>' +
-              '<button class="del-rule" style="margin-left:auto;padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>';
-            row.querySelector('.del-rule').onclick = function () { charNotifyRules.splice(idx, 1); renderCharNotifyList(); };
+              '<span style="color:#10b981;">' + recStr + '</span>' +
+              '<span style="margin-left:auto;display:flex;gap:4px;">' +
+              '<button class="edit-rule" style="padding:2px 8px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:11px;cursor:pointer;">编辑</button>' +
+              '<button class="del-rule" style="padding:2px 8px;border:none;border-radius:4px;background:#333;color:#e94560;font-size:11px;cursor:pointer;">删除</button>' +
+              '</span>';
+            row.querySelector('.edit-rule').onclick = function () { startEditRule(idx); };
+            row.querySelector('.del-rule').onclick = function () {
+              charNotifyRules.splice(idx, 1);
+              if (editingRuleIdx >= 0) resetRuleForm(); // 删除后索引变化，退出编辑避免错位
+              renderCharNotifyList();
+            };
             charNotifyListEl.appendChild(row);
           })(i);
         }
       }
+
+      // 重置规则编辑表单
+      function resetRuleForm() {
+        editingRuleIdx = -1;
+        pendingChars = [];
+        renderPendingChars();
+        box.querySelector('#mwCharNotifyDiff').value = '0';
+        box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = false; });
+        box.querySelector('#mwCharNotifyAddRule').textContent = '保存规则';
+        var cancelBtn = box.querySelector('#mwCharNotifyCancelEdit');
+        if (cancelBtn) cancelBtn.style.display = 'none';
+      }
+
+      // 载入某条规则到表单进行编辑
+      function startEditRule(idx) {
+        var r = charNotifyRules[idx];
+        if (!r) return;
+        editingRuleIdx = idx;
+        pendingChars = r.chars.map(function (c) { return { name: c.name, minConst: c.minConst }; });
+        renderPendingChars();
+        box.querySelector('#mwCharNotifyDiff').value = r.minDiff || 0;
+        var recs = r.recipients || [];
+        box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = recs.indexOf(cb.value) >= 0; });
+        box.querySelector('#mwCharNotifyAddRule').textContent = '更新规则';
+        var cancelBtn = box.querySelector('#mwCharNotifyCancelEdit');
+        if (cancelBtn) cancelBtn.style.display = '';
+      }
+
       renderPendingChars();
       renderCharNotifyList();
 
@@ -6701,12 +6843,20 @@
       box.querySelector('#mwCharNotifyAddRule').onclick = function () {
         if (pendingChars.length === 0) { alert('请至少添加一个角色'); return; }
         var minDiff = parseFloat(box.querySelector('#mwCharNotifyDiff').value) || 0;
-        charNotifyRules.push({ chars: pendingChars.slice(), minDiff: minDiff });
-        pendingChars = [];
-        renderPendingChars();
+        // 收集勾选的 Server酱 接收人（空数组=推给所有"收全部通知"的接收人）
+        var ruleRecipients = [];
+        box.querySelectorAll('.mwRuleRecipient:checked').forEach(function (cb) { ruleRecipients.push(cb.value); });
+        var newRule = { chars: pendingChars.slice(), minDiff: minDiff, recipients: ruleRecipients };
+        if (editingRuleIdx >= 0 && editingRuleIdx < charNotifyRules.length) {
+          charNotifyRules[editingRuleIdx] = newRule; // 更新已有规则
+        } else {
+          charNotifyRules.push(newRule);
+        }
         renderCharNotifyList();
-        box.querySelector('#mwCharNotifyDiff').value = '0';
+        resetRuleForm();
       };
+
+      box.querySelector('#mwCharNotifyCancelEdit').onclick = function () { resetRuleForm(); };
 
       // ===== 估价阶梯差价阈值管理 =====
       var diffTiersListEl = box.querySelector('#mwDiffTiersList');
@@ -6852,6 +7002,115 @@
 
       renderPpList();
 
+      // ===== Server酱 具名接收人管理 =====
+      var scListEl = box.querySelector('#mwServerChanList');
+      var scEditingIdx = -1; // 正在编辑的接收人索引，-1=新增模式
+      function scEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+      function renderScList() {
+        scListEl.innerHTML = '';
+        var subs = pushConfig.serverChanSubscribers || [];
+        if (subs.length === 0) {
+          scListEl.innerHTML = '<div style="font-size:11px;color:#555;padding:4px 0;">暂无接收人，在下方添加</div>';
+        } else {
+          subs.forEach(function (sub, idx) {
+            var k = sub.key || '';
+            var masked = k ? (k.substring(0, 8) + '...' + k.substring(Math.max(0, k.length - 4))) : '';
+            var globalLabel = sub.global !== false
+              ? '<span style="color:#10b981;font-size:10px;">收全部</span>'
+              : '<span style="color:#6b7280;font-size:10px;">仅规则</span>';
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 6px;margin-bottom:4px;background:#0d1a3a;border-radius:4px;font-size:11px;';
+            row.innerHTML =
+              '<span style="color:#e0e0e0;min-width:45px;">' + scEsc(sub.name || '未命名') + '</span>' +
+              globalLabel +
+              '<span style="color:#888;flex:1;word-break:break-all;">' + scEsc(masked) + '</span>' +
+              '<button data-sc-idx="' + idx + '" data-sc-act="test" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#10b981;font-size:10px;cursor:pointer;">测试</button>' +
+              '<button data-sc-idx="' + idx + '" data-sc-act="edit" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#6a9fff;font-size:10px;cursor:pointer;">编辑</button>' +
+              '<button data-sc-idx="' + idx + '" data-sc-act="del" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#ef4444;font-size:10px;cursor:pointer;">删除</button>';
+            scListEl.appendChild(row);
+          });
+        }
+        renderRuleRecipients();
+      }
+
+      // 规则接收人勾选（动态渲染，随接收人列表变化）
+      function renderRuleRecipients() {
+        var el = box.querySelector('#mwCharNotifyRecipients');
+        if (!el) return;
+        var subs = pushConfig.serverChanSubscribers || [];
+        var prevChecked = {};
+        el.querySelectorAll('.mwRuleRecipient:checked').forEach(function (cb) { prevChecked[cb.value] = true; });
+        if (subs.length === 0) {
+          el.innerHTML = '<div style="font-size:10px;color:#555;">暂无接收人，规则命中时将推给所有"收全部通知"的接收人</div>';
+          return;
+        }
+        var html = '<div style="font-size:10px;color:#888;margin-bottom:4px;">Server酱 推送给（不勾选=推给所有"收全部通知"的接收人）：</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
+        subs.forEach(function (s) {
+          var checked = prevChecked[s.name] ? ' checked' : '';
+          html += '<label style="font-size:11px;color:#ccc;display:flex;align-items:center;gap:3px;cursor:pointer;">' +
+            '<input type="checkbox" class="mwRuleRecipient" value="' + scEsc(s.name) + '"' + checked + ' style="cursor:pointer;" /> ' + scEsc(s.name) + '</label>';
+        });
+        html += '</div>';
+        el.innerHTML = html;
+      }
+
+      scListEl.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-sc-act]');
+        if (!btn) return;
+        var idx = parseInt(btn.getAttribute('data-sc-idx'));
+        var act = btn.getAttribute('data-sc-act');
+        var sub = (pushConfig.serverChanSubscribers || [])[idx];
+        if (!sub) return;
+        if (act === 'test') {
+          sendServerChanTest(sub.name, sub.key);
+          var oldTxt = btn.textContent;
+          btn.textContent = '已发送';
+          btn.disabled = true;
+          setTimeout(function () { btn.textContent = oldTxt; btn.disabled = false; }, 1500);
+        } else if (act === 'edit') {
+          box.querySelector('#mwScName').value = sub.name || '';
+          box.querySelector('#mwScKey').value = sub.key || '';
+          box.querySelector('#mwScGlobal').checked = sub.global !== false;
+          scEditingIdx = idx;
+          box.querySelector('#mwScAddBtn').textContent = '更新';
+        } else if (act === 'del') {
+          pushConfig.serverChanSubscribers.splice(idx, 1);
+          scEditingIdx = -1;
+          box.querySelector('#mwScAddBtn').textContent = '添加';
+          box.querySelector('#mwScName').value = '';
+          box.querySelector('#mwScKey').value = '';
+          box.querySelector('#mwScGlobal').checked = true;
+          renderScList();
+        }
+      });
+
+      box.querySelector('#mwScAddBtn').onclick = function () {
+        var name = box.querySelector('#mwScName').value.trim();
+        var key = box.querySelector('#mwScKey').value.trim();
+        var global = box.querySelector('#mwScGlobal').checked;
+        if (!key) { alert('请填写 SendKey'); return; }
+        if (!Array.isArray(pushConfig.serverChanSubscribers)) pushConfig.serverChanSubscribers = [];
+        if (!name) name = '接收人' + (pushConfig.serverChanSubscribers.length + 1);
+        // 名称唯一：规则按名称引用接收人
+        var nameTaken = pushConfig.serverChanSubscribers.some(function (s, i) { return s.name === name && i !== scEditingIdx; });
+        if (nameTaken) { alert('已存在同名接收人，请换个备注名'); return; }
+        if (scEditingIdx >= 0) {
+          pushConfig.serverChanSubscribers[scEditingIdx] = { name: name, key: key, global: global };
+          scEditingIdx = -1;
+          box.querySelector('#mwScAddBtn').textContent = '添加';
+        } else {
+          pushConfig.serverChanSubscribers.push({ name: name, key: key, global: global });
+        }
+        box.querySelector('#mwScName').value = '';
+        box.querySelector('#mwScKey').value = '';
+        box.querySelector('#mwScGlobal').checked = true;
+        renderScList();
+      };
+
+      renderScList();
+
       // 一键赠送所有订阅者
       box.querySelector('#mwPpBonusAll').onclick = function () {
         var subs = pushConfig.pushPlusSubscribers || [];
@@ -6896,7 +7155,7 @@
             renderPpList();
             renderCharNotifyList();
             // 推送渠道
-            box.querySelector('#mwServerChanKey').value = pushConfig.serverChanKey || '';
+            renderScList();
             box.querySelector('#mwDevMessage').value = pushConfig.devMessage || '';
             // 推送规则
             box.querySelector('#mwSecondaryDelay').value = pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20;
@@ -6960,7 +7219,7 @@
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
-        pushConfig.serverChanKey = box.querySelector('#mwServerChanKey').value.trim();
+        // serverChanSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
         pushConfig.secondaryDelay = parseInt(box.querySelector('#mwSecondaryDelay').value) || 0;
         pushConfig.skipHighDiffSecondary = box.querySelector('#mwSkipHighDiffSecondary').checked;
         pushConfig.highDiffThreshold = parseFloat(box.querySelector('#mwHighDiffThreshold').value) || 0;
@@ -7003,6 +7262,8 @@
       }
       openSettings();
     });
+
+    dom.btnTestEval.addEventListener('click', openTestEvalDialog);
 
     dom.btnCleanData.addEventListener('click', openCleanDataDialog);
 
@@ -8348,6 +8609,162 @@
   }
 
   // ============================================================
+  // 测试估价（手动输入描述，结果不录入列表，仅供调参测试）
+  // ============================================================
+
+  /**
+   * 打开测试估价对话框：粘贴账号描述 → 本地解析估值 → 展示结果
+   * 结果仅用于验证当前估值参数，不写入监控列表
+   */
+  function openTestEvalDialog() {
+    const existing = document.getElementById('mw-test-eval-modal');
+    if (existing) { existing.remove(); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mw-test-eval-modal';
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:1000002;background:rgba(0,0,0,0.75);' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'Noto Sans CJK SC\',sans-serif;';
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText =
+      'position:relative;width:640px;max-width:94vw;max-height:90vh;display:flex;flex-direction:column;' +
+      'background:#1a1a2e;color:#e0e0e0;border-radius:12px;' +
+      'box-shadow:0 20px 60px rgba(0,0,0,0.6);border:1px solid #0f3460;padding:22px 22px 18px;';
+
+    const closeBtn = document.createElement('div');
+    closeBtn.style.cssText =
+      'position:absolute;top:10px;right:14px;width:28px;height:28px;' +
+      'line-height:28px;text-align:center;font-size:18px;color:#666;cursor:pointer;' +
+      'border-radius:6px;z-index:10;';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.title = '关闭';
+    closeBtn.onmouseenter = function () { this.style.color = '#e94560'; this.style.background = 'rgba(233,69,96,0.1)'; };
+    closeBtn.onmouseleave = function () { this.style.color = '#666'; this.style.background = 'transparent'; };
+    closeBtn.onclick = function () { overlay.remove(); };
+    dialog.appendChild(closeBtn);
+
+    const title = document.createElement('h2');
+    title.style.cssText = 'font-size:17px;color:#e94560;margin:0 0 6px;';
+    title.textContent = '测试估价';
+    dialog.appendChild(title);
+
+    const subtitle = document.createElement('p');
+    subtitle.style.cssText = 'font-size:12px;color:#888;margin:0 0 14px;line-height:1.5;';
+    subtitle.textContent = '粘贴账号描述，点击"开始估价"查看估值结果。结果不会录入监控列表，仅用于验证当前估值参数。';
+    dialog.appendChild(subtitle);
+
+    const priceRow = document.createElement('div');
+    priceRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+    const priceLabel = document.createElement('span');
+    priceLabel.style.cssText = 'font-size:12px;color:#aaa;white-space:nowrap;';
+    priceLabel.textContent = '标价(元,选填)';
+    priceRow.appendChild(priceLabel);
+    const priceInput = document.createElement('input');
+    priceInput.type = 'number';
+    priceInput.min = '0';
+    priceInput.placeholder = '用于计算差价/性价比';
+    priceInput.style.cssText = 'width:180px;padding:4px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
+    priceRow.appendChild(priceInput);
+    dialog.appendChild(priceRow);
+
+    const ta = document.createElement('textarea');
+    ta.placeholder = '在此粘贴账号描述（商品标题/详情文本）...';
+    ta.style.cssText = 'width:100%;height:150px;resize:vertical;padding:8px 10px;border:1px solid #0f3460;border-radius:6px;background:#0f1626;color:#e0e0e0;font-size:12px;line-height:1.5;box-sizing:border-box;font-family:inherit;';
+    dialog.appendChild(ta);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;margin:10px 0 0;align-items:center;';
+    const evalBtn = document.createElement('button');
+    evalBtn.textContent = '开始估价';
+    evalBtn.style.cssText = 'padding:6px 18px;border:1px solid #e94560;border-radius:6px;background:#e94560;color:#fff;font-size:13px;font-weight:600;cursor:pointer;';
+    btnRow.appendChild(evalBtn);
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = '清空';
+    clearBtn.style.cssText = 'padding:6px 14px;border:1px solid #2a2a4a;border-radius:6px;background:#1a1a2e;color:#aaa;font-size:13px;cursor:pointer;';
+    btnRow.appendChild(clearBtn);
+    const hint = document.createElement('span');
+    hint.style.cssText = 'font-size:11px;color:#666;margin-left:auto;';
+    hint.textContent = '使用当前估值设置（' + G().name + '）';
+    btnRow.appendChild(hint);
+    dialog.appendChild(btnRow);
+
+    const resultBox = document.createElement('div');
+    resultBox.style.cssText = 'display:none;margin-top:12px;padding:12px;background:#0f1626;border:1px solid #0f3460;border-radius:8px;overflow:auto;flex:1;min-height:0;';
+    dialog.appendChild(resultBox);
+
+    clearBtn.onclick = function () {
+      ta.value = '';
+      priceInput.value = '';
+      resultBox.style.display = 'none';
+      resultBox.innerHTML = '';
+      ta.focus();
+    };
+
+    evalBtn.onclick = function () {
+      const text = ta.value.trim();
+      if (!text) {
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = '<div style="color:#f87171;font-size:12px;">请输入账号描述</div>';
+        return;
+      }
+      let price = parseFloat(priceInput.value);
+      if (isNaN(price) || price < 0) price = 0;
+
+      let parsed, valuation;
+      try {
+        parsed = parseAccountInfo(text);
+        valuation = calculateValue(parsed, price);
+      } catch (err) {
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = '<div style="color:#f87171;font-size:12px;">解析失败: ' + (err && err.message ? err.message : err) + '</div>';
+        return;
+      }
+
+      const row = {
+        showTitle: text,
+        price: price,
+        value: valuation.totalValue,
+        ratio: valuation.ratio,
+        valuation: valuation,
+        parsed: parsed,
+        productUniqueNo: ''
+      };
+      const content = buildNotifyContent('手动测试', row, null, price, null);
+
+      const charList = (parsed.characters || []).map(function (c) {
+        return c.name + (c.const > 0 ? c.const + G().constUnitDisplay : '');
+      }).join('、');
+
+      const headHtml =
+        '<div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:6px;">' +
+        '估值 ¥' + Math.round(valuation.totalValue) +
+        (price > 0
+          ? ' · 差价 ¥' + Math.round(valuation.totalValue - price) + ' · 性价比 ' + valuation.ratio.toFixed(1) + '%'
+          : ' · 未填标价（不计算差价/性价比）') +
+        '</div>' +
+        '<div style="font-size:11px;color:#888;margin-bottom:8px;">' +
+        '识别到 ' + (parsed.characters ? parsed.characters.length : 0) + ' 个五星角色' +
+        (charList ? '：' + charList : '') +
+        '</div>';
+
+      const bodyEl = document.createElement('pre');
+      bodyEl.style.cssText = 'margin:0;font-size:11px;line-height:1.6;color:#cfd6e4;white-space:pre-wrap;word-break:break-word;font-family:inherit;';
+      bodyEl.textContent = content.body;
+
+      resultBox.innerHTML = headHtml;
+      resultBox.appendChild(bodyEl);
+      resultBox.style.display = 'block';
+    };
+
+    overlay.appendChild(dialog);
+    overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+    ta.focus();
+  }
+
+  // ============================================================
   // 估值设置面板（改进4）
   // ============================================================
 
@@ -9354,6 +9771,8 @@ function openSettings() {
     function buildPc6CurveModel() {
       var capRaw = parseFloat(pc6MaxBonusInp.value) / 100;
       var cap = isNaN(capRaw) ? 3.0 : capRaw;
+      var maxWCRaw = parseFloat(pullC6MaxWCInput.value);
+      var maxWC = (isNaN(maxWCRaw) || maxWCRaw < 0) ? 0 : maxWCRaw;
       var segs = readPc6SegInputs();
       var cs = pc6ConnectedStarts(segs);
       function bonusAt(wc) {
@@ -9373,7 +9792,7 @@ function openSettings() {
         if (b < 0) b = 0;
         return b;
       }
-      return { segs: segs, sw: cs.sw, sb: cs.sb, cap: cap, bonusAt: bonusAt, clamp: clamp };
+      return { segs: segs, sw: cs.sw, sb: cs.sb, cap: cap, maxWC: maxWC, bonusAt: bonusAt, clamp: clamp };
     }
 
     function renderPc6Chart(m) {
@@ -9389,6 +9808,7 @@ function openSettings() {
         if (m.segs[i].thr != null && m.segs[i].thr > lastFinite) lastFinite = m.segs[i].thr;
       }
       var xmax = Math.max(10, Math.ceil((lastFinite + 5) / 5) * 5);
+      if (m.maxWC > xmax) xmax = Math.ceil((m.maxWC + 1) / 5) * 5;
 
       var ymax = 0.1;
       for (var k = 0; k <= 160; k++) {
@@ -9456,12 +9876,22 @@ function openSettings() {
         capLine = '<line x1="' + mL + '" y1="' + cy + '" x2="' + (W - mR) + '" y2="' + cy + '" stroke="#e94560" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>';
       }
 
+      // 加权上限竖线
+      var wcLine = '';
+      if (m.maxWC > 0 && m.maxWC <= xmax) {
+        var wx = X(m.maxWC);
+        var wcAnchor = wx < mL + 34 ? 'start' : (wx > W - mR - 34 ? 'end' : 'middle');
+        wcLine = '<line x1="' + wx + '" y1="' + mT + '" x2="' + wx + '" y2="' + (H - mB) + '" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4,2" opacity="0.85"/>' +
+          '<text x="' + wx + '" y="' + (mT - 5) + '" text-anchor="' + wcAnchor + '" fill="#f59e0b" font-size="9">加权上限 ' + m.maxWC + '命</text>';
+      }
+
       var svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;background:#16213e;border-radius:8px;border:1px solid #0f3460;">' +
         yGridHtml + xGridHtml +
         '<line x1="' + mL + '" y1="' + (H - mB) + '" x2="' + (W - mR) + '" y2="' + (H - mB) + '" stroke="#0f3460"/>' +
         '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (H - mB) + '" stroke="#0f3460"/>' +
         yTickHtml + xTickHtml +
         capLine +
+        wcLine +
         segPaths.join('') +
         '<circle cx="' + X(0) + '" cy="' + Y(m.clamp(m.sb[0])) + '" r="3" fill="' + pc6SegColors[0] + '"/>' +
         '</svg>';
@@ -9546,86 +9976,359 @@ function openSettings() {
     c6WeightInfo.appendChild(c6WeightRow);
     c6Section.appendChild(c6WeightInfo);
 
-    // 满命溢价公式配置
-    var c6FormulaRow = document.createElement('div');
-    c6FormulaRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;';
+    // 满命溢价配置（分段折线图模式：加权满命数 → 角色价值溢价系数）
+    var c6SubTitle = document.createElement('div');
+    c6SubTitle.style.cssText = 'font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:4px;';
+    c6SubTitle.textContent = '满命溢价（加权满命数 → 角色价值溢价系数，分段折线图）';
+    c6Section.appendChild(c6SubTitle);
+    var c6SubDesc = document.createElement('p');
+    c6SubDesc.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;';
+    c6SubDesc.innerHTML = '根据加权满命数，对角色价值额外加成。按加权满命数分段，分段首尾相连：后一段的起点 = 前一段终点的加成值，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
+    c6Section.appendChild(c6SubDesc);
 
-    function c6fLabel(text) {
+    function c6sLabel(text) {
       var s = document.createElement('span');
-      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:11px;';
+      s.textContent = text; s.style.cssText = 'color:#aaa;font-size:10px;';
       return s;
     }
-    function c6fInput(val, step, color, title) {
+    function c6sInput(val, step, color, title, inpW) {
       var i = document.createElement('input');
       i.type = 'number'; i.value = val; i.step = step; i.min = '0';
       i.title = title;
-      i.style.cssText = 'width:60px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:' + color + ';font-size:12px;text-align:center;font-weight:600;';
+      i.style.cssText = 'width:' + (inpW||48) + 'px;padding:2px 3px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:' + color + ';font-size:11px;text-align:center;font-weight:600;';
       return i;
     }
 
-    c6FormulaRow.appendChild(c6fLabel('基准满命'));
-    var c6BaseInp = c6fInput(weights.c6Base != null ? weights.c6Base : DEFAULT_WEIGHTS.c6Base, '0.5', '#e94560', '此加权满命数对应的溢价为基准溢价');
-    c6FormulaRow.appendChild(c6BaseInp);
-    c6FormulaRow.appendChild(c6fLabel('基准溢价'));
-    var c6BaseBonusInp = c6fInput((weights.c6BaseBonus != null ? weights.c6BaseBonus : DEFAULT_WEIGHTS.c6BaseBonus) * 100, '5', '#10b981', '基准满命数对应的溢价百分比');
-    c6FormulaRow.appendChild(c6BaseBonusInp);
-    c6FormulaRow.appendChild(c6fLabel('%，每'));
-    var c6StepInp = c6fInput(weights.c6Step != null ? weights.c6Step : DEFAULT_WEIGHTS.c6Step, '0.1', '#e94560', '每N命浮动一档');
-    c6FormulaRow.appendChild(c6StepInp);
-    c6FormulaRow.appendChild(c6fLabel('命浮动'));
-    var c6StepBonusInp = c6fInput((weights.c6StepBonus != null ? weights.c6StepBonus : DEFAULT_WEIGHTS.c6StepBonus) * 100, '0.5', '#10b981', '每档浮动百分比');
-    c6FormulaRow.appendChild(c6StepBonusInp);
-    c6FormulaRow.appendChild(c6fLabel('%，加权上限'));
-    var c6MaxWCInp = c6fInput(weights.c6MaxWeightedConst != null ? weights.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0), '0.5', '#f59e0b', '加权满命数超过此值后溢价不再增加（0=不封顶）');
-    c6FormulaRow.appendChild(c6MaxWCInp);
-    c6FormulaRow.appendChild(c6fLabel('（0=不封顶）'));
-    c6Section.appendChild(c6FormulaRow);
+    var c6SegColors = ['#22c55e', '#f59e0b', '#e94560', '#3b82f6', '#a855f7', '#ec4899'];
+    var c6SegInputs = [];
+    var c6SegRows = [];
+
+    // 通用参数行：加权上限、加成上限
+    var c6CommonRow = document.createElement('div');
+    c6CommonRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;padding:8px 10px;background:rgba(233,69,96,0.03);border-radius:6px;border:1px solid rgba(233,69,96,0.1);';
+    c6CommonRow.appendChild(c6sLabel('加权上限'));
+    var c6MaxWCInp = c6sInput(weights.c6MaxWeightedConst != null ? weights.c6MaxWeightedConst : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0), '0.5', '#f59e0b', '加权满命数超过此值后溢价不再增加（0=不封顶）', 48);
+    c6CommonRow.appendChild(c6MaxWCInp);
+    c6CommonRow.appendChild(c6sLabel('命 | 加成上限'));
+    var c6MaxBonusInp = c6sInput((weights.c6MaxBonus != null ? weights.c6MaxBonus : 0) * 100, '1', '#e94560', '溢价系数最大值（百分比，0=不封顶）', 48);
+    c6CommonRow.appendChild(c6MaxBonusInp);
+    c6CommonRow.appendChild(c6sLabel('%'));
+    c6Section.appendChild(c6CommonRow);
+
+    var c6SegsContainer = document.createElement('div');
+    c6Section.appendChild(c6SegsContainer);
+
+    function renderC6SegRows() {
+      c6SegsContainer.innerHTML = '';
+      c6SegInputs.length = 0;
+      c6SegRows.length = 0;
+      var segs = weights.c6Segments || [];
+      for (var si = 0; si < segs.length; si++) {
+        (function(si) {
+          var seg = segs[si];
+          var color = c6SegColors[si % c6SegColors.length];
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;padding:6px 8px;background:' + color + '11;border-radius:6px;border:1px solid ' + color + '33;';
+          var isLast = (si === segs.length - 1);
+          var prevT = si > 0 ? segs[si-1].threshold : 0;
+          var label = isLast ? '第' + (si+1) + '段(' + prevT + '+命)' : '第' + (si+1) + '段(' + prevT + '~T' + (si+1) + '命)';
+          var title = document.createElement('span');
+          title.textContent = label;
+          title.style.cssText = 'color:' + color + ';font-size:11px;font-weight:600;margin-right:6px;min-width:100px;';
+          row.appendChild(title);
+
+          // 基准加成（第1段可编辑，后续段只读自动推算）
+          row.appendChild(c6sLabel(si === 0 ? '基准加成' : '起点加成'));
+          var baseInp = c6sInput((seg.baseBonus != null ? seg.baseBonus : 0) * 100, '1', '#f59e0b', si === 0 ? '第1段起点加成（加权满命=0处）' : '由前面分段终点自动推算（首尾相连，只读）', 48);
+          baseInp.style.textAlign = 'right';
+          if (si > 0) {
+            baseInp.readOnly = true;
+            baseInp.style.background = '#101a2e';
+            baseInp.style.color = '#b58a2e';
+            baseInp.style.borderStyle = 'dashed';
+          }
+          row.appendChild(baseInp);
+          row.appendChild(c6sLabel('%'));
+
+          // 边界（最后一段无边界）
+          var thresholdInp = null;
+          if (!isLast) {
+            row.appendChild(c6sLabel('|边界'));
+            thresholdInp = c6sInput(seg.threshold != null ? seg.threshold : 1, '0.5', color, '加权满命上界', 42);
+            thresholdInp.style.textAlign = 'right';
+            row.appendChild(thresholdInp);
+          }
+
+          // 每命浮动
+          row.appendChild(c6sLabel('|每命浮动'));
+          var stepInp = c6sInput((seg.step != null ? seg.step : 0.1) * 100, '0.1', '#10b981', '每命浮动加成百分比', 52);
+          stepInp.style.textAlign = 'right';
+          row.appendChild(stepInp);
+          row.appendChild(c6sLabel('%'));
+
+          // 删除按钮（至少保留1段）
+          if (segs.length > 1) {
+            var delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'margin-left:4px;padding:1px 6px;border:1px solid #444;border-radius:3px;background:#1a1a2e;color:#f87171;font-size:10px;cursor:pointer;line-height:1.4;';
+            delBtn.title = '删除此段';
+            delBtn.onclick = function() {
+              weights.c6Segments.splice(si, 1);
+              renderC6SegRows();
+              updateC6Preview();
+            };
+            row.appendChild(delBtn);
+          }
+
+          baseInp.addEventListener('input', updateC6Preview);
+          if (thresholdInp) thresholdInp.addEventListener('input', updateC6Preview);
+          stepInp.addEventListener('input', updateC6Preview);
+
+          c6SegInputs.push({ baseInp: baseInp, thresholdInp: thresholdInp, stepInp: stepInp });
+          c6SegRows.push(row);
+          c6SegsContainer.appendChild(row);
+        })(si);
+      }
+    }
+    renderC6SegRows();
+
+    // 添加分段 + 载入默认按钮
+    var c6BtnRow = document.createElement('div');
+    c6BtnRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;';
+    var addC6SegBtn = document.createElement('button');
+    addC6SegBtn.textContent = '+ 添加分段';
+    addC6SegBtn.style.cssText = 'padding:4px 10px;border:1px solid #0f3460;border-radius:4px;background:#1a1a2e;color:#22c55e;font-size:11px;cursor:pointer;';
+    addC6SegBtn.onclick = function() {
+      var segs = weights.c6Segments || [];
+      var prevT = segs.length > 0 ? (segs[segs.length-1].threshold || 5) : 5;
+      if (segs.length > 0 && segs[segs.length-1].threshold == null) {
+        segs[segs.length-1].threshold = prevT;
+      }
+      segs.push({ baseBonus: 0, threshold: null, step: 0.05 });
+      weights.c6Segments = segs;
+      renderC6SegRows();
+      updateC6Preview();
+    };
+    c6BtnRow.appendChild(addC6SegBtn);
+    var c6DefaultBtn = document.createElement('button');
+    c6DefaultBtn.textContent = '载入默认';
+    c6DefaultBtn.style.cssText = 'padding:4px 10px;border:1px solid #0f3460;border-radius:4px;background:#1a1a2e;color:#f59e0b;font-size:11px;cursor:pointer;';
+    c6DefaultBtn.onclick = function() {
+      var defSegs = (DEFAULT_WEIGHTS.c6Segments && DEFAULT_WEIGHTS.c6Segments.length > 0)
+        ? DEFAULT_WEIGHTS.c6Segments.map(function(s) { return { baseBonus: s.baseBonus, threshold: s.threshold, step: s.step }; })
+        : [{ baseBonus: 0, threshold: null, step: 0.1 }];
+      weights.c6Segments = defSegs;
+      c6MaxBonusInp.value = (DEFAULT_WEIGHTS.c6MaxBonus != null ? DEFAULT_WEIGHTS.c6MaxBonus : 0) * 100;
+      c6MaxWCInp.value = DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0;
+      renderC6SegRows();
+      updateC6Preview();
+    };
+    c6BtnRow.appendChild(c6DefaultBtn);
+    c6Section.appendChild(c6BtnRow);
+
+    // 折线图
+    var c6ChartBox = document.createElement('div');
+    c6ChartBox.style.cssText = 'margin-top:10px;';
+    c6Section.appendChild(c6ChartBox);
 
     // 预览
     var c6Preview = document.createElement('div');
-    c6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(233,69,96,0.05);border-radius:6px;border:1px solid rgba(233,69,96,0.15);';
+    c6Preview.style.cssText = 'font-size:11px;color:#888;line-height:1.8;padding:8px 10px;background:rgba(233,69,96,0.05);border-radius:6px;border:1px solid rgba(233,69,96,0.15);margin-top:8px;';
+    c6Section.appendChild(c6Preview);
+
+    // 读取当前分段输入
+    function readC6SegInputs() {
+      var segs = [];
+      for (var i = 0; i < c6SegInputs.length; i++) {
+        var inp = c6SegInputs[i];
+        var b = (parseFloat(inp.baseInp.value) || 0) / 100;
+        var t = inp.thresholdInp ? parseFloat(inp.thresholdInp.value) : null;
+        var s = (parseFloat(inp.stepInp.value) || 0) / 100;
+        segs.push({
+          base: isNaN(b) ? 0 : b,
+          thr: (inp.thresholdInp && !isNaN(t)) ? t : null,
+          step: isNaN(s) ? 0 : s
+        });
+      }
+      return segs;
+    }
+
+    // 首尾相连递推
+    function c6ConnectedStarts(segs) {
+      var sw = [], sb = [];
+      for (var i = 0; i < segs.length; i++) {
+        if (i === 0) {
+          sw[0] = 0;
+          sb[0] = segs.length > 0 ? segs[0].base : 0;
+        } else {
+          var pt = (segs[i - 1].thr != null) ? segs[i - 1].thr : sw[i - 1];
+          sw[i] = pt;
+          sb[i] = sb[i - 1] + (pt - sw[i - 1]) * segs[i - 1].step;
+        }
+      }
+      return { sw: sw, sb: sb };
+    }
+
+    // 构建曲线模型
+    function buildC6CurveModel() {
+      var capRaw = parseFloat(c6MaxBonusInp.value) / 100;
+      var cap = isNaN(capRaw) ? 0 : capRaw;
+      var maxWCRaw = parseFloat(c6MaxWCInp.value);
+      var maxWC = (isNaN(maxWCRaw) || maxWCRaw < 0) ? 0 : maxWCRaw;
+      var segs = readC6SegInputs();
+      var cs = c6ConnectedStarts(segs);
+      function bonusAt(wc) {
+        for (var i = 0; i < segs.length; i++) {
+          if (segs[i].thr == null || wc <= segs[i].thr) {
+            return { bonus: cs.sb[i] + (wc - cs.sw[i]) * segs[i].step, idx: i };
+          }
+        }
+        if (segs.length > 0) {
+          var li = segs.length - 1;
+          return { bonus: cs.sb[li] + (wc - cs.sw[li]) * segs[li].step, idx: li };
+        }
+        return { bonus: 0, idx: 0 };
+      }
+      function clamp(b) {
+        if (cap > 0 && b > cap) b = cap;
+        if (b < 0) b = 0;
+        return b;
+      }
+      return { segs: segs, sw: cs.sw, sb: cs.sb, cap: cap, maxWC: maxWC, bonusAt: bonusAt, clamp: clamp };
+    }
+
+    function renderC6Chart(m) {
+      if (!m.segs.length) {
+        c6ChartBox.innerHTML = '<div style="font-size:11px;color:#666;padding:12px;text-align:center;background:#16213e;border-radius:8px;border:1px solid #0f3460;">暂无分段，点击"+ 添加分段"</div>';
+        return;
+      }
+      var W = 512, H = 200, mL = 44, mR = 12, mT = 18, mB = 32;
+      var pw = W - mL - mR, ph = H - mT - mB;
+
+      var lastFinite = 0;
+      for (var i = 0; i < m.segs.length; i++) {
+        if (m.segs[i].thr != null && m.segs[i].thr > lastFinite) lastFinite = m.segs[i].thr;
+      }
+      var xmax = Math.max(6, Math.ceil((lastFinite + 3) / 3) * 3);
+      if (m.maxWC > xmax) xmax = Math.ceil((m.maxWC + 1) / 3) * 3;
+
+      var ymax = 0.1;
+      for (var k = 0; k <= 160; k++) {
+        var bs2 = m.clamp(m.bonusAt((xmax * k) / 160).bonus);
+        if (bs2 > ymax) ymax = bs2;
+      }
+      for (var i2 = 0; i2 < m.segs.length; i2++) {
+        if (m.segs[i2].thr == null) continue;
+        var bc2 = m.clamp(m.bonusAt(m.segs[i2].thr).bonus);
+        if (bc2 > ymax) ymax = bc2;
+      }
+      ymax = Math.ceil(ymax * 1.15 * 100) / 100;
+      if (ymax < 0.5) ymax = 0.5;
+
+      function X(wc) { return mL + (wc / xmax) * pw; }
+      function Y(b) {
+        var yy = mT + ph - (b / ymax) * ph;
+        if (yy < mT) yy = mT;
+        return yy;
+      }
+
+      // Y轴刻度
+      var yTicks = 5;
+      var yTickHtml = '';
+      var yGridHtml = '';
+      for (var t = 0; t <= yTicks; t++) {
+        var yv = (ymax * t) / yTicks;
+        var yp = Y(yv);
+        yTickHtml += '<text x="' + (mL - 4) + '" y="' + (yp + 3) + '" text-anchor="end" fill="#666" font-size="9">' + Math.round(yv * 100) + '%</text>';
+        yGridHtml += '<line x1="' + mL + '" y1="' + yp + '" x2="' + (W - mR) + '" y2="' + yp + '" stroke="#1a2a4a" stroke-dasharray="2,3"/>';
+      }
+      // X轴刻度
+      var xTicks = 5;
+      var xTickHtml = '';
+      var xGridHtml = '';
+      for (var tx = 0; tx <= xTicks; tx++) {
+        var xv = (xmax * tx) / xTicks;
+        var xp = X(xv);
+        xTickHtml += '<text x="' + xp + '" y="' + (H - mB + 14) + '" text-anchor="middle" fill="#666" font-size="9">' + xv.toFixed(0) + '命</text>';
+        xGridHtml += '<line x1="' + xp + '" y1="' + mT + '" x2="' + xp + '" y2="' + (H - mB) + '" stroke="#1a2a4a" stroke-dasharray="2,3"/>';
+      }
+
+      // 折线
+      var segPaths = [];
+      for (var si = 0; si < m.segs.length; si++) {
+        var seg = m.segs[si];
+        var segColor = c6SegColors[si % c6SegColors.length];
+        var xStart = X(m.sw[si]);
+        var yStart = Y(m.clamp(m.sb[si]));
+        var endWC = seg.thr != null ? seg.thr : xmax;
+        var endBonus = m.bonusAt(endWC).bonus;
+        var xEnd = X(endWC);
+        var yEnd = Y(m.clamp(endBonus));
+        segPaths.push('<line x1="' + xStart + '" y1="' + yStart + '" x2="' + xEnd + '" y2="' + yEnd + '" stroke="' + segColor + '" stroke-width="2" fill="none"/>');
+        // 分段端点圆点
+        if (seg.thr != null) {
+          segPaths.push('<circle cx="' + xEnd + '" cy="' + yEnd + '" r="3" fill="' + segColor + '"/>');
+        }
+      }
+
+      // 上限截断线
+      var capLine = '';
+      if (m.cap > 0 && m.cap <= ymax) {
+        var cy = Y(m.cap);
+        capLine = '<line x1="' + mL + '" y1="' + cy + '" x2="' + (W - mR) + '" y2="' + cy + '" stroke="#e94560" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>';
+      }
+
+      // 加权上限竖线
+      var wcLine = '';
+      if (m.maxWC > 0 && m.maxWC <= xmax) {
+        var wx = X(m.maxWC);
+        var wcAnchor = wx < mL + 34 ? 'start' : (wx > W - mR - 34 ? 'end' : 'middle');
+        wcLine = '<line x1="' + wx + '" y1="' + mT + '" x2="' + wx + '" y2="' + (H - mB) + '" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4,2" opacity="0.85"/>' +
+          '<text x="' + wx + '" y="' + (mT - 5) + '" text-anchor="' + wcAnchor + '" fill="#f59e0b" font-size="9">加权上限 ' + m.maxWC + '命</text>';
+      }
+
+      var svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;background:#16213e;border-radius:8px;border:1px solid #0f3460;">' +
+        yGridHtml + xGridHtml +
+        '<line x1="' + mL + '" y1="' + (H - mB) + '" x2="' + (W - mR) + '" y2="' + (H - mB) + '" stroke="#0f3460"/>' +
+        '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (H - mB) + '" stroke="#0f3460"/>' +
+        yTickHtml + xTickHtml +
+        capLine +
+        wcLine +
+        segPaths.join('') +
+        '<circle cx="' + X(0) + '" cy="' + Y(m.clamp(m.sb[0])) + '" r="3" fill="' + c6SegColors[0] + '"/>' +
+        '</svg>';
+      c6ChartBox.innerHTML = svg;
+    }
+
     function updateC6Preview() {
-      var base = parseFloat(c6BaseInp.value) || 0;
-      var baseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
-      var step = parseFloat(c6StepInp.value) || 1;
-      var stepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      var m = buildC6CurveModel();
+      // 同步只读起点输入框（第2段起自动推算，首尾相连；输入框单位为百分比）
+      for (var i = 1; i < c6SegInputs.length && i < m.sb.length; i++) {
+        c6SegInputs[i].baseInp.value = Math.round(m.sb[i] * 100 * 1000) / 1000;
+      }
+      renderC6Chart(m);
+
       var maxWC = parseFloat(c6MaxWCInp.value);
       if (isNaN(maxWC) || maxWC <= 0) maxWC = 0;
-      var samples = [0, 1, 2, base, base + step, base + step * 5, base + step * 10, base + step * 20, base + step * 50];
-      if (maxWC > 0) samples.push(maxWC, maxWC + step, maxWC + step * 5);
+      var samples = [0, 1, 2, 3, 4, 5, 6, 8, 10, 15];
+      if (maxWC > 0) samples.push(maxWC, maxWC + 3);
       samples = samples.filter(function(v, i, arr) { return arr.indexOf(v) === i; }).sort(function(a, b) { return a - b; });
       var html = '';
       for (var si = 0; si < samples.length; si++) {
         var c = samples[si];
         var effC = (maxWC > 0 && c > maxWC) ? maxWC : c;
-        var bonus = baseBonus + (effC - base) / step * stepBonus;
-        if (bonus < 0) bonus = 0;
-        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%　';
+        var bonus = m.clamp(m.bonusAt(effC).bonus);
+        var capped = (maxWC > 0 && c > maxWC);
+        html += c + '命 → +' + (Math.round(bonus * 1000) / 10) + '%' + (capped ? ' (封顶)' : '') + '　';
       }
+      html += '<br><span style="color:#f59e0b">注：加权满命数超过' + (maxWC > 0 ? maxWC : '∞') + '后按上限计算</span>';
+      if (m.cap > 0) html += '；溢价系数上限 +' + Math.round(m.cap * 100) + '%';
       c6Preview.innerHTML = html;
     }
-    [c6BaseInp, c6BaseBonusInp, c6StepInp, c6StepBonusInp, c6MaxWCInp].forEach(function(inp) {
+    [c6MaxWCInp, c6MaxBonusInp].forEach(function(inp) {
       inp.oninput = updateC6Preview;
     });
     updateC6Preview();
-    c6Section.appendChild(c6Preview);
-
-    // 载入默认按钮
-    var c6DefaultRow = document.createElement('div');
-    c6DefaultRow.style.cssText = 'margin-top:8px;';
-    var loadC6DefaultBtn = document.createElement('button');
-    loadC6DefaultBtn.textContent = '载入默认（3命基准100%，每0.1命浮动5%）';
-    loadC6DefaultBtn.style.cssText = 'padding:4px 10px;border:none;border-radius:4px;background:#333;color:#f59e0b;font-size:11px;cursor:pointer;';
-    loadC6DefaultBtn.onclick = function () {
-      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
-      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
-      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
-      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
-      c6MaxWCInp.value = DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0;
-      updateC6Preview();
-    };
-    c6DefaultRow.appendChild(loadC6DefaultBtn);
-    c6Section.appendChild(c6DefaultRow);
     dialog.appendChild(c6Section);
 
     // ===== 5. 有效金系数（按有效金数分段，动态分段） =====
@@ -10369,7 +11072,7 @@ function openSettings() {
     weightsSection.appendChild(wsTitle);
 
     var weightInputs = {};
-    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, c6MaxWeightedConst: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true, charCountBonus: true, weaponCountBonus: true, outfitCountBonus: true };
+    var skipKeys = { c6TierWeights: true, effTierWeights: true, c6MultiBonus: true, pullC6Bonus: true, teamMultiBonus: true, flatDiscountRules: true, c6TeamDependency: true, charPrices: true, constPremiums: true, teamPremiums: true, teams: true, pullTiers: true, yellowTiers: true, needSigWeapons: true, pullBase: true, pullBasePrice: true, pullStepPrice: true, pullMaxPrice: true, yellowBase: true, yellowStep: true, yellowBaseCoeff: true, yellowStepCoeff: true, yellowMaxCoeff: true, yellowSegments: true, effYellowSegments: true, effYellowMaxCoeff: true, effYellowSeg1BaseCoeff: true, effYellowSeg1Threshold: true, effYellowSeg1Step: true, effYellowSeg2BaseCoeff: true, effYellowSeg2Threshold: true, effYellowSeg2Step: true, effYellowSeg3BaseCoeff: true, effYellowSeg3Step: true, pullC6Base: true, pullC6BaseBonus: true, pullC6Step: true, pullC6StepBonus: true, pullC6Threshold: true, pullC6MaxWeightedConst: true, pullPerWeightedConst: true, pullPerWeightedConstCount: true, c6Base: true, c6BaseBonus: true, c6Step: true, c6StepBonus: true, c6MaxWeightedConst: true, c6Segments: true, c6MaxBonus: true, pullC6Segments: true, pullC6MaxBonus: true, pullSegments: true, priceRangeSegments: true, teamMates: true, constPrices: true, deletedChars: true, charTierOverride: true, sigWeaponsOverride: true, charCountBonus: true, weaponCountBonus: true, outfitCountBonus: true };
     for (var wk of Object.keys(DEFAULT_WEIGHTS)) {
       if (skipKeys[wk]) continue;
       var meta = WEIGHT_LABELS[wk] || { label: wk, desc: '' };
@@ -10504,11 +11207,14 @@ function openSettings() {
       pullMaxPriceInput.value = (DEFAULT_PULL_FORMULA.pullMaxPrice != null) ? DEFAULT_PULL_FORMULA.pullMaxPrice : 5;
       renderPullSegRows();
       updatePullChartPreview();
-      // 重置满命溢价公式参数
-      c6BaseInp.value = DEFAULT_WEIGHTS.c6Base;
-      c6BaseBonusInp.value = DEFAULT_WEIGHTS.c6BaseBonus * 100;
-      c6StepInp.value = DEFAULT_WEIGHTS.c6Step;
-      c6StepBonusInp.value = DEFAULT_WEIGHTS.c6StepBonus * 100;
+      // 重置满命多角色溢价（分段折线图模式）
+      var defC6Segs = (DEFAULT_WEIGHTS.c6Segments && DEFAULT_WEIGHTS.c6Segments.length > 0)
+        ? DEFAULT_WEIGHTS.c6Segments.map(function(s) { return { baseBonus: s.baseBonus, threshold: s.threshold, step: s.step }; })
+        : [{ baseBonus: 0, threshold: null, step: 0.1 }];
+      weights.c6Segments = defC6Segs;
+      c6MaxBonusInp.value = (DEFAULT_WEIGHTS.c6MaxBonus != null ? DEFAULT_WEIGHTS.c6MaxBonus : 0) * 100;
+      c6MaxWCInp.value = DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0;
+      renderC6SegRows();
       updateC6Preview();
       // 重置满命抽数加成（分段折线图模式）
       var defPc6Segs = (DEFAULT_WEIGHTS.pullC6Segments && DEFAULT_WEIGHTS.pullC6Segments.length > 0)
@@ -10745,12 +11451,22 @@ function openSettings() {
       }
       newW.pullC6Segments = newPc6Segs;
 
-      // 收集满命溢价公式参数
-      var _c6b = parseFloat(c6BaseInp.value); newW.c6Base = !isNaN(_c6b) ? _c6b : DEFAULT_WEIGHTS.c6Base;
-      newW.c6BaseBonus = (parseFloat(c6BaseBonusInp.value) || 0) / 100;
-      var _c6s = parseFloat(c6StepInp.value); newW.c6Step = (!isNaN(_c6s) && _c6s > 0) ? _c6s : DEFAULT_WEIGHTS.c6Step;
-      newW.c6StepBonus = (parseFloat(c6StepBonusInp.value) || 0) / 100;
+      // 收集满命多角色溢价（分段折线图模式）
       var _c6mwc = parseFloat(c6MaxWCInp.value); newW.c6MaxWeightedConst = !isNaN(_c6mwc) ? _c6mwc : (DEFAULT_WEIGHTS.c6MaxWeightedConst != null ? DEFAULT_WEIGHTS.c6MaxWeightedConst : 0);
+      var _c6mbVal = parseFloat(c6MaxBonusInp.value) / 100; newW.c6MaxBonus = isNaN(_c6mbVal) ? 0 : _c6mbVal;
+      var newC6Segs = [];
+      for (var _c6si = 0; _c6si < c6SegInputs.length; _c6si++) {
+        var _c6sinp = c6SegInputs[_c6si];
+        var _c6sb = (parseFloat(_c6sinp.baseInp.value) || 0) / 100;
+        var _c6st = _c6sinp.thresholdInp ? parseFloat(_c6sinp.thresholdInp.value) : null;
+        var _c6ss = (parseFloat(_c6sinp.stepInp.value) || 0) / 100;
+        newC6Segs.push({
+          baseBonus: isNaN(_c6sb) ? 0 : _c6sb,
+          threshold: (_c6sinp.thresholdInp && !isNaN(_c6st)) ? _c6st : null,
+          step: isNaN(_c6ss) ? 0 : _c6ss
+        });
+      }
+      newW.c6Segments = newC6Segs;
 
       // 收集满命权重
       var newC6Weights = {};
@@ -11244,8 +11960,12 @@ function openSettings() {
       var fcp = valuation.fullConstPremium || 0;
       var tp = valuation.teamPremium || 0;
       var pv = valuation.pullValue || 0;
+      var pinfoCalc = valuation.pullInfo || {};
+      var pullC6 = pinfoCalc.c6Bonus || 0;
+      var basePull = (pinfoCalc.baseTotal != null) ? pinfoCalc.baseTotal : Math.max(0, pv - pullC6);
       var or = valuation.otherResources || 0;
-      var subtotal = cv + fcp + tp + pv + or;
+      // 参与有效金系数的部分（满命多角色溢价、满命抽数加成不参与，系数后直接相加）
+      var subtotal = cv + tp + basePull + or;
 
       calcLines.push('角色价值: ¥' + Math.round(cv));
       // 无专武折扣
@@ -11256,23 +11976,14 @@ function openSettings() {
       if (valuation.c6DepNotes && valuation.c6DepNotes.length > 0) {
         calcLines.push('强绑折扣: ' + valuation.c6DepNotes.join('; '));
       }
-      if (fcp > 0) {
-        var c6Note = (valuation.c6Bonus && valuation.c6Bonus.notes && valuation.c6Bonus.notes.length > 0)
-          ? ' (' + valuation.c6Bonus.notes.join('; ') + ')' : '';
-        calcLines.push('+满命溢价: +¥' + Math.round(fcp) + c6Note);
-      }
       if (tp > 0) {
         var teamNote = (valuation.teamBonus && valuation.teamBonus.notes && valuation.teamBonus.notes.length > 0)
           ? ' (' + valuation.teamBonus.notes.join('; ') + ')' : '';
         calcLines.push('+配队溢价: +¥' + Math.round(tp) + teamNote);
       }
-      if (pv > 0) {
-        var pi = valuation.pullInfo;
-        var pullNote = pi ? ' (' + pi.pulls + '抽×' + pi.perPull + '/抽)' : '';
-        if (pi && pi.c6Bonus > 0) {
-          pullNote += ' (+满命加成' + Math.round(pi.c6Bonus) + ')';
-        }
-        calcLines.push('+抽数价值: +¥' + Math.round(pv) + pullNote);
+      if (basePull > 0) {
+        var pullNote = pinfoCalc.pulls != null ? ' (' + pinfoCalc.pulls + '抽×' + pinfoCalc.perPull + '/抽)' : '';
+        calcLines.push('+抽数价值: +¥' + Math.round(basePull) + pullNote);
       }
       if (or > 0) {
         calcLines.push('+其他资源: +¥' + Math.round(or));
@@ -11297,6 +12008,15 @@ function openSettings() {
         calcLines.push('取较低值: ×' + finalCoeff.toFixed(3));
       } else {
         calcLines.push('×有效金系数: ×' + yc.toFixed(3) + yellowLabel);
+      }
+      // 满命相关：不参与有效金系数，系数计算后直接相加
+      if (fcp > 0) {
+        var c6Note = (valuation.c6Bonus && valuation.c6Bonus.notes && valuation.c6Bonus.notes.length > 0)
+          ? ' (' + valuation.c6Bonus.notes.join('; ') + ')' : '';
+        calcLines.push('+满命溢价: +¥' + Math.round(fcp) + c6Note);
+      }
+      if (pullC6 > 0) {
+        calcLines.push('+满命抽数加成: +¥' + Math.round(pullC6) + ' (' + Math.round((pinfoCalc.c6Multiplier || 0) * 100) + '%)');
       }
       // 数量加成（角色/武器/皮肤，达到阈值后直接加在最终估值上，不参与系数）
       if (valuation.charCountBonus > 0) {
@@ -11452,7 +12172,7 @@ function openSettings() {
    * 4. 手机推送（Server酱/PushPlus）
    * 5. 重复提醒（可选）
    */
-  function notify(productId, title, body, mdBody) {
+  function notify(productId, title, body, mdBody, ruleRecipients) {
     // 1. 桌面通知（需要浏览器授权）
     try {
       if (Notification && Notification.permission === 'granted') {
@@ -11497,7 +12217,7 @@ function openSettings() {
     }
 
     // 6. 手机推送
-    sendPhonePush(title, mdBody || body, productId);
+    sendPhonePush(title, mdBody || body, productId, ruleRecipients);
 
     // 7. 重复提醒
     if (pushConfig.repeatAlert) {
@@ -11650,10 +12370,53 @@ function openSettings() {
   }
 
   /**
+   * 迁移旧格式 Server酱 SendKey 字符串为具名接收人列表
+   * 旧格式 serverChanKey 是无名 Key 串（无法区分人）；迁移为 [{name, key, global}]
+   * 幂等：仅在接收人列表为空且存在旧 Key 时执行一次
+   */
+  function migrateServerChanSubscribers() {
+    if ((!Array.isArray(pushConfig.serverChanSubscribers) || pushConfig.serverChanSubscribers.length === 0)
+        && pushConfig.serverChanKey) {
+      var oldKeys = String(pushConfig.serverChanKey).split(/[,\n\s]+/).filter(function (k) { return k.trim().length > 0; });
+      if (oldKeys.length > 0) {
+        pushConfig.serverChanSubscribers = oldKeys.map(function (key, i) {
+          return { name: '接收人' + (i + 1), key: key.trim(), global: true };
+        });
+        pushConfig.serverChanKey = '';
+        console.log('[鸣潮监控] Server酱旧格式已迁移为具名接收人，共' + oldKeys.length + '个');
+      }
+    }
+    if (!Array.isArray(pushConfig.serverChanSubscribers)) pushConfig.serverChanSubscribers = [];
+  }
+
+  /**
+   * 向单个 Server酱 接收人发送测试消息（验证该 SendKey 配置是否正常）
+   */
+  function sendServerChanTest(name, key) {
+    if (!key || !String(key).trim()) { alert('该接收人未配置 SendKey'); return; }
+    var cleanKey = String(key).trim();
+    var title = '【测试】鸣潮监控 Server酱推送';
+    var desp = '接收人：' + (name || '未命名') + '\n\n' +
+      '发送时间：' + new Date().toLocaleString('zh-CN') + '\n\n' +
+      '如果你收到这条消息，说明该接收人的 SendKey 配置正常。';
+    try {
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url: 'https://sctapi.ftqq.com/' + cleanKey + '.send',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        data: 'title=' + encodeURIComponent(title) + '&desp=' + encodeURIComponent(desp),
+        onload: function (res) { console.log('[鸣潮监控] Server酱测试推送已发送: ' + cleanKey.substring(0, 8) + '...', res && res.responseText); },
+        onerror: function (e) { console.error('[鸣潮监控] Server酱测试推送失败:', cleanKey.substring(0, 8) + '...', e); }
+      });
+    } catch (e) { console.error('[鸣潮监控] Server酱测试推送异常:', cleanKey.substring(0, 8) + '...', e); }
+  }
+
+  /**
    * 发送手机推送通知
    * 支持：Server酱（微信）、PushPlus（微信）
+   * @param {string[]|null} ruleRecipients - 指定账号规则命中的接收人姓名列表；非空时 Server酱 仅推给这些人
    */
-  function sendPhonePush(title, body, productId) {
+  function sendPhonePush(title, body, productId, ruleRecipients) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
     const productUrl = cleanId.indexOf('pz_') === 0
@@ -11664,24 +12427,38 @@ function openSettings() {
         : 'https://www.pxb7.com/product/' + cleanId + '/1')));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
-    // Server酱推送（微信）- 支持多个SendKey
-    if (pushConfig.serverChanKey) {
-      var sckKeys = pushConfig.serverChanKey.split(/[,\n\s]+/).filter(function(k) { return k.trim().length > 0; });
-      sckKeys.forEach(function(key) {
-        key = key.trim();
-        if (!key) return;
-        try {
-          GM_xmlhttpRequest({
-            method: 'POST',
-            url: 'https://sctapi.ftqq.com/' + key + '.send',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            data: 'title=' + encodeURIComponent(title) + '&desp=' + encodeURIComponent(pushBody),
-            onload: function () { console.log('[鸣潮监控] Server酱推送已发送: ' + key.substring(0, 8) + '...'); },
-            onerror: function (e) { console.error('[鸣潮监控] Server酱推送失败:', key.substring(0, 8) + '...', e); }
-          });
-        } catch (e) { console.error('[鸣潮监控] Server酱推送异常:', key.substring(0, 8) + '...', e); }
+    // Server酱推送（微信）- 具名接收人
+    // 规则命中（ruleRecipients 非空）：仅推给该规则勾选的接收人，不打扰其他人
+    // 常规通知：推给标记"收全部通知"（global !== false）的接收人
+    var scTargetKeys = [];
+    var scSubs = Array.isArray(pushConfig.serverChanSubscribers) ? pushConfig.serverChanSubscribers : [];
+    if (ruleRecipients && ruleRecipients.length > 0) {
+      scSubs.forEach(function (s) {
+        if (s && s.key && ruleRecipients.indexOf(s.name) >= 0) scTargetKeys.push(s.key.trim());
+      });
+      console.log('[鸣潮监控] 指定账号推送：Server酱仅推给接收人 ' + ruleRecipients.join('、'));
+    } else {
+      scSubs.forEach(function (s) {
+        if (s && s.key && s.global !== false) scTargetKeys.push(s.key.trim());
       });
     }
+    // 兼容旧格式（未迁移）：无具名接收人时回退到 serverChanKey 串
+    if (scSubs.length === 0 && pushConfig.serverChanKey) {
+      pushConfig.serverChanKey.split(/[,\n\s]+/).forEach(function (k) { if (k.trim()) scTargetKeys.push(k.trim()); });
+    }
+    scTargetKeys.forEach(function (key) {
+      if (!key) return;
+      try {
+        GM_xmlhttpRequest({
+          method: 'POST',
+          url: 'https://sctapi.ftqq.com/' + key + '.send',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          data: 'title=' + encodeURIComponent(title) + '&desp=' + encodeURIComponent(pushBody),
+          onload: function () { console.log('[鸣潮监控] Server酱推送已发送: ' + key.substring(0, 8) + '...'); },
+          onerror: function (e) { console.error('[鸣潮监控] Server酱推送失败:', key.substring(0, 8) + '...', e); }
+        });
+      } catch (e) { console.error('[鸣潮监控] Server酱推送异常:', key.substring(0, 8) + '...', e); }
+    });
 
     // PushPlus推送（微信）- 主从分级推送
     var ppSubscribers = pushConfig.pushPlusSubscribers || [];
@@ -11781,6 +12558,7 @@ function openSettings() {
     var payload = {
       // 推送渠道
       serverChanKey: pushConfig.serverChanKey || '',
+      serverChanSubscribers: pushConfig.serverChanSubscribers || [],
       pushPlusSubscribers: pushConfig.pushPlusSubscribers || [],
       devMessage: pushConfig.devMessage || '',
       // 推送规则
@@ -11853,6 +12631,7 @@ function openSettings() {
             var remote = json.pushConfig;
             // 推送渠道
             pushConfig.serverChanKey = remote.serverChanKey != null ? remote.serverChanKey : (pushConfig.serverChanKey || '');
+            pushConfig.serverChanSubscribers = Array.isArray(remote.serverChanSubscribers) ? remote.serverChanSubscribers : (pushConfig.serverChanSubscribers || []);
             pushConfig.pushPlusSubscribers = Array.isArray(remote.pushPlusSubscribers) ? remote.pushPlusSubscribers : pushConfig.pushPlusSubscribers;
             pushConfig.devMessage = remote.devMessage != null ? remote.devMessage : (pushConfig.devMessage || '');
             // 推送规则
@@ -12933,6 +13712,8 @@ function openSettings() {
     if (!Array.isArray(pushConfig.pushPlusSubscribers)) {
       pushConfig.pushPlusSubscribers = [];
     }
+    // 迁移旧格式 Server酱 SendKey（无名）为具名接收人列表
+    migrateServerChanSubscribers();
 
     // 如果设置了同步密码，从服务器自动恢复推送配置（换电脑时自动恢复）
     if (pushConfig.syncPassword) {

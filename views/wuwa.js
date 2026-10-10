@@ -4253,13 +4253,6 @@ function getPageHTML(options) {
       let detailHtml = '<div style="color:#888;font-size:12px;margin-bottom:6px;">估价计算</div>';
       // 基础价值
       detailHtml += resultRow('角色价值', det.characterValue + ' 元', '#e0e0e0');
-      // 满命溢价
-      const c6Bonus = det.c6Bonus || {};
-      if (det.c6Premium > 0) {
-        let c6Label = det.c6Premium + ' 元';
-        if (c6Bonus.notes && c6Bonus.notes.length > 0) c6Label += '（' + c6Bonus.notes.join('，') + '）';
-        detailHtml += resultRow('满命溢价', c6Label, '#4ade80');
-      }
       // 配队溢价
       const teamBonus = det.teamBonus || {};
       if (det.teamPremium > 0) {
@@ -4275,15 +4268,14 @@ function getPageHTML(options) {
       if (det.sigDiscountNotes && det.sigDiscountNotes.length > 0) {
         detailHtml += resultRow('无专武折扣', det.sigDiscountNotes.join('；'), '#fbbf24');
       }
-      // 抽数价值
+      // 抽数价值（仅基础抽数价值参与有效金系数；满命抽数加成在系数后单独相加）
       const pi = det.pullInfo || {};
-      if (det.pullValue > 0 || pi.pulls > 0) {
-        let pullLabel = det.pullValue + ' 元';
+      const basePullValue = (pi.baseTotal != null) ? pi.baseTotal : Math.max(0, (det.pullValue || 0) - (pi.c6Bonus || 0));
+      if (basePullValue > 0 || pi.pulls > 0) {
+        let pullLabel = basePullValue + ' 元';
         if (pi.pulls > 0) {
           pullLabel += '（' + pi.pulls + '抽';
           if (pi.perPull != null) pullLabel += '·每抽' + pi.perPull + '元';
-          if (pi.baseTotal > 0) pullLabel += '·基础' + pi.baseTotal + '元';
-          if (pi.c6Bonus > 0) pullLabel += '·满命加成+' + pi.c6Bonus + '元';
           pullLabel += '）';
         }
         detailHtml += resultRow('抽数价值', pullLabel, '#2dd4bf');
@@ -4292,8 +4284,8 @@ function getPageHTML(options) {
       if (det.resourceValue > 0) {
         detailHtml += resultRow('资源价值', det.resourceValue + ' 元', '#fbbf24');
       }
-      // 小计
-      const totalBeforeCoeff = det.characterValue + det.c6Premium + det.teamPremium + det.pullValue + det.resourceValue;
+      // 小计（满命多角色溢价、满命抽数加成不参与系数，系数后单独相加）
+      const totalBeforeCoeff = det.characterValue + det.teamPremium + basePullValue + det.resourceValue;
       detailHtml += resultRow('基础小计', totalBeforeCoeff.toFixed(2) + ' 元', '#aaa');
       // 生效系数
       const flatActive = (fd.value < 1 && fd.notes && fd.notes.length > 0 && fd.value < (yi.coefficient || 1));
@@ -4315,6 +4307,19 @@ function getPageHTML(options) {
           });
           detailHtml += '<div style="padding:4px 0 8px 0;">' + bdItems.join('') + '</div>';
         }
+      }
+      // 满命溢价（不参与有效金系数，系数计算后直接相加）
+      const c6Bonus = det.c6Bonus || {};
+      if (det.c6Premium > 0) {
+        let c6Label = '+' + det.c6Premium + ' 元';
+        if (c6Bonus.notes && c6Bonus.notes.length > 0) c6Label += '（' + c6Bonus.notes.join('，') + '）';
+        detailHtml += resultRow('满命溢价', c6Label, '#4ade80');
+      }
+      // 满命抽数加成（不参与有效金系数，系数计算后直接相加）
+      if (pi.c6Bonus > 0) {
+        let c6PullLabel = '+' + pi.c6Bonus + ' 元';
+        if (pi.c6Multiplier != null) c6PullLabel += '（+' + Math.round(pi.c6Multiplier * 100) + '%）';
+        detailHtml += resultRow('满命抽数加成', c6PullLabel, '#4ade80');
       }
       // 数量加成（角色/武器/皮肤，达到阈值后直接加在最终估值上，不参与系数）
       if (det.charCountBonus > 0) {
@@ -4512,33 +4517,19 @@ function getPageHTML(options) {
         if (det.characterValue != null) {
           calcRows.push({ label: '角色价值', val: det.characterValue + ' 元' });
         }
-        // 满命溢价
-        if (det.c6Premium != null && det.c6Premium > 0) {
-          calcRows.push({ label: '满命溢价', val: '+' + det.c6Premium + ' 元', cls: 'pos', tip: '满命角色越多，账号稀缺性越高，额外加成越多' });
-        }
         // 配队溢价
         if (det.teamPremium != null && det.teamPremium > 0) {
           calcRows.push({ label: '配队溢价', val: '+' + det.teamPremium + ' 元', cls: 'pos', tip: '凑成完整成型配队的账号，可玩性更高，有额外价值加成' });
         }
-        // 抽数价值
-        if (det.pullValue != null && det.pullValue > 0) {
-          calcRows.push({ label: '抽数价值', val: '+' + det.pullValue + ' 元', cls: 'pos', tip: '星声、月相、波纹等抽卡资源按比例换算的等价价值' });
+        // 抽数价值（仅基础抽数价值，参与有效金系数）
+        const mpi = det.pullInfo || {};
+        const mBasePull = (mpi.baseTotal != null) ? mpi.baseTotal : Math.max(0, (det.pullValue || 0) - (mpi.c6Bonus || 0));
+        if (mBasePull > 0) {
+          calcRows.push({ label: '抽数价值', val: '+' + mBasePull + ' 元', cls: 'pos', tip: '星声、月相、波纹等抽卡资源按比例换算的等价价值' });
         }
         // 资源价值
         if (det.resourceValue != null && det.resourceValue > 0) {
           calcRows.push({ label: '资源价值', val: '+' + det.resourceValue + ' 元', cls: 'pos' });
-        }
-        // 角色数量加成
-        if (det.charCountBonus != null && det.charCountBonus > 0) {
-          calcRows.push({ label: '角色数量加成', val: '+' + det.charCountBonus + ' 元', cls: 'pos', tip: '账号五星角色数量达到设定阈值时的额外加成' });
-        }
-        // 武器数量加成
-        if (det.weaponCountBonus != null && det.weaponCountBonus > 0) {
-          calcRows.push({ label: '武器数量加成', val: '+' + det.weaponCountBonus + ' 元', cls: 'pos', tip: '账号角色专武数量达到设定阈值时的额外加成（只统计角色专武）' });
-        }
-        // 皮肤数量加成
-        if (det.outfitCountBonus != null && det.outfitCountBonus > 0) {
-          calcRows.push({ label: '皮肤数量加成', val: '+' + det.outfitCountBonus + ' 元', cls: 'pos', tip: '账号服饰/皮肤数量达到设定阈值时的额外加成' });
         }
         // 强绑折扣（缺少强绑队友时角色价值打折，引擎只回传说明文案）
         if (det.c6DepNotes && det.c6DepNotes.length > 0) {
@@ -4558,6 +4549,28 @@ function getPageHTML(options) {
         if (yi.coefficient != null && yi.coefficient !== 1) {
           const goldLabel = yi.effectiveYellow != null ? fmtGold(yi.effectiveYellow) + ' 金' : '';
           calcRows.push({ label: '有效金系数', val: '× ' + yi.coefficient, cls: yi.coefficient > 1 ? 'pos' : 'neg', tip: '根据有效金数量（限定角色+专武）调整系数，金越多账号越值钱，系数越高' });
+        }
+        // 满命溢价（不参与有效金系数，系数计算后直接相加）
+        if (det.c6Premium != null && det.c6Premium > 0) {
+          calcRows.push({ label: '满命溢价', val: '+' + det.c6Premium + ' 元', cls: 'pos', tip: '满命角色越多，账号稀缺性越高，额外加成越多（不参与系数，系数后直接相加）' });
+        }
+        // 满命抽数加成（不参与有效金系数，系数计算后直接相加）
+        if (mpi.c6Bonus != null && mpi.c6Bonus > 0) {
+          var c6PullVal = '+' + mpi.c6Bonus + ' 元';
+          if (mpi.c6Multiplier != null) c6PullVal += '（+' + Math.round(mpi.c6Multiplier * 100) + '%）';
+          calcRows.push({ label: '满命抽数加成', val: c6PullVal, cls: 'pos', tip: '满命角色带来的抽数价值额外加成（不参与系数，系数后直接相加）' });
+        }
+        // 角色数量加成
+        if (det.charCountBonus != null && det.charCountBonus > 0) {
+          calcRows.push({ label: '角色数量加成', val: '+' + det.charCountBonus + ' 元', cls: 'pos', tip: '账号五星角色数量达到设定阈值时的额外加成' });
+        }
+        // 武器数量加成
+        if (det.weaponCountBonus != null && det.weaponCountBonus > 0) {
+          calcRows.push({ label: '武器数量加成', val: '+' + det.weaponCountBonus + ' 元', cls: 'pos', tip: '账号角色专武数量达到设定阈值时的额外加成（只统计角色专武）' });
+        }
+        // 皮肤数量加成
+        if (det.outfitCountBonus != null && det.outfitCountBonus > 0) {
+          calcRows.push({ label: '皮肤数量加成', val: '+' + det.outfitCountBonus + ' 元', cls: 'pos', tip: '账号服饰/皮肤数量达到设定阈值时的额外加成' });
         }
 
         let calcHtml = '';
