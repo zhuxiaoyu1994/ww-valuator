@@ -1,7 +1,7 @@
 'use strict';
 
 const ZZZ_CONFIG = {
-  configVersion: 10,
+  configVersion: 11,
   gameName: '绝区零',
   gameSlug: 'zzz',
 
@@ -42,6 +42,8 @@ const ZZZ_CONFIG = {
 
   defaultWeights: {
     c6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
+    // 满命抽数加成专用的各级别满命权重（与满命多角色溢价独立，可分别设置）
+    pullC6TierWeights: { S: 1, A: 0.6, B: 0.3, C: 0.2, D: 0.1, E: 0 },
     c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
     c6Base: 3, c6BaseBonus: 1.0, c6Step: 0.1, c6StepBonus: 0.05, c6MaxWeightedConst: 0,
     // 满命多角色溢价 - 分段折线图模式（加权满命数 → 角色价值溢价系数，首尾相连）

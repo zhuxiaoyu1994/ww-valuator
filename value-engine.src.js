@@ -118,6 +118,10 @@ function convertPremiumsToConstPrices(charName, basePrice, premiums) {
     }
     prices[c] = basePrice + maxPrem;
   }
+  // C65：满命+精5专武时的角色绝对价格（独立档位，不参与 C1-C6 递推）
+  if (premiums && premiums['65'] != null) {
+    prices['65'] = basePrice + premiums['65'];
+  }
   return prices;
 }
 
@@ -149,6 +153,8 @@ function buildDefaultWeights(customWeights) {
   }
   const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
   w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
+  // 满命抽数加成专用的各级别满命权重（与满命溢价独立；缺省时回落到满命溢价权重）
+  w.pullC6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.pullC6TierWeights || DEFAULT_WEIGHTS.c6TierWeights, saved.pullC6TierWeights || {});
   // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
   w.effTierWeights = Object.assign({}, DEFAULT_WEIGHTS.effTierWeights, saved.effTierWeights || {});
   w.c6MultiBonus = (saved.c6MultiBonus && saved.c6MultiBonus.length) ? saved.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
@@ -883,7 +889,7 @@ function checkHasSigWeapon(charName, weaponNames, weaponSectionText) {
  * 计算角色命座溢价（绝对定价模式：从constPrices查找对应命座的绝对价格，减去基础价得到溢价）
  * 优先使用constPrices（绝对定价），无则回退到旧constPremiums格式
  */
-function calcConstPremium(charName, constCount, w) {
+function calcConstPremium(charName, constCount, w, sigRefine) {
   w = w || weights || DEFAULT_WEIGHTS;
   
   // 新模式：使用constPrices（绝对定价）
@@ -892,6 +898,10 @@ function calcConstPremium(charName, constCount, w) {
     var charPrices = w.charPrices || {};
     var base = charPrices[charName] != null ? charPrices[charName] : 0;
     var charCP = constPrices[charName];
+    // C65：满命(C6)且专武精5时，取 C65 绝对价格（优先于普通命座价）
+    if (constCount >= 6 && (sigRefine || 0) >= 5 && charCP['65'] != null) {
+      return charCP['65'] - base;
+    }
     var maxLevel = 0;
     for (var bp in charCP) {
       if (!charCP.hasOwnProperty(bp)) continue;
@@ -1296,10 +1306,13 @@ function calculateValue(parsed, price) {
 
   // 满命权重（提前定义，供角色循环中使用）
   const c6Weights = w.c6TierWeights || FULL_CONST_WEIGHT;
+  // 满命抽数加成使用独立的各级别满命权重（缺省回落到满命溢价权重）
+  const pullC6Weights = w.pullC6TierWeights || c6Weights;
 
   // 1. 角色价值（构建 charBreakdown / charDetails / hasSignatureWeapons）
   let charValue = 0;
   let weightedFullConst = 0;
+  let pullWeightedFullConst = 0;
   const charBreakdown = [];
   const charDetails = [];
   const hasSignatureWeapons = [];
@@ -1309,8 +1322,19 @@ function calculateValue(parsed, price) {
 
   for (const char of parsed.characters) {
     const hasSig = checkHasSigWeapon(char.name, weaponNames, weaponSectionText);
+    // 专武精炼数（0=无专武，1-5=精1-5），提前计算供 C65 定价使用
+    let sigRefine = 0;
+    if (hasSig) {
+      const sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[char.name] || SIG_WEAPONS[char.name]) : SIG_WEAPONS[char.name];
+      if (sigName) {
+        const sigWeapon = parsed.weapons.find(function (wp) {
+          return wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name);
+        });
+        if (sigWeapon) sigRefine = sigWeapon.refine || 1;
+      }
+    }
     const val = getCharValue(char, hasSig, w);
-    const premium = calcConstPremium(char.name, char.const, w);
+    const premium = calcConstPremium(char.name, char.const, w, sigRefine);
     charValue += val + premium;
     if (hasSig && !hasSignatureWeapons.includes(char.name)) hasSignatureWeapons.push(char.name);
 
@@ -1332,17 +1356,7 @@ function calculateValue(parsed, price) {
     if (char.const >= 6) {
       fullConstWeightVal = c6Weights[char.tier] != null ? c6Weights[char.tier] : (FULL_CONST_WEIGHT[char.tier] || 0);
       weightedFullConst += fullConstWeightVal;
-    }
-
-    let sigRefine = 0;
-    if (hasSig) {
-      const sigName = _sigWeaponsOverride ? (_sigWeaponsOverride[char.name] || SIG_WEAPONS[char.name]) : SIG_WEAPONS[char.name];
-      if (sigName) {
-        const sigWeapon = parsed.weapons.find(function (wp) {
-          return wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name);
-        });
-        if (sigWeapon) sigRefine = sigWeapon.refine || 1;
-      }
+      pullWeightedFullConst += (pullC6Weights[char.tier] != null ? pullC6Weights[char.tier] : (FULL_CONST_WEIGHT[char.tier] || 0));
     }
 
     charBreakdown.push({
@@ -1421,9 +1435,9 @@ function calculateValue(parsed, price) {
   var pc6PullPerWC = (w.pullPerWeightedConst != null && w.pullPerWeightedConst > 0) ? w.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
   var pc6PullPerWCCount = (w.pullPerWeightedConstCount != null) ? w.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1);
 
-  // 加权满命数 = 实际加权满命数 + 抽数折算的额外加权满命数（每N抽+M命）
+  // 加权满命数 = 实际加权满命数（按抽数加成专用权重）+ 抽数折算的额外加权满命数（每N抽+M命）
   var pullBonusWeightedConst = Math.floor((parsed.pulls || 0) / pc6PullPerWC) * pc6PullPerWCCount;
-  var adjustedWeightedConst = weightedFullConst + pullBonusWeightedConst;
+  var adjustedWeightedConst = pullWeightedFullConst + pullBonusWeightedConst;
 
   // 加权满命上限（0=不封顶）
   var effWeightedConst = (pc6MaxWC > 0 && adjustedWeightedConst > pc6MaxWC) ? pc6MaxWC : adjustedWeightedConst;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.32.0
+// @version      3.34.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,7 +41,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 36;
+  const CONFIG_VERSION = 37;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -451,6 +451,8 @@
     return {
       // 满命溢价（加权满命数档位）
       c6TierWeights: g.fullConstWeight,
+      // 满命抽数加成专用权重（与满命多角色溢价独立，缺省同 c6TierWeights）
+      pullC6TierWeights: g.fullConstWeight,
       c6MultiBonus: [{"count":1.5,"bonus":0.25},{"count":2,"bonus":0.5},{"count":2.5,"bonus":0.75},{"count":3,"bonus":1},{"count":3.5,"bonus":1.25},{"count":4,"bonus":1.5},{"count":4.5,"bonus":1.75},{"count":5,"bonus":2},{"count":5.5,"bonus":2.25},{"count":6,"bonus":2.5},{"count":6.5,"bonus":2.75},{"count":7,"bonus":3},{"count":7.5,"bonus":3.25},{"count":8,"bonus":3.5},{"count":8.5,"bonus":3.75},{"count":9,"bonus":4},{"count":9.5,"bonus":4.25},{"count":10,"bonus":4.5}],
       // 满命溢价公式参数（加权满命数 → 角色价值溢价系数）
       c6Base: 0,           // 基准加权满命数
@@ -1244,6 +1246,8 @@
     const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
     // 嵌套对象单独合并
     w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
+    // 满命抽数加成专用的各级别满命权重（与满命溢价独立；缺省回落到满命溢价权重）
+    w.pullC6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.pullC6TierWeights || DEFAULT_WEIGHTS.c6TierWeights, saved.pullC6TierWeights || {});
     // 有效金级别系数（该级别角色的命座与专武折算计入有效金的比例）
     w.effTierWeights = Object.assign({}, DEFAULT_WEIGHTS.effTierWeights, saved.effTierWeights || {});
     // 列表类配置：优先用用户保存的，否则用默认
@@ -1419,6 +1423,8 @@
           }
           _cpPrices[_c] = _cpBase + _maxPrem;
         }
+        // C65：满命+精5专武时的角色绝对价格（独立档位）
+        if (_cpPrem['65'] != null) _cpPrices['65'] = _cpBase + _cpPrem['65'];
         w.constPrices[_cpName] = _cpPrices;
       }
     }
@@ -2011,7 +2017,7 @@
    * @param {object} w - 权重对象（可选）
    * @returns {number} 溢价金额
    */
-  function calcConstPremium(charName, constCount, w) {
+  function calcConstPremium(charName, constCount, w, sigRefine) {
     w = w || weights || DEFAULT_WEIGHTS;
     
     // 新模式：使用constPrices（绝对定价）
@@ -2020,6 +2026,10 @@
       var charPrices = w.charPrices || {};
       var base = charPrices[charName] != null ? charPrices[charName] : 0;
       var charCP = constPrices[charName];
+      // C65：满命(C6)且专武精5时，取 C65 绝对价格（优先于普通命座价）
+      if (constCount >= 6 && (sigRefine || 0) >= 5 && charCP['65'] != null) {
+        return charCP['65'] - base;
+      }
       var maxLevel = 0;
       for (var bp in charCP) {
         if (!charCP.hasOwnProperty(bp)) continue;
@@ -2454,10 +2464,13 @@
 
     // 满命权重（提前定义，供角色循环中使用）
     const c6Weights = w.c6TierWeights || FULL_CONST_WEIGHT;
+    // 满命抽数加成专用权重（与满命多角色溢价独立，缺省回落到 c6Weights）
+    const pullC6Weights = w.pullC6TierWeights || c6Weights;
 
     // 1. 角色价值（构建 charBreakdown / charDetails / hasSignatureWeapons）
     let charValue = 0;
     let weightedFullConst = 0;
+    let pullWeightedFullConst = 0;
     const charBreakdown = [];
     const charDetails = [];
     const hasSignatureWeapons = [];
@@ -2465,9 +2478,20 @@
 
     for (const char of parsed.characters) {
       const hasSig = checkHasSigWeapon(char.name, weaponNames, weaponSectionText);
+      // 专武精炼数（0=无专武，1-5=精1-5），提前计算供 C65 定价使用
+      let sigRefine = 0;
+      if (hasSig) {
+        const sigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[char.name]) || SIG_WEAPONS[char.name];
+        if (sigName) {
+          const sigWeapon = parsed.weapons.find(function (wp) {
+            return wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name);
+          });
+          if (sigWeapon) sigRefine = sigWeapon.refine || 1;
+        }
+      }
       const val = getCharValue(char, hasSig, w);
       // 改进5：命座溢价（用户自定义的额外加价）
-      const premium = calcConstPremium(char.name, char.const, w);
+      const premium = calcConstPremium(char.name, char.const, w, sigRefine);
       charValue += val + premium;
       if (hasSig && !hasSignatureWeapons.includes(char.name)) hasSignatureWeapons.push(char.name);
 
@@ -2487,23 +2511,12 @@
         }
       }
 
-      // 统计加权满命数
+      // 统计加权满命数（满命多角色溢价 / 满命抽数加成 各自独立累计）
       let fullConstWeightVal = 0;
       if (char.const >= 6) {
         fullConstWeightVal = c6Weights[char.tier] != null ? c6Weights[char.tier] : (FULL_CONST_WEIGHT[char.tier] || 0);
         weightedFullConst += fullConstWeightVal;
-      }
-
-      // 改进3：获取专武精炼数（0表示无专武，1-5表示精1-5）
-      let sigRefine = 0;
-      if (hasSig) {
-        const sigName = (w.sigWeaponsOverride && w.sigWeaponsOverride[char.name]) || SIG_WEAPONS[char.name];
-        if (sigName) {
-          const sigWeapon = parsed.weapons.find(function (wp) {
-            return wp.name === sigName || wp.name.includes(sigName) || sigName.includes(wp.name);
-          });
-          if (sigWeapon) sigRefine = sigWeapon.refine || 1;
-        }
+        pullWeightedFullConst += (pullC6Weights[char.tier] != null ? pullC6Weights[char.tier] : (FULL_CONST_WEIGHT[char.tier] || 0));
       }
 
       // 角色估值明细
@@ -2584,9 +2597,9 @@
     var pc6PullPerWC = (w.pullPerWeightedConst != null && w.pullPerWeightedConst > 0) ? w.pullPerWeightedConst : (DEFAULT_WEIGHTS.pullPerWeightedConst != null ? DEFAULT_WEIGHTS.pullPerWeightedConst : 450);
     var pc6PullPerWCCount = (w.pullPerWeightedConstCount != null) ? w.pullPerWeightedConstCount : (DEFAULT_WEIGHTS.pullPerWeightedConstCount != null ? DEFAULT_WEIGHTS.pullPerWeightedConstCount : 1);
 
-    // 加权满命数 = 实际加权满命数 + 抽数折算的额外加权满命数（每N抽+M命）
+    // 加权满命数 = 实际加权满命数（按抽数加成专用权重）+ 抽数折算的额外加权满命数（每N抽+M命）
     var pullBonusWeightedConst = Math.floor((parsed.pulls || 0) / pc6PullPerWC) * pc6PullPerWCCount;
-    var adjustedWeightedConst = weightedFullConst + pullBonusWeightedConst;
+    var adjustedWeightedConst = pullWeightedFullConst + pullBonusWeightedConst;
 
     // 加权满命上限（0=不封顶）
     var effWeightedConst = (pc6MaxWC > 0 && adjustedWeightedConst > pc6MaxWC) ? pc6MaxWC : adjustedWeightedConst;
@@ -9052,7 +9065,7 @@ function openSettings() {
             var premBtn = document.createElement('button');
             var premCount = entry.constPrices ? Object.keys(entry.constPrices).length : 0;
             premBtn.textContent = '定价' + (premCount > 0 ? '(' + premCount + ')' : '');
-            premBtn.title = '编辑命座定价（C0-C6绝对价格）';
+            premBtn.title = '编辑命座定价（C0-C6、C65绝对价格）';
             premBtn.style.cssText = 'padding:2px 8px;border:none;border-radius:4px;background:#1a1a2e;color:' + (premCount > 0 ? '#10b981' : '#555') + ';font-size:11px;cursor:pointer;line-height:1.4;';
             premBtn.onclick = function() {
               var premOverlay = document.createElement('div');
@@ -9078,6 +9091,15 @@ function openSettings() {
                   '<span style="color:#555;font-size:11px;">元</span>' +
                   '</div>';
               }
+              // C65：满命 + 精5专武时的角色价格
+              var curC65Val = entry.constPrices && entry.constPrices['65'] != null ? entry.constPrices['65'] : '';
+              premHTML += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed #0f3460;">' +
+                '<span style="font-size:12px;color:#f59e0b;font-weight:600;min-width:30px;">C65</span>' +
+                '<span style="color:#555;font-size:11px;">→</span>' +
+                '<input type="number" class="prem-c65" value="' + curC65Val + '" placeholder="" min="0" style="width:80px;padding:4px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:right;" />' +
+                '<span style="color:#555;font-size:11px;">元</span>' +
+                '<span style="color:#555;font-size:10px;">（满命+精5专武）</span>' +
+                '</div>';
               premHTML += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
                 '<button class="cancel-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#333;color:#888;font-size:12px;cursor:pointer;">取消</button>' +
                 '<button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">保存</button></div>';
@@ -9096,6 +9118,11 @@ function openSettings() {
                   if (!isNaN(pv) && pv >= 0) {
                     entry.constPrices[sci] = pv;
                   }
+                }
+                // C65：满命+精5专武时的角色价格
+                var c65Val = parseFloat(premBox.querySelector('.prem-c65').value);
+                if (!isNaN(c65Val) && c65Val >= 0) {
+                  entry.constPrices['65'] = c65Val;
                 }
                 premOverlay.remove();
                 renderCharList();
@@ -9568,6 +9595,35 @@ function openSettings() {
     pullC6Desc.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;';
     pullC6Desc.innerHTML = '根据加权满命数，对抽数价值额外加成。按加权满命数分段，分段首尾相连：后一段的起点 = 前一段终点的加成值，曲线连续不跳变。仅第1段基准可编辑，后续段起点自动推算（只读）。';
     pullSection.appendChild(pullC6Desc);
+
+    // 各级别满命权重（满命抽数加成专用，与满命多角色溢价独立）
+    var pc6WeightInfo = document.createElement('div');
+    pc6WeightInfo.style.cssText = 'font-size:11px;color:#8ecdf5;margin-bottom:10px;padding:8px;background:rgba(142,205,245,0.08);border-radius:4px;';
+    var pc6Weights = Object.assign({}, w.pullC6TierWeights || DEFAULT_WEIGHTS.pullC6TierWeights || DEFAULT_WEIGHTS.c6TierWeights);
+    var pc6WeightInputs = {};
+    pc6WeightInfo.innerHTML = '<div style="margin-bottom:6px;color:#aaa;">各级别满命权重（满命抽数加成专用，与满命多角色溢价独立；可编辑）：</div>';
+    var pc6WeightRow = document.createElement('div');
+    pc6WeightRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+    var pc6TierList = ['S', 'A', 'B', 'C', 'D', 'E'];
+    for (var pwi = 0; pwi < pc6TierList.length; pwi++) {
+      (function (t) {
+        var wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:flex;align-items:center;gap:3px;';
+        var label = document.createElement('span');
+        label.textContent = t + '级';
+        label.style.cssText = 'font-size:11px;color:#e0e0e0;font-weight:600;min-width:24px;';
+        wrapper.appendChild(label);
+        var input = document.createElement('input');
+        input.type = 'number'; input.min = '0'; input.max = '2'; input.step = '0.1';
+        input.value = pc6Weights[t] != null ? pc6Weights[t] : 0;
+        input.style.cssText = 'width:45px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:11px;text-align:center;';
+        pc6WeightInputs[t] = input;
+        wrapper.appendChild(input);
+        pc6WeightRow.appendChild(wrapper);
+      })(pc6TierList[pwi]);
+    }
+    pc6WeightInfo.appendChild(pc6WeightRow);
+    pullSection.appendChild(pc6WeightInfo);
 
     function pc6Label(text) {
       var s = document.createElement('span');
@@ -11235,6 +11291,10 @@ function openSettings() {
       for (var tw = 0; tw < c6TierList.length; tw++) {
         if (c6WeightInputs[c6TierList[tw]]) c6WeightInputs[c6TierList[tw]].value = DEFAULT_WEIGHTS.c6TierWeights[c6TierList[tw]] || 0;
       }
+      // 重置满命抽数加成专用权重
+      for (var ptw = 0; ptw < pc6TierList.length; ptw++) {
+        if (pc6WeightInputs[pc6TierList[ptw]]) pc6WeightInputs[pc6TierList[ptw]].value = (DEFAULT_WEIGHTS.pullC6TierWeights || DEFAULT_WEIGHTS.c6TierWeights)[pc6TierList[ptw]] || 0;
+      }
       // 重置有效金级别系数
       for (var tw2 = 0; tw2 < effTierList.length; tw2++) {
         if (effTierWeightInputs[effTierList[tw2]]) effTierWeightInputs[effTierList[tw2]].value = (DEFAULT_WEIGHTS.effTierWeights || {})[effTierList[tw2]] != null ? DEFAULT_WEIGHTS.effTierWeights[effTierList[tw2]] : 1;
@@ -11363,7 +11423,8 @@ function openSettings() {
             newConstPrices[_cpName][cpl] = cpVal;
             // 转换为旧格式溢价（绝对价 - 基础价）
             var cpPrem = cpVal - _cpBase;
-            if (cpPrem > 0) {
+            // C65 无条件保留（即使 ≤0），确保导出/导入不丢失
+            if (cpPrem > 0 || cpl === '65') {
               newConstPremiums[_cpName][cpl] = cpPrem;
             }
           }
@@ -11475,6 +11536,16 @@ function openSettings() {
         newC6Weights[c6TierList[cw]] = isNaN(cwVal) ? 0 : cwVal;
       }
       newW.c6TierWeights = newC6Weights;
+
+      // 收集满命抽数加成专用权重
+      if (pc6WeightInputs) {
+        var newPc6Weights = {};
+        for (var pwc = 0; pwc < pc6TierList.length; pwc++) {
+          var pwcVal = parseFloat(pc6WeightInputs[pc6TierList[pwc]].value);
+          newPc6Weights[pc6TierList[pwc]] = isNaN(pwcVal) ? 0 : pwcVal;
+        }
+        newW.pullC6TierWeights = newPc6Weights;
+      }
 
       // 收集有效金级别系数
       var newEffTierWeights = {};
@@ -11628,6 +11699,9 @@ function openSettings() {
             }
             if (imported.c6TierWeights) {
               merged.c6TierWeights = Object.assign({}, current.c6TierWeights || {}, imported.c6TierWeights);
+            }
+            if (imported.pullC6TierWeights) {
+              merged.pullC6TierWeights = Object.assign({}, current.pullC6TierWeights || {}, imported.pullC6TierWeights);
             }
             if (imported.effTierWeights) {
               merged.effTierWeights = Object.assign({}, current.effTierWeights || {}, imported.effTierWeights);
