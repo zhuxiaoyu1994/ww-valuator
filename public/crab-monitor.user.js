@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.34.0
+// @version      3.36.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -358,6 +358,7 @@
       table: prefix + '_monitor_table',
       seen: prefix + '_monitor_seen',
       notified: prefix + '_monitor_notified',
+      deleted: prefix + '_monitor_deleted',
       state: prefix + '_monitor_state',
       weights: prefix + '_monitor_config',
       configVersion: prefix + '_monitor_config_version',
@@ -900,6 +901,7 @@
     maxTableRows: 3000,           // 表格最大行数
     maxSeenIds: 5000,              // 已见ID最大数量（需大于 maxTableRows，避免表内数据被反复重新解析）
     maxNotifiedIds: 500,         // 已通知ID最大数量
+    maxDeletedIds: 3000,         // 手动删除的忽略ID最大数量
   };
 
   // ============================================================
@@ -908,6 +910,8 @@
   let tableData = [];            // 表格数据
   let seenIds = [];              // 已扫描productId
   let notifiedIds = [];          // 已通知productId
+  let deletedProductIds = [];    // 手动删除后需永久忽略的productId（防止滚动淘汰后重新入库）
+  let deletedIdSet = new Set();  // deletedProductIds 的镜像，用于 O(1) 成员判断
   let batchMode = false;          // 批量处理模式：跳过逐条保存和刷新
   let monitorRunning = false;    // 监控开关
   let notifyEnabled = false;     // 通知开关
@@ -2007,6 +2011,58 @@
     }
     // 最后检查全文
     return false;
+  }
+
+  /**
+   * 取某角色专武的精炼等级（0=无专武，1-5=精1-5）
+   * @param {string} charName - 角色名
+   * @param {object} parsed - 解析结果（需含 weapons: [{name, refine}]）
+   */
+  function getCharSigRefine(charName, parsed) {
+    if (!parsed || !parsed.weapons) return 0;
+    const sigOverride = (weights && weights.sigWeaponsOverride) || null;
+    const sigName = (sigOverride && sigOverride[charName]) || SIG_WEAPONS[charName];
+    if (!sigName) return 0;
+    const wp = parsed.weapons.find(function (w) {
+      return w.name === sigName || w.name.includes(sigName) || sigName.includes(w.name);
+    });
+    return wp ? (wp.refine || 1) : 0;
+  }
+
+  /**
+   * 判断 parsed 是否满足指定账号规则中的单个角色条件（含命座、专武精炼）
+   */
+  function matchCharCond(cond, parsed) {
+    if (!cond || !parsed || !parsed.characters) return false;
+    const hit = parsed.characters.find(function (x) { return x.name === cond.name && x.const >= (cond.minConst || 0); });
+    if (!hit) return false;
+    const needRefine = cond.minSigRefine || 0;
+    if (needRefine > 0 && getCharSigRefine(cond.name, parsed) < needRefine) return false;
+    return true;
+  }
+
+  /**
+   * 判断 parsed 是否满足整条指定账号规则（须满足全部角色条件）
+   */
+  function matchCharNotifyRule(rule, parsed) {
+    if (!rule || !rule.chars || rule.chars.length === 0) return false;
+    return rule.chars.every(function (cond) { return matchCharCond(cond, parsed); });
+  }
+
+  /**
+   * 格式化单个角色条件为展示文本（如 "心 满命+满精"）
+   */
+  function formatCharCond(c) {
+    var s = c.name + (c.minConst > 0 ? (c.minConst >= 6 ? '满命' : c.minConst + '命+') : '');
+    if (c.minSigRefine > 0) s += (c.minSigRefine >= 5 ? '满精' : '精' + c.minSigRefine + '+');
+    return s;
+  }
+
+  /**
+   * 格式化整条规则的角色条件（用 + 连接）
+   */
+  function formatRuleChars(rule) {
+    return (rule.chars || []).map(formatCharCond).join('+');
   }
 
   /**
@@ -3483,6 +3539,7 @@
   function processPZProduct(product, detailText) {
     const productId = product.productId;
     if (!productId) return;
+    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
     console.log('[鸣潮监控-盼之] processPZProduct开始: ' + product.productUniqueNo + ' ¥' + (product.price || 0) + ' showTitle长度:' + (product.showTitle || '').length + ' detailText长度:' + (detailText || '').length);
 
     const showTitle = product.showTitle || '';
@@ -3670,9 +3727,7 @@
 
     // 入详情队列条件（与螃蟹网一致）
     const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
-    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule =>
-      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
-    );
+    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule => matchCharNotifyRule(rule, parsed));
     const meetsBasicThreshold = valuation.totalValue > 500 && valuation.diff != null && valuation.diff > 100;
     if (meetsBasicThreshold || hasSC6 || matchesCharRule) {
       enqueueDetail(productId, valuation.diff || 0);
@@ -4111,6 +4166,7 @@
   function processKJSProduct(product) {
     const productId = product.productId;
     if (!productId) return;
+    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     const showTitle = product.showTitle || '';
     const price = product.price || 0;
@@ -4483,6 +4539,7 @@
   function processQYProduct(product) {
     const productId = product.productId;
     if (!productId) return;
+    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     const showTitle = product.showTitle || '';
     const price = product.price || 0;
@@ -4898,6 +4955,7 @@
   function processYSYProduct(product) {
     var productId = product.productId;
     if (!productId) return;
+    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     var showTitle = product.showTitle || '';
     var price = product.price || 0;
@@ -5235,6 +5293,7 @@
   function processProduct(item, fromFlashSale) {
     const productId = item.productId || item.id;
     if (!productId) return;
+    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     const showTitle = item.showTitle || item.title || '';
     const originalPrice = (item.price || 0) / 100; // 分转元（原价）
@@ -5471,9 +5530,7 @@
     // 加入详情队列：估值>500且差价>100，或有S级满命，或匹配指定账号规则
     const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
     // 检查是否匹配指定账号通知规则（须满足全部角色条件）
-    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule =>
-      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
-    );
+    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule => matchCharNotifyRule(rule, parsed));
     // 基本入队条件：估值>500且差价>100（过滤低价值账号，减少队列堆积）
     const meetsBasicThreshold = valuation.totalValue > 500 && valuation.diff != null && valuation.diff > 100;
     // 描述疑似被截断（长度恰为500）：强制入队，用详情API的完整描述覆盖
@@ -5499,9 +5556,7 @@
 
     const notifyDiff = valuation.totalValue - price;
     // 检查指定账号通知规则
-    const matchedRules = charNotifyRules.filter(rule =>
-      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
-    );
+    const matchedRules = charNotifyRules.filter(rule => matchCharNotifyRule(rule, parsed));
     // 常规通知条件
     const shouldNotifyRegular = (notifyDiff > getNotifyDiffThreshold(valuation.totalValue))
       && valuation.totalValue >= notifyMinValue
@@ -5525,9 +5580,7 @@
 
     if (!charRuleTriggered && !shouldNotifyRegular) return false;
 
-    const matchedCharNames = triggeredRule
-      ? triggeredRule.chars.map(c => c.name + (c.minConst > 0 ? c.minConst + '命+' : '')).join('+')
-      : '';
+    const matchedCharNames = triggeredRule ? formatRuleChars(triggeredRule) : '';
     const prefix = charRuleTriggered ? '指定账号' : '高差价';
     const notifyRow = {
       value: valuation.totalValue,
@@ -5690,9 +5743,7 @@
           const notifyPrice = finalPrice;
           const notifyDiff = valuation.totalValue - notifyPrice;
           // 1. 优先检查指定账号通知规则（须满足全部角色条件 + 差价）
-          const matchedRules = charNotifyRules.filter(rule =>
-            rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
-          );
+          const matchedRules = charNotifyRules.filter(rule => matchCharNotifyRule(rule, parsed));
           // 常规通知条件：差价超过阈值，且估值/标价不低于各自下限，且标价不高于上限
           const shouldNotifyRegular = (notifyDiff > getNotifyDiffThreshold(valuation.totalValue))
             && valuation.totalValue >= notifyMinValue
@@ -5718,9 +5769,7 @@
 
           if (charRuleTriggered || shouldNotifyRegular) {
             // 构建通知内容
-            const matchedCharNames = triggeredRule
-              ? triggeredRule.chars.map(c => c.name + (c.minConst > 0 ? c.minConst + '命+' : '')).join('+')
-              : '';
+            const matchedCharNames = triggeredRule ? formatRuleChars(triggeredRule) : '';
             const prefix = charRuleTriggered ? '指定账号' : '高差价';
             const notifyRow = {
               value: valuation.totalValue,
@@ -5771,6 +5820,8 @@
    * 添加表格行
    */
   function addTableRow(row) {
+    // 已手动删除的商品不再入库（防止详情队列/重复扫描把它重新写回）
+    if (row.productId && deletedIdSet.has(row.productId)) return;
     // 入表时立即精简：移除 valuation/parsed 等可从 showTitle 重建的大字段，避免 localStorage 配额浪费
     const slim = slimRow(row);
     // 检查是否已存在
@@ -5817,7 +5868,8 @@
       saveTableData();
       refreshTableDisplay();
     } else {
-      // 行不存在（可能被挤出），重新创建
+      // 行不存在（可能被挤出），重新创建；但已手动删除的忽略
+      if (deletedIdSet.has(productId)) return;
       console.log('[鸣潮监控] 行不存在，重新创建:', productId);
       tableData.push(slimRow(Object.assign({
         productId: productId,
@@ -6622,7 +6674,7 @@
         '<div style="font-size:11px;color:#f59e0b;margin-bottom:16px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">差价超过阈值且标价不超过上限时自动打开商品页并点击"立即购买"跳转到确认页，你只需手动扫码支付。需保持螃蟹网登录状态。标价上限填0表示不限制。</div>' +
         // 指定账号通知
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">指定账号通知（须满足全部角色条件）</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，且差价超过阈值才通知；可勾选 Server酱 接收人，只推给指定的人</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，并可指定其专武的精炼等级（如"满命+满精"）；全部满足且差价超过阈值才通知；可勾选 Server酱 接收人，只推给指定的人</div>' +
         '<div id="mwCharNotifyList" style="margin-bottom:8px;"></div>' +
         '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">' +
         '<select id="mwCharNotifyName" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;">' +
@@ -6640,6 +6692,9 @@
         '</select>' +
         '<select id="mwCharNotifyConst" style="width:80px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;">' +
         '<option value="0">0命+</option><option value="1">1命+</option><option value="2">2命+</option><option value="3">3命+</option><option value="4">4命+</option><option value="5">5命+</option><option value="6">满命</option>' +
+        '</select>' +
+        '<select id="mwCharNotifySigRefine" title="该角色专武的精炼等级要求" style="width:90px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;">' +
+        '<option value="0">专武不限</option><option value="1">精1+</option><option value="2">精2+</option><option value="3">精3+</option><option value="4">精4+</option><option value="5">满精</option>' +
         '</select>' +
         '<button id="mwCharNotifyAddChar" style="padding:6px 12px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:12px;cursor:pointer;">添加角色</button>' +
         '</div>' +
@@ -6765,7 +6820,7 @@
         for (var i = 0; i < pendingChars.length; i++) {
           var pc = pendingChars[i];
           html += '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#0f3460;color:#6a9fff;">' +
-            pc.name + (pc.minConst > 0 ? ' ' + pc.minConst + '命+' : '') +
+            formatCharCond(pc) +
             ' <span class="del-pending" data-idx="' + i + '" style="color:#e94560;cursor:pointer;margin-left:4px;">✕</span></span>';
         }
         html += '</div>';
@@ -6790,7 +6845,7 @@
             var r = charNotifyRules[idx];
             var row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;background:#16213e;border-radius:6px;margin-bottom:4px;flex-wrap:wrap;';
-            var charStr = r.chars.map(function (c) { return c.name + (c.minConst > 0 ? c.minConst + '命+' : ''); }).join(' + ');
+            var charStr = formatRuleChars(r);
             var diffStr = r.minDiff !== 0 ? ('差价>' + r.minDiff + '元') : '不限差价';
             var recStr = (r.recipients && r.recipients.length) ? ('→ 推给 ' + r.recipients.map(scEsc).join('、')) : '→ 推给全部接收人';
             row.innerHTML = '<span style="color:#e94560;font-weight:600;">规则' + (idx + 1) + ':</span>' +
@@ -6818,6 +6873,8 @@
         pendingChars = [];
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = '0';
+        var sigSelReset = box.querySelector('#mwCharNotifySigRefine');
+        if (sigSelReset) sigSelReset.value = '0';
         box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = false; });
         box.querySelector('#mwCharNotifyAddRule').textContent = '保存规则';
         var cancelBtn = box.querySelector('#mwCharNotifyCancelEdit');
@@ -6829,7 +6886,7 @@
         var r = charNotifyRules[idx];
         if (!r) return;
         editingRuleIdx = idx;
-        pendingChars = r.chars.map(function (c) { return { name: c.name, minConst: c.minConst }; });
+        pendingChars = r.chars.map(function (c) { return { name: c.name, minConst: c.minConst, minSigRefine: c.minSigRefine || 0 }; });
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = r.minDiff || 0;
         var recs = r.recipients || [];
@@ -6845,12 +6902,14 @@
       box.querySelector('#mwCharNotifyAddChar').onclick = function () {
         var name = box.querySelector('#mwCharNotifyName').value;
         var minConst = parseInt(box.querySelector('#mwCharNotifyConst').value) || 0;
+        var minSigRefine = parseInt(box.querySelector('#mwCharNotifySigRefine').value) || 0;
         if (!name) { alert('请选择角色'); return; }
         if (pendingChars.some(function (c) { return c.name === name; })) { alert('已添加过该角色'); return; }
-        pendingChars.push({ name: name, minConst: minConst });
+        pendingChars.push({ name: name, minConst: minConst, minSigRefine: minSigRefine });
         renderPendingChars();
         box.querySelector('#mwCharNotifyName').value = '';
         box.querySelector('#mwCharNotifyConst').value = '0';
+        box.querySelector('#mwCharNotifySigRefine').value = '0';
       };
 
       box.querySelector('#mwCharNotifyAddRule').onclick = function () {
@@ -7691,9 +7750,18 @@
     if (idx < 0) return;
     var delRow = tableData[idx];
     tableData.splice(idx, 1);
-    // 同步从 seenIds 移除，允许未来重新发现
+    // 同步从 seenIds 移除（仅清理内存）
     var seenIdx = seenIds.indexOf(pid);
     if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
+    // 加入永久忽略列表：扫描时直接跳过，避免 seenIds 滚动淘汰后该商品被重新入库
+    if (!deletedIdSet.has(pid)) {
+      deletedProductIds.push(pid);
+      deletedIdSet.add(pid);
+      if (deletedProductIds.length > CONFIG.maxDeletedIds) {
+        var evicted = deletedProductIds.shift();
+        deletedIdSet.delete(evicted);
+      }
+    }
     // 同步从 notifiedIds 移除
     ['_drop', '_flash'].forEach(function (suf) {
       var nIdx = notifiedIds.indexOf(pid + suf);
@@ -7702,10 +7770,11 @@
     saveTableData();
     saveStorage(STORAGE_KEYS.seen, seenIds);
     saveStorage(STORAGE_KEYS.notified, notifiedIds);
+    saveStorage(STORAGE_KEYS.deleted, deletedProductIds);
     sortTableData();
     refreshTableDisplay();
     updateStatusText();
-    console.log('[鸣潮监控] 手动删除: ' + (delRow.productUniqueNo || pid));
+    console.log('[鸣潮监控] 手动删除(已加入忽略列表): ' + (delRow.productUniqueNo || pid));
   }
 
   /**
@@ -11873,9 +11942,9 @@ function openSettings() {
       showAlertBanner('自动抢购-弹窗被拦截', '请允许弹窗后重试，或手动点击查看\n差价' + diff.toFixed(0) + '元', productId);
     } else {
       showAlertBanner('自动抢购已触发', '已打开商品页并自动点击购买\n差价' + diff.toFixed(0) + '元，请尽快扫码支付', productId);
-      // 急促报警声
+      // 自动抢购专属警报音（与普通提醒的单音区分：急促双音警报）
       if (pushConfig.soundAlert) {
-        beepMultiple(8);
+        beepAutoBuy();
       }
     }
   }
@@ -12330,6 +12399,36 @@ function openSettings() {
       osc.onended = function () { try { ctx.close(); } catch (e) { } };
       osc.start();
       osc.stop(ctx.currentTime + 0.5);
+    } catch (e) { }
+  }
+
+  /**
+   * 自动抢购专属警报音：急促的高低双音警报，与普通提醒的单音明显区分
+   * 共用一个 AudioContext，播完后统一关闭，避免上下文泄漏
+   */
+  function beepAutoBuy() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+      const pattern = [1240, 760, 1240, 760, 1240, 760, 1240, 760]; // 高-低交替
+      const step = 0.15;
+      pattern.forEach(function (freq, i) {
+        const t0 = now + i * step;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, t0);
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.01, t0 + step);
+        osc.start(t0);
+        osc.stop(t0 + step);
+      });
+      // 全部播完后关闭上下文
+      const total = pattern.length * step + 0.1;
+      setTimeout(function () { try { ctx.close(); } catch (e) { } }, total * 1000);
     } catch (e) { }
   }
 
@@ -13727,6 +13826,8 @@ function openSettings() {
     }
     seenIds = loadStorage(STORAGE_KEYS.seen, []);
     notifiedIds = loadStorage(STORAGE_KEYS.notified, []);
+    deletedProductIds = loadStorage(STORAGE_KEYS.deleted, []);
+    deletedIdSet = new Set(deletedProductIds);
 
     // 迁移：修复旧版截断的 showTitle（旧版 slimRow/ultraSlimRow 在存储压力下截断为500字符，
     // 导致武器列表尾部丢失、专武识别不全）。特征：showTitle 长度恰好为500。
