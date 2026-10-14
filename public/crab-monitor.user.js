@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.36.0
+// @version      3.40.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -15,7 +15,6 @@
 // @grant        GM_deleteValue
 // @grant        GM_openInTab
 // @connect      api.day.app
-// @connect      sctapi.ftqq.com
 // @connect      www.pushplus.plus
 // @connect      www.pzds.com
 // @connect      api.kejinshou.com
@@ -444,6 +443,10 @@
   function minLevel() {
     return G().minLevel;
   }
+  // 收录的估值下限：跟随通知设置里的"估值下限"，未设置(0)时回落到默认 300，避免垃圾数据入库
+  function includeMinValue() {
+    return notifyMinValue > 0 ? notifyMinValue : 300;
+  }
 
   // ============================================================
   // 估值权重默认值（可被用户在设置面板中覆盖；数值参数两游戏相同）
@@ -847,6 +850,8 @@
   }
 
   // 盼之平台URL（SSR HTML抓取，无需API token；gameId按当前游戏动态生成）
+  // 站点SSR固定返回"综合排序"，URL参数无法改成按发布时间排序；故每轮多抓几页再本地按发布时间倒序合并
+  const PZ_SCAN_PAGES = 3;   // 盼之每轮抓取的列表页数（每页10条）
   function pzdsUrls() {
     const gameId = G().platformIds.pzds;
     return {
@@ -2030,6 +2035,14 @@
   }
 
   /**
+   * 判断角色是否为 S 级（仅 S 级角色支持"专武精炼"筛选）
+   */
+  function isSTierChar(name) {
+    var info = (CHAR_LOOKUP || {})[name];
+    return !!(info && info.tier === 'S');
+  }
+
+  /**
    * 判断 parsed 是否满足指定账号规则中的单个角色条件（含命座、专武精炼）
    */
   function matchCharCond(cond, parsed) {
@@ -2047,6 +2060,23 @@
   function matchCharNotifyRule(rule, parsed) {
     if (!rule || !rule.chars || rule.chars.length === 0) return false;
     return rule.chars.every(function (cond) { return matchCharCond(cond, parsed); });
+  }
+
+  /**
+   * 判断某条指定账号规则是否触发（角色条件之外：估值范围 + 最低差价）
+   * 估值范围：规则自带 minValue/maxValue（0=不限）；规则未设任何范围时回落到全局估值下限 notifyMinValue
+   */
+  function matchRuleTrigger(rule, valuation, notifyDiff) {
+    const v = valuation.totalValue;
+    const rMin = rule.minValue || 0;
+    const rMax = rule.maxValue || 0;
+    if (rMin > 0 || rMax > 0) {
+      if (rMin > 0 && v < rMin) return false;
+      if (rMax > 0 && v > rMax) return false;
+    } else if (v < notifyMinValue) {
+      return false;
+    }
+    return rule.minDiff === 0 || notifyDiff > rule.minDiff;
   }
 
   /**
@@ -3644,11 +3674,11 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
+    // 估值低于收录下限的垃圾数据不收录
+    if (valuation.totalValue < includeMinValue()) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
@@ -4233,11 +4263,11 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
+    // 估值低于收录下限的垃圾数据不收录
+    if (valuation.totalValue < includeMinValue()) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
@@ -4592,11 +4622,11 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
+    // 估值低于收录下限的垃圾数据不收录
+    if (valuation.totalValue < includeMinValue()) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
@@ -5002,10 +5032,10 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    if (valuation.totalValue < 300) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
+    if (valuation.totalValue < includeMinValue()) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
     if (valuation.levelFound && valuation.level < G().minLevel) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
 
     // 内容指纹去重
@@ -5429,11 +5459,11 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
+      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
+    // 估值低于收录下限的垃圾数据不收录
+    if (valuation.totalValue < includeMinValue()) {
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
@@ -5566,11 +5596,10 @@
     let charRuleTriggered = false;
     let triggeredRule = null;
     const priceWithinMax = (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
-    const meetsMinValue = valuation.totalValue >= notifyMinValue;
     const meetsMinPrice = price >= notifyMinPrice;
-    if (matchedRules.length > 0 && priceWithinMax && meetsMinValue && meetsMinPrice) {
+    if (matchedRules.length > 0 && priceWithinMax && meetsMinPrice) {
       for (const r of matchedRules) {
-        if (r.minDiff === 0 || notifyDiff > r.minDiff) {
+        if (matchRuleTrigger(r, valuation, notifyDiff)) {
           charRuleTriggered = true;
           triggeredRule = r;
           break;
@@ -5680,8 +5709,8 @@
         const parsed = parseAccountInfo(showTitle);
         const valuation = calculateValue(parsed, detailPrice);
 
-        // 详估后估值低于300，从表格移除
-        if (valuation.totalValue < 300) {
+        // 详估后估值低于收录下限，从表格移除
+        if (valuation.totalValue < includeMinValue()) {
           const idx = tableData.findIndex(r => r.productId === item.productId);
           if (idx >= 0) {
             tableData.splice(idx, 1);
@@ -5750,16 +5779,14 @@
             && notifyPrice >= notifyMinPrice
             && (notifyMaxPrice <= 0 || notifyPrice <= notifyMaxPrice);
 
-          // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff + 最低限制 + 标价不高于上限
+          // 指定账号通知条件：匹配规则 + 估值范围 + 差价满足该规则的 minDiff + 标价不高于上限
           let charRuleTriggered = false;
           let triggeredRule = null;
           const priceWithinMax = (notifyMaxPrice <= 0 || notifyPrice <= notifyMaxPrice);
-          const meetsMinValue = valuation.totalValue >= notifyMinValue;
           const meetsMinPrice = notifyPrice >= notifyMinPrice;
-          if (matchedRules.length > 0 && priceWithinMax && meetsMinValue && meetsMinPrice) {
+          if (matchedRules.length > 0 && priceWithinMax && meetsMinPrice) {
             for (const r of matchedRules) {
-              // minDiff=0 表示不限差价（始终通过），否则检查差价是否超过 minDiff
-              if (r.minDiff === 0 || notifyDiff > r.minDiff) {
+              if (matchRuleTrigger(r, valuation, notifyDiff)) {
                 charRuleTriggered = true;
                 triggeredRule = r;
                 break;
@@ -5957,8 +5984,8 @@
     }
   }
 
-  // 排序状态：默认按差价降序
-  let sortColumn = 'diff';   // 'time' | 'value' | 'ratio' | 'diff' | 'price' | 'yellow' | 'pulls'
+  // 排序状态：默认按上架时间降序（最新发布在前）
+  let sortColumn = 'time';   // 'time' | 'value' | 'ratio' | 'diff' | 'price' | 'yellow' | 'pulls'（默认按上架时间，最新在前）
   let sortDirection = 'desc'; // 'asc' | 'desc'
 
   /**
@@ -6674,7 +6701,7 @@
         '<div style="font-size:11px;color:#f59e0b;margin-bottom:16px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">差价超过阈值且标价不超过上限时自动打开商品页并点击"立即购买"跳转到确认页，你只需手动扫码支付。需保持螃蟹网登录状态。标价上限填0表示不限制。</div>' +
         // 指定账号通知
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">指定账号通知（须满足全部角色条件）</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，并可指定其专武的精炼等级（如"满命+满精"）；全部满足且差价超过阈值才通知；可勾选 Server酱 接收人，只推给指定的人</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，并可指定其专武的精炼等级（如"满命+满精"）；全部满足、估值落在指定范围内且差价超过阈值才通知（估值范围填0表示不限，未填则沿用上方"估值下限"）；可勾选 Server酱 接收人，只推给指定的人</div>' +
         '<div id="mwCharNotifyList" style="margin-bottom:8px;"></div>' +
         '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">' +
         '<select id="mwCharNotifyName" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;">' +
@@ -6700,9 +6727,13 @@
         '</div>' +
         '<div id="mwCharNotifyPending" style="margin-bottom:8px;"></div>' +
         '<div id="mwCharNotifyRecipients" style="margin-bottom:8px;"></div>' +
-        '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;">' +
+        '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">' +
         '<label style="font-size:12px;color:#888;">最低差价(元)</label>' +
         '<input type="number" id="mwCharNotifyDiff" value="0" min="0" style="width:80px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
+        '<label style="font-size:12px;color:#888;margin-left:6px;">估值范围(元)</label>' +
+        '<input type="number" id="mwCharNotifyMinValue" value="0" min="0" placeholder="最低" title="估值下限，0=不限" style="width:70px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
+        '<span style="color:#666;">~</span>' +
+        '<input type="number" id="mwCharNotifyMaxValue" value="0" min="0" placeholder="最高" title="估值上限，0=不限" style="width:70px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
         '<button id="mwCharNotifyAddRule" style="padding:6px 12px;border:none;border-radius:4px;background:#f59e0b;color:#1a1a2e;font-size:12px;font-weight:600;cursor:pointer;">保存规则</button>' +
         '<button id="mwCharNotifyCancelEdit" style="display:none;padding:6px 12px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#aaa;font-size:12px;cursor:pointer;">取消编辑</button>' +
         '</div>' +
@@ -6716,7 +6747,7 @@
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">标价上限（元）</label>' +
         '<input type="number" id="mwNotifyMaxPrice" value="' + notifyMaxPrice + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值或标价低于各自下限时不会发送通知，标价高于上限时也不通知（填0表示不限制）</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值低于下限的账号不会收录进监控列表，也不会发送通知（填0则仅过滤估值低于300的垃圾数据）；标价低于下限或高于上限时不会发送通知（填0表示不限制）</div>' +
         // 提醒方式
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">提醒方式</div>' +
         '<div style="margin-bottom:8px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwSoundAlert" ' + (pushConfig.soundAlert ? 'checked' : '') + ' style="margin-right:6px;">声音提醒（连续蜂鸣3次）</label></div>' +
@@ -6847,10 +6878,16 @@
             row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;background:#16213e;border-radius:6px;margin-bottom:4px;flex-wrap:wrap;';
             var charStr = formatRuleChars(r);
             var diffStr = r.minDiff !== 0 ? ('差价>' + r.minDiff + '元') : '不限差价';
+            var rMin = r.minValue || 0, rMax = r.maxValue || 0;
+            var rangeStr = '';
+            if (rMin > 0 && rMax > 0) rangeStr = '估值' + rMin + '~' + rMax + '元';
+            else if (rMin > 0) rangeStr = '估值≥' + rMin + '元';
+            else if (rMax > 0) rangeStr = '估值≤' + rMax + '元';
             var recStr = (r.recipients && r.recipients.length) ? ('→ 推给 ' + r.recipients.map(scEsc).join('、')) : '→ 推给全部接收人';
             row.innerHTML = '<span style="color:#e94560;font-weight:600;">规则' + (idx + 1) + ':</span>' +
               '<span style="color:#6a9fff;">' + charStr + '</span>' +
               '<span style="color:#888;">' + diffStr + '</span>' +
+              (rangeStr ? '<span style="color:#f59e0b;">' + rangeStr + '</span>' : '') +
               '<span style="color:#10b981;">' + recStr + '</span>' +
               '<span style="margin-left:auto;display:flex;gap:4px;">' +
               '<button class="edit-rule" style="padding:2px 8px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:11px;cursor:pointer;">编辑</button>' +
@@ -6873,6 +6910,8 @@
         pendingChars = [];
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = '0';
+        box.querySelector('#mwCharNotifyMinValue').value = '0';
+        box.querySelector('#mwCharNotifyMaxValue').value = '0';
         var sigSelReset = box.querySelector('#mwCharNotifySigRefine');
         if (sigSelReset) sigSelReset.value = '0';
         box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = false; });
@@ -6889,6 +6928,8 @@
         pendingChars = r.chars.map(function (c) { return { name: c.name, minConst: c.minConst, minSigRefine: c.minSigRefine || 0 }; });
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = r.minDiff || 0;
+        box.querySelector('#mwCharNotifyMinValue').value = r.minValue || 0;
+        box.querySelector('#mwCharNotifyMaxValue').value = r.maxValue || 0;
         var recs = r.recipients || [];
         box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = recs.indexOf(cb.value) >= 0; });
         box.querySelector('#mwCharNotifyAddRule').textContent = '更新规则';
@@ -6915,10 +6956,13 @@
       box.querySelector('#mwCharNotifyAddRule').onclick = function () {
         if (pendingChars.length === 0) { alert('请至少添加一个角色'); return; }
         var minDiff = parseFloat(box.querySelector('#mwCharNotifyDiff').value) || 0;
+        var minValue = parseFloat(box.querySelector('#mwCharNotifyMinValue').value) || 0;
+        var maxValue = parseFloat(box.querySelector('#mwCharNotifyMaxValue').value) || 0;
+        if (minValue > 0 && maxValue > 0 && maxValue < minValue) { alert('估值范围有误：最高值不能小于最低值'); return; }
         // 收集勾选的 Server酱 接收人（空数组=推给所有"收全部通知"的接收人）
         var ruleRecipients = [];
         box.querySelectorAll('.mwRuleRecipient:checked').forEach(function (cb) { ruleRecipients.push(cb.value); });
-        var newRule = { chars: pendingChars.slice(), minDiff: minDiff, recipients: ruleRecipients };
+        var newRule = { chars: pendingChars.slice(), minDiff: minDiff, minValue: minValue, maxValue: maxValue, recipients: ruleRecipients };
         if (editingRuleIdx >= 0 && editingRuleIdx < charNotifyRules.length) {
           charNotifyRules[editingRuleIdx] = newRule; // 更新已有规则
         } else {
@@ -7299,6 +7343,17 @@
         pushConfig.syncPassword = box.querySelector('#mwSyncPassword').value.trim();
         pushConfig.devMessage = box.querySelector('#mwDevMessage').value.trim();
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
+        // 估值下限提高后，同步清理列表中低于新下限的行，避免旧数据残留
+        var minVal = includeMinValue();
+        var beforeLen = tableData.length;
+        tableData = tableData.filter(function (r) { return (r.value || 0) >= minVal; });
+        if (tableData.length !== beforeLen) {
+          console.log('[鸣潮监控] 按估值下限(' + minVal + ')清理' + (beforeLen - tableData.length) + '行');
+          saveTableData();
+          sortTableData();
+          refreshTableDisplay();
+          updateStatusText();
+        }
         saveState();
         // 如果设置了同步密码，自动上传到服务器
         if (pushConfig.syncPassword) {
@@ -7537,8 +7592,16 @@
     dom.filterBar.style.display = 'flex';
     const constUnit = G().constUnitDisplay;
     dom.filterCharTags.innerHTML = charFilter.map(function (cond) {
-      const label = cond.name + (cond.minConst > 0 ? cond.minConst + constUnit + '+' : '');
-      return '<span class="mw-char-filter-tag" data-char="' + cond.name + '" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid #e94560;border-radius:999px;background:rgba(233,69,96,0.15);color:#e94560;font-size:11px;cursor:pointer;" title="' + cond.name + '：点击移除，右键调整命座条件（当前' + (cond.minConst > 0 ? '≥' + cond.minConst + constUnit : '不限命座') + '）">' + label + ' ×</span>';
+      const constLabel = cond.minConst > 0 ? cond.minConst + constUnit + '+' : '';
+      const isS = isSTierChar(cond.name);
+      const refine = cond.minSigRefine || 0;
+      // S 级角色额外展示可点击的"精炼"徽标（非 S 级不显示）
+      const refineBadge = isS
+        ? '<span class="mw-char-filter-refine" data-char="' + cond.name + '" style="padding:0 5px;border-radius:999px;background:rgba(245,158,11,0.25);color:#f59e0b;font-size:10px;">' + (refine > 0 ? '精' + refine + '+' : '精不限') + '</span>'
+        : '';
+      const title = cond.name + '：点击移除，右键调整命座（当前' + (cond.minConst > 0 ? '≥' + cond.minConst + constUnit : '不限命座') + '）'
+        + (isS ? '，点击「精」徽标调整专武精炼（当前' + (refine > 0 ? '≥精' + refine : '不限') + '）' : '');
+      return '<span class="mw-char-filter-tag" data-char="' + cond.name + '" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid #e94560;border-radius:999px;background:rgba(233,69,96,0.15);color:#e94560;font-size:11px;cursor:pointer;" title="' + title + '">' + cond.name + constLabel + refineBadge + ' ×</span>';
     }).join('');
     var filterTags = dom.filterCharTags.querySelectorAll('.mw-char-filter-tag');
     filterTags.forEach(function (t) {
@@ -7557,6 +7620,20 @@
         var cond = charFilter.find(function (c) { return c.name === name; });
         if (cond) {
           cond.minConst = (cond.minConst || 0) >= 6 ? 0 : (cond.minConst || 0) + 1;
+          currentPage = 1;
+          updateFilterBar();
+          refreshTableDisplay();
+        }
+      });
+    });
+    // S 级角色的"精炼"徽标：点击循环 不限→精1+→…→精5+→不限
+    dom.filterCharTags.querySelectorAll('.mw-char-filter-refine').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); // 阻止冒泡触发标签移除
+        var name = b.getAttribute('data-char');
+        var cond = charFilter.find(function (c) { return c.name === name; });
+        if (cond) {
+          cond.minSigRefine = (cond.minSigRefine || 0) >= 5 ? 0 : (cond.minSigRefine || 0) + 1;
           currentPage = 1;
           updateFilterBar();
           refreshTableDisplay();
@@ -7586,7 +7663,7 @@
 
     var hint = document.createElement('div');
     hint.style.cssText = 'font-size:11px;color:#666;margin-top:8px;';
-    hint.textContent = '点击添加/移除筛选；标签右键调整命座条件';
+    hint.textContent = '点击添加/移除筛选；标签右键调整命座，S级角色可点标签内「精」徽标调整专武精炼';
 
     picker.appendChild(input);
     picker.appendChild(list);
@@ -7628,7 +7705,8 @@
         var active = charFilter.some(function (c) { return c.name === it.name; });
         var color = it.tier === 'S' ? '#e94560' : (it.tier === 'A' ? '#f59e0b' : '#8a8fb5');
         var bg = active ? 'background:rgba(233,69,96,.25);border-color:#e94560;' : 'border-color:#0f3460;';
-        return '<span class="mw-picker-char" data-name="' + it.name + '" title="' + it.tier + '级，默认估值' + it.price + '元" style="display:inline-block;padding:3px 8px;border:1px solid;border-radius:4px;font-size:12px;cursor:pointer;color:' + color + ';' + bg + '">' + it.name + '</span>';
+        var chipTitle = it.tier + '级，默认估值' + it.price + '元' + (it.tier === 'S' ? '（支持专武精炼筛选）' : '');
+        return '<span class="mw-picker-char" data-name="' + it.name + '" title="' + chipTitle + '" style="display:inline-block;padding:3px 8px;border:1px solid;border-radius:4px;font-size:12px;cursor:pointer;color:' + color + ';' + bg + '">' + it.name + '</span>';
       }).join('');
       list.querySelectorAll('.mw-picker-char').forEach(function (el) {
         el.addEventListener('click', function () {
@@ -7862,14 +7940,11 @@
         return false;
       });
     }
-    // 角色筛选（多角色+命座条件，全部满足才显示）
+    // 角色筛选（多角色+命座+专武精炼条件，全部满足才显示）
     if (charFilter && charFilter.length > 0) {
       displayData = displayData.filter(row => {
         if (!row.parsed || !row.parsed.characters) return false;
-        return charFilter.every(cond => {
-          const char = row.parsed.characters.find(c => c.name === cond.name);
-          return char && char.const >= (cond.minConst || 0);
-        });
+        return charFilter.every(cond => matchCharCond(cond, row.parsed));
       });
     }
     // 只显示已售
@@ -13422,8 +13497,8 @@ function openSettings() {
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) return '估值低于300';
+    // 估值低于收录下限的垃圾数据不收录
+    if (valuation.totalValue < includeMinValue()) return '估值低于' + includeMinValue();
     // 等级低于门槛且明确解析到等级时不收录
     if (valuation.levelFound && valuation.level < G().minLevel) return '等级低于' + G().minLevel;
 
@@ -13723,22 +13798,31 @@ function openSettings() {
     try {
 
       // 盼之平台扫描（SSR HTML抓取）
+      // 站点SSR固定返回"综合排序"且无法按发布时间排序，故多抓几页后本地按发布时间倒序合并，提升最新商品覆盖
       if (pzdsEnabled) {
-        let pzdsTotal = 0;
-        for (let page = 1; page <= 1; page++) {
+        let pzAll = [];
+        for (let page = 1; page <= PZ_SCAN_PAGES; page++) {
           try {
             const pzdsProducts = await fetchListPZ(page);
             if (pzdsProducts.length > 0) {
-              pzdsTotal += pzdsProducts.length;
-              await handlePZListResponse(pzdsProducts);
-              console.log('[鸣潮监控-盼之] 第' + page + '页扫描完成，获取' + pzdsProducts.length + '条');
+              pzAll = pzAll.concat(pzdsProducts);
+              console.log('[鸣潮监控-盼之] 第' + page + '页获取' + pzdsProducts.length + '条');
             }
           } catch (e) {
             console.error('[鸣潮监控-盼之] 第' + page + '页获取失败:', e);
           }
         }
-        if (pzdsTotal > 0) {
-          console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzdsTotal + '条');
+        // 跨页去重 + 按发布时间倒序（最新在前）
+        const pzSeen = new Set();
+        pzAll = pzAll.filter(function (p) {
+          if (pzSeen.has(p.productId)) return false;
+          pzSeen.add(p.productId);
+          return true;
+        });
+        pzAll.sort(function (a, b) { return (b.onStandTime || 0) - (a.onStandTime || 0); });
+        if (pzAll.length > 0) {
+          await handlePZListResponse(pzAll);
+          console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzAll.length + '条（已按发布时间倒序）');
         }
       }
 
