@@ -1901,6 +1901,12 @@ function getAdminPage() {
     renderDealsTable();
   }
 
+  // 螃蟹网商品链接：统一使用 PC 端规范格式 /product/{productId}/1（旧数据存的是 /buy/.../detail?productId=，需纠正）
+  function pxb7DealUrl(d) {
+    if (d && d.productId) return 'https://www.pxb7.com/product/' + d.productId + '/1';
+    return (d && d.url) || '#';
+  }
+
   function renderDealsTable() {
     const tbody = document.getElementById('d-tbody');
     if (dealsFiltered.length === 0) {
@@ -1915,7 +1921,7 @@ function getAdminPage() {
       const devPctSign = d.deviationPercent > 0 ? '+' : '';
       const hasDetails = d.details && d.estimatedValue > 0;
       return '<tr class="d-deal-row" id="d-row-' + i + '">' +
-        '<td class="d-no"><a href="' + d.url + '" target="_blank">' + (d.productUniqueNo || '-') + '</a></td>' +
+        '<td class="d-no"><a href="' + pxb7DealUrl(d) + '" target="_blank">' + (d.productUniqueNo || '-') + '</a></td>' +
         '<td>' + (d.payTime || '-') + '</td>' +
         '<td><div class="d-desc" onclick="toggleDesc(this)"><div class="short">' + escapeHtml(d.shortDescription || d.showTitle || '-') + '</div><div class="full">' + escapeHtml(d.showTitle || '') + '</div></div></td>' +
         '<td class="d-price d-price-actual">¥' + d.price + '</td>' +
@@ -2190,7 +2196,9 @@ function getAdminPage() {
     const status = document.getElementById('server-config-status');
     status.innerHTML = '<span style="color:#fbbf24;">正在检查' + GAME_NAMES[currentGame] + '配置...</span>';
     try {
-      const resp = await fetch('/api/config/default?game=' + currentGame);
+      const resp = await fetch('/api/config/default?game=' + currentGame, {
+        headers: { 'x-admin-password': sessionStorage.getItem('admin_pw') || '' }
+      });
       const json = await resp.json();
       if (json.success && json.data) {
         const config = json.data;

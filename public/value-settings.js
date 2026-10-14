@@ -41,12 +41,25 @@
   // ============================================================
 
   /**
+   * 管理后台鉴权头：/api/defaults 仅管理员可访问
+   * （面板已移至管理后台，登录后 sessionStorage 中存有 admin_pw）
+   */
+  function adminHeaders() {
+    try {
+      var pw = sessionStorage.getItem('admin_pw');
+      return pw ? { 'x-admin-password': pw } : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /**
    * 从后端获取默认权重配置（按当前游戏上下文）
    * @returns {Promise<object|null>}
    */
   function fetchDefaults() {
     if (cachedDefaults) return Promise.resolve(cachedDefaults);
-    return fetch('/api/defaults?game=' + (gameKey === 'zzz' ? 'zzz' : 'wuwa') + '&_t=' + Date.now())
+    return fetch('/api/defaults?game=' + (gameKey === 'zzz' ? 'zzz' : 'wuwa') + '&_t=' + Date.now(), { headers: adminHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (result) {
         if (result.success && result.data) {

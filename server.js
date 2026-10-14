@@ -30,6 +30,23 @@ function getConfigKey(game) {
   return 'default_weights_' + (game || 'wuwa');
 }
 
+// 服务端配置缓存（60秒 TTL）：估价时直接取用，避免每次请求都查数据库；
+// 管理员保存配置时立即失效，保证改动即时生效
+const CONFIG_CACHE_TTL = 60 * 1000;
+const configCache = {};
+async function getEffectiveConfig(game) {
+  const key = getConfigKey(game);
+  const now = Date.now();
+  const hit = configCache[key];
+  if (hit && hit.expiresAt > now) return hit.value;
+  let value = null;
+  try {
+    value = await db.getConfig(key);
+  } catch (e) { /* 忽略，回落到源码内置默认值 */ }
+  configCache[key] = { value, expiresAt: now + CONFIG_CACHE_TTL };
+  return value;
+}
+
 // HTML页面模板（从views/目录加载）
 const getPlatformPage = require('./views/platform');
 const getPageHTML = require('./views/wuwa');
@@ -416,6 +433,10 @@ app.use(async (req, res, next) => {
  * 优先返回数据库中存储的服务器端配置，无则返回源码内置默认值
  */
 app.get('/api/defaults', async (req, res) => {
+  // 仅管理后台的估值设置面板使用；需管理员密码，避免公开泄露完整规则参数
+  if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
+    return res.status(401).json({ success: false, error: '未授权' });
+  }
   const game = req.query.game || 'wuwa';
   const engine = getEngine(game);
   try {
@@ -438,13 +459,19 @@ app.get('/api/defaults', async (req, res) => {
 /**
  * 估值接口 - 输入文本返回估值
  */
-app.post('/api/x9k2-eval', (req, res) => {
+app.post('/api/x9k2-eval', async (req, res) => {
   const { showTitle, priceInCents, customWeights, game, parseOnly } = req.body;
   if (!showTitle) {
     return res.status(400).json({ success: false, error: 'showTitle is required' });
   }
   const engine = getEngine(game);
-  const result = engine.evaluateWithPrice(showTitle, priceInCents || 0, customWeights || null);
+  // 权重优先级：请求传入的自定义权重 > 服务端数据库配置 > 源码内置默认值
+  // parseOnly 只做解析、不估价，跳过数据库读取以保持轻量
+  let effectiveWeights = customWeights || null;
+  if (!effectiveWeights && !parseOnly) {
+    effectiveWeights = await getEffectiveConfig(game);
+  }
+  const result = engine.evaluateWithPrice(showTitle, priceInCents || 0, effectiveWeights);
 
   // 纯解析请求（前端识别描述用）不计入查询日志，避免一次估价产生两条记录
   if (!parseOnly) {
@@ -765,7 +792,12 @@ app.post('/api/x9k2-find', async (req, res) => {
     }
 
     const engine = getEngine(game);
-    const result = engine.evaluateWithPrice(showTitle, priceInCents, customWeights || null);
+    // 权重优先级：请求传入的自定义权重 > 服务端数据库配置 > 源码内置默认值
+    let effectiveWeights = customWeights || null;
+    if (!effectiveWeights) {
+      effectiveWeights = await getEffectiveConfig(game);
+    }
+    const result = engine.evaluateWithPrice(showTitle, priceInCents, effectiveWeights);
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
 
     // 记录查询日志
@@ -1292,7 +1324,7 @@ app.post('/api/deals', async (req, res) => {
         attrNameList: item.attrNameList || [],
         mainImageUrl: item.mainImageUrl,
         game: game || 'wuwa',
-        url: `https://www.pxb7.com/buy/${(gameConfigs[game] && gameConfigs[game].platformIds.pxb7) || '10302'}/detail?productId=${item.productId}`,
+        url: `https://www.pxb7.com/product/${item.productId}/1`,
         details: valuation ? valuation.details : null,
         costPerformance: valuation ? valuation.costPerformance : 0,
       };
@@ -1353,20 +1385,34 @@ app.get('/', (req, res) => {
   res.send(getPlatformPage());
 });
 
-app.get('/wuwa', (req, res) => {
+app.get('/wuwa', async (req, res) => {
   const engine = getEngine('wuwa');
   const defaults = engine.getDefaults();
   const charList = buildCharList(defaults);
-  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, guideBase: WUWA_CONFIG.guideBase, charGuides: WUWA_CONFIG.charGuides, events: WUWA_EVENTS }));
+  const cfg = (await getEffectiveConfig('wuwa')) || {};
+  // 只下发可视化编辑器需要的覆盖项（角色等级/价格、专武映射），不下发完整规则参数
+  const serverOverrides = {
+    charTierOverride: cfg.charTierOverride || {},
+    charPrices: cfg.charPrices || {},
+    sigWeaponsOverride: cfg.sigWeaponsOverride || {},
+  };
+  res.send(getPageHTML({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, guideBase: WUWA_CONFIG.guideBase, charGuides: WUWA_CONFIG.charGuides, events: WUWA_EVENTS, serverOverrides }));
 });
 
 // 鸣潮 - 角色资讯、买卖攻略已改为站内弹窗，不再提供独立页面
 
-app.get('/zzz', (req, res) => {
+app.get('/zzz', async (req, res) => {
   const engine = getEngine('zzz');
   const defaults = engine.getDefaults();
   const charList = buildCharList(defaults);
-  res.send(getZZZPage({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {} }));
+  const cfg = (await getEffectiveConfig('zzz')) || {};
+  // 只下发可视化编辑器需要的覆盖项（角色等级/价格、专武映射），不下发完整规则参数
+  const serverOverrides = {
+    charTierOverride: cfg.charTierOverride || {},
+    charPrices: cfg.charPrices || {},
+    sigWeaponsOverride: cfg.sigWeaponsOverride || {},
+  };
+  res.send(getZZZPage({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, serverOverrides }));
 });
 
 // 从默认配置构建精简角色列表（前端可视化编辑器用）
@@ -1835,8 +1881,11 @@ app.post('/admin/api/cache-clear', (req, res) => {
 // 估值配置管理 API
 // ============================================================
 
-// 获取默认估值配置（公开接口，网站页面加载时调用）
+// 获取默认估值配置（仅管理后台使用，需管理员密码，避免公开泄露完整规则参数）
 app.get('/api/config/default', async (req, res) => {
+  if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
+    return res.status(401).json({ success: false, error: '未授权' });
+  }
   const game = req.query.game || 'wuwa';
   const engine = getEngine(game);
   try {
@@ -1860,6 +1909,7 @@ app.post('/api/config/update', async (req, res) => {
   }
   const ok = await db.setConfig(getConfigKey(game), config);
   if (ok) {
+    delete configCache[getConfigKey(game)]; // 让估价侧缓存立即失效
     res.json({ success: true, message: '配置已更新' });
   } else {
     res.json({ success: false, error: '配置保存失败（数据库未配置或写入失败）' });

@@ -5,6 +5,7 @@ function getPageHTML(options) {
   const pxb7Proxies = options.pxb7Proxies || [];
   const charList = options.charList || [];
   const sigWeapons = options.sigWeapons || {};
+  const serverOverrides = options.serverOverrides || {};
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1308,8 +1309,6 @@ function getPageHTML(options) {
       transition: all 0.2s; font-family: inherit;
     }
     .settings-btn:hover { border-color: var(--warn); background: rgba(251,191,36,0.08); }
-    .settings-btn.customized { color: var(--good); border-color: rgba(74,222,128,0.5); }
-    .settings-btn.customized:hover { background: rgba(74,222,128,0.08); }
     /* "估值不准"按钮 - 显示在估值结果下方 */
     .adjust-link {
       display: none;
@@ -1619,7 +1618,6 @@ function getPageHTML(options) {
 
     <!-- 估值规则设置入口 -->
     <div class="settings-bar rise d2">
-      <button class="settings-btn" id="settings-btn" onclick="safeOpenValueSettings()" style="display:none;">估值规则设置</button>
       <button class="settings-btn" id="stats-btn" onclick="openStatsModal()">算法准确性报告</button>
     </div>
 
@@ -1631,7 +1629,6 @@ function getPageHTML(options) {
           <button class="eval-btn" id="lookup-btn" onclick="doLookup()" style="flex:1;">估价</button>
           <button class="clear-btn" id="clear-lookup-btn" onclick="clearLookupInput()" style="flex-shrink:0;width:60px;padding:0;border:1px solid #ddd;background:#f9f9f9;color:#666;border-radius:8px;cursor:pointer;font-size:14px;">清空</button>
         </div>
-        <div id="config-info" style="font-size:12px;color:#888;margin-top:4px;"></div>
       </div>
     </div>
 
@@ -1988,7 +1985,7 @@ function getPageHTML(options) {
     <div class="mfb-ratio" id="mfb-ratio" style="display:none;"></div>
   </div>
 
-  <script src="/public/value-settings.js?v=20260824" onerror="window.__vsFailed=true"></script>
+  <!-- 估值设置面板已移至管理后台（仅管理员可用），公开页不再加载 value-settings.js -->
   <script>
     // 顶部导航栏滚动效果
     (function() {
@@ -2006,52 +2003,11 @@ function getPageHTML(options) {
     // 螃蟹网代理列表（客户端抓取用，多代理轮询降低被封风险）
     window._pxb7Proxies = ${JSON.stringify(pxb7Proxies)};
     window._charList = ${JSON.stringify(charList)};
+    // 服务端渲染的覆盖项（角色等级/价格、专武映射），供可视化编辑器使用
+    window._serverDefaultConfig = ${JSON.stringify(serverOverrides).replace(/</g, '\\u003c')};
     window._sigWeapons = ${JSON.stringify(sigWeapons)};
   </script>
   <script>
-    // 切换估值设置面板到绝区零上下文（存储键 zzz_eval_weights，默认配置走 zzz 引擎）
-    if (typeof setValueSettingsGame === 'function') setValueSettingsGame('zzz');
-
-    // ============================================================
-    // 服务器端默认配置（从数据库加载，优先于源码内置默认值）
-    // 检测配置更新时间戳，自动清除用户旧的自定义配置
-    // ============================================================
-    window._serverDefaultConfig = null;
-    fetch('/api/config/default?game=zzz').then(r => r.json()).then(json => {
-      if (json.success && json.data) {
-        window._serverDefaultConfig = json.data;
-        console.log('[config] 已加载服务器端默认估值配置');
-        // 检测 CONFIG_VERSION 变更（代码更新时不改变数据库 updated_at，需独立检查）
-        var serverConfigVersion = json.data.configVersion || 1;
-        var storedConfigVersion = parseInt(localStorage.getItem('zzz_eval_config_version') || '0', 10);
-        if (serverConfigVersion > storedConfigVersion) {
-          if (localStorage.getItem('zzz_eval_weights')) {
-            localStorage.removeItem('zzz_eval_weights');
-            console.log('[config] 检测到CONFIG_VERSION更新(' + storedConfigVersion + '→' + serverConfigVersion + ')，已自动清除旧配置');
-          }
-          localStorage.setItem('zzz_eval_config_version', String(serverConfigVersion));
-        }
-        // 检测服务器端配置是否已更新（基于数据库 updated_at 时间戳）
-        var serverUpdatedAt = json.configUpdatedAt;
-        var storedUpdatedAt = localStorage.getItem('zzz_config_updated_at');
-        if (serverUpdatedAt && serverUpdatedAt !== storedUpdatedAt) {
-          // 服务器配置已更新，清除用户旧的自定义配置
-          if (localStorage.getItem('zzz_eval_weights')) {
-            localStorage.removeItem('zzz_eval_weights');
-            console.log('[config] 检测到服务器配置更新(' + storedUpdatedAt + '→' + serverUpdatedAt + ')，已自动清除旧配置');
-          }
-          localStorage.setItem('zzz_config_updated_at', serverUpdatedAt);
-        }
-      }
-      updateConfigInfo();
-    }).catch(() => {});
-
-    // 记录本次页面加载时间（用户刷新浏览器即更新）
-    var pageLoadTime = new Date().toISOString();
-    localStorage.setItem('zzz_page_loaded_at', pageLoadTime);
-
-    updateConfigInfo();
-
     function clearPasteInput() {
       document.getElementById('eval-text').value = '';
       document.getElementById('eval-price').value = '';
@@ -2061,87 +2017,6 @@ function getPageHTML(options) {
     function clearLookupInput() {
       document.getElementById('product-id').value = '';
       document.getElementById('product-id').focus();
-    }
-
-    function updateConfigInfo() {
-      var el = document.getElementById('config-info');
-      if (!el) return;
-      var storedAt = localStorage.getItem('zzz_page_loaded_at');
-      if (!storedAt) { el.innerHTML = ''; return; }
-      var date = new Date(storedAt);
-      if (isNaN(date.getTime())) { el.innerHTML = ''; return; }
-      var now = new Date();
-      var diffMs = now - date;
-      var diffDays = Math.floor(diffMs / (86400000));
-      var dateStr = date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-      var html = '算法规则加载时间：' + dateStr;
-      if (diffDays >= 3) {
-        html += ' <span style="color:#e65100;font-weight:600;">已超' + diffDays + '天未刷新，建议定期刷新页面获取最新规则</span>';
-      }
-      el.innerHTML = html;
-    }
-
-    // ============================================================
-    // 估值规则设置按钮状态更新
-    // ============================================================
-    function updateSettingsBtnState() {
-      const btn = document.getElementById('settings-btn');
-      if (!btn) return;
-      if (typeof hasCustomWeights === 'function' && hasCustomWeights()) {
-        btn.textContent = '估值规则设置（已自定义）';
-        btn.classList.add('customized');
-      } else {
-        btn.textContent = '估值规则设置';
-        btn.classList.remove('customized');
-      }
-    }
-
-    // 安全打开估值设置：如果 value-settings.js 加载失败则提示用户
-    function safeOpenValueSettings() {
-      if (typeof openValueSettings === 'function') {
-        openValueSettings(reevaluateAfterSettings);
-      } else if (window.__vsFailed) {
-        alert('估值设置面板加载失败，请刷新页面重试。如问题持续，请检查网络连接。');
-      } else {
-        alert('估值设置面板尚未加载完成，请稍后重试。');
-      }
-    }
-    // 页面加载后初始化按钮状态
-    (function(){ updateSettingsBtnState(); })();
-
-    // ============================================================
-    // 新规则检测：页面加载后自动应用最新规则（无需用户确认）
-    // ============================================================
-    (function checkNewRules() {
-      if (typeof checkNewRulesAvailable !== 'function') return;
-      checkNewRulesAvailable().then(function(hasNew) {
-        if (!hasNew) return;
-        // 自动加载最新规则，不显示横幅
-        if (typeof loadLatestRules === 'function') loadLatestRules();
-        updateSettingsBtnState();
-        console.log('[config] 检测到新规则版本，已自动加载最新规则');
-        // 如果之前有估价结果，重新估价以应用新规则
-        if (currentTab === 'paste') {
-          doEvaluate();
-        } else if (lastLookupId) {
-          doLookup();
-        }
-      });
-    })();
-
-    // 最近一次按编号查询的商品ID（用于设置保存后重新估价）
-    let lastLookupId = '';
-
-    // 估值规则保存后：更新按钮状态并重新估价（根据当前Tab）
-    function reevaluateAfterSettings() {
-      updateSettingsBtnState();
-      if (currentTab === 'paste') {
-        doEvaluate();
-      } else if (currentTab === 'lookup' && lastLookupId) {
-        // 重新查询编号以应用新规则
-        document.getElementById('product-id').value = lastLookupId;
-        doLookup();
-      }
     }
 
     // ============================================================
@@ -2225,7 +2100,6 @@ function getPageHTML(options) {
       const productId = document.getElementById('product-id').value.trim();
       if (!productId) { alert('请输入商品编号或商品链接'); return; }
       if (!productId.startsWith('http')) { alert('请粘贴商品链接，不要输入纯编号。\\n\\n链接查询支持螃蟹网和盼之网的商品链接。'); return; }
-      lastLookupId = productId;
 
       const btn = document.getElementById('lookup-btn');
       btn.disabled = true; btn.textContent = '查询中...';
@@ -2233,7 +2107,8 @@ function getPageHTML(options) {
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在查询商品信息...</div>';
 
       try {
-        const customWeights = (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null);
+        // 权重由服务端按数据库配置决定，前端不再下发
+        const customWeights = null;
         const parsed = parseProductLink(productId);
         let clientSuccess = false;
         let clientError = null;
@@ -2326,7 +2201,8 @@ function getPageHTML(options) {
       document.getElementById('status-msg').innerHTML = '<div class="loading">正在计算估值...</div>';
 
       try {
-        const customWeights = (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null);
+        // 权重由服务端按数据库配置决定，前端不再下发
+        const customWeights = null;
         const resp = await fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3410,7 +3286,7 @@ function getPageHTML(options) {
           body: JSON.stringify({
             showTitle: desc,
             priceInCents: Math.round(price * 100),
-            customWeights: (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null),
+            customWeights: null,
             game: 'zzz',
           }),
         });
@@ -3426,10 +3302,6 @@ function getPageHTML(options) {
       } finally {
         VE_EVALUATING = false;
       }
-    }
-
-    function veGetCustomWeights() {
-      return (typeof getSavedWeights === 'function') ? (getSavedWeights() || window._serverDefaultConfig || null) : (window._serverDefaultConfig || null);
     }
 
     function veShowLoading(text) {
@@ -3545,7 +3417,7 @@ function getPageHTML(options) {
         fetch('/api/x9k2-eval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: veGetCustomWeights(), game: 'zzz', parseOnly: true }),
+          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: null, game: 'zzz', parseOnly: true }),
         }).then(function(r) { return r.json(); }).then(function(result) {
           if (result.success && result.data && result.data.info) {
             var info = result.data.info;
