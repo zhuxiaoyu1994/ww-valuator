@@ -229,6 +229,7 @@ function getAdminPage() {
       <button class="tab-btn" onclick="switchTab('config', this)">配置管理</button>
       <button class="tab-btn" onclick="switchTab('testbank', this)">估值题库</button>
       <button class="tab-btn" onclick="switchTab('blocklist', this)">IP封禁</button>
+      <button class="tab-btn" onclick="switchTab('evalkeys', this)">估价Key</button>
     </div>
 
     <!-- Tab 1: 查询日志 -->
@@ -588,6 +589,32 @@ function getAdminPage() {
         <div id="bl-list" style="background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;"></div>
       </div>
     </div>
+
+    <!-- Tab 7: 估价Key -->
+    <div id="tab-evalkeys" class="tab-content">
+      <div class="mon-card">
+        <h2>估价 Key 管理</h2>
+        <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
+          给每位朋友发一把专属密钥，用于「螃蟹网页面估值」精简脚本（<code style="color:#888;">dist/pxb7-value-lite.user.js</code>）。<br>
+          收到钱后在下方新建密钥并发给对方，到期后脚本自动失效；到期前点「续期」顺延天数即可，未用完的剩余天数不会丢失。<br>
+          密钥存在服务器数据库中，停用/删除后立即生效，无需重新部署。
+        </p>
+        <div style="font-size:13px;color:#888;margin-bottom:12px;" id="ek-stats">加载中...</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+          <input type="text" id="ek-new-name" placeholder="备注名，如 张三 / 微信昵称" onkeydown="if(event.key==='Enter')ekCreate()" style="flex:1;min-width:180px;padding:10px 14px;border:1px solid #2a2a4a;border-radius:8px;background:#1a1a3a;color:#e0e0e0;font-size:14px;">
+          <select id="ek-new-days" style="padding:10px 14px;border:1px solid #2a2a4a;border-radius:8px;background:#1a1a3a;color:#e0e0e0;font-size:14px;">
+            <option value="30" selected>30 天</option>
+            <option value="31">31 天</option>
+            <option value="90">90 天</option>
+            <option value="365">365 天</option>
+            <option value="0">永久</option>
+          </select>
+          <button onclick="ekCreate()" style="padding:10px 24px;background:#4ade80;color:#12122a;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">新建密钥</button>
+          <button onclick="ekRefresh()" style="padding:10px 20px;background:#1a1a3a;color:#4ade80;border:1px solid #2a2a4a;border-radius:8px;font-size:14px;cursor:pointer;">刷新</button>
+        </div>
+        <div id="ek-list" style="background:#1a1a3a;border:1px solid #2a2a4a;border-radius:10px;overflow:hidden;"></div>
+      </div>
+    </div>
   </div>
 
   <div class="tb-modal-mask" id="tb-modal-mask" onclick="if(event.target===this)tbCloseModal()">
@@ -893,6 +920,9 @@ function getAdminPage() {
     }
     if (name === 'blocklist') {
       blRefresh();
+    }
+    if (name === 'evalkeys') {
+      ekRefresh();
     }
   }
 
@@ -2804,6 +2834,154 @@ function getAdminPage() {
         alert(result.error || '操作失败');
       }
     }).catch((e) => { alert('网络错误: ' + (e.message || '未知')); });
+  }
+
+  // ============================================================
+  // 估价Key管理
+  // ============================================================
+
+  function ekPost(path, payload) {
+    const pw = sessionStorage.getItem('admin_pw');
+    if (!pw) return Promise.reject(new Error('未登录'));
+    return fetch('/admin/api/eval-keys/' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ password: pw }, payload)),
+    }).then(r => r.json());
+  }
+
+  function ekRefresh() {
+    const statsEl = document.getElementById('ek-stats');
+    if (statsEl) statsEl.textContent = '加载中...';
+    ekPost('list', {}).then(result => {
+      if (result.success) {
+        evalKeysData = result.data || [];
+        ekRenderList();
+      } else {
+        if (statsEl) statsEl.textContent = '加载失败：' + (result.error || '未知错误');
+      }
+    }).catch(e => {
+      if (statsEl) statsEl.textContent = '加载失败：' + (e.message || '网络错误');
+    });
+  }
+
+  function ekStatusOf(rec) {
+    if (rec.status !== 'active') return { text: '已停用', color: '#6b7280' };
+    if (rec.expiresAt && Date.parse(rec.expiresAt) <= Date.now()) return { text: '已过期', color: '#ef4444' };
+    return { text: '生效中', color: '#4ade80' };
+  }
+
+  function ekExpireText(rec) {
+    if (!rec.expiresAt) return '永久有效';
+    const t = Date.parse(rec.expiresAt);
+    const d = new Date(t).toLocaleDateString('zh-CN', { hour12: false });
+    const diff = t - Date.now();
+    if (diff <= 0) return d + '（已过期）';
+    return d + '（剩余 ' + Math.ceil(diff / 86400000) + ' 天）';
+  }
+
+  function ekRenderList() {
+    const stats = document.getElementById('ek-stats');
+    const list = document.getElementById('ek-list');
+    if (!stats || !list) return;
+    const now = Date.now();
+    const activeCount = evalKeysData.filter(r => r.status === 'active' && (!r.expiresAt || Date.parse(r.expiresAt) > now)).length;
+    stats.textContent = '共 ' + evalKeysData.length + ' 把密钥，其中 ' + activeCount + ' 把生效中';
+    if (evalKeysData.length === 0) {
+      list.innerHTML = '<div style="text-align:center;color:#666;padding:40px;font-size:14px;">还没有密钥，先在上方新建一把</div>';
+      return;
+    }
+    list.innerHTML = evalKeysData.map(function(rec) {
+      const st = ekStatusOf(rec);
+      const k = String(rec.key || '');
+      const last = rec.lastUsedAt ? new Date(rec.lastUsedAt).toLocaleString('zh-CN', { hour12: false }) : '从未使用';
+      return '<div style="padding:14px 18px;border-bottom:1px solid #1f1f3a;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">' +
+          '<div style="min-width:0;">' +
+            '<div style="font-size:14px;color:#e0e0e0;font-weight:600;">' + escapeHtml(rec.name || '未命名') +
+              '<span style="padding:2px 8px;border-radius:4px;font-size:11px;background:' + st.color + ';color:#12122a;margin-left:8px;">' + st.text + '</span>' +
+            '</div>' +
+            '<div style="font-size:12px;font-family:monospace;color:#9ca3af;margin-top:5px;word-break:break-all;">' + escapeHtml(k) + '</div>' +
+            '<div style="font-size:12px;color:#9ca3af;margin-top:5px;">有效期：' + ekExpireText(rec) +
+              '　调用 ' + (rec.usageCount || 0) + ' 次　最后使用：' + last + '</div>' +
+            (rec.note ? '<div style="font-size:12px;color:#9ca3af;margin-top:3px;">备注：' + escapeHtml(rec.note) + '</div>' : '') +
+          '</div>' +
+          '<div style="display:flex;gap:8px;flex-shrink:0;">' +
+            '<button onclick="ekCopy(\\'' + k.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 12px;border:1px solid #4ade80;border-radius:6px;background:transparent;color:#4ade80;font-size:12px;cursor:pointer;">复制</button>' +
+            '<button onclick="ekRenew(\\'' + k.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 12px;border:1px solid #38bdf8;border-radius:6px;background:transparent;color:#38bdf8;font-size:12px;cursor:pointer;">续期</button>' +
+            '<button onclick="ekToggle(\\'' + k.replace(/'/g, "\\\\'") + '\\', \\'' + (rec.status === 'active' ? 'disabled' : 'active') + '\\')" style="padding:5px 12px;border:1px solid #fbbf24;border-radius:6px;background:transparent;color:#fbbf24;font-size:12px;cursor:pointer;">' + (rec.status === 'active' ? '停用' : '启用') + '</button>' +
+            '<button onclick="ekDelete(\\'' + k.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 12px;border:1px solid #ef4444;border-radius:6px;background:transparent;color:#ef4444;font-size:12px;cursor:pointer;">删除</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function ekCreate() {
+    const nameEl = document.getElementById('ek-new-name');
+    const daysEl = document.getElementById('ek-new-days');
+    const name = (nameEl.value || '').trim();
+    if (!name) { alert('请先填写备注名'); return; }
+    const days = Number(daysEl.value);
+    ekPost('create', { name: name, days: days }).then(result => {
+      if (result.success) {
+        nameEl.value = '';
+        evalKeysData.unshift(result.data);
+        ekRenderList();
+        alert('密钥已生成：\n' + result.data.key + '\n\n有效期：' + ekExpireText(result.data) + '\n请复制发给对方。');
+      } else {
+        alert(result.error || '创建失败');
+      }
+    }).catch(e => alert('网络错误: ' + (e.message || '未知')));
+  }
+
+  function ekCopy(key) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(key).then(function() {
+        alert('密钥已复制到剪贴板');
+      }, function() {
+        window.prompt('复制下面的密钥：', key);
+      });
+    } else {
+      window.prompt('复制下面的密钥：', key);
+    }
+  }
+
+  function ekRenew(key) {
+    const input = window.prompt('续期天数（从当前到期日往后顺延，填 0 表示改为永久）：', '30');
+    if (input === null) return;
+    const days = Number(input);
+    if (isNaN(days) || days < 0) { alert('请输入有效的天数'); return; }
+    ekPost('renew', { key: key, days: days }).then(result => {
+      if (result.success) {
+        ekRefresh();
+      } else {
+        alert(result.error || '续期失败');
+      }
+    }).catch(e => alert('网络错误: ' + (e.message || '未知')));
+  }
+
+  function ekToggle(key, status) {
+    const label = status === 'active' ? '启用' : '停用';
+    if (!confirm('确定' + label + '这把密钥吗？' + (status === 'active' ? '' : '停用后对方脚本会立即失效。'))) return;
+    ekPost('toggle', { key: key, status: status }).then(result => {
+      if (result.success) {
+        ekRefresh();
+      } else {
+        alert(result.error || '操作失败');
+      }
+    }).catch(e => alert('网络错误: ' + (e.message || '未知')));
+  }
+
+  function ekDelete(key) {
+    if (!confirm('确定删除这把密钥吗？删除后无法恢复。')) return;
+    ekPost('delete', { key: key }).then(result => {
+      if (result.success) {
+        ekRefresh();
+      } else {
+        alert(result.error || '删除失败');
+      }
+    }).catch(e => alert('网络错误: ' + (e.message || '未知')));
   }
 </script>
 </body>

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.40.0
+// @version      3.41.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -6170,6 +6170,33 @@
           border-color: #10b981;
           color: white;
         }
+        .mw-page-badge {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          z-index: 10;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 4px 10px;
+          border-radius: 8px;
+          color: #fff;
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.3;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+          cursor: pointer;
+          user-select: none;
+        }
+        .mw-page-badge small {
+          font-size: 10px;
+          opacity: 0.9;
+        }
+        .mw-page-est {
+          font-size: 12px;
+          font-weight: 600;
+          margin-top: 2px;
+        }
         .mw-input {
           width: 40px;
           padding: 2px 4px;
@@ -6383,6 +6410,7 @@
           <button class="mw-btn" id="mwBtnNotify">开启通知</button>
           <button class="mw-btn" id="mwBtnNotifySettings">通知设置</button>
           <button class="mw-btn" id="mwBtnRefresh">立即刷新</button>
+          <button class="mw-btn" id="mwBtnPageEval" title="对当前页面显示的商品估值并标注在卡片上（仅螃蟹网列表页，点击开启/再点关闭）">页面估值</button>
           <button class="mw-btn" id="mwBtnSettings">估值设置</button>
           <button class="mw-btn" id="mwBtnTestEval" title="手动粘贴账号描述测试估值（结果不录入列表，仅供调参）">测试估价</button>
           <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
@@ -6464,6 +6492,7 @@
     dom.btnNotify = document.getElementById('mwBtnNotify');
     dom.btnNotifySettings = document.getElementById('mwBtnNotifySettings');
     dom.btnRefresh = document.getElementById('mwBtnRefresh');
+    dom.btnPageEval = document.getElementById('mwBtnPageEval');
     dom.btnSettings = document.getElementById('mwBtnSettings');
     dom.btnTestEval = document.getElementById('mwBtnTestEval');
     dom.btnCleanData = document.getElementById('mwBtnCleanData');
@@ -7391,6 +7420,7 @@
     });
 
     dom.btnTestEval.addEventListener('click', openTestEvalDialog);
+    dom.btnPageEval.addEventListener('click', togglePageEval);
 
     dom.btnCleanData.addEventListener('click', openCleanDataDialog);
 
@@ -8209,6 +8239,238 @@
     if (ratio > threshold) return '高性价';
     if (ratio > 0) return '可入';
     return '普通';
+  }
+
+  // ============================================================
+  // 页面估值：点击按钮后对当前页面显示的商品估值并标注在卡片上
+  // 仅螃蟹网列表页有效（卡片为 div[productid]），不依赖监控列表。
+  // 与监控助手一致：拉详情接口（fetchDetail）拿完整描述+等级做详估，
+  // 详情失败时回退卡片文本初估。再点一次关闭并清除标注。
+  // ============================================================
+  let pageEvalActive = false;
+  let pageEvalObserver = null;
+  let pageEvalScanTimer = null;
+  let pageEvalSig = '';
+  const pageEvalDetailCache = new Map();  // productId -> { showTitle, price }（详情接口结果）
+  const pageEvalQueue = [];               // 待详估的商品
+  let pageEvalRunning = false;            // 详估工作器是否在运行
+  let pageEvalDone = 0;
+  let pageEvalTotal = 0;
+
+  // 收集页面商品卡片，读取编号、价格（元）与描述
+  function collectPageCards(cards) {
+    if (!cards) cards = document.querySelectorAll('div[productid]');
+    const items = [];
+    for (const card of cards) {
+      const productId = card.getAttribute('productid');
+      if (!productId) continue;
+      const titleEl = card.querySelector('.smallCardTitle');
+
+      let price = 0;
+      if (titleEl) {
+        const priceAttr = titleEl.getAttribute('price');
+        if (priceAttr) price = Math.round(parseInt(priceAttr, 10) / 100);
+        const promo = titleEl.getAttribute('seckillprice') || titleEl.getAttribute('activityprice');
+        if (promo) price = Math.round(parseInt(promo, 10) / 100);
+      }
+      if (price <= 0) {
+        const boldSpans = card.querySelectorAll('span.text-Bold, span[class*="text-Bold"]');
+        for (const s of boldSpans) {
+          const n = parseInt(s.textContent.replace(/[,，￥¥\s]/g, ''), 10);
+          if (!isNaN(n) && n > 0) { price = n; break; }
+        }
+      }
+      if (price <= 0) {
+        const spans = card.querySelectorAll('span, div');
+        for (const s of spans) {
+          const m = s.textContent.trim().match(/[￥¥]\s*(\d[\d,，]+)/);
+          if (m) {
+            const n = parseInt(m[1].replace(/[,，\s]/g, ''), 10);
+            if (!isNaN(n) && n > 0) { price = n; break; }
+          }
+        }
+      }
+
+      let desc = titleEl ? titleEl.textContent.trim() : '';
+      if (!desc) {
+        const descEl = card.querySelector('.text-Medium') || card.querySelector('[class*="text-Medium"]');
+        if (descEl) desc = descEl.textContent.trim();
+      }
+      if (!desc) continue;
+
+      items.push({ productId: String(productId), price: price, desc: desc, card: card, titleEl: titleEl });
+    }
+    return items;
+  }
+
+  // 计算估值并注入/更新角标
+  function injectPageBadge(item, desc, price) {
+    let valuation;
+    try {
+      valuation = calculateValue(parseAccountInfo(desc), price);
+    } catch (e) {
+      return false;
+    }
+    if (!valuation) return false;
+
+    const value = valuation.totalValue;
+    const ratio = price > 0 ? Math.round((value - price) / price * 1000) / 10 : 0;
+    const color = getRatioColor(ratio);
+
+    item.card.dataset.mwPageEval = 'done';
+    item.card.dataset.mwPageEvalLen = String((desc || '').length);
+    if (getComputedStyle(item.card).position === 'static') item.card.style.position = 'relative';
+
+    let badge = item.card.querySelector('.mw-page-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'mw-page-badge';
+      badge.dataset.mwPageBadge = '1';
+      item.card.appendChild(badge);
+    }
+    badge.style.background = color;
+    badge.title = '估算价值: ¥' + value + '\n标价: ¥' + price + '\n性价比: ' + ratio + '%';
+    badge.innerHTML = '<span>¥' + Math.round(value) + '</span><small>' +
+      (price > 0 ? ('性价比 ' + ratio + '%') : '估值') + '</small>';
+
+    if (item.titleEl && item.titleEl.parentElement) {
+      let est = item.card.querySelector('.mw-page-est');
+      if (!est) {
+        est = document.createElement('div');
+        est.className = 'mw-page-est';
+        est.dataset.mwPageBadge = '1';
+        item.titleEl.parentElement.appendChild(est);
+      }
+      est.style.color = color;
+      est.textContent = '估值 ¥' + Math.round(value);
+    }
+    return true;
+  }
+
+  // 占位角标（等待详情接口详估）
+  function injectPagePending(item) {
+    if (item.card.querySelector('.mw-page-badge')) return;
+    if (getComputedStyle(item.card).position === 'static') item.card.style.position = 'relative';
+    const badge = document.createElement('div');
+    badge.className = 'mw-page-badge';
+    badge.dataset.mwPageBadge = '1';
+    badge.style.background = '#6b7280';
+    badge.textContent = '估值中…';
+    item.card.appendChild(badge);
+  }
+
+  // 逐批拉详情接口详估（并发2，批间隔300ms，避免触发WAF）
+  async function runPageEvalQueue() {
+    if (pageEvalRunning) return;
+    pageEvalRunning = true;
+    while (pageEvalQueue.length > 0 && pageEvalActive) {
+      const batch = pageEvalQueue.splice(0, 2);
+      await Promise.all(batch.map(async function (item) {
+        let desc = item.desc;
+        let price = item.price;
+        let cached = pageEvalDetailCache.get(item.productId);
+        if (!cached) {
+          cached = { showTitle: '', price: 0 };
+          try {
+            const data = await fetchDetail(item.productId);
+            if (data && data.success && data.data) {
+              cached.showTitle = data.data.showTitle || data.data.title || '';
+              cached.price = (data.data.price || 0) / 100;
+            }
+          } catch (e) {
+            // 详情拉取失败：回退卡片文本初估
+          }
+          pageEvalDetailCache.set(item.productId, cached);
+        }
+        if (cached.showTitle && cached.showTitle.length > desc.length) desc = cached.showTitle;
+        if (cached.price > 0) price = cached.price;
+        injectPageBadge(item, desc, price);
+        pageEvalDone++;
+        updatePageEvalButtonText();
+      }));
+      if (pageEvalQueue.length > 0 && pageEvalActive) {
+        await new Promise(function (r) { setTimeout(r, 300); });
+      }
+    }
+    pageEvalRunning = false;
+    updatePageEvalButtonText();
+  }
+
+  function updatePageEvalButtonText() {
+    if (!dom.btnPageEval) return;
+    if (!pageEvalActive) { dom.btnPageEval.textContent = '页面估值'; return; }
+    dom.btnPageEval.classList.add('mw-btn-active');
+    if (pageEvalRunning || pageEvalQueue.length > 0) {
+      dom.btnPageEval.textContent = '估值中 ' + pageEvalDone + '/' + pageEvalTotal;
+    } else {
+      dom.btnPageEval.textContent = '停止页面估值';
+    }
+  }
+
+  // 扫描页面卡片：未处理的入队并显示占位角标，返回本次新增数量
+  function runPageEvalScan() {
+    const cards = document.querySelectorAll('div[productid]');
+    if (cards.length === 0) return 0;
+    // 卡片集合未变化则跳过（避免页面无关变动触发无谓重扫）
+    const sig = cards.length + '|' + (cards[0].getAttribute('productid') || '') + '|' +
+      (cards[cards.length - 1].getAttribute('productid') || '');
+    if (sig === pageEvalSig) return 0;
+    pageEvalSig = sig;
+
+    let n = 0;
+    for (const item of collectPageCards(cards)) {
+      const state = item.card.dataset.mwPageEval;
+      if (state === 'pending' || state === 'done') continue;
+      item.card.dataset.mwPageEval = 'pending';
+      injectPagePending(item);
+      pageEvalQueue.push(item);
+      pageEvalTotal++;
+      n++;
+    }
+    if (n > 0) runPageEvalQueue();
+    updatePageEvalButtonText();
+    return n;
+  }
+
+  // 页面变化时防抖重扫（仅开启状态生效）
+  function schedulePageEvalScan() {
+    if (!pageEvalActive || pageEvalScanTimer) return;
+    pageEvalScanTimer = setTimeout(function () {
+      pageEvalScanTimer = null;
+      if (pageEvalActive) runPageEvalScan();
+    }, 400);
+  }
+
+  function startPageEval() {
+    pageEvalActive = true;
+    pageEvalSig = '';
+    pageEvalDone = 0;
+    pageEvalTotal = 0;
+    const n = runPageEvalScan();
+    pageEvalObserver = new MutationObserver(schedulePageEvalScan);
+    pageEvalObserver.observe(document.body, { childList: true, subtree: true });
+    if (dom.btnPageEval) dom.btnPageEval.classList.add('mw-btn-active');
+    updatePageEvalButtonText();
+    console.log('[鸣潮监控-页面估值] ' + (n > 0 ? ('已加入 ' + n + ' 个商品，正在拉详情接口详估…') : '未发现商品卡片，当前页面可能不是螃蟹网列表页'));
+  }
+
+  function stopPageEval() {
+    pageEvalActive = false;
+    pageEvalSig = '';
+    pageEvalQueue.length = 0;
+    if (pageEvalObserver) { pageEvalObserver.disconnect(); pageEvalObserver = null; }
+    if (pageEvalScanTimer) { clearTimeout(pageEvalScanTimer); pageEvalScanTimer = null; }
+    document.querySelectorAll('[data-mw-page-badge]').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('div[productid][data-mw-page-eval]').forEach(function (c) {
+      delete c.dataset.mwPageEval;
+      delete c.dataset.mwPageEvalLen;
+    });
+    if (dom.btnPageEval) dom.btnPageEval.classList.remove('mw-btn-active');
+    updatePageEvalButtonText();
+  }
+
+  function togglePageEval() {
+    if (pageEvalActive) stopPageEval(); else startPageEval();
   }
 
   /**

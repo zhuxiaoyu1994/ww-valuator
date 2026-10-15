@@ -704,6 +704,162 @@ async function deleteDealByProductId(productId) {
 }
 
 // ============================================================
+// 估价 Key 管理（分发给朋友的页面估值密钥，手动收款+手动续期）
+// ============================================================
+
+// 内存降级存储（未配置数据库时使用，重启后丢失）
+const memoryEvalKeys = new Map();
+
+/**
+ * 创建估价Key表
+ */
+async function ensureEvalKeysTable() {
+  if (!dbClient) return;
+  try {
+    await dbClient.execute(`
+      CREATE TABLE IF NOT EXISTS eval_keys (
+        key TEXT PRIMARY KEY,
+        name TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        expires_at TEXT,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        last_used_at TEXT,
+        usage_count INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    console.log('[DB] 估价Key表已就绪');
+  } catch (e) {
+    console.error('[DB] 建估价Key表失败:', e.message);
+  }
+}
+
+function mapEvalKeyRow(r) {
+  return {
+    key: r.key,
+    name: r.name || '',
+    status: r.status || 'active',
+    expiresAt: r.expires_at || null,
+    note: r.note || '',
+    createdAt: r.created_at || null,
+    lastUsedAt: r.last_used_at || null,
+    usageCount: Number(r.usage_count || 0),
+  };
+}
+
+/**
+ * 列出全部估价Key（按创建时间倒序）
+ */
+async function listEvalKeys() {
+  if (!dbClient) {
+    return [...memoryEvalKeys.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  }
+  try {
+    const result = await dbClient.execute('SELECT * FROM eval_keys ORDER BY created_at DESC');
+    return result.rows.map(mapEvalKeyRow);
+  } catch (e) {
+    console.error('[DB] 查询估价Key失败:', e.message);
+    return [];
+  }
+}
+
+/**
+ * 按 key 查单条
+ */
+async function getEvalKey(key) {
+  if (!dbClient) {
+    return memoryEvalKeys.get(key) || null;
+  }
+  try {
+    const result = await dbClient.execute({
+      sql: 'SELECT * FROM eval_keys WHERE key = ?',
+      args: [key],
+    });
+    return result.rows.length > 0 ? mapEvalKeyRow(result.rows[0]) : null;
+  } catch (e) {
+    console.error('[DB] 读取估价Key失败:', e.message);
+    return null;
+  }
+}
+
+/**
+ * 写入/覆盖一条估价Key记录
+ */
+async function saveEvalKey(rec) {
+  if (!dbClient) {
+    memoryEvalKeys.set(rec.key, Object.assign({}, rec));
+    return true;
+  }
+  try {
+    await dbClient.execute({
+      sql: `INSERT INTO eval_keys (key, name, status, expires_at, note, created_at, last_used_at, usage_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+              name = excluded.name,
+              status = excluded.status,
+              expires_at = excluded.expires_at,
+              note = excluded.note,
+              last_used_at = excluded.last_used_at,
+              usage_count = excluded.usage_count`,
+      args: [
+        rec.key,
+        rec.name || '',
+        rec.status || 'active',
+        rec.expiresAt || null,
+        rec.note || '',
+        rec.createdAt || new Date().toISOString(),
+        rec.lastUsedAt || null,
+        rec.usageCount || 0,
+      ],
+    });
+    return true;
+  } catch (e) {
+    console.error('[DB] 保存估价Key失败:', e.message);
+    return false;
+  }
+}
+
+/**
+ * 删除估价Key
+ */
+async function deleteEvalKey(key) {
+  if (!dbClient) return memoryEvalKeys.delete(key);
+  try {
+    const result = await dbClient.execute({
+      sql: 'DELETE FROM eval_keys WHERE key = ?',
+      args: [key],
+    });
+    return result.rowsAffected > 0;
+  } catch (e) {
+    console.error('[DB] 删除估价Key失败:', e.message);
+    return false;
+  }
+}
+
+/**
+ * 记录一次使用（更新最后使用时间与累计次数）
+ */
+async function touchEvalKey(key) {
+  const now = new Date().toISOString();
+  if (!dbClient) {
+    const rec = memoryEvalKeys.get(key);
+    if (rec) {
+      rec.lastUsedAt = now;
+      rec.usageCount = (rec.usageCount || 0) + 1;
+    }
+    return;
+  }
+  try {
+    await dbClient.execute({
+      sql: `UPDATE eval_keys SET last_used_at = ?, usage_count = usage_count + 1 WHERE key = ?`,
+      args: [now, key],
+    });
+  } catch (e) {
+    console.error('[DB] 更新估价Key使用记录失败:', e.message);
+  }
+}
+
+// ============================================================
 // 限流计数（基于数据库，支持 Serverless 多实例）
 // ============================================================
 
@@ -812,6 +968,7 @@ module.exports = {
   ensureConfigTable,
   ensureDealsTable,
   ensureRateLimitTable,
+  ensureEvalKeysTable,
   insertLog,
   queryLogs,
   getStats,
@@ -824,6 +981,11 @@ module.exports = {
   queryAllDealsForStats,
   deleteDealByProductId,
   cleanupOldDeals,
+  listEvalKeys,
+  getEvalKey,
+  saveEvalKey,
+  deleteEvalKey,
+  touchEvalKey,
   incrementRateCounter,
   getRateCounter,
   cleanupRateCounters,

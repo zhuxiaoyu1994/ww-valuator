@@ -8,6 +8,7 @@
 const express = require('express');
 const path = require('path');
 const https = require('https');
+const nodeCrypto = require('crypto');
 
 const { createEngine } = require('./value-engine');
 const WUWA_CONFIG = require('./configs/wuwa');
@@ -59,6 +60,9 @@ const PORT = process.env.PORT || 3000;
 
 // 管理后台密码（可通过环境变量配置）
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zhucs3336466';
+
+// 页面估值接口的主密钥（可选，作为管理员兜底密钥；分发给朋友的密钥存在数据库 eval_keys 表中）
+const PAGE_EVAL_KEY = process.env.PAGE_EVAL_KEY || '';
 
 // IP黑名单（初始从环境变量加载，运行时增删时同步到数据库）
 const BLOCKLIST_KEY = 'blocked_ips_v2';
@@ -157,6 +161,8 @@ function normalizeIp(ip) {
 // ============================================================
 const RATE_LIMIT_PER_MINUTE = 15;     // 每分钟最多 15 次查询
 const PARSE_ONLY_PER_MINUTE = 60;     // 纯解析请求每分钟最多 60 次（仅本地计算，不参与自动封禁）
+const PAGE_EVAL_PER_MINUTE = 60;      // 页面估值接口每分钟最多 60 次（凭共享密钥使用，不参与自动封禁）
+const PAGE_EVAL_MAX_ITEMS = 100;      // 页面估值单次最多提交 100 个商品
 const RATE_LIMIT_WINDOW = 60 * 1000;  // 限流窗口 1 分钟
 const AUTO_BAN_THRESHOLD = 60;        // 5 分钟内超过 60 次自动封禁
 const AUTO_BAN_WINDOW = 5 * 60 * 1000;// 自动封禁统计窗口 5 分钟
@@ -395,12 +401,15 @@ app.use(async (req, res, next) => {
 
   // 限流检查（查询接口 + 配置接口）
   // 纯解析请求（parseOnly，前端识别描述用）仅做本地计算：走独立的宽松上限，且不参与自动封禁
-  const isRateLimitedApi = req.path === '/api/x9k2-find' || req.path === '/api/x9k2-eval' || req.path === '/api/config/default';
+  const isPageEval = req.path === '/api/page-eval' && req.method === 'POST';
+  const isRateLimitedApi = req.path === '/api/x9k2-find' || req.path === '/api/x9k2-eval' || req.path === '/api/config/default' || isPageEval;
   const isParseOnly = req.path === '/api/x9k2-eval' && req.body && req.body.parseOnly === true;
   if (isRateLimitedApi) {
     const result = isParseOnly
       ? await checkRateLimit(clientIp, { perMinute: PARSE_ONLY_PER_MINUTE, keyPrefix: 'parse:', autoBan: false })
-      : await checkRateLimit(clientIp);
+      : (isPageEval
+        ? await checkRateLimit(clientIp, { perMinute: PAGE_EVAL_PER_MINUTE, keyPrefix: 'pageeval:', autoBan: false })
+        : await checkRateLimit(clientIp));
     if (result.autoBanned) {
       console.log(`[RateLimit] 自动封禁 ${clientIp}，5分钟内 ${result.count5min} 次`);
       return res.json({
@@ -411,7 +420,7 @@ app.use(async (req, res, next) => {
       });
     }
     if (result.limited) {
-      const limit = isParseOnly ? PARSE_ONLY_PER_MINUTE : RATE_LIMIT_PER_MINUTE;
+      const limit = isParseOnly ? PARSE_ONLY_PER_MINUTE : (isPageEval ? PAGE_EVAL_PER_MINUTE : RATE_LIMIT_PER_MINUTE);
       return res.json({
         success: false,
         error: `请求过于频繁，请稍后再试（每分钟最多${limit}次）。`,
@@ -520,6 +529,87 @@ app.post('/api/x9k2-eval', async (req, res) => {
       shortDescription: engine.generateShortDescription(result),
     },
   });
+});
+
+/**
+ * 页面估值接口 - 供分发给朋友的精简油猴脚本使用
+ * 入参：{ game, items: [{ productId, desc, price }] }（price 单位：元）
+ * 出参：{ productId: { value, ratio } } —— 只返回最终估值与性价比，
+ *       不下发有效金/限定金/等级/计算明细，避免算法参数泄露
+ * 鉴权：请求头 x-eval-key 必须是数据库 eval_keys 表中状态为 active 且未过期的密钥；
+ *       环境变量 PAGE_EVAL_KEY 作为管理员兜底主密钥同样放行
+ */
+function pageEvalCors(req, res) {
+  const origin = req.headers.origin || '';
+  if (origin === 'https://www.pxb7.com' || origin === 'https://pxb7.com') {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+  }
+  res.set('Access-Control-Allow-Headers', 'content-type, x-eval-key');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+}
+
+/**
+ * 校验页面估值密钥
+ * @returns {null|string} null 表示通过，否则返回错误原因
+ */
+async function verifyEvalKey(rawKey) {
+  if (!rawKey) return '未授权';
+  if (PAGE_EVAL_KEY && rawKey === PAGE_EVAL_KEY) return null;
+  const rec = await db.getEvalKey(rawKey);
+  if (!rec) return '未授权';
+  if (rec.status !== 'active') return '密钥已停用';
+  if (rec.expiresAt && Date.parse(rec.expiresAt) <= Date.now()) return '密钥已过期';
+  return null;
+}
+
+app.options('/api/page-eval', (req, res) => {
+  pageEvalCors(req, res);
+  res.status(204).end();
+});
+
+app.post('/api/page-eval', async (req, res) => {
+  pageEvalCors(req, res);
+
+  const rawKey = req.headers['x-eval-key'] || '';
+  const keyErr = await verifyEvalKey(rawKey);
+  if (keyErr) {
+    return res.status(401).json({ success: false, error: keyErr });
+  }
+  if (rawKey !== PAGE_EVAL_KEY) {
+    db.touchEvalKey(rawKey).catch(() => {});
+  }
+
+  const body = req.body || {};
+  const game = body.game || 'wuwa';
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (items.length === 0) {
+    return res.status(400).json({ success: false, error: 'items is required' });
+  }
+  if (items.length > PAGE_EVAL_MAX_ITEMS) {
+    return res.status(400).json({ success: false, error: `items 数量超出上限（${PAGE_EVAL_MAX_ITEMS}）` });
+  }
+
+  const engine = getEngine(game);
+  const effectiveWeights = await getEffectiveConfig(game);
+
+  const data = {};
+  for (const it of items) {
+    const productId = it && it.productId;
+    const desc = it && it.desc;
+    if (!productId || !desc) continue;
+    try {
+      const r = engine.evaluateWithPrice(desc, Math.round((Number(it.price) || 0) * 100), effectiveWeights);
+      data[String(productId)] = {
+        value: r.details.finalValue,
+        ratio: r.costPerformance,
+      };
+    } catch (e) {
+      // 单条失败跳过，不影响其余商品
+    }
+  }
+
+  res.json({ success: true, data });
 });
 
 /**
@@ -1878,6 +1968,108 @@ app.post('/admin/api/cache-clear', (req, res) => {
 });
 
 // ============================================================
+// 估价 Key 管理 API（分发给朋友，手动收款 + 手动续期）
+// ============================================================
+
+const EVAL_KEY_PREFIX = 'pxb7_';
+const EVAL_KEY_DEFAULT_DAYS = 30;
+
+/**
+ * 按天数计算到期时间；days <= 0 表示永久（返回 null）
+ * base 传入现有到期时间（续期时从原到期日顺延，未过期时不损失剩余天数）
+ */
+function calcExpiresAt(baseIso, days) {
+  if (!days || days <= 0) return null;
+  const baseMs = Math.max(Date.now(), baseIso ? (Date.parse(baseIso) || 0) : 0);
+  return new Date(baseMs + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function newEvalKey() {
+  return EVAL_KEY_PREFIX + nodeCrypto.randomBytes(16).toString('hex');
+}
+
+/**
+ * 解析请求中的天数：未传或非法时用默认值；0 表示永久（合法值，不可当作"未传"处理）
+ */
+function parseDays(raw, fallback) {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  const n = Number(raw);
+  return isNaN(n) ? fallback : n;
+}
+
+app.post('/admin/api/eval-keys/list', async (req, res) => {
+  const { password } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  const list = await db.listEvalKeys();
+  res.json({ success: true, data: list });
+});
+
+app.post('/admin/api/eval-keys/create', async (req, res) => {
+  const { password, name, days, note } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  const rec = {
+    key: newEvalKey(),
+    name: (name || '').trim() || '未命名',
+    status: 'active',
+    expiresAt: calcExpiresAt(null, parseDays(days, EVAL_KEY_DEFAULT_DAYS)),
+    note: (note || '').trim(),
+    createdAt: new Date().toISOString(),
+    lastUsedAt: null,
+    usageCount: 0,
+  };
+  const ok = await db.saveEvalKey(rec);
+  if (!ok) return res.json({ success: false, error: '保存失败，请重试' });
+  console.log('[EvalKey] 新建密钥:', rec.key, rec.name, rec.expiresAt || '永久');
+  res.json({ success: true, data: rec });
+});
+
+app.post('/admin/api/eval-keys/renew', async (req, res) => {
+  const { password, key, days } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  const rec = await db.getEvalKey(key);
+  if (!rec) return res.json({ success: false, error: '密钥不存在' });
+  const n = parseDays(days, NaN);
+  if (isNaN(n)) return res.json({ success: false, error: '续期天数无效' });
+  rec.expiresAt = calcExpiresAt(rec.expiresAt, n);
+  rec.status = 'active';
+  const ok = await db.saveEvalKey(rec);
+  if (!ok) return res.json({ success: false, error: '保存失败，请重试' });
+  console.log('[EvalKey] 续期:', rec.key, rec.expiresAt || '永久');
+  res.json({ success: true, data: rec });
+});
+
+app.post('/admin/api/eval-keys/toggle', async (req, res) => {
+  const { password, key, status } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  const rec = await db.getEvalKey(key);
+  if (!rec) return res.json({ success: false, error: '密钥不存在' });
+  rec.status = status === 'active' ? 'active' : 'disabled';
+  const ok = await db.saveEvalKey(rec);
+  if (!ok) return res.json({ success: false, error: '保存失败，请重试' });
+  console.log('[EvalKey] 状态变更:', rec.key, rec.status);
+  res.json({ success: true, data: rec });
+});
+
+app.post('/admin/api/eval-keys/delete', async (req, res) => {
+  const { password, key } = req.body;
+  if (password !== ADMIN_PASSWORD) {
+    return res.json({ success: false, error: '密码错误' });
+  }
+  const ok = await db.deleteEvalKey(key);
+  if (!ok) return res.json({ success: false, error: '密钥不存在或删除失败' });
+  console.log('[EvalKey] 删除:', key);
+  res.json({ success: true });
+});
+
+// ============================================================
 // 估值配置管理 API
 // ============================================================
 
@@ -2198,6 +2390,7 @@ function initApp() {
   db.ensureConfigTable();
   db.ensureDealsTable();
   db.ensureRateLimitTable();
+  db.ensureEvalKeysTable();
 }
 
 // 导出 app 和 initApp（供 Vercel 使用）
