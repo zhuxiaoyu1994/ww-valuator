@@ -2928,7 +2928,7 @@ function getAdminPage() {
         nameEl.value = '';
         evalKeysData.unshift(result.data);
         ekRenderList();
-        alert('密钥已生成：\n' + result.data.key + '\n\n有效期：' + ekExpireText(result.data) + '\n请复制发给对方。');
+        alert('密钥已生成：\\n' + result.data.key + '\\n\\n有效期：' + ekExpireText(result.data) + '\\n请复制发给对方。');
       } else {
         alert(result.error || '创建失败');
       }
