@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         螃蟹网鸣潮估价助手
 // @namespace    pxb7-value-lite
-// @version      1.2.0
+// @version      1.2.1
 // @description  在螃蟹网鸣潮商品列表页一键显示每个账号的估值与性价比（估值由服务器计算，脚本不含任何算法与规则）
 // @author       You
 // @homepageURL  https://www.youxigujia.cn/lite
@@ -49,6 +49,7 @@
   const queue = [];
   let done = 0;
   let total = 0;
+  let failedCount = 0;
   let observer = null;
   let scanTimer = null;
   let sig = '';
@@ -153,24 +154,84 @@
   }
 
   // ---------- 拉取商品详情（拿完整描述与真实价格） ----------
-  function fetchDetail(productId) {
-    return new Promise(function (resolve) {
-      if (typeof GM_xmlhttpRequest !== 'function') { resolve(null); return; }
+  // 详情接口有阿里云 WAF 防护，必须优先用页面内 XHR（withCredentials），
+  // 它带着页面自身已有的 WAF cookie，与网站自己的请求方式一致；
+  // 裸的 GM 跨域请求会被 WAF 挡回挑战页，导致拿不到完整描述、估值偏低。
+  function isWafHtml(text) {
+    return typeof text === 'string' && (text.indexOf('aliyun_waf') >= 0 || text.indexOf('_waf_') >= 0);
+  }
+
+  function xhrDetail(productId) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', DETAIL_API, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
+      xhr.withCredentials = true;
+      xhr.timeout = 15000;
+      xhr.onload = function () {
+        var ct = xhr.getResponseHeader('content-type') || '';
+        if (ct.indexOf('json') >= 0) {
+          try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(new Error('JSON解析失败')); }
+          return;
+        }
+        reject(new Error(isWafHtml(xhr.responseText) ? 'WAF拦截' : '返回非JSON'));
+      };
+      xhr.onerror = function () { reject(new Error('网络错误')); };
+      xhr.ontimeout = function () { reject(new Error('超时')); };
+      try { xhr.send(JSON.stringify({ productId: productId })); } catch (e) { reject(e); }
+    });
+  }
+
+  function fetchDetailViaFetch(productId) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    return fetch(DETAIL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
+      body: JSON.stringify({ productId: productId }),
+      credentials: 'include',
+      signal: controller.signal
+    }).then(function (resp) {
+      clearTimeout(timer);
+      var ct = resp.headers.get('content-type') || '';
+      if (ct.indexOf('json') < 0) throw new Error('返回非JSON');
+      return resp.json();
+    }, function (e) { clearTimeout(timer); throw e; });
+  }
+
+  function gmDetail(productId) {
+    return new Promise(function (resolve, reject) {
+      if (typeof GM_xmlhttpRequest !== 'function') { reject(new Error('GM 不可用')); return; }
       try {
         GM_xmlhttpRequest({
           method: 'POST',
           url: DETAIL_API,
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': location.href,
+            'Origin': location.origin
+          },
           data: JSON.stringify({ productId: productId }),
+          anonymous: false,
           timeout: 15000,
           onload: function (r) {
-            try { resolve(JSON.parse(r.responseText)); } catch (e) { resolve(null); }
+            try { resolve(JSON.parse(r.responseText)); }
+            catch (e) { reject(new Error(isWafHtml(r.responseText) ? 'WAF拦截' : '返回非JSON')); }
           },
-          onerror: function () { resolve(null); },
-          ontimeout: function () { resolve(null); }
+          onerror: function () { reject(new Error('网络错误')); },
+          ontimeout: function () { reject(new Error('超时')); }
         });
-      } catch (e) { resolve(null); }
+      } catch (e) { reject(e); }
     });
+  }
+
+  async function fetchDetail(productId) {
+    try { var d1 = await xhrDetail(productId); if (d1) return d1; } catch (e) {}
+    try { var d2 = await fetchDetailViaFetch(productId); if (d2) return d2; } catch (e) {}
+    try { var d3 = await gmDetail(productId); if (d3) return d3; } catch (e) {}
+    return null;
   }
 
   // ---------- 调用服务端估值接口（只取最终估值与性价比） ----------
@@ -239,6 +300,21 @@
     item.card.appendChild(badge);
   }
 
+  // 详情没拿到时不显示金额，避免用户把截断文本算出的低估值当成真实估值
+  function injectFailedBadge(item) {
+    item.card.dataset.pxl = 'done';
+    if (getComputedStyle(item.card).position === 'static') item.card.style.position = 'relative';
+    let badge = item.card.querySelector('.pxl-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'pxl-badge';
+      item.card.appendChild(badge);
+    }
+    badge.style.background = '#4b5563';
+    badge.title = '未能获取该商品的完整描述，无法准确估值。\n请刷新页面重试。';
+    badge.innerHTML = '<span>—</span><small>详情获取失败</small>';
+  }
+
   // ---------- 队列处理：拉详情 → 批量调接口 → 贴角标 ----------
   async function processQueue() {
     if (running) return;
@@ -247,22 +323,27 @@
       while (active && queue.length > 0) {
         const chunk = queue.splice(0, CHUNK_SIZE);
         const payload = [];
+        const failed = [];
 
         for (let i = 0; i < chunk.length; i += CONCURRENCY) {
           const slice = chunk.slice(i, i + CONCURRENCY);
           await Promise.all(slice.map(async function (item) {
-            let desc = item.desc;
-            let price = item.price;
             let cached = detailCache.get(item.productId);
             if (!cached) {
-              cached = { showTitle: '', price: 0 };
+              cached = { showTitle: '', price: 0, ok: false };
               const data = await fetchDetail(item.productId);
               if (data && data.success && data.data) {
                 cached.showTitle = data.data.showTitle || data.data.title || '';
                 cached.price = (data.data.price || 0) / 100;
+                cached.ok = !!cached.showTitle;
               }
-              detailCache.set(item.productId, cached);
+              // 只缓存成功结果：失败不缓存，重新开启估价时会重新尝试
+              if (cached.ok) detailCache.set(item.productId, cached);
             }
+            // 详情没拿到时不能用卡片截断文本凑数，否则估值会明显偏低（少算武器/资源段）
+            if (!cached.ok) { failed.push(item); return; }
+            let desc = item.desc;
+            let price = item.price;
             if (cached.showTitle && cached.showTitle.length > desc.length) desc = cached.showTitle;
             if (cached.price > 0) price = cached.price;
             item.price = price;
@@ -271,24 +352,30 @@
           if (i + CONCURRENCY < chunk.length) await sleep(GAP_MS);
         }
 
-        const resp = await callEvalApi(payload);
-        if (resp.error) {
-          stop();
-          if (resp.authError) {
-            alert('估价密钥' + resp.error + '。\n请向站长确认后重新输入密钥。');
-            const v = askKey();
-            if (v) { evalKey = v; refreshKeyBtn(); alert('密钥已保存，点「显示估价」重新开始。'); }
-          } else {
-            alert('估价失败：' + resp.error);
+        let resp = null;
+        if (payload.length > 0) {
+          resp = await callEvalApi(payload);
+          if (resp.error) {
+            stop();
+            if (resp.authError) {
+              alert('估价密钥' + resp.error + '。\n请向站长确认后重新输入密钥。');
+              const v = askKey();
+              if (v) { evalKey = v; refreshKeyBtn(); alert('密钥已保存，点「显示估价」重新开始。'); }
+            } else {
+              alert('估价失败：' + resp.error);
+            }
+            return;
           }
-          return;
         }
-        if (resp.data) {
+
+        if (resp && resp.data) {
           for (const item of chunk) {
             const r = resp.data[item.productId];
             if (r) injectBadge(item, r.value, r.ratio);
           }
         }
+        for (const item of failed) injectFailedBadge(item);
+        failedCount += failed.length;
         done += chunk.length;
         updateProgress();
         if (active && queue.length > 0) await sleep(GAP_MS);
@@ -337,7 +424,7 @@
     if (!active) { btn.classList.remove('on'); setBtnText('显示估价'); return; }
     btn.classList.add('on');
     if (running || queue.length > 0) setBtnText('估价中 ' + done + '/' + total);
-    else setBtnText('关闭估价');
+    else setBtnText(failedCount > 0 ? '关闭估价（' + failedCount + ' 失败）' : '关闭估价');
   }
 
   function start() {
@@ -351,6 +438,7 @@
     sig = '';
     done = 0;
     total = 0;
+    failedCount = 0;
     const n = scan();
     observer = new MutationObserver(scheduleScan);
     observer.observe(document.body, { childList: true, subtree: true });
