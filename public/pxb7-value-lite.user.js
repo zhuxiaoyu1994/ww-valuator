@@ -26,7 +26,7 @@
 
   const CHUNK_SIZE = 20;    // 每批提交的商品数
   const CONCURRENCY = 2;    // 详情接口并发
-  const GAP_MS = 300;       // 批间隔，避免触发 WAF
+  const GAP_MS = 300;       // 批间隔，分散请求频率
 
   // ---------- 密钥：首次运行手动输入，存 localStorage，点「密钥」按钮可随时更换 ----------
   function getKey() {
@@ -154,10 +154,10 @@
   }
 
   // ---------- 拉取商品详情（拿完整描述与真实价格） ----------
-  // 详情接口有阿里云 WAF 防护，必须优先用页面内 XHR（withCredentials），
-  // 它带着页面自身已有的 WAF cookie，与网站自己的请求方式一致；
-  // 裸的 GM 跨域请求会被 WAF 挡回挑战页，导致拿不到完整描述、估值偏低。
-  function isWafHtml(text) {
+  // 优先使用页面内 XHR，它与站点自身的请求方式一致，可沿用当前页面已有的会话状态；
+  // 该方式不可用时再依次回退到 fetch 与 GM 请求，尽可能取到完整描述，
+  // 避免只拿到列表页的截断文本导致估值偏低。
+  function isChallengeHtml(text) {
     return typeof text === 'string' && (text.indexOf('aliyun_waf') >= 0 || text.indexOf('_waf_') >= 0);
   }
 
@@ -175,7 +175,7 @@
           try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(new Error('JSON解析失败')); }
           return;
         }
-        reject(new Error(isWafHtml(xhr.responseText) ? 'WAF拦截' : '返回非JSON'));
+        reject(new Error(isChallengeHtml(xhr.responseText) ? '接口校验未通过' : '返回非JSON'));
       };
       xhr.onerror = function () { reject(new Error('网络错误')); };
       xhr.ontimeout = function () { reject(new Error('超时')); };
@@ -218,7 +218,7 @@
           timeout: 15000,
           onload: function (r) {
             try { resolve(JSON.parse(r.responseText)); }
-            catch (e) { reject(new Error(isWafHtml(r.responseText) ? 'WAF拦截' : '返回非JSON')); }
+            catch (e) { reject(new Error(isChallengeHtml(r.responseText) ? '接口校验未通过' : '返回非JSON')); }
           },
           onerror: function () { reject(new Error('网络错误')); },
           ontimeout: function () { reject(new Error('超时')); }

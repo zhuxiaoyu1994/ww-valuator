@@ -1964,7 +1964,7 @@ function getPageHTML(options) {
             <span style="color:#a78bfa;">📊</span> 数据说明
           </h3>
           <div style="font-size:13px;color:#aaa;line-height:1.8;">
-            <p style="margin-bottom:10px;"><strong style="color:#ddd;">数据来源：</strong>估价模型基于螃蟹网、盼之等平台的历史成交数据训练，定期更新行情参数。</p>
+            <p style="margin-bottom:10px;"><strong style="color:#ddd;">数据来源：</strong>估价模型依据市场行情与公开成交样本统计得出，定期更新行情参数。</p>
             <p style="margin-bottom:10px;"><strong style="color:#ddd;">算法准确性：</strong>算法准确性报告可查看当前模型的误差分布，帮助你了解估价的可靠程度。</p>
           </div>
           <div style="margin-top:20px;padding:14px 16px;background:rgba(251,191,36,0.06);border-left:3px solid #fbbf24;border-radius:0 8px 8px 0;font-size:12px;color:#d4a84b;line-height:1.7;">
@@ -2000,7 +2000,7 @@ function getPageHTML(options) {
     })();
   </script>
   <script>
-    // 螃蟹网代理列表（客户端抓取用，多代理轮询降低被封风险）
+    // 螃蟹网代理列表（客户端获取商品信息用，多代理轮询分散请求压力）
     window._pxb7Proxies = ${JSON.stringify(pxb7Proxies)};
     window._charList = ${JSON.stringify(charList)};
     // 服务端渲染的覆盖项（角色等级/价格、专武映射），供可视化编辑器使用
@@ -2052,7 +2052,7 @@ function getPageHTML(options) {
       return null;
     }
 
-    // 客户端抓取：通过 CORS 代理直接调螃蟹网 API
+    // 客户端获取：通过 CORS 代理直接调螃蟹网 API
     async function clientFetchPxb7(productId) {
       const proxies = window._pxb7Proxies || [];
       if (proxies.length === 0) throw new Error('无可用代理');
@@ -2079,9 +2079,9 @@ function getPageHTML(options) {
           });
           clearTimeout(timer);
           const text = await resp.text();
-          // 检测 WAF 拦截
+          // 检测安全校验拦截
           if (text.indexOf('aliyun_waf') >= 0 || text.indexOf('_waf_') >= 0) {
-            errors.push('代理' + (proxyIdx + 1) + ': WAF拦截');
+            errors.push('代理' + (proxyIdx + 1) + ': 安全校验拦截');
             continue;
           }
           const json = JSON.parse(text);
@@ -2113,7 +2113,7 @@ function getPageHTML(options) {
         let clientSuccess = false;
         let clientError = null;
 
-        // 尝试客户端抓取（仅螃蟹网，且有代理配置时）
+        // 尝试客户端获取（仅螃蟹网，且有代理配置时）
         if (parsed && parsed.platform === 'pxb7' && window._pxb7Proxies && window._pxb7Proxies.length > 0) {
           try {
             const productData = await clientFetchPxb7(parsed.productId);
@@ -2145,11 +2145,11 @@ function getPageHTML(options) {
             }
           } catch (e) {
             clientError = e.message;
-            console.warn('[客户端抓取] 失败，回退服务器模式:', e.message);
+            console.warn('[客户端获取] 失败，回退服务器模式:', e.message);
           }
         }
 
-        // 客户端抓取失败或不支持，回退服务器模式
+        // 客户端获取失败或不支持，回退服务器模式
         if (!clientSuccess) {
           const resp = await fetch('/api/x9k2-find', {
             method: 'POST',
@@ -2164,7 +2164,7 @@ function getPageHTML(options) {
             const switchToPaste = result.switchToPaste || isTimeout;
             let errorHtml = '<div class="error-msg">' + (result.error || '查询失败') + '</div>';
             if (clientError) {
-              errorHtml += '<div style="font-size:12px;color:#888;margin-top:4px;">客户端抓取失败: ' + clientError + '</div>';
+              errorHtml += '<div style="font-size:12px;color:#888;margin-top:4px;">客户端获取失败: ' + clientError + '</div>';
             }
             if (switchToPaste) {
               errorHtml += '<div style="text-align:center;margin-top:8px;">' +

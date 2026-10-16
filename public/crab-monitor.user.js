@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.42.0
+// @version      3.43.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -936,7 +936,17 @@
   let notifyMaxPrice = 20000;    // 通知标价上限(元)，高于此值不通知（0=不限制）
   let autoBuyMaxPrice = 6000;    // 自动抢购标价上限(元)，高于此值不抢购（0=不限制）
   let refreshIntervalSec = 15;   // 刷新间隔（秒），可设置
-  let scanPages = 3;             // 螃蟹网增量翻页的最大页数（每页20条，遇到已见ID即停止翻页）
+  let scanPages = 3;             // 螃蟹网增量翻页的最大页数（每页20条，整页都是已见ID才停止翻页）
+  let scanBackfillPages = 8;     // 补扫（深翻页）最大页数：增量只扫前几页，补扫负责把窗口外漏掉的商品捞回来
+  let scanBackfillIntervalSec = 300; // 补扫间隔（秒）
+  // 上次补扫时间。故意不持久化：每次脚本启动后第一轮刷新都会先做一次补扫，
+  // 把页面关闭/电脑休眠期间上架、又已经沉到增量窗口外的商品补回来
+  let lastBackfillTime = 0;
+  // 补扫续扫页：上一轮补扫因页数上限没追平时记下"下一个待补的页"，下一轮从这页继续往下补
+  let backfillStartPage = 1;
+  // 补扫"补捞区间"（第2页及以后）的商品ID集合。这些商品可能已上架较久，
+  // 只入库不推送/不自动抢购，避免停机较久后一次补扫把几十条旧号全推给用户
+  let backfillRecoveryIds = null;
   let flashSaleEnabled = true;   // 秒杀库池监控开关
   let pzdsEnabled = false;      // 盼之平台监控开关
   let kjsEnabled = false;       // 氪金兽平台监控开关
@@ -5659,7 +5669,18 @@
     }
 
     // 初估即推送通知（不等详情API，减少通知延迟）
-    tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, productUniqueNo, fromFlashSale ? '秒杀' : null);
+    // 补扫捞回来的旧号（补捞区间）只入库，不推送也不自动抢购；
+    // 同时记入 notifiedIds，避免详情接口返回后又被补推一次
+    if (backfillRecoveryIds && backfillRecoveryIds.has(productId)) {
+      if (notifiedIds.indexOf(productId) < 0) {
+        notifiedIds.push(productId);
+        if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+        saveStorage(STORAGE_KEYS.notified, notifiedIds);
+      }
+      console.log('[鸣潮监控] 补扫入库(不推送): ' + (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0));
+    } else {
+      tryNotifyNewProduct(productId, parsed, valuation, price, showTitle, productUniqueNo, fromFlashSale ? '秒杀' : null);
+    }
   }
 
   /**
@@ -6814,13 +6835,19 @@
         '<div style="font-size:16px;font-weight:600;margin-bottom:16px;color:#e94560;">通知设置</div>' +
         // 刷新间隔
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">刷新设置</div>' +
-        '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
+        '<div style="display:flex;gap:12px;margin-bottom:12px;">' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">刷新间隔（秒）</label>' +
         '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="5" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">最大扫描页数</label>' +
         '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
+        '<div style="display:flex;gap:12px;margin-bottom:12px;">' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">补扫页数</label>' +
+        '<input type="number" id="mwScanBackfillPages" value="' + scanBackfillPages + '" min="1" max="20" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">补扫间隔（秒）</label>' +
+        '<input type="number" id="mwScanBackfillInterval" value="' + scanBackfillIntervalSec + '" min="60" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒；最大扫描页数=每轮增量最多翻几页（每页20条），整页都是已见商品才提前停止；补扫页数/间隔=每隔一段时间深翻页补扫一次，把停机或增量窗口外漏掉的商品捞回来（补扫第2页起捞回的号只入库、不推送）</div>' +
         // 秒杀库池监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
@@ -7476,6 +7503,8 @@
             // 监控设置
             box.querySelector('#mwRefreshInterval').value = refreshIntervalSec || 60;
             box.querySelector('#mwScanPages').value = scanPages || 3;
+            box.querySelector('#mwScanBackfillPages').value = scanBackfillPages || 8;
+            box.querySelector('#mwScanBackfillInterval').value = scanBackfillIntervalSec || 300;
             box.querySelector('#mwFlashSaleEnabled').checked = !!flashSaleEnabled;
             box.querySelector('#mwPzdsEnabled').checked = !!pzdsEnabled;
             box.querySelector('#mwKjsEnabled').checked = !!kjsEnabled;
@@ -7505,6 +7534,14 @@
         if (newScanPages < 1) newScanPages = 1;
         if (newScanPages > 10) newScanPages = 10;
         scanPages = newScanPages;
+        var newBackfillPages = parseInt(box.querySelector('#mwScanBackfillPages').value) || 8;
+        if (newBackfillPages < 1) newBackfillPages = 1;
+        if (newBackfillPages > 20) newBackfillPages = 20;
+        scanBackfillPages = newBackfillPages;
+        var newBackfillInterval = parseInt(box.querySelector('#mwScanBackfillInterval').value) || 300;
+        if (newBackfillInterval < 60) newBackfillInterval = 60;
+        if (newBackfillInterval > 3600) newBackfillInterval = 3600;
+        scanBackfillIntervalSec = newBackfillInterval;
         flashSaleEnabled = box.querySelector('#mwFlashSaleEnabled').checked;
         pzdsEnabled = box.querySelector('#mwPzdsEnabled').checked;
         kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
@@ -13247,6 +13284,8 @@ function openSettings() {
       // 监控设置
       refreshIntervalSec: refreshIntervalSec != null ? refreshIntervalSec : 60,
       scanPages: scanPages != null ? scanPages : 3,
+      scanBackfillPages: scanBackfillPages != null ? scanBackfillPages : 8,
+      scanBackfillIntervalSec: scanBackfillIntervalSec != null ? scanBackfillIntervalSec : 300,
       flashSaleEnabled: flashSaleEnabled || false,
       pzdsEnabled: pzdsEnabled != null ? pzdsEnabled : true,
       kjsEnabled: kjsEnabled != null ? kjsEnabled : true,
@@ -13320,6 +13359,8 @@ function openSettings() {
             // 监控设置
             if (remote.refreshIntervalSec != null) refreshIntervalSec = remote.refreshIntervalSec;
             if (remote.scanPages != null) scanPages = remote.scanPages;
+            if (remote.scanBackfillPages != null) scanBackfillPages = remote.scanBackfillPages;
+            if (remote.scanBackfillIntervalSec != null) scanBackfillIntervalSec = remote.scanBackfillIntervalSec;
             if (remote.flashSaleEnabled != null) flashSaleEnabled = remote.flashSaleEnabled;
             if (remote.pzdsEnabled != null) pzdsEnabled = remote.pzdsEnabled;
             if (remote.kjsEnabled != null) kjsEnabled = remote.kjsEnabled;
@@ -14049,6 +14090,8 @@ function openSettings() {
       notifyMaxPrice: notifyMaxPrice,
       refreshIntervalSec: refreshIntervalSec,
       scanPages: scanPages,
+      scanBackfillPages: scanBackfillPages,
+      scanBackfillIntervalSec: scanBackfillIntervalSec,
       flashSaleEnabled: flashSaleEnabled,
       pzdsEnabled: pzdsEnabled,
       kjsEnabled: kjsEnabled,
@@ -14129,11 +14172,15 @@ function openSettings() {
   async function scanPXB7() {
     let err = '';
     try {
-      // 从第1页起逐页拉取，遇到已见ID（说明已追平上次扫描区间）或达到页数上限即停
-      const maxPages = Math.max(1, scanPages);
+      // 补扫模式：距上次补扫超过设定间隔（或脚本刚启动）时，深翻页把增量窗口外漏掉的商品捞回来
+      const isBackfill = (Date.now() - lastBackfillTime) >= scanBackfillIntervalSec * 1000;
+      // 从第1页起逐页拉取，整页都是已见ID（说明已追平上次扫描区间）或达到页数上限即停
+      const maxPages = Math.max(1, isBackfill ? Math.max(scanPages, scanBackfillPages) : scanPages);
       const collected = [];
+      const recoveryIds = new Set();
       let pagesScanned = 0;
       let caughtUp = false;
+      let reachedEnd = false;
       let firstPageEmpty = false;
 
       // 页面自身的列表请求与本轮扫描请求等价时，直接复用其结果，跳过重复请求
@@ -14143,6 +14190,9 @@ function openSettings() {
         lastInterceptPageInfo = null;
         console.log('[鸣潮监控] 复用页面拦截到的第1页列表，跳过重复请求');
       }
+      // 补扫上一轮没追平（缺口比页数上限还深）时，从上次停下的页继续往下补，
+      // 否则每轮都从第1页重新开始、刚碰到"整页已见"就停，深区永远补不到
+      if (isBackfill && backfillStartPage > startPage) startPage = backfillStartPage;
 
       for (let page = startPage; page <= maxPages; page++) {
         let data = null;
@@ -14170,11 +14220,13 @@ function openSettings() {
         if (!list) break;  // 请求失败（WAF/错误），错误信息已在上面记录
         if (list.length === 0) {
           if (page === 1) firstPageEmpty = true;
+          reachedEnd = true;  // 翻到列表末尾，说明整份列表都已覆盖
           break;
         }
 
-        // 本页是否出现已见ID：出现即代表已翻到上次扫过的区间，更旧的无需再翻
-        const hasSeen = list.some(function (it) {
+        // 整页都是已见ID才算追平上次扫描区间。只要本页还有新商品就继续往下翻，
+        // 否则会出现"第1页只要碰到1个旧号就停"→ 第2页的新号被永久漏掉的窗口缺口
+        const allSeen = list.every(function (it) {
           const pid = it.productId || it.id;
           return pid && seenIds.indexOf(pid) >= 0;
         });
@@ -14182,13 +14234,28 @@ function openSettings() {
         collected.push(...list);
         pagesScanned++;
 
-        if (hasSeen) { caughtUp = true; break; }
+        // 补扫时第2页及以后属于"补捞区间"，这些号可能已上架较久，只入库不推送/不抢购
+        if (isBackfill && page >= 2) {
+          list.forEach(function (it) {
+            const pid = it.productId || it.id;
+            if (pid) recoveryIds.add(pid);
+          });
+        }
+
+        if (allSeen) { caughtUp = true; break; }
       }
 
       if (collected.length > 0) {
+        backfillRecoveryIds = isBackfill && recoveryIds.size > 0 ? recoveryIds : null;
         handleListResponse(collected, false);
-        console.log('[鸣潮监控] 螃蟹网增量扫描: ' + pagesScanned + '页/' + collected.length + '条' +
-          (caughtUp ? '（已追平上次）' : '（达页数上限' + maxPages + '）'));
+        backfillRecoveryIds = null;
+        if (isBackfill) {
+          lastBackfillTime = Date.now();
+          // 已追平（或翻到列表末尾）→ 下次补扫回到第1页；否则继续从更深的页往下补
+          backfillStartPage = (caughtUp || reachedEnd) ? 1 : maxPages + 1;
+        }
+        console.log('[鸣潮监控] 螃蟹网' + (isBackfill ? '补扫' : '增量扫描') + ': ' + pagesScanned + '页/' + collected.length + '条' +
+          (caughtUp ? '（已追平上次）' : (reachedEnd ? '（已到列表末尾）' : '（达页数上限' + maxPages + '）')));
       } else if (firstPageEmpty) {
         console.log('[鸣潮监控] 螃蟹网增量扫描: 列表为空');
       }
@@ -14413,6 +14480,8 @@ function openSettings() {
     notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 20000;
     refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 15;
     scanPages = savedState.scanPages != null ? savedState.scanPages : 3;
+    scanBackfillPages = savedState.scanBackfillPages != null ? savedState.scanBackfillPages : 8;
+    scanBackfillIntervalSec = savedState.scanBackfillIntervalSec != null ? savedState.scanBackfillIntervalSec : 300;
     // 迁移：旧默认值20秒 → 新默认值15秒（用户手动设过其他值则保留）
     if (refreshIntervalSec === 20 && savedState._intervalMigrated !== true) {
       refreshIntervalSec = 15;
