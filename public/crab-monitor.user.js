@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         游戏账号监控助手（鸣潮+绝区零）
 // @namespace    pxb7-monitor
-// @version      3.41.0
+// @version      3.42.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -3240,7 +3240,7 @@
   /**
    * 带重试的列表API调用
    */
-  async function fetchListWithRetry(page, retries = 2) {
+  async function fetchListWithRetry(page, retries = 1) {
     for (let i = 0; i <= retries; i++) {
       try {
         const data = await fetchList(page);
@@ -3769,7 +3769,8 @@
 
   /**
    * 处理盼之商品列表（批量模式）
-   * 列表页标题被截断，需先抓取详情页获取完整角色/武器数据
+   * 列表页标题被截断，需抓详情页才能得到完整角色/武器数据。
+   * 详情改为后台并发抓取：列表先出初估行，刷新不必等待详情接口
    */
   async function handlePZListResponse(list) {
     if (!Array.isArray(list)) return;
@@ -3781,9 +3782,8 @@
       console.log('  - ' + uniqueNo + ' ¥' + price + ' ' + title);
     });
 
-    // 为新商品预取详情页（跳过超过48小时的旧商品；已在表格中但未成功获取过详情的也继续抓）
+    // 需要详情页的商品（跳过超过48小时的旧商品；已在表格中但未成功获取过详情的也继续抓）
     const PZ_MAX_AGE_HOURS = 48;
-    const detailMap = {};
     const needDetail = list.filter(p => {
       if (p.onStandTime > 0 && (Date.now() - p.onStandTime) / 3600000 > PZ_MAX_AGE_HOURS) return false;
       if (!seenIds.includes(p.productId)) return true;
@@ -3793,12 +3793,37 @@
       if (existRow.platform === 'pzds' && !existRow._detailFetched) return true;
       return false;
     });
-    if (needDetail.length > 0) {
-      console.log('[鸣潮监控-盼之] 预取' + needDetail.length + '个新商品详情页');
-      const details = await Promise.all(needDetail.map(p => fetchPZDetail(p.productUniqueNo)));
-      needDetail.forEach((p, i) => { detailMap[p.productId] = details[i]; });
+
+    if (needDetail.length === 0) {
+      // 全部无需补详情：直接同步处理，无网络等待
+      processPZListBatch(list, {});
+      return;
     }
 
+    // 无需补详情的商品立即处理；需补详情的转后台抓取，抓完统一处理
+    const needDetailSet = new Set(needDetail.map(p => p.productId));
+    const immediate = list.filter(p => !needDetailSet.has(p.productId));
+    if (immediate.length > 0) processPZListBatch(immediate, {});
+
+    const started = runPrefetchBatch(
+      needDetail.map(p => ({ key: p.productId, fetch: () => fetchPZDetail(p.productUniqueNo) })),
+      function (results) {
+        const detailMap = {};
+        needDetail.forEach(p => { detailMap[p.productId] = results[p.productId] || ''; });
+        processPZListBatch(needDetail, detailMap);
+      }
+    );
+    if (started) {
+      console.log('[鸣潮监控-盼之] ' + needDetail.length + '个商品详情转后台抓取（不阻塞刷新），抓完即入库');
+    }
+  }
+
+  /**
+   * 盼之列表批量处理（纯同步，无网络等待）
+   * @param {Array} list - 待处理商品
+   * @param {Object} detailMap - productId → 详情页文本
+   */
+  function processPZListBatch(list, detailMap) {
     batchMode = true;
     try {
       for (const product of list) {
@@ -4704,7 +4729,46 @@
   }
 
   /**
+   * 用详情数据补全7881商品标题（原逻辑在抓详情后、处理前执行）
+   */
+  function applyQYDetailToTitle(p, detail) {
+    detail = detail || {};
+    const parts = [];
+
+    // 武器处理：标题有摘要格式（武器段:N个）时替换为详细数据，无武器时追加（关键词按当前游戏）
+    if (detail.weapons) {
+      const weaponKw = G().keywords.weaponSections.find(kw => p.showTitle.includes(kw));
+      const weaponSummary = weaponKw ? p.showTitle.match(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?')) : null;
+      const hasDetailedWeapons = weaponKw ? new RegExp(weaponKw + '[：:][^]*精\\d').test(p.showTitle) : false;
+      if (weaponSummary && !hasDetailedWeapons) {
+        // 移除摘要格式"武器段:N个"，替换为详细武器列表
+        p.showTitle = p.showTitle.replace(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?', 'g'), '').replace(/\s+/g, ' ').trim();
+        parts.push(detail.weapons);
+      } else if (!weaponKw) {
+        // 标题完全无武器段落，追加详细数据
+        parts.push(detail.weapons);
+      }
+    }
+
+    // 资源数据：始终追加（7881标题经常缺少星声/波纹等资源数据）
+    if (detail.resources) {
+      parts.push(detail.resources);
+    }
+
+    if (parts.length > 0) {
+      const extraStr = parts.join(' ');
+      if (p.showTitle.endsWith('】')) {
+        p.showTitle = p.showTitle.slice(0, -1) + ' ' + extraStr + '】';
+      } else {
+        p.showTitle = p.showTitle + ' ' + extraStr;
+      }
+      console.log('[鸣潮监控-7881] 详情补充: ' + p.productUniqueNo + ' → ' + extraStr);
+    }
+  }
+
+  /**
    * 处理7881商品列表（批量模式）
+   * 新商品的详情数据改为后台并发抓取：列表先出初估行，刷新不必等待详情接口
    */
   async function handleQYListResponse(list) {
     if (!Array.isArray(list)) return;
@@ -4713,50 +4777,34 @@
       console.log('  - ' + (p.productUniqueNo || '') + ' ¥' + (p.price || 0).toFixed(0) + ' [' + (p.onStandTimeStr || '') + '] ' + (p.showTitle || '').substring(0, 60));
     });
 
-    // 为新商品批量获取详情数据（武器+资源，7881标题可能缺少这些信息）
+    // 新商品需补详情数据（武器+资源，7881标题可能缺少这些信息）
     const newProducts = list.filter(p => !seenIds.includes(p.productId));
-    if (newProducts.length > 0) {
-      console.log('[鸣潮监控-7881] 为' + newProducts.length + '个新商品获取详情数据');
-      const concurrency = 5;
-      for (let i = 0; i < newProducts.length; i += concurrency) {
-        const batch = newProducts.slice(i, i + concurrency);
-        await Promise.all(batch.map(async p => {
-          const detail = await fetchQYDetail(p.productUniqueNo);
-          const parts = [];
-
-          // 武器处理：标题有摘要格式（武器段:N个）时替换为详细数据，无武器时追加（关键词按当前游戏）
-          if (detail.weapons) {
-            const weaponKw = G().keywords.weaponSections.find(kw => p.showTitle.includes(kw));
-            const weaponSummary = weaponKw ? p.showTitle.match(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?')) : null;
-            const hasDetailedWeapons = weaponKw ? new RegExp(weaponKw + '[：:][^]*精\\d').test(p.showTitle) : false;
-            if (weaponSummary && !hasDetailedWeapons) {
-              // 移除摘要格式"武器段:N个"，替换为详细武器列表
-              p.showTitle = p.showTitle.replace(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?', 'g'), '').replace(/\s+/g, ' ').trim();
-              parts.push(detail.weapons);
-            } else if (!weaponKw) {
-              // 标题完全无武器段落，追加详细数据
-              parts.push(detail.weapons);
-            }
-          }
-
-          // 资源数据：始终追加（7881标题经常缺少星声/波纹等资源数据）
-          if (detail.resources) {
-            parts.push(detail.resources);
-          }
-
-          if (parts.length > 0) {
-            const extraStr = parts.join(' ');
-            if (p.showTitle.endsWith('】')) {
-              p.showTitle = p.showTitle.slice(0, -1) + ' ' + extraStr + '】';
-            } else {
-              p.showTitle = p.showTitle + ' ' + extraStr;
-            }
-            console.log('[鸣潮监控-7881] 详情补充: ' + p.productUniqueNo + ' → ' + extraStr);
-          }
-        }));
-      }
+    if (newProducts.length === 0) {
+      processQYListBatch(list);
+      return;
     }
 
+    // 已见商品立即处理（降价检测不必等详情）；新商品转后台抓详情，抓完补全标题再处理
+    const newSet = new Set(newProducts.map(p => p.productId));
+    const immediate = list.filter(p => !newSet.has(p.productId));
+    if (immediate.length > 0) processQYListBatch(immediate);
+
+    const started = runPrefetchBatch(
+      newProducts.map(p => ({ key: p.productId, fetch: () => fetchQYDetail(p.productUniqueNo) })),
+      function (results) {
+        newProducts.forEach(p => applyQYDetailToTitle(p, results[p.productId]));
+        processQYListBatch(newProducts);
+      }
+    );
+    if (started) {
+      console.log('[鸣潮监控-7881] ' + newProducts.length + '个新商品详情转后台抓取（不阻塞刷新），抓完即入库');
+    }
+  }
+
+  /**
+   * 7881列表批量处理（纯同步，无网络等待）
+   */
+  function processQYListBatch(list) {
     batchMode = true;
     try {
       for (const product of list) {
@@ -5224,6 +5272,41 @@
   // 请求拦截
   // ============================================================
 
+  // 记录页面自身列表请求的参数，用于判断能否复用（跳过重复请求）
+  let lastInterceptPageInfo = null;
+
+  function parseInterceptBody(body) {
+    if (!body) return null;
+    if (typeof body !== 'string') return body;
+    try { return JSON.parse(body); } catch (e) { return null; }
+  }
+
+  function recordInterceptPageInfo(body, length) {
+    const b = body || {};
+    lastInterceptPageInfo = {
+      pageIndex: b.pageIndex != null ? b.pageIndex : null,
+      sortType: b.sortType != null ? b.sortType : null,
+      filterCount: (b.filterDTOList ? b.filterDTOList.length : 0) + (b.combineFilterList ? b.combineFilterList.length : 0),
+      query: b.query || '',
+      length: length || 0,
+      time: Date.now(),
+    };
+  }
+
+  /**
+   * 页面自身的第1页请求与脚本扫描请求完全等价时（同排序、无筛选无搜索词、满页、60秒内），
+   * 可跳过脚本自己的第1页请求，避免重复调用同一接口
+   */
+  function canReuseInterceptedPage1() {
+    const info = lastInterceptPageInfo;
+    if (!info) return false;
+    if (Date.now() - info.time > 60000) return false;
+    if (info.pageIndex !== 1 || info.sortType !== 2) return false;
+    if (info.filterCount > 0 || info.query) return false;
+    if (info.length < 20) return false;
+    return true;
+  }
+
   /**
    * 设置fetch和XHR拦截
    */
@@ -5239,7 +5322,10 @@
           const data = await cloned.json();
           if (data && data.success && data.data) {
             const list = Array.isArray(data.data) ? data.data : (data.data.list || null);
-            if (list) handleListResponse(list, true);
+            if (list) {
+              recordInterceptPageInfo(parseInterceptBody(args[1] && args[1].body), list.length);
+              handleListResponse(list, true);
+            }
           }
         }
       } catch (e) {
@@ -5264,7 +5350,10 @@
             const data = JSON.parse(this.responseText);
             if (data && data.success && data.data) {
               const list = Array.isArray(data.data) ? data.data : (data.data.list || null);
-              if (list) handleListResponse(list, true);
+              if (list) {
+                recordInterceptPageInfo(parseInterceptBody(args[0]), list.length);
+                handleListResponse(list, true);
+              }
             }
           }
         } catch (e) {
@@ -5633,6 +5722,67 @@
     }
     return true;
   }
+  // ============================================================
+  // 第三方平台详情预取（盼之/7881）
+  // 抓的是第三方平台详情页，与 pxb7 的 detailRateLimit 队列独立：
+  // 后台并发抓取、不阻塞刷新主流程，抓完统一回主线程批量处理，
+  // 保证估值/通知/去重逻辑与旧版完全一致
+  // ============================================================
+  const PREFETCH_CONCURRENCY = 4;   // 同时抓取数
+  const PREFETCH_GAP_MS = 250;      // 每次发起间隔，降低被WAF拦截概率
+  let prefetchRunning = 0;
+  let prefetchStepTimer = null;
+  const prefetchActiveKeys = new Set();
+
+  /**
+   * 后台并发执行一批详情抓取任务，全部完成后回调（不阻塞刷新）
+   * @param {Array<{key:string, fetch:function}>} jobs
+   * @param {function(Object|null)} onDone - 收到 {key: 结果} 映射；该批已在抓取中时收到 null
+   * @returns {boolean} 是否启动了新批次
+   */
+  function runPrefetchBatch(jobs, onDone) {
+    const pending = jobs.filter(j => !prefetchActiveKeys.has(j.key));
+    if (pending.length === 0) return false;
+    pending.forEach(j => prefetchActiveKeys.add(j.key));
+    const results = {};
+    let idx = 0;
+    let done = false;
+
+    function finish() {
+      if (done) return;
+      done = true;
+      pending.forEach(j => prefetchActiveKeys.delete(j.key));
+      onDone(results);
+    }
+
+    function step() {
+      prefetchStepTimer = null;
+      if (idx >= pending.length) {
+        if (prefetchRunning === 0) finish();
+        return;
+      }
+      if (prefetchRunning >= PREFETCH_CONCURRENCY) return;
+      const job = pending[idx++];
+      prefetchRunning++;
+      Promise.resolve()
+        .then(() => job.fetch())
+        .then(r => { results[job.key] = r; })
+        .catch(e => {
+          console.error('[鸣潮监控] 详情预取失败: ' + job.key, (e && e.message) || e);
+          results[job.key] = null;
+        })
+        .then(() => {
+          prefetchRunning--;
+          if (idx >= pending.length && prefetchRunning === 0) { finish(); return; }
+          if (!prefetchStepTimer) step();
+        });
+      prefetchStepTimer = setTimeout(step, PREFETCH_GAP_MS);
+    }
+
+    step();
+    return true;
+  }
+
   // ============================================================
 
   /**
@@ -7401,7 +7551,12 @@
     });
 
     dom.btnRefresh.addEventListener('click', function () {
-      doRefresh();
+      if (refreshInProgress) {
+        console.log('[鸣潮监控] 刷新进行中，忽略重复点击');
+        return;
+      }
+      refreshInProgress = true;
+      doRefresh().finally(function () { refreshInProgress = false; });
     });
 
 
@@ -13963,13 +14118,16 @@ function openSettings() {
   }
 
   /**
-   * 执行刷新（调用列表API）
+   * 刷新过程中的错误信息收集（各平台并行，结束后汇总到状态栏）
    */
-  async function doRefresh() {
-    lastRefreshTime = Date.now();
+  let refreshErrors = [];
 
-    // 螃蟹网API扫描（增量翻页，独立try-catch，失败不影响其他平台）
-    var pxb7Error = null;
+  /**
+   * 螃蟹网扫描（增量翻页 + 秒杀池）
+   * 列表与秒杀池共用同一接口，放在同一任务内串行，避免并发触发WAF
+   */
+  async function scanPXB7() {
+    let err = '';
     try {
       // 从第1页起逐页拉取，遇到已见ID（说明已追平上次扫描区间）或达到页数上限即停
       const maxPages = Math.max(1, scanPages);
@@ -13978,7 +14136,15 @@ function openSettings() {
       let caughtUp = false;
       let firstPageEmpty = false;
 
-      for (let page = 1; page <= maxPages; page++) {
+      // 页面自身的列表请求与本轮扫描请求等价时，直接复用其结果，跳过重复请求
+      let startPage = 1;
+      if (canReuseInterceptedPage1()) {
+        startPage = 2;
+        lastInterceptPageInfo = null;
+        console.log('[鸣潮监控] 复用页面拦截到的第1页列表，跳过重复请求');
+      }
+
+      for (let page = startPage; page <= maxPages; page++) {
         let data = null;
         try {
           data = await fetchListWithRetry(page);
@@ -13995,9 +14161,9 @@ function openSettings() {
 
         if (page === 1 && !list) {
           if (data && !data.success) {
-            lastRefreshError = '螃蟹网API: ' + (data.message || data.msg || '未知错误');
+            err = '螃蟹网API: ' + (data.message || data.msg || '未知错误');
           } else if (!data) {
-            lastRefreshError = '螃蟹网API被WAF拦截（依赖拦截+其他平台正常）';
+            err = '螃蟹网API被WAF拦截（依赖拦截+其他平台正常）';
           }
         }
 
@@ -14021,7 +14187,6 @@ function openSettings() {
 
       if (collected.length > 0) {
         handleListResponse(collected, false);
-        lastRefreshError = '';  // 刷新成功，清除错误
         console.log('[鸣潮监控] 螃蟹网增量扫描: ' + pagesScanned + '页/' + collected.length + '条' +
           (caughtUp ? '（已追平上次）' : '（达页数上限' + maxPages + '）'));
       } else if (firstPageEmpty) {
@@ -14051,87 +14216,129 @@ function openSettings() {
         }
       }
     } catch (e) {
-      pxb7Error = e;
-      lastRefreshError = '螃蟹网: ' + (e.message || e);
+      err = '螃蟹网: ' + (e.message || e);
       console.error('[鸣潮监控] 螃蟹网API失败(WAF/反爬):', e.message);
     }
+    if (err) refreshErrors.push(err);
+  }
 
-    // 以下其他平台扫描不受螃蟹网API失败影响
+  /**
+   * 盼之平台扫描（SSR HTML抓取）
+   * 站点SSR固定返回"综合排序"且无法按发布时间排序，故多抓几页后本地按发布时间倒序合并，提升最新商品覆盖
+   */
+  async function scanPZDS() {
     try {
-
-      // 盼之平台扫描（SSR HTML抓取）
-      // 站点SSR固定返回"综合排序"且无法按发布时间排序，故多抓几页后本地按发布时间倒序合并，提升最新商品覆盖
-      if (pzdsEnabled) {
-        let pzAll = [];
-        for (let page = 1; page <= PZ_SCAN_PAGES; page++) {
-          try {
-            const pzdsProducts = await fetchListPZ(page);
-            if (pzdsProducts.length > 0) {
-              pzAll = pzAll.concat(pzdsProducts);
-              console.log('[鸣潮监控-盼之] 第' + page + '页获取' + pzdsProducts.length + '条');
-            }
-          } catch (e) {
-            console.error('[鸣潮监控-盼之] 第' + page + '页获取失败:', e);
-          }
-        }
-        // 跨页去重 + 按发布时间倒序（最新在前）
-        const pzSeen = new Set();
-        pzAll = pzAll.filter(function (p) {
-          if (pzSeen.has(p.productId)) return false;
-          pzSeen.add(p.productId);
-          return true;
-        });
-        pzAll.sort(function (a, b) { return (b.onStandTime || 0) - (a.onStandTime || 0); });
-        if (pzAll.length > 0) {
-          await handlePZListResponse(pzAll);
-          console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzAll.length + '条（已按发布时间倒序）');
-        }
-      }
-
-      // 氪金兽平台扫描（MWP API，按最新发布排序）
-      if (kjsEnabled) {
+      let pzAll = [];
+      for (let page = 1; page <= PZ_SCAN_PAGES; page++) {
         try {
-          const kjsProducts = await kjsSearch(1);
-          if (kjsProducts.length > 0) {
-            await handleKJSListResponse(kjsProducts);
-            console.log('[鸣潮监控-氪金兽] 扫描完成，获取' + kjsProducts.length + '条');
+          const pzdsProducts = await fetchListPZ(page);
+          if (pzdsProducts.length > 0) {
+            pzAll = pzAll.concat(pzdsProducts);
+            console.log('[鸣潮监控-盼之] 第' + page + '页获取' + pzdsProducts.length + '条');
           }
         } catch (e) {
-          console.error('[鸣潮监控-氪金兽] 扫描失败:', e);
+          console.error('[鸣潮监控-盼之] 第' + page + '页获取失败:', e);
         }
       }
-
-      // 7881平台扫描（API抓取，MD5签名认证，按最新发布排序）
-      if (qyEnabled) {
-        try {
-          const qyProducts = await qySearch(1);
-          if (qyProducts.length > 0) {
-            await handleQYListResponse(qyProducts);
-            console.log('[鸣潮监控-7881] 扫描完成，获取' + qyProducts.length + '条');
-          }
-        } catch (e) {
-          console.error('[鸣潮监控-7881] 扫描失败:', e);
-        }
-      }
-
-      // 易手游平台扫描（结构化API，按最新发布排序）
-      if (ysyEnabled && G().platformIds.ysy > 0) {
-        try {
-          const ysyProducts = await fetchYSYList(1);
-          if (ysyProducts.length > 0) {
-            await handleYSYListResponse(ysyProducts);
-            console.log('[鸣潮监控-易手游] 扫描完成，获取' + ysyProducts.length + '条');
-          }
-        } catch (e) {
-          console.error('[鸣潮监控-易手游] 扫描失败:', e);
-        }
+      // 跨页去重 + 按发布时间倒序（最新在前）
+      const pzSeen = new Set();
+      pzAll = pzAll.filter(function (p) {
+        if (pzSeen.has(p.productId)) return false;
+        pzSeen.add(p.productId);
+        return true;
+      });
+      pzAll.sort(function (a, b) { return (b.onStandTime || 0) - (a.onStandTime || 0); });
+      if (pzAll.length > 0) {
+        await handlePZListResponse(pzAll);
+        console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzAll.length + '条（已按发布时间倒序）');
       }
     } catch (e) {
-      if (!pxb7Error) lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
-      console.error('[鸣潮监控] 其他平台扫描失败:', e);
+      refreshErrors.push('盼之: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
+      console.error('[鸣潮监控] 盼之扫描失败:', e);
+    }
+  }
+
+  /**
+   * 氪金兽平台扫描（MWP API，按最新发布排序）
+   */
+  async function scanKJS() {
+    try {
+      const kjsProducts = await kjsSearch(1);
+      if (kjsProducts.length > 0) {
+        await handleKJSListResponse(kjsProducts);
+        console.log('[鸣潮监控-氪金兽] 扫描完成，获取' + kjsProducts.length + '条');
+      }
+    } catch (e) {
+      refreshErrors.push('氪金兽: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
+      console.error('[鸣潮监控-氪金兽] 扫描失败:', e);
+    }
+  }
+
+  /**
+   * 7881平台扫描（API抓取，MD5签名认证，按最新发布排序）
+   */
+  async function scanQY() {
+    try {
+      const qyProducts = await qySearch(1);
+      if (qyProducts.length > 0) {
+        await handleQYListResponse(qyProducts);
+        console.log('[鸣潮监控-7881] 扫描完成，获取' + qyProducts.length + '条');
+      }
+    } catch (e) {
+      refreshErrors.push('7881: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
+      console.error('[鸣潮监控-7881] 扫描失败:', e);
+    }
+  }
+
+  /**
+   * 易手游平台扫描（结构化API，按最新发布排序）
+   */
+  async function scanYSY() {
+    try {
+      const ysyProducts = await fetchYSYList(1);
+      if (ysyProducts.length > 0) {
+        await handleYSYListResponse(ysyProducts);
+        console.log('[鸣潮监控-易手游] 扫描完成，获取' + ysyProducts.length + '条');
+      }
+    } catch (e) {
+      refreshErrors.push('易手游: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
+      console.error('[鸣潮监控] 易手游扫描失败:', e);
+    }
+  }
+
+  /**
+   * 执行刷新：各平台并行扫描（总耗时取各平台最大值，而非累加）
+   * 详情抓取（盼之/7881）已转为后台异步，不再阻塞刷新完成
+   */
+  async function doRefresh() {
+    lastRefreshTime = Date.now();
+    refreshErrors = [];
+
+    // 刷新按钮反馈：禁用并显示进度，避免重复点击
+    const refreshBtn = dom.btnRefresh;
+    const btnOldText = refreshBtn ? refreshBtn.textContent : '';
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = '刷新中…';
     }
 
-    updateBottomBar();
+    try {
+      // 各平台内部独立 try-catch 收集错误，互不影响
+      await Promise.all([
+        scanPXB7(),
+        pzdsEnabled ? scanPZDS() : null,
+        kjsEnabled ? scanKJS() : null,
+        qyEnabled ? scanQY() : null,
+        (ysyEnabled && G().platformIds.ysy > 0) ? scanYSY() : null,
+      ].filter(Boolean));
+      lastRefreshError = refreshErrors.length ? refreshErrors.join('；') : '';
+    } finally {
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = btnOldText;
+      }
+      updateBottomBar();
+    }
   }
 
   /**
