@@ -602,12 +602,11 @@ function getAdminPage() {
         <div style="font-size:13px;color:#888;margin-bottom:12px;" id="ek-stats">加载中...</div>
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
           <input type="text" id="ek-new-name" placeholder="备注名，如 张三 / 微信昵称" onkeydown="if(event.key==='Enter')ekCreate()" style="flex:1;min-width:180px;padding:10px 14px;border:1px solid #2a2a4a;border-radius:8px;background:#1a1a3a;color:#e0e0e0;font-size:14px;">
-          <select id="ek-new-days" style="padding:10px 14px;border:1px solid #2a2a4a;border-radius:8px;background:#1a1a3a;color:#e0e0e0;font-size:14px;">
-            <option value="30" selected>30 天</option>
-            <option value="31">31 天</option>
-            <option value="90">90 天</option>
-            <option value="365">365 天</option>
-            <option value="0">永久</option>
+          <input type="number" id="ek-new-amount" value="30" min="0" step="any" onkeydown="if(event.key==='Enter')ekCreate()" style="width:110px;padding:10px 14px;border:1px solid #2a2a4a;border-radius:8px;background:#1a1a3a;color:#e0e0e0;font-size:14px;">
+          <select id="ek-new-unit" style="padding:10px 14px;border:1px solid #2a2a4a;border-radius:8px;background:#1a1a3a;color:#e0e0e0;font-size:14px;">
+            <option value="day" selected>天</option>
+            <option value="hour">小时</option>
+            <option value="forever">永久</option>
           </select>
           <button onclick="ekCreate()" style="padding:10px 24px;background:#4ade80;color:#12122a;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">新建密钥</button>
           <button onclick="ekRefresh()" style="padding:10px 20px;background:#1a1a3a;color:#4ade80;border:1px solid #2a2a4a;border-radius:8px;font-size:14px;cursor:pointer;">刷新</button>
@@ -1549,7 +1548,7 @@ function getAdminPage() {
       var ta = tierOrder[pairTier[a]] != null ? tierOrder[pairTier[a]] : 9;
       var tb = tierOrder[pairTier[b]] != null ? tierOrder[pairTier[b]] : 9;
       if (ta !== tb) return ta - tb;
-      var na = a.replace(/_C\d+$/, ''), nb = b.replace(/_C\d+$/, '');
+      var na = a.replace(/_C\\d+$/, ''), nb = b.replace(/_C\\d+$/, '');
       if (na !== nb) return na < nb ? -1 : 1;
       var ca = parseInt(a.replace(/.*_C/, '')), cb = parseInt(b.replace(/.*_C/, ''));
       return ca - cb;
@@ -1624,7 +1623,7 @@ function getAdminPage() {
       var vals = pairVals[key] || [];
       var adjVals = pairAdjustedVals[key] || [];
       var count = pairCount[key];
-      var name = key.replace(/_C\d+$/, '');
+      var name = key.replace(/_C\\d+$/, '');
       var constLevel = parseInt(key.replace(/.*_C/, ''));
 
       // 当前价格：优先从 localStorage 保存的估值规则中读取，无则回退到历史均值
@@ -2874,10 +2873,17 @@ function getAdminPage() {
   function ekExpireText(rec) {
     if (!rec.expiresAt) return '永久有效';
     const t = Date.parse(rec.expiresAt);
-    const d = new Date(t).toLocaleDateString('zh-CN', { hour12: false });
+    const d = new Date(t).toLocaleString('zh-CN', { hour12: false });
     const diff = t - Date.now();
     if (diff <= 0) return d + '（已过期）';
-    return d + '（剩余 ' + Math.ceil(diff / 86400000) + ' 天）';
+    return d + '（剩余 ' + ekFmtRemain(diff) + '）';
+  }
+
+  // 剩余时长：不足 1 小时按分钟、不足 2 天按小时、其余按天
+  function ekFmtRemain(diff) {
+    if (diff < 3600000) return Math.max(1, Math.round(diff / 60000)) + ' 分钟';
+    if (diff < 2 * 86400000) return Math.round(diff / 3600000) + ' 小时';
+    return Math.ceil(diff / 86400000) + ' 天';
   }
 
   function ekRenderList() {
@@ -2917,12 +2923,34 @@ function getAdminPage() {
     }).join('');
   }
 
+  // 把「数量 + 单位」换算成天数（服务端以天为单位，支持小数）；永久返回 0
+  function ekToDays(amount, unit) {
+    if (unit === 'forever') return 0;
+    const n = Number(amount);
+    if (!n || isNaN(n) || n <= 0) return null;
+    return unit === 'hour' ? n / 24 : n;
+  }
+
+  // 解析续期输入：纯数字按天；支持 1h / 30d 后缀；0 表示永久
+  function ekParseDuration(str) {
+    const s = String(str == null ? '' : str).trim().toLowerCase();
+    if (!s) return null;
+    const m = s.match(/^(\\d+(?:\\.\\d+)?)\\s*([hd]?)$/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    if (isNaN(n)) return null;
+    return m[2] === 'h' ? n / 24 : n;
+  }
+
   function ekCreate() {
     const nameEl = document.getElementById('ek-new-name');
-    const daysEl = document.getElementById('ek-new-days');
+    const amountEl = document.getElementById('ek-new-amount');
+    const unitEl = document.getElementById('ek-new-unit');
     const name = (nameEl.value || '').trim();
     if (!name) { alert('请先填写备注名'); return; }
-    const days = Number(daysEl.value);
+    const unit = unitEl.value;
+    const days = ekToDays(amountEl.value, unit);
+    if (days === null) { alert('请输入大于 0 的时长'); return; }
     ekPost('create', { name: name, days: days }).then(result => {
       if (result.success) {
         nameEl.value = '';
@@ -2948,10 +2976,10 @@ function getAdminPage() {
   }
 
   function ekRenew(key) {
-    const input = window.prompt('续期天数（从当前到期日往后顺延，填 0 表示改为永久）：', '30');
+    const input = window.prompt('续期时长：填数字按「天」算，也可加后缀，如 1h = 1 小时、12h = 12 小时、30d = 30 天；填 0 表示改为永久。', '30');
     if (input === null) return;
-    const days = Number(input);
-    if (isNaN(days) || days < 0) { alert('请输入有效的天数'); return; }
+    const days = ekParseDuration(input);
+    if (days === null) { alert('格式不正确，示例：1h、12h、7d、30、0（永久）'); return; }
     ekPost('renew', { key: key, days: days }).then(result => {
       if (result.success) {
         ekRefresh();
