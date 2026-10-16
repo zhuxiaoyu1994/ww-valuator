@@ -247,7 +247,7 @@ function getLitePage() {
           <span class="tag y">性价比 <b>0~20%</b> · 一般</span>
           <span class="tag r">性价比 <b>为负</b> · 偏贵</span>
         </div>
-        <p style="margin-top:10px;">性价比达到 <b>30%</b> 的卡片会自动加上绿色描边，方便快速挑出值得看的号。</p>
+        <p style="margin-top:10px;">卡片上色块的颜色按 <b>差价</b> 分档，和账号监控助手一致：差价 ≥200 绿、0~200 黄、0~-200 灰、低于 -200 红。性价比达到 <b>30%</b> 的卡片会额外加一圈绿色描边。</p>
       </div>
     </div>
   </div>
@@ -287,7 +287,7 @@ function getLitePage() {
     </details>
     <details class="faq">
       <summary>卡片上的角标都显示什么？</summary>
-      <div class="ans">右上角显示估算价值、差价、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数，都不需要悬停就能看到。</div>
+      <div class="ans">右上角显示估算价值、差价、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数，都不需要悬停就能看到。色块颜色按差价分档，和账号监控助手一致。</div>
     </details>
     <details class="faq">
       <summary>以前装过「螃蟹网鸣潮估价助手」，现在要装两次吗？</summary>
