@@ -1,9 +1,12 @@
 // ==UserScript==
-// @name         螃蟹网鸣潮估价助手（精简版）
+// @name         螃蟹网鸣潮估价助手
 // @namespace    pxb7-value-lite
-// @version      1.1.1
+// @version      1.2.0
 // @description  在螃蟹网鸣潮商品列表页一键显示每个账号的估值与性价比（估值由服务器计算，脚本不含任何算法与规则）
 // @author       You
+// @homepageURL  https://www.youxigujia.cn/lite
+// @downloadURL  https://www.youxigujia.cn/pxb7-value-lite.user.js
+// @updateURL    https://www.youxigujia.cn/pxb7-value-lite.user.js
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @grant        GM_xmlhttpRequest

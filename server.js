@@ -54,6 +54,7 @@ const getPageHTML = require('./views/wuwa');
 const getZZZPage = require('./views/zzz');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
+const getLitePage = require('./views/lite');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1532,6 +1533,11 @@ function buildCharList(defaults) {
 // ============================================================
 // IP封禁管理
 // ============================================================
+
+// 螃蟹网估价助手下载页（公开，仅提供脚本安装说明）
+app.get('/lite', (req, res) => {
+  res.send(getLitePage());
+});
 
 app.get('/blocklist', (req, res) => {
   res.send(getBlocklistPage());
