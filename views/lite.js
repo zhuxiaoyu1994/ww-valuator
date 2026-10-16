@@ -241,13 +241,13 @@ function getLitePage() {
       <div class="step-no">4</div>
       <div class="step-body">
         <h3>开始看估价</h3>
-        <p>点右下角的「显示估价」，稍等片刻，每个商品卡片右上角就会显示估算价值和性价比百分比。</p>
+        <p>点右下角的「显示估价」，稍等片刻，每个商品卡片右上角显示估算价值、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数。</p>
         <div class="legend">
           <span class="tag g">性价比 <b>高于 20%</b> · 划算</span>
           <span class="tag y">性价比 <b>0~20%</b> · 一般</span>
           <span class="tag r">性价比 <b>为负</b> · 偏贵</span>
         </div>
-        <p style="margin-top:10px;">性价比达到 <b>30%</b> 的卡片会自动加上绿色描边和「高性价比」标记，方便快速挑出值得看的号。</p>
+        <p style="margin-top:10px;">性价比达到 <b>30%</b> 的卡片会自动加上绿色描边，方便快速挑出值得看的号。</p>
       </div>
     </div>
   </div>
@@ -286,8 +286,8 @@ function getLitePage() {
       <div class="ans">估价是按账号配置（角色命座、专武精炼、资源等）折算出的参考值，不含卖家主观溢价、平台手续费和议价空间。把它当作筛选工具用，不要当成交价。</div>
     </details>
     <details class="faq">
-      <summary>鼠标移到角标上能看到什么？</summary>
-      <div class="ans">除了估算价值，还会显示合理交易范围、账号的有效金／限定金／总金数，以及标价和性价比，方便你判断这个号值不值。</div>
+      <summary>卡片上的角标都显示什么？</summary>
+      <div class="ans">右上角显示估算价值、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数，都不需要悬停就能看到。</div>
     </details>
     <details class="faq">
       <summary>以前装过「螃蟹网鸣潮估价助手」，现在要装两次吗？</summary>

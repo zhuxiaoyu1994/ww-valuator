@@ -603,15 +603,14 @@ app.post('/api/page-eval', async (req, res) => {
       const r = engine.evaluateWithPrice(desc, Math.round((Number(it.price) || 0) * 100), effectiveWeights);
       const d = r.details || {};
       const yi = d.yellowInfo || {};
-      const pr = d.priceRange || {};
+      const info = r.info || {};
       data[String(productId)] = {
         value: d.finalValue,
         ratio: r.costPerformance,
-        low: pr.low || 0,
-        high: pr.high || 0,
         effGold: Math.round((yi.effectiveYellow || 0) * 10) / 10,
-        limGold: yi.limitedYellow || 0,
-        totalGold: yi.totalYellow || 0,
+        pulls: Math.round(info.pulls || 0),
+        outfits: info.outfits || 0,
+        motos: info.motorcycles || 0,
       };
     } catch (e) {
       // 单条失败跳过，不影响其余商品
