@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         页面估价助手
 // @namespace    pxb7-value-lite
-// @version      1.4.0
+// @version      1.5.0
 // @description  在螃蟹网鸣潮商品列表页一键显示每个账号的估值与性价比（估值由服务器计算，脚本不含任何算法与规则）
 // @author       You
 // @homepageURL  https://www.youxigujia.cn/lite
@@ -64,6 +64,14 @@
     return '#ef4444';
   }
 
+  // 差价配色与账号监控助手一致：<-200 红、<0 灰、<200 黄、>=200 绿
+  function diffStyle(diff) {
+    if (diff < -200) return { bg: '#ef4444', fg: '#ffffff' };
+    if (diff < 0) return { bg: '#8888aa', fg: '#ffffff' };
+    if (diff < 200) return { bg: '#fbbf24', fg: '#1f2937' };
+    return { bg: '#10b981', fg: '#ffffff' };
+  }
+
   // ---------- 样式与按钮 ----------
   const style = document.createElement('style');
   style.textContent = [
@@ -72,6 +80,8 @@
     'font-weight:600;line-height:1.4;text-align:right;box-shadow:0 2px 8px rgba(0,0,0,.25);user-select:none;}',
     '.pxl-badge .pxl-val{font-size:15px;font-weight:800;line-height:1.2;}',
     '.pxl-badge .pxl-row{font-size:10.5px;opacity:.95;white-space:nowrap;}',
+    '.pxl-badge .pxl-diff{font-size:10.5px;font-weight:800;line-height:1.6;padding:0 6px;',
+    'border-radius:5px;margin-top:1px;white-space:nowrap;}',
     '.pxl-res{position:absolute;top:8px;left:8px;z-index:10;padding:4px 9px;border-radius:8px;color:#fff;',
     'font-size:10.5px;font-weight:600;line-height:1.4;white-space:nowrap;',
     'box-shadow:0 2px 8px rgba(0,0,0,.25);user-select:none;}',
@@ -295,11 +305,14 @@
     const shownRatio = Math.round(ratio * 10) / 10;
     badge.style.background = ratioColor(ratio);
 
-    // 有效金直接显示在卡片上，不用悬停即可看到
-    const rows = [
-      '<span class="pxl-val">¥' + Math.round(value) + '</span>',
-      '<span class="pxl-row">性价比 ' + (shownRatio > 0 ? '+' : '') + shownRatio + '%</span>'
-    ];
+    // 价值、差价、性价比、有效金直接显示在卡片上，不用悬停即可看到
+    const rows = ['<span class="pxl-val">¥' + Math.round(value) + '</span>'];
+    if (r.diff != null) {
+      const ds = diffStyle(r.diff);
+      rows.push('<span class="pxl-diff" style="background:' + ds.bg + ';color:' + ds.fg + '">差价 ' +
+        (r.diff > 0 ? '+' : '') + Math.round(r.diff) + '</span>');
+    }
+    rows.push('<span class="pxl-row">性价比 ' + (shownRatio > 0 ? '+' : '') + shownRatio + '%</span>');
     if (r.effGold != null) rows.push('<span class="pxl-row">有效金 ' + r.effGold + '</span>');
     badge.innerHTML = rows.join('');
     badge.title = '标价: ¥' + item.price;

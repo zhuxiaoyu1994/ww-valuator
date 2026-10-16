@@ -606,6 +606,7 @@ app.post('/api/page-eval', async (req, res) => {
       const info = r.info || {};
       data[String(productId)] = {
         value: d.finalValue,
+        diff: d.diff,
         ratio: r.costPerformance,
         effGold: Math.round((yi.effectiveYellow || 0) * 10) / 10,
         pulls: Math.round(info.pulls || 0),

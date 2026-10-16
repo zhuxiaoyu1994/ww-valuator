@@ -241,7 +241,7 @@ function getLitePage() {
       <div class="step-no">4</div>
       <div class="step-body">
         <h3>开始看估价</h3>
-        <p>点右下角的「显示估价」，稍等片刻，每个商品卡片右上角显示估算价值、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数。</p>
+        <p>点右下角的「显示估价」，稍等片刻，每个商品卡片右上角显示估算价值、差价、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数。</p>
         <div class="legend">
           <span class="tag g">性价比 <b>高于 20%</b> · 划算</span>
           <span class="tag y">性价比 <b>0~20%</b> · 一般</span>
@@ -287,7 +287,7 @@ function getLitePage() {
     </details>
     <details class="faq">
       <summary>卡片上的角标都显示什么？</summary>
-      <div class="ans">右上角显示估算价值、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数，都不需要悬停就能看到。</div>
+      <div class="ans">右上角显示估算价值、差价、性价比和有效金，左上角显示账号的抽数、皮肤数和车架数，都不需要悬停就能看到。</div>
     </details>
     <details class="faq">
       <summary>以前装过「螃蟹网鸣潮估价助手」，现在要装两次吗？</summary>
