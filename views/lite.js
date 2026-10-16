@@ -6,7 +6,7 @@ function getLitePage() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>螃蟹网鸣潮估价助手 - 安装说明</title>
+<title>页面估价助手 - 安装说明</title>
 <meta name="description" content="在螃蟹网鸣潮商品列表页直接显示每个账号的估值与性价比。附完整安装步骤。">
 <style>
   :root {
@@ -193,14 +193,14 @@ function getLitePage() {
 <div class="wrap">
 
   <div class="nav">
-    <img src="/icons/wuwaLogo.jpeg" alt="鸣潮估价助手">
-    <span class="name">鸣潮估价助手</span>
+    <img src="/icons/wuwaLogo.jpeg" alt="页面估价助手">
+    <span class="name">页面估价助手</span>
     <a class="back" href="/wuwa">网站首页 →</a>
   </div>
 
   <div class="hero">
     <div class="kicker">PXB7 VALUE HELPER</div>
-    <h1>螃蟹网鸣潮估价助手</h1>
+    <h1>页面估价助手</h1>
     <p class="sub">在螃蟹网的鸣潮商品列表页，直接在每个商品上显示该账号的估算价值和性价比，一眼看出哪些值得入手。</p>
   </div>
 
@@ -247,6 +247,7 @@ function getLitePage() {
           <span class="tag y">性价比 <b>0~20%</b> · 一般</span>
           <span class="tag r">性价比 <b>为负</b> · 偏贵</span>
         </div>
+        <p style="margin-top:10px;">性价比达到 <b>30%</b> 的卡片会自动加上绿色描边和「高性价比」标记，方便快速挑出值得看的号。</p>
       </div>
     </div>
   </div>
@@ -283,6 +284,14 @@ function getLitePage() {
     <details class="faq">
       <summary>估价和实际成交价差很多？</summary>
       <div class="ans">估价是按账号配置（角色命座、专武精炼、资源等）折算出的参考值，不含卖家主观溢价、平台手续费和议价空间。把它当作筛选工具用，不要当成交价。</div>
+    </details>
+    <details class="faq">
+      <summary>鼠标移到角标上能看到什么？</summary>
+      <div class="ans">除了估算价值，还会显示合理交易范围、账号的有效金／限定金／总金数，以及标价和性价比，方便你判断这个号值不值。</div>
+    </details>
+    <details class="faq">
+      <summary>以前装过「螃蟹网鸣潮估价助手」，现在要装两次吗？</summary>
+      <div class="ans">脚本已更名为「页面估价助手」，油猴会把它识别成一个新脚本，所以需要重新安装一次。装好后请到油猴面板里把旧的「螃蟹网鸣潮估价助手」删掉，避免两个脚本同时生效。</div>
     </details>
     <details class="faq">
       <summary>换电脑了需要重新装吗？</summary>

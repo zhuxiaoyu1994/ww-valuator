@@ -601,9 +601,17 @@ app.post('/api/page-eval', async (req, res) => {
     if (!productId || !desc) continue;
     try {
       const r = engine.evaluateWithPrice(desc, Math.round((Number(it.price) || 0) * 100), effectiveWeights);
+      const d = r.details || {};
+      const yi = d.yellowInfo || {};
+      const pr = d.priceRange || {};
       data[String(productId)] = {
-        value: r.details.finalValue,
+        value: d.finalValue,
         ratio: r.costPerformance,
+        low: pr.low || 0,
+        high: pr.high || 0,
+        effGold: Math.round((yi.effectiveYellow || 0) * 10) / 10,
+        limGold: yi.limitedYellow || 0,
+        totalGold: yi.totalYellow || 0,
       };
     } catch (e) {
       // 单条失败跳过，不影响其余商品

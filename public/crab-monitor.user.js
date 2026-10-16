@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         游戏账号监控助手（鸣潮+绝区零）
+// @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      3.43.0
+// @version      3.44.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -7457,7 +7457,7 @@
 
       // 测试推送
       box.querySelector('#mwTestPush').onclick = function () {
-        notify('test', '测试通知 - 鸣潮监控助手', '如果您收到了这条通知，说明推送配置正确！\n标价100元 估值200元\n差价+100元 性价比+100%');
+        notify('test', '测试通知 - 账号监控助手', '如果您收到了这条通知，说明推送配置正确！\n标价100元 估值200元\n差价+100元 性价比+100%');
       };
 
       // 云端同步
@@ -13490,7 +13490,7 @@ function openSettings() {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = '监控助手迁移包_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.json';
+    a.download = '账号监控助手迁移包_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -13507,7 +13507,7 @@ function openSettings() {
       try {
         var pkg = JSON.parse(e.target.result);
         if (pkg.type !== 'crab-monitor-migration' || !pkg.games) {
-          onDone({ ok: false, msg: '不是有效的监控助手迁移包文件' });
+          onDone({ ok: false, msg: '不是有效的账号监控助手迁移包文件' });
           return;
         }
         var written = 0;

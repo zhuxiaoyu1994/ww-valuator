@@ -466,7 +466,7 @@ function getAdminPage() {
           <li>在"估值设置"中调整估值规则，让估价更符合你的预期</li>
         </ol>
         <div class="mon-download-area">
-          <a class="mon-download-btn" href="/public/crab-monitor.user.js">安装监控脚本</a>
+          <a class="mon-download-btn" href="/public/crab-monitor.user.js">安装账号监控助手</a>
           <div class="mon-note">点击后会自动通过 Tampermonkey 安装，如未弹出请确认已安装 Tampermonkey 扩展</div>
         </div>
       </div>
@@ -595,7 +595,7 @@ function getAdminPage() {
       <div class="mon-card">
         <h2>估价 Key 管理</h2>
         <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
-          给每位朋友发一把专属密钥，用于「螃蟹网页面估值」精简脚本（<code style="color:#888;">dist/pxb7-value-lite.user.js</code>）。<br>
+          给每位朋友发一把专属密钥，用于「页面估价助手」脚本（<code style="color:#888;">pxb7-value-lite.user.js</code>）。<br>
           收到钱后在下方新建密钥并发给对方，到期后脚本自动失效；到期前点「续期」顺延天数即可，未用完的剩余天数不会丢失。<br>
           密钥存在服务器数据库中，停用/删除后立即生效，无需重新部署。
         </p>

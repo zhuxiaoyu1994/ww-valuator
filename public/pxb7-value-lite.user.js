@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         螃蟹网鸣潮估价助手
+// @name         页面估价助手
 // @namespace    pxb7-value-lite
-// @version      1.2.1
+// @version      1.3.0
 // @description  在螃蟹网鸣潮商品列表页一键显示每个账号的估值与性价比（估值由服务器计算，脚本不含任何算法与规则）
 // @author       You
 // @homepageURL  https://www.youxigujia.cn/lite
@@ -27,6 +27,7 @@
   const CHUNK_SIZE = 20;    // 每批提交的商品数
   const CONCURRENCY = 2;    // 详情接口并发
   const GAP_MS = 300;       // 批间隔，分散请求频率
+  const HOT_RATIO = 30;     // 性价比达到该值(%)的卡片加高亮标记
 
   // ---------- 密钥：首次运行手动输入，存 localStorage，点「密钥」按钮可随时更换 ----------
   function getKey() {
@@ -76,7 +77,10 @@
     '.pxl-toggle{background:#e11d48;}',
     '.pxl-toggle.on{background:#16a34a;}',
     '.pxl-key{background:#475569;}',
-    '.pxl-key.set{background:#0f766e;}'
+    '.pxl-key.set{background:#0f766e;}',
+    '.pxl-hot{outline:2px solid #16a34a;outline-offset:1px;box-shadow:0 0 12px rgba(22,163,74,.45);}',
+    '.pxl-hot-flag{position:absolute;top:0;left:0;z-index:11;background:#16a34a;color:#fff;',
+    'font-size:10px;font-weight:700;padding:1px 7px;border-radius:0 0 8px 0;user-select:none;}'
   ].join('');
   document.head.appendChild(style);
 
@@ -273,7 +277,7 @@
   }
 
   // ---------- 注入角标 ----------
-  function injectBadge(item, value, ratio) {
+  function injectBadge(item, r) {
     item.card.dataset.pxl = 'done';
     if (getComputedStyle(item.card).position === 'static') item.card.style.position = 'relative';
 
@@ -283,11 +287,36 @@
       badge.className = 'pxl-badge';
       item.card.appendChild(badge);
     }
+    const value = r.value;
+    const ratio = r.ratio;
     const shownRatio = Math.round(ratio * 10) / 10;
-    const color = ratioColor(ratio);
-    badge.style.background = color;
-    badge.title = '估算价值: ¥' + value + '\n标价: ¥' + item.price + '\n性价比: ' + shownRatio + '%';
+    badge.style.background = ratioColor(ratio);
+
+    const lines = ['估算价值: ¥' + Math.round(value)];
+    if (r.low || r.high) lines.push('交易范围: ¥' + r.low + ' ~ ¥' + r.high);
+    if (r.effGold != null || r.limGold != null || r.totalGold != null) {
+      lines.push('有效金: ' + (r.effGold || 0) + ' · 限定金: ' + (r.limGold || 0) + ' · 总金数: ' + (r.totalGold || 0));
+    }
+    lines.push('标价: ¥' + item.price);
+    lines.push('性价比: ' + (shownRatio > 0 ? '+' : '') + shownRatio + '%');
+    badge.title = lines.join('\n');
+
     badge.innerHTML = '<span>¥' + Math.round(value) + '</span><small>性价比 ' + shownRatio + '%</small>';
+
+    // 高性价比卡片加绿色描边与角标，方便在一屏里快速定位
+    const hot = ratio >= HOT_RATIO;
+    item.card.classList.toggle('pxl-hot', hot);
+    let flag = item.card.querySelector('.pxl-hot-flag');
+    if (hot) {
+      if (!flag) {
+        flag = document.createElement('div');
+        flag.className = 'pxl-hot-flag';
+        item.card.appendChild(flag);
+      }
+      flag.textContent = '高性价比';
+    } else if (flag) {
+      flag.remove();
+    }
   }
 
   function injectPending(item) {
@@ -371,7 +400,7 @@
         if (resp && resp.data) {
           for (const item of chunk) {
             const r = resp.data[item.productId];
-            if (r) injectBadge(item, r.value, r.ratio);
+            if (r) injectBadge(item, r);
           }
         }
         for (const item of failed) injectFailedBadge(item);
@@ -452,7 +481,8 @@
     queue.length = 0;
     if (observer) { observer.disconnect(); observer = null; }
     if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
-    document.querySelectorAll('.pxl-badge').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('.pxl-badge, .pxl-hot-flag').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('.pxl-hot').forEach(function (c) { c.classList.remove('pxl-hot'); });
     document.querySelectorAll('div[productid][data-pxl]').forEach(function (c) { delete c.dataset.pxl; });
     updateProgress();
   }
