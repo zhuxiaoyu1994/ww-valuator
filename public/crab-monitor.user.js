@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      3.44.0
+// @version      3.48.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -5419,7 +5419,7 @@
   /**
    * 处理单个商品
    */
-  function processProduct(item, fromFlashSale) {
+  function processProduct(item, fromFlashSale, prefetchedDetail) {
     const productId = item.productId || item.id;
     if (!productId) return;
     if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
@@ -5636,7 +5636,8 @@
       price,
       value: valuation.totalValue,
       ratio: valuation.ratio,
-      status: fromFlashSale ? '秒杀' : '初估',
+      // 页面估值已用过详情接口的完整描述，直接记为详估，避免重复拉一次详情
+      status: fromFlashSale ? '秒杀' : (prefetchedDetail ? '详估' : '初估'),
       effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
@@ -5664,7 +5665,7 @@
     const meetsBasicThreshold = valuation.totalValue > 500 && valuation.diff != null && valuation.diff > 100;
     // 描述疑似被截断（长度恰为500）：强制入队，用详情API的完整描述覆盖
     const showTitleSuspectTruncated = showTitle.length === 500;
-    if (meetsBasicThreshold || hasSC6 || matchesCharRule || showTitleSuspectTruncated) {
+    if (!prefetchedDetail && (meetsBasicThreshold || hasSC6 || matchesCharRule || showTitleSuspectTruncated)) {
       enqueueDetail(productId, valuation.diff || 0);
     }
 
@@ -6348,25 +6349,59 @@
           z-index: 10;
           display: flex;
           flex-direction: column;
-          align-items: center;
-          padding: 4px 10px;
+          align-items: flex-end;
+          gap: 1px;
+          padding: 5px 9px;
           border-radius: 8px;
           color: #fff;
-          font-size: 14px;
-          font-weight: 700;
-          line-height: 1.3;
+          font-size: 11px;
+          font-weight: 600;
+          line-height: 1.4;
+          text-align: right;
           box-shadow: 0 2px 8px rgba(0,0,0,0.25);
           cursor: pointer;
           user-select: none;
         }
-        .mw-page-badge small {
-          font-size: 10px;
-          opacity: 0.9;
+        .mw-page-badge .mw-pv-val {
+          font-size: 15px;
+          font-weight: 800;
+          line-height: 1.2;
+        }
+        .mw-page-badge .mw-pv-row {
+          font-size: 10.5px;
+          opacity: 0.95;
+          white-space: nowrap;
+        }
+        .mw-page-badge .mw-pv-diff {
+          font-size: 10.5px;
+          font-weight: 800;
+          line-height: 1.4;
+          white-space: nowrap;
+        }
+        .mw-page-res {
+          position: absolute;
+          top: 8px;
+          left: 8px;
+          z-index: 10;
+          padding: 4px 9px;
+          border-radius: 8px;
+          font-size: 10.5px;
+          font-weight: 600;
+          line-height: 1.4;
+          white-space: nowrap;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+          user-select: none;
+        }
+        .mw-page-res b {
+          font-weight: 800;
         }
         .mw-page-est {
-          font-size: 12px;
-          font-weight: 600;
+          display: inline-block;
           margin-top: 2px;
+          padding: 1px 7px;
+          border-radius: 5px;
+          font-size: 11px;
+          font-weight: 700;
         }
         .mw-input {
           width: 40px;
@@ -7577,8 +7612,7 @@
         }
         // 如果刷新间隔变了且正在监控，重启定时器
         if (intervalChanged && monitorRunning) {
-          if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
-          monitorTimeout = setTimeout(monitorTick, refreshIntervalSec * 1000);
+          scheduleNextTick(refreshIntervalSec * 1000);
           nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
         }
         overlay.remove();
@@ -8425,6 +8459,16 @@
   }
 
   /**
+   * 差价配色，与页面估价助手保持一致：<-200 红、<0 灰、<200 黄、>=200 绿
+   */
+  function getDiffStyle(diff) {
+    if (diff < -200) return { bg: '#ef4444', fg: '#ffffff' };
+    if (diff < 0) return { bg: '#8888aa', fg: '#ffffff' };
+    if (diff < 200) return { bg: '#fbbf24', fg: '#1f2937' };
+    return { bg: '#10b981', fg: '#ffffff' };
+  }
+
+  /**
    * 性价比标签
    */
   function getRatioLabel(ratio) {
@@ -8495,11 +8539,12 @@
     return items;
   }
 
-  // 计算估值并注入/更新角标
+  // 计算估值并注入/更新角标（样式与页面估价助手一致）
   function injectPageBadge(item, desc, price) {
-    let valuation;
+    let parsed, valuation;
     try {
-      valuation = calculateValue(parseAccountInfo(desc), price);
+      parsed = parseAccountInfo(desc);
+      valuation = calculateValue(parsed, price);
     } catch (e) {
       return false;
     }
@@ -8507,7 +8552,8 @@
 
     const value = valuation.totalValue;
     const ratio = price > 0 ? Math.round((value - price) / price * 1000) / 10 : 0;
-    const color = getRatioColor(ratio);
+    // 整块配色由差价决定
+    const ds = getDiffStyle(valuation.diff);
 
     item.card.dataset.mwPageEval = 'done';
     item.card.dataset.mwPageEvalLen = String((desc || '').length);
@@ -8520,10 +8566,32 @@
       badge.dataset.mwPageBadge = '1';
       item.card.appendChild(badge);
     }
-    badge.style.background = color;
-    badge.title = '估算价值: ¥' + value + '\n标价: ¥' + price + '\n性价比: ' + ratio + '%';
-    badge.innerHTML = '<span>¥' + Math.round(value) + '</span><small>' +
-      (price > 0 ? ('性价比 ' + ratio + '%') : '估值') + '</small>';
+    badge.style.background = ds.bg;
+    badge.style.color = ds.fg;
+    badge.title = '标价: ¥' + price;
+
+    const rows = ['<span class="mw-pv-val">¥' + Math.round(value) + '</span>'];
+    if (valuation.diff != null) {
+      rows.push('<span class="mw-pv-diff">差价 ' + (valuation.diff > 0 ? '+' : '') + Math.round(valuation.diff) + '</span>');
+    }
+    if (price > 0) rows.push('<span class="mw-pv-row">性价比 ' + (ratio > 0 ? '+' : '') + ratio + '%</span>');
+    if (valuation.effectiveYellow != null) {
+      rows.push('<span class="mw-pv-row">有效金 ' + (Math.round((valuation.effectiveYellow || 0) * 10) / 10) + '</span>');
+    }
+    badge.innerHTML = rows.join('');
+
+    // 抽数／皮肤／车架放左上角，与右上角角标分开
+    let res = item.card.querySelector('.mw-page-res');
+    if (!res) {
+      res = document.createElement('div');
+      res.className = 'mw-page-res';
+      res.dataset.mwPageBadge = '1';
+      item.card.appendChild(res);
+    }
+    res.style.background = ds.bg;
+    res.style.color = ds.fg;
+    res.innerHTML = '抽数 <b>' + Math.round(parsed.pulls || 0) + '</b> · 皮肤 <b>' +
+      (parsed.outfitCount || 0) + '</b> · 车架 <b>' + (parsed.motoCount || 0) + '</b>';
 
     if (item.titleEl && item.titleEl.parentElement) {
       let est = item.card.querySelector('.mw-page-est');
@@ -8533,7 +8601,8 @@
         est.dataset.mwPageBadge = '1';
         item.titleEl.parentElement.appendChild(est);
       }
-      est.style.color = color;
+      est.style.background = ds.bg;
+      est.style.color = ds.fg;
       est.textContent = '估值 ¥' + Math.round(value);
     }
     return true;
@@ -8551,6 +8620,62 @@
     item.card.appendChild(badge);
   }
 
+  // 页面估值结果同步进监控列表：与监控扫描共用 processProduct 主流程，
+  // 收录条件（估值下限、等级下限、已删除忽略、同 productId 去重、指纹去重）与
+  // 推送 / 自动抢购规则完全一致；不符合收录条件的会在 processProduct 内部直接 return。
+  // 落盘方式与扫描保持一致（批量模式 + 每20条统一保存）：一屏商品 60+ 个，
+  // 若逐条落盘会触发 60+ 次全量 localStorage 写入与重绘，表格接近上限时
+  // saveTableData 还会走多轮降级裁剪，把主线程占满导致录入卡顿。
+  let pageEvalImportPending = 0;
+
+  function importPageEvalProduct(productId, showTitle, price, productUniqueNo) {
+    const prevBatch = batchMode;
+    batchMode = true;
+    try {
+      processProduct({
+        productId: productId,
+        showTitle: showTitle,
+        price: Math.round(price * 100),  // 元转分
+        productUniqueNo: productUniqueNo || '',
+      }, false, true);
+      pageEvalImportPending++;
+    } finally {
+      batchMode = prevBatch;
+    }
+    if (pageEvalImportPending >= 20) flushPageEvalImport();
+  }
+
+  // 统一截断、排序、保存、刷新（与 handleListResponse 尾部一致）
+  function flushPageEvalImport() {
+    if (pageEvalImportPending === 0) return;
+    pageEvalImportPending = 0;
+    const prevBatch = batchMode;
+    batchMode = false;
+    try {
+      trimTableData();
+      sortTableData();
+      saveTableData();
+      saveStorage(STORAGE_KEYS.seen, seenIds);
+      refreshTableDisplay();
+      updateStatusText();
+    } finally {
+      batchMode = prevBatch;
+    }
+  }
+
+  // 页面估值的详情请求优先走 GM_xmlhttpRequest（与「页面估价助手」一致）：
+  // 页面上下文请求量过大时会和监控扫描的列表请求争抢同一份 WAF 计数，
+  // 把监控扫描一起拖慢；GM 通道失败时回落到 fetchDetail。
+  async function fetchDetailForPageEval(productId) {
+    try {
+      const data = await gmFetch(API_URLS.detail, { productId: productId });
+      if (data && data.success) return data;
+    } catch (e) {
+      console.warn('[鸣潮监控-页面估值] GM详情请求失败，回落到页面请求:', e.message);
+    }
+    return fetchDetail(productId);
+  }
+
   // 逐批拉详情接口详估（并发2，批间隔300ms，避免触发WAF）
   async function runPageEvalQueue() {
     if (pageEvalRunning) return;
@@ -8562,12 +8687,13 @@
         let price = item.price;
         let cached = pageEvalDetailCache.get(item.productId);
         if (!cached) {
-          cached = { showTitle: '', price: 0 };
+          cached = { showTitle: '', price: 0, uniqueNo: '' };
           try {
-            const data = await fetchDetail(item.productId);
+            const data = await fetchDetailForPageEval(item.productId);
             if (data && data.success && data.data) {
               cached.showTitle = data.data.showTitle || data.data.title || '';
               cached.price = (data.data.price || 0) / 100;
+              cached.uniqueNo = data.data.productUniqueNo || data.data.uniqueNo || '';
             }
           } catch (e) {
             // 详情拉取失败：回退卡片文本初估
@@ -8577,6 +8703,10 @@
         if (cached.showTitle && cached.showTitle.length > desc.length) desc = cached.showTitle;
         if (cached.price > 0) price = cached.price;
         injectPageBadge(item, desc, price);
+        // 只有详情拉取成功的才同步进监控列表：截断文本算出的估值不可信，不入库
+        if (cached.showTitle) {
+          importPageEvalProduct(item.productId, cached.showTitle, price, cached.uniqueNo);
+        }
         pageEvalDone++;
         updatePageEvalButtonText();
       }));
@@ -8584,6 +8714,8 @@
         await new Promise(function (r) { setTimeout(r, 300); });
       }
     }
+    // 队列跑完统一落盘，避免剩余未满20条的导入结果丢失
+    flushPageEvalImport();
     pageEvalRunning = false;
     updatePageEvalButtonText();
   }
@@ -8650,6 +8782,7 @@
     pageEvalActive = false;
     pageEvalSig = '';
     pageEvalQueue.length = 0;
+    flushPageEvalImport();  // 关闭前落盘，避免已导入但未保存的商品丢失
     if (pageEvalObserver) { pageEvalObserver.disconnect(); pageEvalObserver = null; }
     if (pageEvalScanTimer) { clearTimeout(pageEvalScanTimer); pageEvalScanTimer = null; }
     document.querySelectorAll('[data-mw-page-badge]').forEach(function (el) { el.remove(); });
@@ -14141,6 +14274,51 @@ function openSettings() {
 
   let refreshInProgress = false;
 
+  // ── 后台刷新加固 ─────────────────────────────────────────────
+  // 浏览器会对隐藏标签页做省电限制，导致"只有切回监控页才拿到新数据"：
+  //  ① 密集节流（Chrome 88+）：页面隐藏>5分钟、页面静音、无 WebRTC、且"链式定时器"
+  //     计数≥5 时，定时器最慢降到每分钟才执行一次；
+  //  ② 冻结（Chrome 133+ 节能模式）：后台标签页若 CPU 占用高会被直接冻结，
+  //     定时器/事件/Promise 回调全部挂起，切回标签页才恢复。
+  // 对策：① 用 MessageChannel 把定时器放到"消息任务"（非定时器任务）里创建，
+  //       链式计数恒为 1，后台只受"每秒一次"的普通节流影响，仍按设定间隔刷新；
+  //       ② 持有 Web Lock，节能模式下持有 Web Lock 的页面不会被冻结。
+  let pendingTickDelay = 0;
+  let tickPort2 = null;
+  (function initTickChannel() {
+    if (typeof MessageChannel === 'undefined') return;
+    try {
+      const ch = new MessageChannel();
+      tickPort2 = ch.port2;
+      ch.port1.onmessage = function (ev) {
+        if (!monitorRunning) return;
+        if (ev.data === 'fire') { monitorTick(); return; }
+        // 在"消息任务"里创建延时定时器，链式计数恒为 1
+        const d = pendingTickDelay;
+        pendingTickDelay = 0;
+        if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
+        monitorTimeout = setTimeout(function () { tickPort2.postMessage('fire'); }, d);
+      };
+    } catch (e) { tickPort2 = null; }
+  })();
+
+  function scheduleNextTick(delayMs) {
+    if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
+    if (!tickPort2) { monitorTimeout = setTimeout(monitorTick, delayMs); return; }
+    pendingTickDelay = delayMs;
+    tickPort2.postMessage('schedule');
+  }
+
+  // 持有 Web Lock，避免页面被节能模式冻结（名称带随机后缀，避免同站多标签页互相排队）
+  function holdKeepAliveLock() {
+    try {
+      if (!navigator || !navigator.locks || !navigator.locks.request) return;
+      navigator.locks.request('mw-monitor-keepalive-' + Math.random().toString(36).slice(2), function () {
+        return new Promise(function () {}); // 永不 resolve → 锁一直持有
+      });
+    } catch (e) {}
+  }
+
   /**
    * 监控tick
    */
@@ -14152,11 +14330,11 @@ function openSettings() {
         refreshInProgress = false;
         // 刷新完成后才设置下次倒计时，避免API耗时导致倒计时卡在0
         nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
-        monitorTimeout = setTimeout(monitorTick, refreshIntervalSec * 1000);
+        scheduleNextTick(refreshIntervalSec * 1000);
       });
     } else {
       // 刷新仍在进行，2秒后重试
-      monitorTimeout = setTimeout(monitorTick, 2000);
+      scheduleNextTick(2000);
     }
   }
 
