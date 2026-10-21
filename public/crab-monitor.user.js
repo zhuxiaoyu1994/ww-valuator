@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      3.48.0
+// @version      3.60.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -29,6 +29,146 @@
 
 (function () {
   'use strict';
+
+  // ============================================================
+  // 实时日志捕获
+  // 螃蟹网有反调试（按 F12 会弹 debugger），无法打开控制台看运行日志。
+  // 这里劫持 console 输出到内存环形缓冲，由面板内「日志」按钮实时查看。
+  // ============================================================
+  var MW_LOG_MAX = 1500;  // 环形缓冲上限（简化模式下约覆盖 40~50 分钟，足以回看后台挂起空档）
+  var mwLogs = [];        // { seq, t, level, text, mw, noise }
+  var mwLogSeq = 0;
+  var mwLogUnread = 0;    // 面板关闭期间累计的新日志条数（用于按钮角标）
+  var mwLogPanel = null;  // 日志面板（打开时非 null，含 onNew 回调）
+  var mwLogSimple = true; // 简化模式：隐藏逐条明细，仅保留关键事件与异常
+  var mwEvictCursor = 0;      // 淘汰游标：从上次淘汰处继续找明细，避免每条新日志都全表扫描
+  var mwLogBtnDirty = false;  // 后台期间按钮状态待刷新（document.hidden 时不写 DOM）
+  var mwLogPanelDirty = false;// 后台期间日志面板待重绘
+
+  function mwFormatArg(a) {
+    if (a == null) return String(a);
+    var t = typeof a;
+    if (t === 'string') return a;
+    if (t === 'number' || t === 'boolean' || t === 'bigint') return String(a);
+    if (a instanceof Error) return a.message || String(a);
+    try {
+      var s = JSON.stringify(a);
+      return s === undefined ? String(a) : s;
+    } catch (e) { return String(a); }
+  }
+
+  // 逐条明细类日志（每个商品/每页一条，量大且对定位问题无价值）。
+  // 简化模式下隐藏，仅保留扫描汇总、异常、WAF、后台挂起等关键事件。
+  var MW_LOG_NOISE = [
+    '解析到 ',            // 盼之：逐条打印商品
+    '解析到',             // 7881：逐页条数（保留"扫描完成"汇总即可）
+    '开始: ',             // processXXProduct 开始
+    '跳过自主截图商品',
+    '跳过旧商品',
+    '重新评估:',
+    '补充详情页信息:',
+    '降价:',
+    '解析结果:',
+    '等级低于70',
+    '跨平台重复',
+    '收到',               // handleXXListResponse 收到N条
+    '商品字段:',
+    '签名参数:',
+    'API请求: ',
+    '详情补充:',
+    '指纹重复更新低价',
+    '重复(指纹匹配)',
+    '  - ',               // 商品列表项
+    '秒杀价: ',           // 逐条打印秒杀折扣
+    '秒杀池新商品',
+    '秒杀标记',
+    '存储[',
+    '清理 seenIds',
+    '清理 notifiedIds',
+    '自动迁移存储到GM',
+  ];
+  function mwIsNoise(text) {
+    for (var i = 0; i < MW_LOG_NOISE.length; i++) {
+      if (text.indexOf(MW_LOG_NOISE[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function mwAppendLog(level, text, mw) {
+    var entry = { seq: ++mwLogSeq, t: Date.now(), level: level, text: text, mw: mw, noise: mwIsNoise(text) };
+    mwLogs.push(entry);
+    // 超上限时优先淘汰逐条明细，避免明细把关键事件挤出缓冲。
+    // 从 mwEvictCursor 处继续往后找，而不是每条新日志都从头全表扫描（突发时是纯浪费的 CPU）
+    while (mwLogs.length > MW_LOG_MAX) {
+      var idx = -1;
+      for (var i = mwEvictCursor; i < mwLogs.length; i++) { if (mwLogs[i].noise) { idx = i; break; } }
+      if (idx === -1) { idx = 0; mwEvictCursor = 0; } else { mwEvictCursor = idx; }
+      mwLogs.splice(idx, 1);
+    }
+    if (mwLogPanel) {
+      try { mwLogPanel.onNew(entry); } catch (e) {}
+    } else {
+      mwLogUnread++;
+      mwUpdateLogButton();
+    }
+  }
+
+  // 脚本自身日志的识别前缀（覆盖 [鸣潮监控] / [监控-平台] / %c[鸣潮监控] 等写法）
+  function mwIsScriptLog(text) {
+    return text.indexOf('[鸣潮监控') !== -1 ||
+           text.indexOf('[监控') !== -1 ||
+           text.indexOf('鸣潮监控助手') !== -1;
+  }
+
+  // 只捕获脚本自身日志（含前缀的调用），页面自身输出与我们自己的逐条商品明细 dump
+  // 一律放过：格式化参数（对象要 JSON.stringify）+ 入缓冲 + 写 DOM 都是后台 CPU 开销，
+  // 而这些明细对定位问题没有价值，还会把关键事件挤出缓冲。
+  (function installConsoleHook() {
+    ['log', 'info', 'warn', 'error'].forEach(function (level) {
+      var orig = console[level];
+      if (typeof orig !== 'function') return;
+      console[level] = function () {
+        var hit = false;
+        for (var i = 0; i < arguments.length; i++) {
+          var a = arguments[i];
+          if (typeof a === 'string' && mwIsScriptLog(a)) { hit = true; break; }
+        }
+        if (hit) {
+          try {
+            var parts = [];
+            for (var j = 0; j < arguments.length; j++) parts.push(mwFormatArg(arguments[j]));
+            mwAppendLog(level, parts.join(' '), true);
+          } catch (e) {}
+        }
+        return orig.apply(console, arguments);
+      };
+    });
+  })();
+
+  // 回到前台时补齐后台期间攒下的 DOM 更新。
+  // 后台标签页不写 DOM 是刻意为之：写 textContent/classList、创建日志行节点、
+  // 读 scrollHeight 都会触发样式/布局计算，把后台 CPU 抬到 Chrome 节能模式
+  // 停用（冻结）的判定线以上。
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    if (mwLogBtnDirty) mwUpdateLogButton();
+    if (mwLogPanelDirty && mwLogPanel) mwLogPanel.rerender();
+  });
+
+  // ============================================================
+  // 页面生命周期事件（区分"浏览器冻结标签页"与"系统休眠/App Nap"）
+  // Chrome 冻结标签页时会派发 freeze/resume 事件；系统休眠或 macOS App Nap
+  // 则是整进程被挂起，不会派发任何事件。所以：
+  //   - 空档前后有 freeze/resume 记录 → 浏览器冻结标签页
+  //   - 空档前后只有"后台挂起"告警、无 freeze/resume → 系统休眠 / App Nap
+  // 日志里出现这些行即为关键事件，简化模式下不会被过滤。
+  // ============================================================
+  document.addEventListener('freeze', function () {
+    console.warn('[鸣潮监控] 页面被浏览器冻结（freeze）：JS/定时器/网络回调全部挂起');
+  });
+  document.addEventListener('resume', function () {
+    console.warn('[鸣潮监控] 页面已从冻结恢复（resume）');
+  });
 
   // 螃蟹网改版后URL结构变更：旧 /buy/{gameId} → 新 /buy/{gameId}/1（1=账号商品类型）
   // 访问旧URL会显示404页面，自动重定向到新URL
@@ -358,10 +498,10 @@
       seen: prefix + '_monitor_seen',
       notified: prefix + '_monitor_notified',
       deleted: prefix + '_monitor_deleted',
+      rejected: prefix + '_monitor_rejected',
       state: prefix + '_monitor_state',
       weights: prefix + '_monitor_config',
       configVersion: prefix + '_monitor_config_version',
-      backup: prefix + '_monitor_last_backup',
     };
   }
 
@@ -446,6 +586,56 @@
   // 收录的估值下限：跟随通知设置里的"估值下限"，未设置(0)时回落到默认 300，避免垃圾数据入库
   function includeMinValue() {
     return notifyMinValue > 0 ? notifyMinValue : 300;
+  }
+
+  // ============================================================
+  // 被拒商品记忆
+  // 被收录下限/等级门槛挡掉的商品，ID 仍留在 seenIds 中，导致每轮刷新都会
+  // 走"重新评估"重算一遍（解析+估值）。而估值只由描述文本和定价规则决定，
+  // 条件不变时重算结果必然相同，纯属浪费 CPU 并刷屏日志。
+  // 这里记下拒绝时的关键条件，仅当条件发生变化时才允许重新评估。
+  // ============================================================
+  function rejectRemember(productId, price, reason, value) {
+    const old = rejectedMap.get(productId);
+    if (old) {
+      const i = rejectedList.indexOf(old);
+      if (i >= 0) rejectedList.splice(i, 1);
+    }
+    const entry = { id: productId, v: Math.round(value || 0), r: reason, cv: CONFIG_VERSION, p: price, t: Date.now(),
+      mv: includeMinValue(), lv: G().minLevel };
+    rejectedList.push(entry);
+    rejectedMap.set(productId, entry);
+    if (rejectedList.length > CONFIG.maxRejectedIds) {
+      const evicted = rejectedList.shift();
+      rejectedMap.delete(evicted.id);
+    }
+    rejectedDirty = true;
+  }
+
+  // true = 拒绝条件完全没变，可以安全跳过重算
+  function rejectShouldSkip(productId, price) {
+    const e = rejectedMap.get(productId);
+    if (!e) return false;
+    if (e.cv !== CONFIG_VERSION) return false;          // 定价规则已更新
+    if (e.p !== price) return false;                    // 标价已变化（可能降价）
+    if (e.mv !== includeMinValue()) return false;       // 收录下限已调整
+    if (e.lv !== G().minLevel) return false;            // 等级门槛已调整
+    return (Date.now() - e.t) < CONFIG.rejectRetryMs;   // 未到重试间隔
+  }
+
+  function rejectForget(productId) {
+    const e = rejectedMap.get(productId);
+    if (!e) return;
+    const i = rejectedList.indexOf(e);
+    if (i >= 0) rejectedList.splice(i, 1);
+    rejectedMap.delete(productId);
+    rejectedDirty = true;
+  }
+
+  function saveRejectedIfDirty() {
+    if (!rejectedDirty) return;
+    rejectedDirty = false;
+    saveStorage(STORAGE_KEYS.rejected, rejectedList);
   }
 
   // ============================================================
@@ -907,6 +1097,8 @@
     maxSeenIds: 5000,              // 已见ID最大数量（需大于 maxTableRows，避免表内数据被反复重新解析）
     maxNotifiedIds: 500,         // 已通知ID最大数量
     maxDeletedIds: 3000,         // 手动删除的忽略ID最大数量
+    maxRejectedIds: 3000,        // 被拒商品记忆最大数量
+    rejectRetryMs: 30 * 60 * 1000, // 被拒商品重新评估的最短间隔（30分钟）
   };
 
   // ============================================================
@@ -917,6 +1109,9 @@
   let notifiedIds = [];          // 已通知productId
   let deletedProductIds = [];    // 手动删除后需永久忽略的productId（防止滚动淘汰后重新入库）
   let deletedIdSet = new Set();  // deletedProductIds 的镜像，用于 O(1) 成员判断
+  let rejectedList = [];         // 被拒商品记忆 [{ id, v, r, cv, p, t }]（避免每轮重复解析+估值）
+  let rejectedMap = new Map();   // rejectedList 的镜像，用于 O(1) 查找
+  let rejectedDirty = false;     // 有未落盘的被拒记忆变更
   let batchMode = false;          // 批量处理模式：跳过逐条保存和刷新
   let monitorRunning = false;    // 监控开关
   let notifyEnabled = false;     // 通知开关
@@ -952,6 +1147,20 @@
   let kjsEnabled = false;       // 氪金兽平台监控开关
   let qyEnabled = false;        // 7881平台监控开关
   let ysyEnabled = false;       // 易手游平台监控开关
+  // 各平台独立刷新间隔（秒）。螃蟹网池子更新快，跟随 refreshIntervalSec 每轮都扫；
+  // 盼之/氪金兽/7881/易手游更新慢，按各自间隔扫描，避免无谓请求
+  let platformIntervals = { pzds: 60, kjs: 60, qy: 60, ysy: 60 };
+  // 各平台上次扫描时间戳（用于按间隔判断本轮是否扫描）
+  const lastPlatformScan = { pxb7: 0, pzds: 0, kjs: 0, qy: 0, ysy: 0 };
+
+  // 应用外部来源（localStorage / 云端）的平台间隔配置，非法值忽略
+  function applyPlatformIntervals(obj) {
+    if (!obj || typeof obj !== 'object') return;
+    ['pzds', 'kjs', 'qy', 'ysy'].forEach(function (k) {
+      var v = parseInt(obj[k], 10);
+      if (v > 0) platformIntervals[k] = Math.min(3600, Math.max(10, v));
+    });
+  }
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
@@ -3616,6 +3825,8 @@
       const existRow = tableData.find(r => r.productId === productId);
       if (!existRow) {
         // 已见过但不在表格中（之前被估值过滤），移除后重新评估
+        // 若此前已被拒且条件未变（同一标价、规则未更新、未到重试间隔），跳过重算
+        if (rejectShouldSkip(productId, price)) return;
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
         console.log('[鸣潮监控-盼之] 重新评估: ' + product.productUniqueNo + ' ¥' + price);
@@ -3689,12 +3900,14 @@
 
     // 估值低于收录下限的垃圾数据不收录
     if (valuation.totalValue < includeMinValue()) {
+      rejectRemember(productId, price, 'lowvalue', valuation.totalValue);
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
     if (valuation.levelFound && valuation.level < G().minLevel) {
+      rejectRemember(productId, price, 'lowlevel', valuation.totalValue);
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       console.log('[鸣潮监控-盼之] 等级低于70，不收录: ' + product.productUniqueNo + ' Lv.' + valuation.level);
       return;
@@ -3704,6 +3917,8 @@
     const fingerprint = generateFingerprint(parsed);
     const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
     if (dupRow) {
+      // 记入拒绝记忆：该账号已在表中（重复上架），避免每轮重复解析+估值
+      rejectRemember(productId, price, 'duplicate', valuation.totalValue);
       console.log('[鸣潮监控-盼之] 跨平台重复(指纹匹配): ' + product.productUniqueNo + ' ¥' + price + ' → 已有:' + dupRow.productId + ' ¥' + dupRow.price);
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
@@ -3764,6 +3979,7 @@
     });
 
     console.log('[鸣潮监控-盼之] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
+    rejectForget(productId);
 
     // 入详情队列条件（与螃蟹网一致）
     const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
@@ -5492,6 +5708,8 @@
       }
       // 表格中不存在（可能已被截断）
       // 秒杀池商品不受 seenIds 去重限制，从 seenIds 中移除以允许重新处理
+      // 若此前已被拒且条件未变（同一秒杀价、规则未更新、未到重试间隔），跳过重算
+      if (rejectShouldSkip(productId, price)) return;
       const seenIdx = seenIds.indexOf(productId);
       if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
       console.log('[鸣潮监控] 秒杀池新商品(表格中不存在): ' + productId + ' ¥' + price);
@@ -5533,6 +5751,8 @@
         return;
       } else if (!existRow) {
         // 已见过但不在表格中（之前被截断或估值过滤），移除后重新评估
+        // 若此前已被拒且条件未变（同一标价、规则未更新、未到重试间隔），跳过重算
+        if (rejectShouldSkip(productId, price)) return;
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
         console.log('[鸣潮监控] 重新评估(已见但表格中不存在): ' + (item.productUniqueNo || productId) + ' ¥' + price);
@@ -5563,6 +5783,7 @@
 
     // 估值低于收录下限的垃圾数据不收录
     if (valuation.totalValue < includeMinValue()) {
+      rejectRemember(productId, price, 'lowvalue', valuation.totalValue);
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
@@ -5571,6 +5792,7 @@
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤，列表页无等级信息时留待详情页判断）
     if (valuation.levelFound && valuation.level < G().minLevel) {
+      rejectRemember(productId, price, 'lowlevel', valuation.totalValue);
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
@@ -5582,6 +5804,8 @@
     const fingerprint = generateFingerprint(parsed);
     const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
     if (dupRow) {
+      // 记入拒绝记忆：该账号已在表中（换链接重复上架），避免每轮重复解析+估值
+      rejectRemember(productId, price, 'duplicate', valuation.totalValue);
       // 标记新ID为已见，避免重复进详情队列
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
@@ -5653,9 +5877,10 @@
       firstSeen: Date.now(),
     });
 
-    if (fromFlashSale) {
-      console.log('[鸣潮监控] 秒杀池商品已入表: ' + (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0));
-    }
+    console.log('[鸣潮监控] ' + (fromFlashSale ? '秒杀池商品已入表: ' : '商品已入表: ') +
+      (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) +
+      ' (表格共' + tableData.length + '行)');
+    rejectForget(productId);
 
     // 加入详情队列：估值>500且差价>100，或有S级满命，或匹配指定账号规则
     const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
@@ -5798,7 +6023,7 @@
           if (idx >= pending.length && prefetchRunning === 0) { finish(); return; }
           if (!prefetchStepTimer) step();
         });
-      prefetchStepTimer = setTimeout(step, PREFETCH_GAP_MS);
+      prefetchStepTimer = bgSetTimeout(step, PREFETCH_GAP_MS);
     }
 
     step();
@@ -5855,7 +6080,7 @@
     // 频率限制
     if (detailCallsThisMinute >= CONFIG.detailRateLimit) {
       const waitTime = 60000 - (Date.now() - detailMinuteStart) + 100;
-      detailTimer = setTimeout(processNextDetail, waitTime);
+      detailTimer = bgSetTimeout(processNextDetail, waitTime);
       updateBottomBar();
       return;
     }
@@ -5995,7 +6220,7 @@
     }).catch(e => {
       console.error('[鸣潮监控] 详情API调用失败:', item.productId, e);
     }).finally(() => {
-      detailTimer = setTimeout(processNextDetail, CONFIG.detailInterval);
+      detailTimer = bgSetTimeout(processNextDetail, CONFIG.detailInterval);
       updateBottomBar();
     });
   }
@@ -6619,9 +6844,10 @@
           <button class="mw-btn" id="mwBtnPageEval" title="对当前页面显示的商品估值并标注在卡片上（仅螃蟹网列表页，点击开启/再点关闭）">页面估值</button>
           <button class="mw-btn" id="mwBtnSettings">估值设置</button>
           <button class="mw-btn" id="mwBtnTestEval" title="手动粘贴账号描述测试估值（结果不录入列表，仅供调参）">测试估价</button>
+          <button class="mw-btn" id="mwBtnLog" title="查看脚本运行日志（实时输出，无需打开控制台）">日志</button>
           <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
-          <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端（每天也会自动备份一次）">云端备份</button>
+          <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端">云端备份</button>
           <button class="mw-btn" id="mwBtnCloudRestore" title="从云端恢复监控列表（与本地合并，不覆盖本地已有行）">云端恢复</button>
           <button class="mw-btn" id="mwBtnMigrate" title="跨脚本管理器/跨浏览器迁移：导出或导入全部数据（监控列表+配置+通知设置）">迁移</button>
         </div>
@@ -6703,6 +6929,7 @@
     dom.btnTestEval = document.getElementById('mwBtnTestEval');
     dom.btnCleanData = document.getElementById('mwBtnCleanData');
     dom.btnCheckSold = document.getElementById('mwBtnCheckSold');
+    dom.btnLog = document.getElementById('mwBtnLog');
     dom.btnCloudBackup = document.getElementById('mwBtnCloudBackup');
     dom.btnCloudRestore = document.getElementById('mwBtnCloudRestore');
     dom.btnMigrate = document.getElementById('mwBtnMigrate');
@@ -6871,7 +7098,7 @@
         // 刷新间隔
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">刷新设置</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:12px;">' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">刷新间隔（秒）</label>' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">螃蟹网刷新间隔（秒）</label>' +
         '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="5" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">最大扫描页数</label>' +
         '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
@@ -6882,7 +7109,7 @@
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">补扫间隔（秒）</label>' +
         '<input type="number" id="mwScanBackfillInterval" value="' + scanBackfillIntervalSec + '" min="60" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒；最大扫描页数=每轮增量最多翻几页（每页20条），整页都是已见商品才提前停止；补扫页数/间隔=每隔一段时间深翻页补扫一次，把停机或增量窗口外漏掉的商品捞回来（补扫第2页起捞回的号只入库、不推送）</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒（仅作用于螃蟹网，池子更新快可设小一点）；下方各平台可单独设置扫描间隔，更新慢的平台建议30~60秒。最大扫描页数=每轮增量最多翻几页（每页20条），整页都是已见商品才提前停止；补扫页数/间隔=每隔一段时间深翻页补扫一次，把停机或增量窗口外漏掉的商品捞回来（补扫第2页起捞回的号只入库、不推送）</div>' +
         // 秒杀库池监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
@@ -6890,27 +7117,39 @@
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">扫描秒杀库池前2页，捕获还价后卖家同意的降价商品</div>' +
         // 盼之平台监控
-        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
         '<input type="checkbox" id="mwPzdsEnabled" ' + (pzdsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控盼之平台（pzds.com' + G().name + '商品池）</label>' +
+        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
+        '<input type="number" id="mwPzdsInterval" value="' + platformIntervals.pzds + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
+        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过SSR HTML抓取盼之平台商品列表，无需API token，扫描前2页</div>' +
         // 氪金兽平台监控
-        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
         '<input type="checkbox" id="mwKjsEnabled" ' + (kjsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控氪金兽平台（kejinshou.com' + G().name + '成品号）</label>' +
+        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
+        '<input type="number" id="mwKjsInterval" value="' + platformIntervals.kjs + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
+        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过MWP API按最新发布顺序获取氪金兽商品列表（含完整角色武器数据），扫描第1页</div>' +
         // 7881平台监控
-        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
         '<input type="checkbox" id="mwQyEnabled" ' + (qyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控7881平台（search.7881.com' + G().name + '成品号）</label>' +
+        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
+        '<input type="number" id="mwQyInterval" value="' + platformIntervals.qy + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
+        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取7881商品列表（MD5签名认证），按最新发布排序</div>' +
         // 易手游平台监控
-        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
         '<input type="checkbox" id="mwYsyEnabled" ' + (ysyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控易手游平台（swcbg.com' + G().name + '成品号）</label>' +
+        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
+        '<input type="number" id="mwYsyInterval" value="' + platformIntervals.ysy + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
+        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取易手游商品列表（结构化角色武器数据），按最新发布排序</div>' +
         // 通知阈值
@@ -7545,6 +7784,10 @@
             box.querySelector('#mwKjsEnabled').checked = !!kjsEnabled;
             box.querySelector('#mwQyEnabled').checked = !!qyEnabled;
             box.querySelector('#mwYsyEnabled').checked = !!ysyEnabled;
+            box.querySelector('#mwPzdsInterval').value = platformIntervals.pzds;
+            box.querySelector('#mwKjsInterval').value = platformIntervals.kjs;
+            box.querySelector('#mwQyInterval').value = platformIntervals.qy;
+            box.querySelector('#mwYsyInterval').value = platformIntervals.ysy;
           } else {
             alert('服务器暂无推送配置或恢复失败');
           }
@@ -7582,6 +7825,16 @@
         kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
         qyEnabled = box.querySelector('#mwQyEnabled').checked;
         ysyEnabled = box.querySelector('#mwYsyEnabled').checked;
+        // 各平台独立刷新间隔（10~3600秒）
+        var clampInterval = function (v, def) {
+          var n = parseInt(v, 10);
+          if (!n || isNaN(n)) return def;
+          return Math.min(3600, Math.max(10, n));
+        };
+        platformIntervals.pzds = clampInterval(box.querySelector('#mwPzdsInterval').value, platformIntervals.pzds);
+        platformIntervals.kjs = clampInterval(box.querySelector('#mwKjsInterval').value, platformIntervals.kjs);
+        platformIntervals.qy = clampInterval(box.querySelector('#mwQyInterval').value, platformIntervals.qy);
+        platformIntervals.ysy = clampInterval(box.querySelector('#mwYsyInterval').value, platformIntervals.ysy);
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
@@ -7627,7 +7880,9 @@
         return;
       }
       refreshInProgress = true;
-      doRefresh().finally(function () { refreshInProgress = false; });
+      // 手动刷新：忽略各平台间隔，全部平台强制扫描一次
+      console.log('[鸣潮监控] 手动刷新：强制扫描全部平台');
+      doRefresh(true).finally(function () { refreshInProgress = false; });
     });
 
 
@@ -7653,8 +7908,12 @@
     // 检查已售
     dom.btnCheckSold.addEventListener('click', checkSoldAccounts);
 
+    // 运行日志（替代控制台）
+    if (dom.btnLog) dom.btnLog.addEventListener('click', openLogViewer);
+    mwUpdateLogButton();
+
     // 云端备份/恢复（防止脚本重装/换浏览器丢失历史列表）
-    dom.btnCloudBackup.addEventListener('click', function () { backupTableToCloud(false); });
+    dom.btnCloudBackup.addEventListener('click', function () { backupTableToCloud(); });
     dom.btnCloudRestore.addEventListener('click', restoreTableFromCloud);
 
     // 跨管理器/跨浏览器迁移
@@ -9506,6 +9765,299 @@
     overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
     document.body.appendChild(overlay);
     ta.focus();
+  }
+
+  // ============================================================
+  // 运行日志面板（替代控制台，螃蟹网反调试无法按 F12）
+  // ============================================================
+
+  function mwFormatTime(t) {
+    var d = new Date(t);
+    function p(n) { return n < 10 ? '0' + n : '' + n; }
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+
+  function mwLogMatches(entry, filter) {
+    // 简化模式：隐藏逐条明细（警告/错误始终保留）
+    if (mwLogSimple && entry.noise && entry.level !== 'warn' && entry.level !== 'error') return false;
+    if (filter === 'all') return true;
+    if (filter === 'warn') return entry.level === 'warn' || entry.level === 'error';
+    return entry.mw;   // 'mw'：仅脚本自身日志
+  }
+
+  function mwUpdateLogButton() {
+    try {
+      // 后台不写 DOM：textContent/classList 会触发样式重算，是后台 CPU 的主要来源之一。
+      // 只打标记，回前台时由 visibilitychange 监听统一补一次
+      if (document.hidden) { mwLogBtnDirty = true; return; }
+      mwLogBtnDirty = false;
+      if (!dom.btnLog) return;
+      if (mwLogUnread > 0) {
+        dom.btnLog.textContent = '日志 (' + (mwLogUnread > 99 ? '99+' : mwLogUnread) + ')';
+        dom.btnLog.classList.add('mw-btn-active');
+      } else {
+        dom.btnLog.textContent = '日志';
+        dom.btnLog.classList.remove('mw-btn-active');
+      }
+    } catch (e) {}
+  }
+
+  function mwLogRow(entry) {
+    var lvColor = { log: '#8b95a8', info: '#7dd3fc', warn: '#fbbf24', error: '#f87171' }[entry.level] || '#8b95a8';
+    var lvText = { log: 'LOG', info: 'INFO', warn: 'WARN', error: 'ERR' }[entry.level] || entry.level;
+
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;padding:2px 8px;font-size:11.5px;line-height:1.55;border-bottom:1px solid rgba(255,255,255,0.05);';
+
+    var ts = document.createElement('span');
+    ts.style.cssText = 'flex-shrink:0;color:#5b6478;font-variant-numeric:tabular-nums;';
+    ts.textContent = mwFormatTime(entry.t);
+    row.appendChild(ts);
+
+    var lv = document.createElement('span');
+    lv.style.cssText = 'flex-shrink:0;width:34px;font-weight:700;color:' + lvColor + ';';
+    lv.textContent = lvText;
+    row.appendChild(lv);
+
+    var msg = document.createElement('span');
+    msg.style.cssText = 'flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:' + (entry.mw ? '#e0e0e0' : '#9aa4b8') + ';';
+    msg.textContent = entry.text;
+    row.appendChild(msg);
+
+    return row;
+  }
+
+  function mwFormatDateTime(t) {
+    var d = new Date(t);
+    function p(n, w) { var s = '' + n; while (s.length < (w || 2)) s = '0' + s; return s; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
+           p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' + p(d.getMilliseconds(), 3);
+  }
+
+  // 导出完整日志为文本文件（含毫秒时间戳，便于分析后台挂起/超时的时间空档）
+  function mwExportLogs() {
+    var ver = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) ? GM_info.script.version : '未知';
+    var lines = [];
+    lines.push('===== 账号监控助手 运行日志导出 =====');
+    lines.push('导出时间: ' + mwFormatDateTime(Date.now()));
+    lines.push('脚本版本: ' + ver + '  (CONFIG_VERSION=' + CONFIG_VERSION + ')');
+    lines.push('页面地址: ' + window.location.href);
+    lines.push('游戏: ' + (G().name || ''));
+    lines.push('刷新间隔: ' + refreshIntervalSec + 's');
+    lines.push('日志条数: ' + mwLogs.length + ' / 上限 ' + MW_LOG_MAX);
+    lines.push('=====================================');
+    for (var i = 0; i < mwLogs.length; i++) {
+      var e = mwLogs[i];
+      lines.push(mwFormatDateTime(e.t) + ' [' + e.level.toUpperCase() + ']' + (e.noise ? '(明细)' : '') + ' ' + e.text);
+    }
+    lines.push('===== 日志结束 =====');
+
+    var text = lines.join('\n');
+    var d = new Date();
+    function p(n) { var s = '' + n; return s.length < 2 ? '0' + s : s; }
+    var name = 'mw-log-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+               p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '.txt';
+    try {
+      var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+      return name;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function mwFallbackCopy(text, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (done) done();
+    } catch (e) {}
+  }
+
+  function openLogViewer() {
+    var existing = document.getElementById('mw-log-modal');
+    if (existing) { existing.remove(); mwLogPanel = null; return; }
+
+    mwLogUnread = 0;
+    mwUpdateLogButton();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'mw-log-modal';
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:1000003;background:rgba(0,0,0,0.75);' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'Noto Sans CJK SC\',sans-serif;';
+
+    var dialog = document.createElement('div');
+    dialog.style.cssText =
+      'position:relative;width:900px;max-width:96vw;height:80vh;display:flex;flex-direction:column;' +
+      'background:#1a1a2e;color:#e0e0e0;border-radius:12px;border:1px solid #0f3460;' +
+      'box-shadow:0 20px 60px rgba(0,0,0,0.6);padding:18px 18px 14px;';
+
+    function close() {
+      overlay.remove();
+      mwLogPanel = null;
+      mwLogPanelDirty = false;
+      mwLogUnread = 0;
+      mwUpdateLogButton();
+    }
+
+    var closeBtn = document.createElement('div');
+    closeBtn.style.cssText =
+      'position:absolute;top:10px;right:14px;width:28px;height:28px;line-height:28px;' +
+      'text-align:center;font-size:18px;color:#666;cursor:pointer;border-radius:6px;z-index:10;';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.title = '关闭';
+    closeBtn.onmouseenter = function () { this.style.color = '#e94560'; this.style.background = 'rgba(233,69,96,0.1)'; };
+    closeBtn.onmouseleave = function () { this.style.color = '#666'; this.style.background = 'transparent'; };
+    closeBtn.onclick = close;
+    dialog.appendChild(closeBtn);
+
+    var title = document.createElement('h2');
+    title.style.cssText = 'font-size:17px;color:#e94560;margin:0 0 4px;';
+    title.textContent = '运行日志';
+    dialog.appendChild(title);
+
+    var subtitle = document.createElement('p');
+    subtitle.style.cssText = 'font-size:12px;color:#888;margin:0 0 10px;line-height:1.5;';
+    subtitle.textContent = '实时显示脚本运行输出。默认简化模式，仅保留扫描汇总、异常、WAF、后台挂起等关键事件；取消勾选「简化」可查看逐条明细。点「导出」可下载完整日志文件。最多保留最近 ' + MW_LOG_MAX + ' 条。';
+    dialog.appendChild(subtitle);
+
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;';
+
+    var filterSel = document.createElement('select');
+    filterSel.style.cssText = 'padding:4px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;';
+    [['mw', '仅监控日志'], ['all', '全部输出'], ['warn', '警告与错误']].forEach(function (opt) {
+      var o = document.createElement('option');
+      o.value = opt[0];
+      o.textContent = opt[1];
+      filterSel.appendChild(o);
+    });
+    bar.appendChild(filterSel);
+
+    var autoWrap = document.createElement('label');
+    autoWrap.style.cssText = 'font-size:12px;color:#aaa;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;';
+    var autoChk = document.createElement('input');
+    autoChk.type = 'checkbox';
+    autoChk.checked = true;
+    autoWrap.appendChild(autoChk);
+    autoWrap.appendChild(document.createTextNode('自动滚动'));
+    bar.appendChild(autoWrap);
+
+    var simpleWrap = document.createElement('label');
+    simpleWrap.style.cssText = 'font-size:12px;color:#aaa;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;';
+    var simpleChk = document.createElement('input');
+    simpleChk.type = 'checkbox';
+    simpleChk.checked = mwLogSimple;
+    simpleWrap.appendChild(simpleChk);
+    simpleWrap.appendChild(document.createTextNode('简化（仅关键事件）'));
+    bar.appendChild(simpleWrap);
+
+    var countEl = document.createElement('span');
+    countEl.style.cssText = 'font-size:11px;color:#666;';
+    bar.appendChild(countEl);
+
+    function mkBtn(text, tip) {
+      var b = document.createElement('button');
+      b.textContent = text;
+      b.title = tip || '';
+      b.style.cssText = 'padding:4px 12px;border:1px solid #2a2a4a;border-radius:6px;background:#1a1a2e;color:#cfd6e4;font-size:12px;cursor:pointer;';
+      return b;
+    }
+    var spacer = document.createElement('span');
+    spacer.style.cssText = 'margin-left:auto;';
+    var copyBtn = mkBtn('复制', '复制当前显示的日志到剪贴板');
+    var exportBtn = mkBtn('导出', '导出完整日志为 txt 文件（含毫秒时间戳），可直接发给开发者分析');
+    var clearBtn = mkBtn('清空');
+    bar.appendChild(spacer);
+    bar.appendChild(copyBtn);
+    bar.appendChild(exportBtn);
+    bar.appendChild(clearBtn);
+    dialog.appendChild(bar);
+
+    var listEl = document.createElement('div');
+    listEl.style.cssText = 'flex:1;min-height:0;overflow-y:auto;background:#0f1626;border:1px solid #0f3460;' +
+      'border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
+    dialog.appendChild(listEl);
+
+    var filter = 'mw';
+    filterSel.value = filter;
+
+    function updateCount() {
+      countEl.textContent = '显示 ' + listEl.childElementCount + ' / 缓存 ' + mwLogs.length + ' 条';
+    }
+
+    function renderAll() {
+      listEl.innerHTML = '';
+      for (var i = 0; i < mwLogs.length; i++) {
+        if (!mwLogMatches(mwLogs[i], filter)) continue;
+        listEl.appendChild(mwLogRow(mwLogs[i]));
+      }
+      updateCount();
+      listEl.scrollTop = listEl.scrollHeight;
+    }
+
+    mwLogPanel = {
+      onNew: function (entry) {
+        // 后台不追加 DOM：创建节点 + 读 scrollHeight 会触发样式/布局计算。
+        // 只打标记，回前台时由 rerender 一次性重绘
+        if (document.hidden) { mwLogPanelDirty = true; return; }
+        if (!mwLogMatches(entry, filter)) { updateCount(); return; }
+        var atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 24;
+        listEl.appendChild(mwLogRow(entry));
+        while (listEl.childElementCount > MW_LOG_MAX) listEl.removeChild(listEl.firstChild);
+        updateCount();
+        if (autoChk.checked && atBottom) listEl.scrollTop = listEl.scrollHeight;
+      },
+      rerender: function () { mwLogPanelDirty = false; renderAll(); }
+    };
+
+    filterSel.onchange = function () { filter = filterSel.value; renderAll(); };
+    autoChk.onchange = function () { if (autoChk.checked) listEl.scrollTop = listEl.scrollHeight; };
+    simpleChk.onchange = function () { mwLogSimple = simpleChk.checked; renderAll(); };
+    exportBtn.onclick = function () {
+      var name = mwExportLogs();
+      exportBtn.textContent = name ? '已导出' : '导出失败';
+      setTimeout(function () { exportBtn.textContent = '导出'; }, 1500);
+    };
+    clearBtn.onclick = function () {
+      mwLogs.length = 0;
+      listEl.innerHTML = '';
+      updateCount();
+    };
+    copyBtn.onclick = function () {
+      var text = mwLogs.filter(function (e) { return mwLogMatches(e, filter); })
+        .map(function (e) { return mwFormatTime(e.t) + ' [' + e.level.toUpperCase() + '] ' + e.text; })
+        .join('\n');
+      var done = function () {
+        copyBtn.textContent = '已复制';
+        setTimeout(function () { copyBtn.textContent = '复制'; }, 1200);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { mwFallbackCopy(text, done); });
+      } else {
+        mwFallbackCopy(text, done);
+      }
+    };
+
+    overlay.appendChild(dialog);
+    overlay.onclick = function (e) { if (e.target === overlay) close(); };
+    document.body.appendChild(overlay);
+
+    renderAll();
   }
 
   // ============================================================
@@ -13424,6 +13976,7 @@ function openSettings() {
       kjsEnabled: kjsEnabled != null ? kjsEnabled : true,
       qyEnabled: qyEnabled != null ? qyEnabled : true,
       ysyEnabled: ysyEnabled != null ? ysyEnabled : false,
+      platformIntervals: platformIntervals,
       // 角色通知规则
       charNotifyRules: charNotifyRules || [],
     };
@@ -13499,6 +14052,7 @@ function openSettings() {
             if (remote.kjsEnabled != null) kjsEnabled = remote.kjsEnabled;
             if (remote.qyEnabled != null) qyEnabled = remote.qyEnabled;
             if (remote.ysyEnabled != null) ysyEnabled = remote.ysyEnabled;
+            applyPlatformIntervals(remote.platformIntervals);
             // 角色通知规则
             if (Array.isArray(remote.charNotifyRules)) charNotifyRules = remote.charNotifyRules;
             saveState();
@@ -13789,8 +14343,6 @@ function openSettings() {
   // ============================================================
 
   var backupRunning = false;
-  var lastBackupTime = 0;                          // 上次云端备份成功时间戳
-  var BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;    // 自动备份间隔：24小时
   var BACKUP_MAX_BYTES = 3 * 1024 * 1024;          // 上传体积上限（低于服务器4MB限制）
 
   function cloudBackupPassword() {
@@ -13806,13 +14358,13 @@ function openSettings() {
   }
 
   /**
-   * 备份监控列表到云端（自动备份 silent=true 不弹窗）
+   * 备份监控列表到云端（纯手动，仅由「云端备份」按钮触发）
    */
-  function backupTableToCloud(silent) {
-    if (backupRunning) { if (!silent) alert('正在备份中，请稍候...'); return; }
-    if (tableData.length === 0) { if (!silent) alert('表格暂无数据，无需备份'); return; }
+  function backupTableToCloud() {
+    if (backupRunning) { alert('正在备份中，请稍候...'); return; }
+    if (tableData.length === 0) { alert('表格暂无数据，无需备份'); return; }
     var password = cloudBackupPassword();
-    if (!password) { if (!silent) alert('请先在通知设置中填写云端同步密码（管理后台密码）'); return; }
+    if (!password) { alert('请先在通知设置中填写云端同步密码（管理后台密码）'); return; }
 
     // 精简行数据（估值/解析缓存可由 showTitle 重算，不参与备份）
     var rows = tableData.map(slimRow);
@@ -13844,23 +14396,21 @@ function openSettings() {
         try {
           var json = JSON.parse(resp.responseText);
           if (json.success) {
-            lastBackupTime = Date.now();
-            saveStorage(STORAGE_KEYS.backup, lastBackupTime, true);
             console.log('[鸣潮监控] 云端备份成功: ' + json.rowCount + '条 (' + G().name + ')');
-            if (!silent) alert('云端备份成功：' + json.rowCount + ' 条记录（游戏：' + G().name + '）');
+            alert('云端备份成功：' + json.rowCount + ' 条记录（游戏：' + G().name + '）');
           } else {
             console.error('[鸣潮监控] 云端备份失败:', json.error);
-            if (!silent) alert('云端备份失败: ' + (json.error || '未知错误'));
+            alert('云端备份失败: ' + (json.error || '未知错误'));
           }
         } catch (e) {
           console.error('[鸣潮监控] 云端备份响应解析失败');
-          if (!silent) alert('云端备份失败: 服务器响应异常');
+          alert('云端备份失败: 服务器响应异常');
         }
       },
       onerror: function () {
         backupRunning = false;
         console.error('[鸣潮监控] 云端备份网络错误');
-        if (!silent) alert('云端备份失败: 网络错误');
+        alert('云端备份失败: 网络错误');
       },
     });
   }
@@ -13951,18 +14501,6 @@ function openSettings() {
       },
       onerror: function () {},
     });
-  }
-
-  /**
-   * 自动云端备份：距上次备份超过24小时且有密码时静默备份
-   */
-  function checkAutoBackup() {
-    if (!cloudBackupPassword()) return;
-    if (tableData.length === 0) return;
-    if (backupRunning) return;
-    if (Date.now() - lastBackupTime < BACKUP_INTERVAL_MS) return;
-    console.log('[鸣潮监控] 距上次云端备份已超过24小时，开始自动备份...');
-    backupTableToCloud(true);
   }
 
   /**
@@ -14230,6 +14768,7 @@ function openSettings() {
       kjsEnabled: kjsEnabled,
       qyEnabled: qyEnabled,
       ysyEnabled: ysyEnabled,
+      platformIntervals: platformIntervals,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -14245,6 +14784,17 @@ function openSettings() {
     saveState();
     updateStatusText();
 
+    // 阻止后台标签页被节能模式冻结（否则定时器/事件/Promise 全部挂起）
+    holdKeepAliveLock();
+
+    // Web Lock 挡不住 macOS App Nap / 系统休眠，再叠一层"正在播放音频"豁免。
+    // 注意：Chrome 只在标签页出现喇叭图标时才认"正在播放音频"，
+    // 静默音频流不给豁免，所以增益不能压得太低（见 startKeepAliveAudio 注释）
+    startKeepAliveAudio();
+
+    // 兜底：定时器若被系统挂起后丢失，看门狗负责把刷新拉回来
+    startWatchdog();
+
     // 立即开始第一次刷新（通过monitorTick统一管理refreshInProgress）
     nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
     monitorTick();
@@ -14258,10 +14808,10 @@ function openSettings() {
    */
   function stopMonitor() {
     monitorRunning = false;
-    if (monitorTimeout) {
-      clearTimeout(monitorTimeout);
-      monitorTimeout = null;
-    }
+    stopKeepAliveAudio();
+    stopWatchdog();
+    bgClearTimeout(monitorTimeout);
+    monitorTimeout = null;
     if (countdownTimer) {
       clearInterval(countdownTimer);
       countdownTimer = null;
@@ -14274,49 +14824,176 @@ function openSettings() {
 
   let refreshInProgress = false;
 
-  // ── 后台刷新加固 ─────────────────────────────────────────────
-  // 浏览器会对隐藏标签页做省电限制，导致"只有切回监控页才拿到新数据"：
-  //  ① 密集节流（Chrome 88+）：页面隐藏>5分钟、页面静音、无 WebRTC、且"链式定时器"
+  // ── 后台加固（定时器节流 + 标签页冻结）─────────────────────────
+  // 隐藏标签页会被浏览器省电限制，导致"只有切回监控页才拿到新数据"：
+  //  ① 密集节流（Chrome 88+）：页面隐藏>5分钟、静音≥30秒、无 WebRTC、且"链式定时器"
   //     计数≥5 时，定时器最慢降到每分钟才执行一次；
-  //  ② 冻结（Chrome 133+ 节能模式）：后台标签页若 CPU 占用高会被直接冻结，
+  //  ② 冻结（Chrome 133+ 节能模式）：后台标签页 CPU 超阈值会被直接冻结，
   //     定时器/事件/Promise 回调全部挂起，切回标签页才恢复。
-  // 对策：① 用 MessageChannel 把定时器放到"消息任务"（非定时器任务）里创建，
-  //       链式计数恒为 1，后台只受"每秒一次"的普通节流影响，仍按设定间隔刷新；
-  //       ② 持有 Web Lock，节能模式下持有 Web Lock 的页面不会被冻结。
-  let pendingTickDelay = 0;
-  let tickPort2 = null;
-  (function initTickChannel() {
-    if (typeof MessageChannel === 'undefined') return;
-    try {
-      const ch = new MessageChannel();
-      tickPort2 = ch.port2;
-      ch.port1.onmessage = function (ev) {
-        if (!monitorRunning) return;
-        if (ev.data === 'fire') { monitorTick(); return; }
-        // 在"消息任务"里创建延时定时器，链式计数恒为 1
-        const d = pendingTickDelay;
-        pendingTickDelay = 0;
-        if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
-        monitorTimeout = setTimeout(function () { tickPort2.postMessage('fire'); }, d);
-      };
-    } catch (e) { tickPort2 = null; }
-  })();
+  // 对策：
+  //  ① 保活音频（"正在播放音频"是官方唯一明确豁免密集节流 + 节能冻结的机制）；
+  //  ② 持有 Web Lock：浏览器不会冻结持有 Web Lock 的页面；
+  //  ③ 看门狗：定时器若真的丢了，20 秒内把刷新拉回来。
+  //
+  // 历史：3.48.0 曾用 MessageChannel 把 setTimeout 的"创建"动作挪进"消息任务"来绕开密集节流。
+  // 但 MessageChannel 在页面被系统挂起/恢复后可能不再派发消息，定时器就此彻底丢失——
+  // 表现为锁屏后一行日志都没有、解锁后也永远不恢复，比"被节流到每分钟一次"更糟。
+  // 既然保活音频已经能豁免密集节流（官方唯一明确豁免项），这里退回裸 setTimeout：
+  // 行为与 3.30 之前一致，且不引入任何额外失效点。
+  const bgTimers = new Map();   // id -> 真实定时器句柄（用于取消）
+  let bgSeq = 0;
 
-  function scheduleNextTick(delayMs) {
-    if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
-    if (!tickPort2) { monitorTimeout = setTimeout(monitorTick, delayMs); return; }
-    pendingTickDelay = delayMs;
-    tickPort2.postMessage('schedule');
+  // 后台安全的 setTimeout：返回 id（用 bgClearTimeout 取消）
+  function bgSetTimeout(fn, delay) {
+    const id = ++bgSeq;
+    bgTimers.set(id, setTimeout(function () { bgTimers.delete(id); fn(); }, delay));
+    return id;
   }
 
+  function bgClearTimeout(id) {
+    if (id == null) return;
+    const t = bgTimers.get(id);
+    if (t) { clearTimeout(t); bgTimers.delete(id); }
+  }
+
+  let expectedTickAt = 0;
+  function scheduleNextTick(delayMs) {
+    bgClearTimeout(monitorTimeout);
+    expectedTickAt = Date.now() + delayMs;
+    monitorTimeout = bgSetTimeout(function () {
+      monitorTimeout = null;
+      // 明显晚于计划时间 → 标签页被浏览器冻结/休眠，或系统睡眠（脚本无法执行，只能记录）
+      const late = Date.now() - expectedTickAt;
+      if (late > Math.max(5000, delayMs)) {
+        console.warn('[鸣潮监控] 后台挂起：本次刷新比计划晚 ' + Math.round(late / 1000) + ' 秒（浏览器冻结标签页 / 系统休眠 / App Nap；若同时有 freeze-resume 记录则为浏览器冻结）');
+      }
+      monitorTick();
+    }, delayMs);
+  }
+
+  // ── 看门狗 ────────────────────────────────────────────────────
+  // 兜底自愈：锁屏/系统休眠/浏览器挂起后，定时器有可能直接丢失（到期也不再触发）。
+  // 用一个独立于所有自定义调度的裸 setInterval 定期核对，停摆就强制补跑一轮。
+  // 它自己也可能被节流，但节流只是让检查变慢，不会让它永久失效。
+  let watchdogTimer = null;
+  const WATCHDOG_INTERVAL_MS = 20 * 1000;   // 每 20 秒核对一次
+  const WATCHDOG_STALL_MS = 90 * 1000;      // 超过计划时间 90 秒仍未刷新 → 判定停摆
+
+  function startWatchdog() {
+    if (watchdogTimer) return;
+    watchdogTimer = setInterval(function () {
+      if (!monitorRunning || refreshInProgress) return;
+      if (!expectedTickAt) return;
+      const overdue = Date.now() - expectedTickAt;
+      if (overdue < WATCHDOG_STALL_MS) return;
+      console.warn('[鸣潮监控] 看门狗：刷新已停摆 ' + Math.round(overdue / 1000) + ' 秒（定时器丢失），强制补跑一轮');
+      bgClearTimeout(monitorTimeout);
+      monitorTimeout = null;
+      monitorTick();
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  function stopWatchdog() {
+    if (!watchdogTimer) return;
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
+  }
+
+  // 页面重新可见（解锁屏幕 / 切回标签页）：立即恢复保活音频，并补跑已过期的刷新。
+  // 系统休眠期间不会有任何事件，这一处是解锁后最快恢复的入口。
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
+      keepAliveAudioCtx.resume().catch(function () {});
+    }
+    if (!monitorRunning || refreshInProgress) return;
+    if (!expectedTickAt) return;
+    const overdue = Date.now() - expectedTickAt;
+    if (overdue < 3000) return;
+    console.log('[鸣潮监控] 页面恢复可见，刷新已过期 ' + Math.round(overdue / 1000) + ' 秒，立即补跑');
+    bgClearTimeout(monitorTimeout);
+    monitorTimeout = null;
+    monitorTick();
+  });
+
   // 持有 Web Lock，避免页面被节能模式冻结（名称带随机后缀，避免同站多标签页互相排队）
+  let keepAliveLockHeld = false;
   function holdKeepAliveLock() {
+    if (keepAliveLockHeld) return;
     try {
       if (!navigator || !navigator.locks || !navigator.locks.request) return;
+      keepAliveLockHeld = true;
       navigator.locks.request('mw-monitor-keepalive-' + Math.random().toString(36).slice(2), function () {
         return new Promise(function () {}); // 永不 resolve → 锁一直持有
       });
-    } catch (e) {}
+      console.log('[鸣潮监控] 已持有 Web Lock，后台标签页不会被节能模式冻结');
+    } catch (e) { keepAliveLockHeld = false; }
+  }
+
+  // ── 静音保活音频 ──────────────────────────────────────────────
+  // Web Lock 只能挡住 Chrome 自带的节能模式冻结，挡不住 macOS App Nap / 系统休眠
+  // （实测日志里出现过定时器晚 460 秒才触发，整轮 478s 只有 16s 在执行）。
+  // 官方唯一明确豁免"节能模式停用 + 密集节流"的机制是「正在播放音频」，
+  // macOS 也不会 App Nap 正在出声的进程，因此用一个听不见的振荡器维持播放状态。
+  let keepAliveAudioCtx = null;
+  let keepAliveGestureBound = false;
+
+  function startKeepAliveAudio() {
+    if (!keepAliveAudioCtx) {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 32;   // 次低频：笔记本扬声器基本放不出，耳机也几乎听不到
+        // 增益不能太小：Chrome 判定"正在播放音频"要求标签页出现喇叭图标，
+        // 静默音频流不给豁免（0.0015 这种量级会被当成静默）。0.02 ≈ -34dBFS，
+        // 足够被判定为有声，同时 32Hz 在人耳几乎听不出
+        gain.gain.value = 0.02;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        keepAliveAudioCtx = ctx;
+      } catch (e) {
+        console.error('[鸣潮监控] 保活音频启动失败:', e);
+        keepAliveAudioCtx = null;
+        return;
+      }
+    }
+    // 自动启动（非用户手势）时 AudioContext 处于 suspended，需等首次交互才能恢复播放
+    if (keepAliveAudioCtx.state === 'suspended') {
+      keepAliveAudioCtx.resume().then(function () {
+        if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'running') {
+          console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标签页标题旁出现喇叭图标即生效）');
+        }
+      }).catch(function () {});
+    } else {
+      console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标签页标题旁出现喇叭图标即生效）');
+    }
+    bindKeepAliveResumeOnGesture();
+  }
+
+  // 首次用户交互时恢复保活音频（绕过自动播放限制）
+  function bindKeepAliveResumeOnGesture() {
+    if (keepAliveGestureBound) return;
+    keepAliveGestureBound = true;
+    const resume = function () {
+      if (monitorRunning && keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
+        keepAliveAudioCtx.resume().catch(function () {});
+      }
+    };
+    ['click', 'keydown', 'pointerdown', 'touchstart'].forEach(function (ev) {
+      document.addEventListener(ev, resume, { passive: true });
+    });
+  }
+
+  function stopKeepAliveAudio() {
+    if (!keepAliveAudioCtx) return;
+    try { keepAliveAudioCtx.close(); } catch (e) {}
+    keepAliveAudioCtx = null;
+    console.log('[鸣潮监控] 已停止保活音频');
   }
 
   /**
@@ -14326,11 +15003,17 @@ function openSettings() {
     if (!monitorRunning) return;
     if (!refreshInProgress) {
       refreshInProgress = true;
+      // 保活音频若被系统挂起（如 macOS 失焦），每轮尝试恢复，维持后台不被冻结
+      if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
+        keepAliveAudioCtx.resume().catch(function () {});
+      }
+      const tickStartAt = Date.now();
       doRefresh().finally(() => {
         refreshInProgress = false;
-        // 刷新完成后才设置下次倒计时，避免API耗时导致倒计时卡在0
-        nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
-        scheduleNextTick(refreshIntervalSec * 1000);
+        // 按"轮次起点 + 间隔"对齐：单轮耗时不再累加进周期，快轮时才能真正做到每 N 秒调用一次
+        const wait = Math.max(1000, tickStartAt + refreshIntervalSec * 1000 - Date.now());
+        nextRefreshTime = Date.now() + wait;
+        scheduleNextTick(wait);
       });
     } else {
       // 刷新仍在进行，2秒后重试
@@ -14554,10 +15237,12 @@ function openSettings() {
   /**
    * 执行刷新：各平台并行扫描（总耗时取各平台最大值，而非累加）
    * 详情抓取（盼之/7881）已转为后台异步，不再阻塞刷新完成
+   * @param {boolean} force 手动刷新时传 true，忽略各平台间隔，强制全部扫描
    */
-  async function doRefresh() {
+  async function doRefresh(force) {
     lastRefreshTime = Date.now();
     refreshErrors = [];
+    const refreshStartTs = Date.now();
 
     // 刷新按钮反馈：禁用并显示进度，避免重复点击
     const refreshBtn = dom.btnRefresh;
@@ -14568,14 +15253,17 @@ function openSettings() {
     }
 
     try {
+      const nowTs = Date.now();
+      // 各平台按自己的间隔决定本轮是否扫描：螃蟹网每轮都扫，其余到点才扫
+      const due = (key) => force || (nowTs - lastPlatformScan[key] >= platformIntervals[key] * 1000);
+      const tasks = [scanPXB7()];
+      lastPlatformScan.pxb7 = nowTs;
+      if (pzdsEnabled && due('pzds')) { lastPlatformScan.pzds = nowTs; tasks.push(scanPZDS()); }
+      if (kjsEnabled && due('kjs')) { lastPlatformScan.kjs = nowTs; tasks.push(scanKJS()); }
+      if (qyEnabled && due('qy')) { lastPlatformScan.qy = nowTs; tasks.push(scanQY()); }
+      if (ysyEnabled && G().platformIds.ysy > 0 && due('ysy')) { lastPlatformScan.ysy = nowTs; tasks.push(scanYSY()); }
       // 各平台内部独立 try-catch 收集错误，互不影响
-      await Promise.all([
-        scanPXB7(),
-        pzdsEnabled ? scanPZDS() : null,
-        kjsEnabled ? scanKJS() : null,
-        qyEnabled ? scanQY() : null,
-        (ysyEnabled && G().platformIds.ysy > 0) ? scanYSY() : null,
-      ].filter(Boolean));
+      await Promise.all(tasks);
       lastRefreshError = refreshErrors.length ? refreshErrors.join('；') : '';
     } finally {
       if (refreshBtn) {
@@ -14583,6 +15271,15 @@ function openSettings() {
         refreshBtn.textContent = btnOldText;
       }
       updateBottomBar();
+      // 每轮刷新一条汇总，便于通过日志判断"某段时间是否真的没刷新"
+      const cost = ((Date.now() - refreshStartTs) / 1000).toFixed(1);
+      // 保活音频状态：若显示"被挂起"，说明浏览器/系统把页面冻结了，可据此判断刷新空档成因
+      const kaState = keepAliveAudioCtx
+        ? (keepAliveAudioCtx.state === 'running' ? '保活中' : '音频被挂起')
+        : '保活未启用';
+      console.log('[鸣潮监控] 本轮刷新完成 · 耗时' + cost + 's · 表格' + tableData.length + '行 · ' + kaState +
+        (lastRefreshError ? ' · 异常: ' + lastRefreshError : ''));
+      saveRejectedIfDirty();
     }
   }
 
@@ -14602,6 +15299,15 @@ function openSettings() {
    * 初始化
    */
   function init() {
+    // 被浏览器"内存节省"重新加载的页面（wasDiscarded）：说明标签页被整体丢弃过，
+    // 与"冻结"不同——冻结会保留内存，丢弃会重新加载，两者都会导致刷新空档
+    if (document.wasDiscarded) {
+      console.warn('[鸣潮监控] 本次页面是浏览器丢弃标签页后重新加载的（wasDiscarded）');
+    }
+    // 启动标记：页面一旦被丢弃重载，内存里的日志会清空，这条是新会话的第一条记录
+    console.log('[鸣潮监控] 脚本已加载 v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) ? GM_info.script.version : '?') +
+      (document.wasDiscarded ? '（页面被浏览器丢弃后重新加载）' : '') +
+      '，可见性=' + (document.hidden ? 'hidden' : 'visible'));
     // 加载存储数据
     tableData = loadStorage(STORAGE_KEYS.table, []);
     // 历史数据可能因旧版"无上限模式"累积过大，启动时先裁剪，避免逐行迁移时内存爆炸/卡死
@@ -14626,6 +15332,8 @@ function openSettings() {
     notifiedIds = loadStorage(STORAGE_KEYS.notified, []);
     deletedProductIds = loadStorage(STORAGE_KEYS.deleted, []);
     deletedIdSet = new Set(deletedProductIds);
+    rejectedList = loadStorage(STORAGE_KEYS.rejected, []);
+    rejectedMap = new Map(rejectedList.map(e => [e.id, e]));
 
     // 迁移：修复旧版截断的 showTitle（旧版 slimRow/ultraSlimRow 在存储压力下截断为500字符，
     // 导致武器列表尾部丢失、专武识别不全）。特征：showTitle 长度恰好为500。
@@ -14669,6 +15377,7 @@ function openSettings() {
     kjsEnabled = savedState.kjsEnabled != null ? savedState.kjsEnabled : false;
     qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
       ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
+    applyPlatformIntervals(savedState.platformIntervals);
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
     // 加载推送配置
     if (savedState.pushConfig) {
@@ -14710,11 +15419,7 @@ function openSettings() {
     updateStatusText();
     updateBottomBar();
 
-    // 云端备份：加载上次备份时间，启动自动备份定时器（每30分钟检查一次，24小时未备份则触发）
-    lastBackupTime = loadStorage(STORAGE_KEYS.backup, 0) || 0;
-    setInterval(checkAutoBackup, 30 * 60 * 1000);
-    setTimeout(checkAutoBackup, 60 * 1000);
-
+    // 云端备份为纯手动：仅在用户点击「云端备份」按钮时上传，不做任何定时自动备份
     // 本地列表为空时静默检查云端备份（脚本重装/换浏览器丢失数据的恢复入口）
     checkCloudRestoreOnStartup();
 
