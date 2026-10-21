@@ -318,6 +318,23 @@ function getPlatformPage() {
     .cover-badge.available .pulse-dot { background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.8); }
     .cover-badge.beta { color: var(--zzz); border: 1px solid rgba(255, 184, 77, 0.4); }
     .cover-badge.beta .pulse-dot { background: var(--zzz); box-shadow: 0 0 8px rgba(255,184,77,0.8); }
+    .cover-badge.offline { color: #9aa0aa; border: 1px solid rgba(154, 160, 170, 0.3); }
+    .cover-badge.offline .pulse-dot { background: #9aa0aa; box-shadow: none; animation: none; }
+
+    /* 暂时关闭的入口：不可点击，整体压暗 */
+    .game-card.is-disabled {
+      cursor: not-allowed;
+      filter: grayscale(0.9) brightness(0.55);
+    }
+    .game-card.is-disabled:hover {
+      transform: none;
+      border-color: var(--line);
+      box-shadow: none;
+    }
+    .game-card.is-disabled:hover .cover-img { transform: scale(1.02); }
+    .game-card.is-disabled:hover .cover-tint { opacity: 1; }
+    .game-card.is-disabled:hover .hud-corner { opacity: 0.45; transform: translate(6px, 6px); }
+    .game-card.is-disabled .enter-row { color: #8b8b96; }
 
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
@@ -647,23 +664,23 @@ function getPlatformPage() {
         </div>
       </a>
 
-      <!-- 绝区零 -->
-      <a class="game-card zzz rise d3" href="/zzz">
+      <!-- 绝区零：入口暂时关闭（不可点击）。恢复时改回 a 标签指向 /zzz，并删掉 is-disabled 类 -->
+      <div class="game-card zzz is-disabled rise d3" aria-disabled="true" title="绝区零估价暂时关闭">
         <img class="cover-img" src="/public/covers/zzz-cover.jpg" alt="绝区零" loading="eager">
         <div class="cover-tint"></div>
         <div class="cover-shade"></div>
         <div class="hud-corner tl"></div>
         <div class="hud-corner br"></div>
-        <span class="cover-badge beta"><span class="pulse-dot"></span>BE TA 测 试</span>
+        <span class="cover-badge offline"><span class="pulse-dot"></span>暂 停 开 放</span>
         <div class="card-info">
           <div class="game-title-row">
             <div class="game-title">绝区零</div>
             <div class="game-sub">ZENLESS ZONE ZERO</div>
           </div>
           <div class="game-desc">代理人价值评估 · 音擎影画定价 · 定价数据持续完善</div>
-          <div class="enter-row">进入估价 <span class="enter-arrow">&#10142;</span></div>
+          <div class="enter-row">暂未开放</div>
         </div>
-      </a>
+      </div>
     </div>
 
     <!-- 即将上线 -->

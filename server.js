@@ -1500,6 +1500,13 @@ app.get('/wuwa', async (req, res) => {
 
 // 鸣潮 - 角色资讯、买卖攻略已改为站内弹窗，不再提供独立页面
 
+// 绝区零入口暂时关闭：直接访问 /zzz 也重定向回首页。
+// 恢复时删掉这段重定向、恢复下面的原路由实现即可。
+app.get('/zzz', (req, res) => {
+  res.redirect(302, '/');
+});
+
+/*
 app.get('/zzz', async (req, res) => {
   const engine = getEngine('zzz');
   const defaults = engine.getDefaults();
@@ -1513,6 +1520,7 @@ app.get('/zzz', async (req, res) => {
   };
   res.send(getZZZPage({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, serverOverrides }));
 });
+*/
 
 // 从默认配置构建精简角色列表（前端可视化编辑器用）
 function buildCharList(defaults) {
