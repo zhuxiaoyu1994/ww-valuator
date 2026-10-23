@@ -197,14 +197,17 @@ async function checkRateLimit(clientIp, opts) {
   const minuteKey = keyPrefix + '1m:' + getMinuteKey(now);
   const fiveMinKey = keyPrefix + '5m:' + get5MinKey(now);
 
-  // 尝试使用数据库计数（准确，支持跨实例）
-  const count1min = await db.incrementRateCounter(clientIp, minuteKey);
+  // 尝试使用数据库计数（准确，支持跨实例）；两个窗口并行查询，避免串行等待拖长响应
+  const counterResults = await Promise.all([
+    db.incrementRateCounter(clientIp, minuteKey),
+    enableAutoBan ? db.incrementRateCounter(clientIp, fiveMinKey) : Promise.resolve(0),
+  ]);
+  const count1min = counterResults[0];
   if (count1min !== null) {
     // 数据库模式
-    let count5min = 0;
+    let count5min = counterResults[1] || 0;
     let autoBanned = false;
     if (enableAutoBan) {
-      count5min = await db.incrementRateCounter(clientIp, fiveMinKey);
 
       // 定期清理过期计数（每 100 次清理一次）
       if (!checkRateLimit._cleanupCounter) checkRateLimit._cleanupCounter = 0;
@@ -406,6 +409,10 @@ app.use(async (req, res, next) => {
   const isRateLimitedApi = req.path === '/api/x9k2-find' || req.path === '/api/x9k2-eval' || req.path === '/api/config/default' || isPageEval;
   const isParseOnly = req.path === '/api/x9k2-eval' && req.body && req.body.parseOnly === true;
   if (isRateLimitedApi) {
+    // 估价请求：配置读取与限流计数并行，避免两段数据库等待串行累加
+    if (req.path === '/api/x9k2-eval' && req.method === 'POST' && req.body && !req.body.parseOnly && !req.body.customWeights) {
+      req._configPromise = getEffectiveConfig(req.body.game || 'wuwa');
+    }
     const result = isParseOnly
       ? await checkRateLimit(clientIp, { perMinute: PARSE_ONLY_PER_MINUTE, keyPrefix: 'parse:', autoBan: false })
       : (isPageEval
@@ -484,7 +491,7 @@ app.post('/api/x9k2-eval', async (req, res) => {
   // parseOnly 只做解析、不估价，跳过数据库读取以保持轻量
   let effectiveWeights = customWeights || null;
   if (!effectiveWeights && !parseOnly) {
-    effectiveWeights = await getEffectiveConfig(game);
+    effectiveWeights = req._configPromise ? await req._configPromise : await getEffectiveConfig(game);
   }
   const result = engine.evaluateWithPrice(showTitle, priceInCents || 0, effectiveWeights);
 

@@ -14,6 +14,25 @@
 
 let dbClient = null;
 
+// 单次数据库请求超时（毫秒）。Turso 偶发卡顿时若不设上限，整个 Serverless 函数会被拖到超时
+const DB_QUERY_TIMEOUT_MS = 6000;
+
+function withDbTimeout(promise, label) {
+  let timer = null;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('数据库请求超时(' + label + ', ' + DB_QUERY_TIMEOUT_MS + 'ms)')), DB_QUERY_TIMEOUT_MS);
+  });
+  return Promise.race([promise, guard]).finally(() => { if (timer) clearTimeout(timer); });
+}
+
+// 统一包装客户端，所有 execute/batch 调用都带超时保护
+function wrapClient(client) {
+  return {
+    execute: function (stmt) { return withDbTimeout(client.execute(stmt), 'execute'); },
+    batch: function (stmts) { return withDbTimeout(client.batch(stmts), 'batch'); },
+  };
+}
+
 // 成交记录保留天数（按入库时间计算，超期自动清理）
 const DEALS_RETENTION_DAYS = 7;
 
@@ -41,7 +60,7 @@ function initDb() {
 
   try {
     const { createClient } = require('@libsql/client');
-    dbClient = createClient({ url, authToken: token });
+    dbClient = wrapClient(createClient({ url, authToken: token }));
     console.log('[DB] Turso数据库已连接');
     return dbClient;
   } catch (e) {

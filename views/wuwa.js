@@ -3942,11 +3942,7 @@ function getPageHTML(options) {
 
             if (showTitle) {
               // 客户端拿到数据了，调粘贴估价接口
-              const resp = await fetch('/api/x9k2-eval', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ showTitle, priceInCents, customWeights, game: 'wuwa' }),
-              });
+              const resp = await veFetchEval({ showTitle, priceInCents, customWeights, game: 'wuwa' });
               const result = await resp.json();
               document.getElementById('status-msg').innerHTML = '';
 
@@ -4022,11 +4018,7 @@ function getPageHTML(options) {
       try {
         // 权重由服务端按数据库配置决定，前端不再下发
         const customWeights = null;
-        const resp = await fetch('/api/x9k2-eval', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: text, priceInCents: price * 100, customWeights }),
-        });
+        const resp = await veFetchEval({ showTitle: text, priceInCents: price * 100, customWeights });
         const result = await resp.json();
         document.getElementById('status-msg').innerHTML = '';
 
@@ -5353,11 +5345,7 @@ function getPageHTML(options) {
         if (charGrid) charGrid.classList.add('parsing');
         var seq = ++VE_PARSE_SEQ;
         
-        fetch('/api/x9k2-eval', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: text, priceInCents: 0, customWeights: null, game: 'wuwa', parseOnly: true })
-        }).then(function(r) { return r.json(); })
+        veFetchEval({ showTitle: text, priceInCents: 0, customWeights: null, game: 'wuwa', parseOnly: true }).then(function(r) { return r.json(); })
           .then(function(result) {
             if (seq !== VE_PARSE_SEQ) return; // 丢弃过期响应，避免覆盖最新角色列表
             if (result.success && result.data) {
@@ -5505,15 +5493,11 @@ function getPageHTML(options) {
       var price = parseFloat(priceEl.value) || 0;
 
       try {
-        const resp = await fetch('/api/x9k2-eval', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            showTitle: desc,
-            priceInCents: Math.round(price * 100),
-            customWeights: null,
-            game: 'wuwa',
-          }),
+        const resp = await veFetchEval({
+          showTitle: desc,
+          priceInCents: Math.round(price * 100),
+          customWeights: null,
+          game: 'wuwa',
         });
         const result = await resp.json();
         if (result.success) {
@@ -5531,7 +5515,7 @@ function getPageHTML(options) {
           veShowError(result.error || '估价失败');
         }
       } catch (e) {
-        veShowError('网络错误：' + e.message);
+        veShowError(veEvalErrorMessage(e));
       } finally {
         VE_EVALUATING = false;
         veSetEvalLoading(false);
@@ -5553,6 +5537,25 @@ function getPageHTML(options) {
     function veClearStatus() {
       var el = document.getElementById('status-msg');
       if (el) el.innerHTML = '';
+    }
+
+    // 估价请求统一入口：带超时，避免服务端/网络卡住时界面一直转圈
+    var VE_EVAL_TIMEOUT_MS = 20000;
+    function veFetchEval(body, timeoutMs) {
+      var ctrl = new AbortController();
+      var timer = setTimeout(function() { ctrl.abort(); }, timeoutMs || VE_EVAL_TIMEOUT_MS);
+      return fetch('/api/x9k2-eval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      }).finally(function() { clearTimeout(timer); });
+    }
+    function veEvalErrorMessage(e) {
+      if (e && (e.name === 'AbortError' || e.code === 20)) {
+        return '服务响应超时，请稍后重试';
+      }
+      return '网络错误：' + (e && e.message ? e.message : '请稍后重试');
     }
 
     // 生成描述文本（用现有接口的话直接传文本，不依赖 generateDescription 函数）
@@ -5648,11 +5651,7 @@ function getPageHTML(options) {
         modal.remove();
         veShowLoading('解析中...');
 
-        fetch('/api/x9k2-eval', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ showTitle: desc, priceInCents: 0, customWeights: null, game: 'wuwa', parseOnly: true }),
-        }).then(function(r) { return r.json(); }).then(function(result) {
+        veFetchEval({ showTitle: desc, priceInCents: 0, customWeights: null, game: 'wuwa', parseOnly: true }).then(function(r) { return r.json(); }).then(function(result) {
           if (result.success && result.data && result.data.info) {
             var info = result.data.info;
             // 回填角色
@@ -5706,7 +5705,7 @@ function getPageHTML(options) {
             veShowError('导入失败：' + (result.error || '未知错误'));
           }
         }).catch(function(e) {
-          veShowError('网络错误：' + e.message);
+          veShowError(veEvalErrorMessage(e));
         });
       }
 
