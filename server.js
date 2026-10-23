@@ -454,7 +454,12 @@ app.get('/api/defaults', async (req, res) => {
     if (serverConfig) {
       const defaults = engine.getDefaults();
       defaults.weights = Object.assign({}, defaults.weights, serverConfig);
-      const merged = Object.assign({}, defaults, serverConfig);
+      // 角色定价按 key 合并：服务器旧配置缺少新增角色时，仍保留内置默认价
+      defaults.weights.charPrices = Object.assign({}, defaults.charPrices, serverConfig.charPrices || {});
+      const merged = Object.assign({}, defaults, serverConfig, {
+        charPrices: defaults.weights.charPrices,
+        weights: defaults.weights,
+      });
       res.json({ success: true, data: merged });
     } else {
       const defaults = engine.getDefaults();

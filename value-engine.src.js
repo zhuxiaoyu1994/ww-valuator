@@ -98,6 +98,8 @@ function buildDefaultConstPrices() {
       }
       prices[c] = base + maxPrem;
     }
+    // C65 独立档位（满命+精5专武），不参与 C1-C6 递推
+    if (premiums['65'] != null) prices['65'] = base + premiums['65'];
     result[charName] = prices;
   }
   return result;
@@ -355,6 +357,22 @@ function buildDefaultWeights(customWeights) {
         isHot: ctoTier === 'S' || ctoTier === 'A' || ctoTier === 'B'
       };
     }
+  }
+  // charPrices 中只配了价格、未配级别的角色也加入查找表，否则解析时会被完全忽略
+  for (const cpName in w.charPrices) {
+    if (!Object.prototype.hasOwnProperty.call(w.charPrices, cpName)) continue;
+    if (CHAR_LOOKUP[cpName]) continue;
+    const cpTier = w.charTierOverride[cpName] || 'C';
+    const cpTierPrice = CHAR_TIERS[cpTier] ? CHAR_TIERS[cpTier].price : 0;
+    CHAR_LOOKUP[cpName] = {
+      tier: cpTier,
+      price: cpTierPrice,
+      isHot: cpTier === 'S' || cpTier === 'A' || cpTier === 'B'
+    };
+  }
+  // 查找表价格与最终定价保持一致（charPrices 优先于级别默认价），避免解析结果显示级别价
+  for (const pName in w.charPrices) {
+    if (CHAR_LOOKUP[pName]) CHAR_LOOKUP[pName].price = w.charPrices[pName];
   }
   return w;
 }

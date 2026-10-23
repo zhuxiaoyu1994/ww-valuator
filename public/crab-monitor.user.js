@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      3.60.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号
+// @version      3.62.1
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（3.34.0 抓取逻辑 + 深翻页补扫/防冻结/日志面板）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -15,6 +15,7 @@
 // @grant        GM_deleteValue
 // @grant        GM_openInTab
 // @connect      api.day.app
+// @connect      sctapi.ftqq.com
 // @connect      www.pushplus.plus
 // @connect      www.pzds.com
 // @connect      api.kejinshou.com
@@ -35,7 +36,7 @@
   // 螃蟹网有反调试（按 F12 会弹 debugger），无法打开控制台看运行日志。
   // 这里劫持 console 输出到内存环形缓冲，由面板内「日志」按钮实时查看。
   // ============================================================
-  var MW_LOG_MAX = 1500;  // 环形缓冲上限（简化模式下约覆盖 40~50 分钟，足以回看后台挂起空档）
+  var MW_LOG_MAX = 1500;  // 环形缓冲上限
   var mwLogs = [];        // { seq, t, level, text, mw, noise }
   var mwLogSeq = 0;
   var mwLogUnread = 0;    // 面板关闭期间累计的新日志条数（用于按钮角标）
@@ -57,35 +58,13 @@
     } catch (e) { return String(a); }
   }
 
-  // 逐条明细类日志（每个商品/每页一条，量大且对定位问题无价值）。
-  // 简化模式下隐藏，仅保留扫描汇总、异常、WAF、后台挂起等关键事件。
+  // 逐条明细类日志（每个商品/每页一条，量大且对定位问题无价值）。简化模式下隐藏
   var MW_LOG_NOISE = [
-    '解析到 ',            // 盼之：逐条打印商品
-    '解析到',             // 7881：逐页条数（保留"扫描完成"汇总即可）
-    '开始: ',             // processXXProduct 开始
-    '跳过自主截图商品',
-    '跳过旧商品',
-    '重新评估:',
-    '补充详情页信息:',
-    '降价:',
-    '解析结果:',
-    '等级低于70',
-    '跨平台重复',
-    '收到',               // handleXXListResponse 收到N条
-    '商品字段:',
-    '签名参数:',
-    'API请求: ',
-    '详情补充:',
-    '指纹重复更新低价',
-    '重复(指纹匹配)',
-    '  - ',               // 商品列表项
-    '秒杀价: ',           // 逐条打印秒杀折扣
-    '秒杀池新商品',
-    '秒杀标记',
-    '存储[',
-    '清理 seenIds',
-    '清理 notifiedIds',
-    '自动迁移存储到GM',
+    '解析到 ', '解析到', '开始: ', '跳过自主截图商品', '跳过旧商品', '重新评估:',
+    '补充详情页信息:', '降价:', '解析结果:', '等级低于70', '跨平台重复', '收到',
+    '商品字段:', '签名参数:', 'API请求: ', '详情补充:', '指纹重复更新低价',
+    '重复(指纹匹配)', '  - ', '秒杀价: ', '秒杀池新商品', '秒杀标记', '存储[',
+    '清理 seenIds', '清理 notifiedIds', '自动迁移存储到GM',
   ];
   function mwIsNoise(text) {
     for (var i = 0; i < MW_LOG_NOISE.length; i++) {
@@ -97,8 +76,7 @@
   function mwAppendLog(level, text, mw) {
     var entry = { seq: ++mwLogSeq, t: Date.now(), level: level, text: text, mw: mw, noise: mwIsNoise(text) };
     mwLogs.push(entry);
-    // 超上限时优先淘汰逐条明细，避免明细把关键事件挤出缓冲。
-    // 从 mwEvictCursor 处继续往后找，而不是每条新日志都从头全表扫描（突发时是纯浪费的 CPU）
+    // 超上限时优先淘汰逐条明细，避免明细把关键事件挤出缓冲
     while (mwLogs.length > MW_LOG_MAX) {
       var idx = -1;
       for (var i = mwEvictCursor; i < mwLogs.length; i++) { if (mwLogs[i].noise) { idx = i; break; } }
@@ -120,9 +98,7 @@
            text.indexOf('鸣潮监控助手') !== -1;
   }
 
-  // 只捕获脚本自身日志（含前缀的调用），页面自身输出与我们自己的逐条商品明细 dump
-  // 一律放过：格式化参数（对象要 JSON.stringify）+ 入缓冲 + 写 DOM 都是后台 CPU 开销，
-  // 而这些明细对定位问题没有价值，还会把关键事件挤出缓冲。
+  // 只捕获脚本自身日志，页面自身输出一律放过（格式化 + 入缓冲 + 写 DOM 都是后台 CPU 开销）
   (function installConsoleHook() {
     ['log', 'info', 'warn', 'error'].forEach(function (level) {
       var orig = console[level];
@@ -145,24 +121,14 @@
     });
   })();
 
-  // 回到前台时补齐后台期间攒下的 DOM 更新。
-  // 后台标签页不写 DOM 是刻意为之：写 textContent/classList、创建日志行节点、
-  // 读 scrollHeight 都会触发样式/布局计算，把后台 CPU 抬到 Chrome 节能模式
-  // 停用（冻结）的判定线以上。
+  // 回到前台时补齐后台期间攒下的 DOM 更新（后台写 DOM 会触发样式/布局计算，抬高 CPU）
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
     if (mwLogBtnDirty) mwUpdateLogButton();
     if (mwLogPanelDirty && mwLogPanel) mwLogPanel.rerender();
   });
 
-  // ============================================================
-  // 页面生命周期事件（区分"浏览器冻结标签页"与"系统休眠/App Nap"）
-  // Chrome 冻结标签页时会派发 freeze/resume 事件；系统休眠或 macOS App Nap
-  // 则是整进程被挂起，不会派发任何事件。所以：
-  //   - 空档前后有 freeze/resume 记录 → 浏览器冻结标签页
-  //   - 空档前后只有"后台挂起"告警、无 freeze/resume → 系统休眠 / App Nap
-  // 日志里出现这些行即为关键事件，简化模式下不会被过滤。
-  // ============================================================
+  // 区分"浏览器冻结标签页"与"系统休眠/App Nap"：冻结会派发 freeze/resume，系统挂起不会
   document.addEventListener('freeze', function () {
     console.warn('[鸣潮监控] 页面被浏览器冻结（freeze）：JS/定时器/网络回调全部挂起');
   });
@@ -180,7 +146,7 @@
   }
 
   // 配置版本号（递增后强制覆盖用户旧配置）
-  const CONFIG_VERSION = 37;
+  const CONFIG_VERSION = 38;
 
   // ============================================================
   // 多游戏配置（角色定价、资源关键词、平台ID均按游戏隔离）
@@ -247,6 +213,7 @@
         '达妮娅': '赝作的矮星', '菲比': '和光回唱', '绯雪': '灼霜', '琳奈': '溢彩荧辉',
         '丽贝卡': '碎骨', '陆赫斯': '白昼之脊', '秧秧玄翎': '天之苍苍', '穗穗': '栖霞饮露',
         '露西': '蜃影', '洛可可': '悲喜剧', '清宵': '云琅', '景燃': '千般渡', '心': '玉阙玄华',
+        '锁暝': '沉冥',
       },
       charAbbr: {
         '爱弥斯': '爱', '绯雪': '绯', '卡提希娅': '卡', '弗洛洛': '弗',
@@ -262,7 +229,7 @@
       charAliases: { '爱弥丝': '爱弥斯', '心月狐': '心', '清霄': '清宵' },
       fullConstWeight: { S: 1.5, A: 0.3, B: 0.2, C: 0.1, D: 0.05, E: 0 },
       defaultCharPrices: {
-        '爱弥斯': 28, '绯雪': 33, '秧秧玄翎': 28, '清宵': 28, '心': 38,
+        '爱弥斯': 28, '绯雪': 33, '秧秧玄翎': 28, '清宵': 28, '心': 38, '锁暝': 20,
         '琳奈': 15, '穗穗': 21, '莫宁': 13,
         '弗洛洛': 22, '卡提希娅': 23, '西格莉卡': 18, '景燃': 18,
         '达妮娅': 13, '夏空': 13, '陆赫斯': 23, '洛瑟菈': 15,
@@ -348,6 +315,8 @@
         '仇远': ['嘉贝莉娜', '弗洛洛'],
         '景燃': ['尤诺'],
         '露西': ['丽贝卡'],
+        '心': ['锁暝'],
+        '锁暝': ['心'],
       },
       defaultTeams: [
         { name: '日月守', members: ['奥古斯塔', '尤诺', '守岸人'], multiplier: 1.1 },
@@ -367,6 +336,7 @@
         { name: '椿洛守', members: ['椿', '洛可可', '守岸人'], multiplier: 1.05 },
         { name: '柯折守', members: ['珂莱塔', '折枝', '守岸人'], multiplier: 1.05 },
         { name: '景尤守', members: ['景燃', '尤诺', '守岸人'], multiplier: 1.2 },
+        { name: '心锁守', members: ['心', '锁暝', '守岸人'], multiplier: 1.5 },
       ],
       c6TeamDependency: {
         '卡提希娅': { teammate: '夏空', weightTier: 'A', valueDiscount: 0.7 },
@@ -497,11 +467,10 @@
       table: prefix + '_monitor_table',
       seen: prefix + '_monitor_seen',
       notified: prefix + '_monitor_notified',
-      deleted: prefix + '_monitor_deleted',
-      rejected: prefix + '_monitor_rejected',
       state: prefix + '_monitor_state',
       weights: prefix + '_monitor_config',
       configVersion: prefix + '_monitor_config_version',
+      backup: prefix + '_monitor_last_backup',
     };
   }
 
@@ -582,60 +551,6 @@
   // 收录/通知最低等级
   function minLevel() {
     return G().minLevel;
-  }
-  // 收录的估值下限：跟随通知设置里的"估值下限"，未设置(0)时回落到默认 300，避免垃圾数据入库
-  function includeMinValue() {
-    return notifyMinValue > 0 ? notifyMinValue : 300;
-  }
-
-  // ============================================================
-  // 被拒商品记忆
-  // 被收录下限/等级门槛挡掉的商品，ID 仍留在 seenIds 中，导致每轮刷新都会
-  // 走"重新评估"重算一遍（解析+估值）。而估值只由描述文本和定价规则决定，
-  // 条件不变时重算结果必然相同，纯属浪费 CPU 并刷屏日志。
-  // 这里记下拒绝时的关键条件，仅当条件发生变化时才允许重新评估。
-  // ============================================================
-  function rejectRemember(productId, price, reason, value) {
-    const old = rejectedMap.get(productId);
-    if (old) {
-      const i = rejectedList.indexOf(old);
-      if (i >= 0) rejectedList.splice(i, 1);
-    }
-    const entry = { id: productId, v: Math.round(value || 0), r: reason, cv: CONFIG_VERSION, p: price, t: Date.now(),
-      mv: includeMinValue(), lv: G().minLevel };
-    rejectedList.push(entry);
-    rejectedMap.set(productId, entry);
-    if (rejectedList.length > CONFIG.maxRejectedIds) {
-      const evicted = rejectedList.shift();
-      rejectedMap.delete(evicted.id);
-    }
-    rejectedDirty = true;
-  }
-
-  // true = 拒绝条件完全没变，可以安全跳过重算
-  function rejectShouldSkip(productId, price) {
-    const e = rejectedMap.get(productId);
-    if (!e) return false;
-    if (e.cv !== CONFIG_VERSION) return false;          // 定价规则已更新
-    if (e.p !== price) return false;                    // 标价已变化（可能降价）
-    if (e.mv !== includeMinValue()) return false;       // 收录下限已调整
-    if (e.lv !== G().minLevel) return false;            // 等级门槛已调整
-    return (Date.now() - e.t) < CONFIG.rejectRetryMs;   // 未到重试间隔
-  }
-
-  function rejectForget(productId) {
-    const e = rejectedMap.get(productId);
-    if (!e) return;
-    const i = rejectedList.indexOf(e);
-    if (i >= 0) rejectedList.splice(i, 1);
-    rejectedMap.delete(productId);
-    rejectedDirty = true;
-  }
-
-  function saveRejectedIfDirty() {
-    if (!rejectedDirty) return;
-    rejectedDirty = false;
-    saveStorage(STORAGE_KEYS.rejected, rejectedList);
   }
 
   // ============================================================
@@ -823,6 +738,8 @@
         }
         prices[c] = base + maxPrem;
       }
+      // C65 独立档位（满命+精5专武），不参与 C1-C6 递推
+      if (premiums['65'] != null) prices['65'] = base + premiums['65'];
       result[charName] = prices;
     }
     return result;
@@ -1040,8 +957,6 @@
   }
 
   // 盼之平台URL（SSR HTML抓取，无需API token；gameId按当前游戏动态生成）
-  // 站点SSR固定返回"综合排序"，URL参数无法改成按发布时间排序；故每轮多抓几页再本地按发布时间倒序合并
-  const PZ_SCAN_PAGES = 3;   // 盼之每轮抓取的列表页数（每页10条）
   function pzdsUrls() {
     const gameId = G().platformIds.pzds;
     return {
@@ -1096,9 +1011,6 @@
     maxTableRows: 3000,           // 表格最大行数
     maxSeenIds: 5000,              // 已见ID最大数量（需大于 maxTableRows，避免表内数据被反复重新解析）
     maxNotifiedIds: 500,         // 已通知ID最大数量
-    maxDeletedIds: 3000,         // 手动删除的忽略ID最大数量
-    maxRejectedIds: 3000,        // 被拒商品记忆最大数量
-    rejectRetryMs: 30 * 60 * 1000, // 被拒商品重新评估的最短间隔（30分钟）
   };
 
   // ============================================================
@@ -1107,11 +1019,6 @@
   let tableData = [];            // 表格数据
   let seenIds = [];              // 已扫描productId
   let notifiedIds = [];          // 已通知productId
-  let deletedProductIds = [];    // 手动删除后需永久忽略的productId（防止滚动淘汰后重新入库）
-  let deletedIdSet = new Set();  // deletedProductIds 的镜像，用于 O(1) 成员判断
-  let rejectedList = [];         // 被拒商品记忆 [{ id, v, r, cv, p, t }]（避免每轮重复解析+估值）
-  let rejectedMap = new Map();   // rejectedList 的镜像，用于 O(1) 查找
-  let rejectedDirty = false;     // 有未落盘的被拒记忆变更
   let batchMode = false;          // 批量处理模式：跳过逐条保存和刷新
   let monitorRunning = false;    // 监控开关
   let notifyEnabled = false;     // 通知开关
@@ -1131,36 +1038,19 @@
   let notifyMaxPrice = 20000;    // 通知标价上限(元)，高于此值不通知（0=不限制）
   let autoBuyMaxPrice = 6000;    // 自动抢购标价上限(元)，高于此值不抢购（0=不限制）
   let refreshIntervalSec = 15;   // 刷新间隔（秒），可设置
-  let scanPages = 3;             // 螃蟹网增量翻页的最大页数（每页20条，整页都是已见ID才停止翻页）
-  let scanBackfillPages = 8;     // 补扫（深翻页）最大页数：增量只扫前几页，补扫负责把窗口外漏掉的商品捞回来
+  let scanPages = 3;             // 螃蟹网增量翻页的最大页数（每页20条，整页已见才停止翻页）
+  // 补扫：增量窗口只有 scanPages 页，一次批量上架超过窗口深度时新号会被挤到窗口外永久漏掉。
+  // 每 scanBackfillIntervalSec 秒做一次深翻页补扫，把窗口外的商品捞回来
+  let scanBackfillPages = 8;     // 补扫最大页数
   let scanBackfillIntervalSec = 300; // 补扫间隔（秒）
-  // 上次补扫时间。故意不持久化：每次脚本启动后第一轮刷新都会先做一次补扫，
-  // 把页面关闭/电脑休眠期间上架、又已经沉到增量窗口外的商品补回来
-  let lastBackfillTime = 0;
-  // 补扫续扫页：上一轮补扫因页数上限没追平时记下"下一个待补的页"，下一轮从这页继续往下补
-  let backfillStartPage = 1;
-  // 补扫"补捞区间"（第2页及以后）的商品ID集合。这些商品可能已上架较久，
-  // 只入库不推送/不自动抢购，避免停机较久后一次补扫把几十条旧号全推给用户
-  let backfillRecoveryIds = null;
+  let lastBackfillTime = 0;      // 上次补扫时间（不持久化：启动后第一轮先补一次）
+  let backfillStartPage = 1;     // 补扫续扫页（上一轮没追平时从这页继续往下补）
+  let backfillRecoveryIds = null;// 补捞区间的商品ID：只入库，不推送/不自动抢购
   let flashSaleEnabled = true;   // 秒杀库池监控开关
   let pzdsEnabled = false;      // 盼之平台监控开关
   let kjsEnabled = false;       // 氪金兽平台监控开关
   let qyEnabled = false;        // 7881平台监控开关
   let ysyEnabled = false;       // 易手游平台监控开关
-  // 各平台独立刷新间隔（秒）。螃蟹网池子更新快，跟随 refreshIntervalSec 每轮都扫；
-  // 盼之/氪金兽/7881/易手游更新慢，按各自间隔扫描，避免无谓请求
-  let platformIntervals = { pzds: 60, kjs: 60, qy: 60, ysy: 60 };
-  // 各平台上次扫描时间戳（用于按间隔判断本轮是否扫描）
-  const lastPlatformScan = { pxb7: 0, pzds: 0, kjs: 0, qy: 0, ysy: 0 };
-
-  // 应用外部来源（localStorage / 云端）的平台间隔配置，非法值忽略
-  function applyPlatformIntervals(obj) {
-    if (!obj || typeof obj !== 'object') return;
-    ['pzds', 'kjs', 'qy', 'ysy'].forEach(function (k) {
-      var v = parseInt(obj[k], 10);
-      if (v > 0) platformIntervals[k] = Math.min(3600, Math.max(10, v));
-    });
-  }
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
@@ -1738,6 +1628,12 @@
         };
       }
     }
+    // 查找表价格与最终定价保持一致（charPrices 优先于级别默认价），避免解析结果显示级别价
+    var priceSource = savedCharPrices || w.charPrices || {};
+    for (var pName in priceSource) {
+      if (!priceSource.hasOwnProperty(pName)) continue;
+      if (CHAR_LOOKUP[pName]) CHAR_LOOKUP[pName].price = priceSource[pName];
+    }
   }
 
   /**
@@ -2235,83 +2131,6 @@
     }
     // 最后检查全文
     return false;
-  }
-
-  /**
-   * 取某角色专武的精炼等级（0=无专武，1-5=精1-5）
-   * @param {string} charName - 角色名
-   * @param {object} parsed - 解析结果（需含 weapons: [{name, refine}]）
-   */
-  function getCharSigRefine(charName, parsed) {
-    if (!parsed || !parsed.weapons) return 0;
-    const sigOverride = (weights && weights.sigWeaponsOverride) || null;
-    const sigName = (sigOverride && sigOverride[charName]) || SIG_WEAPONS[charName];
-    if (!sigName) return 0;
-    const wp = parsed.weapons.find(function (w) {
-      return w.name === sigName || w.name.includes(sigName) || sigName.includes(w.name);
-    });
-    return wp ? (wp.refine || 1) : 0;
-  }
-
-  /**
-   * 判断角色是否为 S 级（仅 S 级角色支持"专武精炼"筛选）
-   */
-  function isSTierChar(name) {
-    var info = (CHAR_LOOKUP || {})[name];
-    return !!(info && info.tier === 'S');
-  }
-
-  /**
-   * 判断 parsed 是否满足指定账号规则中的单个角色条件（含命座、专武精炼）
-   */
-  function matchCharCond(cond, parsed) {
-    if (!cond || !parsed || !parsed.characters) return false;
-    const hit = parsed.characters.find(function (x) { return x.name === cond.name && x.const >= (cond.minConst || 0); });
-    if (!hit) return false;
-    const needRefine = cond.minSigRefine || 0;
-    if (needRefine > 0 && getCharSigRefine(cond.name, parsed) < needRefine) return false;
-    return true;
-  }
-
-  /**
-   * 判断 parsed 是否满足整条指定账号规则（须满足全部角色条件）
-   */
-  function matchCharNotifyRule(rule, parsed) {
-    if (!rule || !rule.chars || rule.chars.length === 0) return false;
-    return rule.chars.every(function (cond) { return matchCharCond(cond, parsed); });
-  }
-
-  /**
-   * 判断某条指定账号规则是否触发（角色条件之外：估值范围 + 最低差价）
-   * 估值范围：规则自带 minValue/maxValue（0=不限）；规则未设任何范围时回落到全局估值下限 notifyMinValue
-   */
-  function matchRuleTrigger(rule, valuation, notifyDiff) {
-    const v = valuation.totalValue;
-    const rMin = rule.minValue || 0;
-    const rMax = rule.maxValue || 0;
-    if (rMin > 0 || rMax > 0) {
-      if (rMin > 0 && v < rMin) return false;
-      if (rMax > 0 && v > rMax) return false;
-    } else if (v < notifyMinValue) {
-      return false;
-    }
-    return rule.minDiff === 0 || notifyDiff > rule.minDiff;
-  }
-
-  /**
-   * 格式化单个角色条件为展示文本（如 "心 满命+满精"）
-   */
-  function formatCharCond(c) {
-    var s = c.name + (c.minConst > 0 ? (c.minConst >= 6 ? '满命' : c.minConst + '命+') : '');
-    if (c.minSigRefine > 0) s += (c.minSigRefine >= 5 ? '满精' : '精' + c.minSigRefine + '+');
-    return s;
-  }
-
-  /**
-   * 格式化整条规则的角色条件（用 + 连接）
-   */
-  function formatRuleChars(rule) {
-    return (rule.chars || []).map(formatCharCond).join('+');
   }
 
   /**
@@ -3459,7 +3278,7 @@
   /**
    * 带重试的列表API调用
    */
-  async function fetchListWithRetry(page, retries = 1) {
+  async function fetchListWithRetry(page, retries = 2) {
     for (let i = 0; i <= retries; i++) {
       try {
         const data = await fetchList(page);
@@ -3788,7 +3607,6 @@
   function processPZProduct(product, detailText) {
     const productId = product.productId;
     if (!productId) return;
-    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
     console.log('[鸣潮监控-盼之] processPZProduct开始: ' + product.productUniqueNo + ' ¥' + (product.price || 0) + ' showTitle长度:' + (product.showTitle || '').length + ' detailText长度:' + (detailText || '').length);
 
     const showTitle = product.showTitle || '';
@@ -3825,8 +3643,6 @@
       const existRow = tableData.find(r => r.productId === productId);
       if (!existRow) {
         // 已见过但不在表格中（之前被估值过滤），移除后重新评估
-        // 若此前已被拒且条件未变（同一标价、规则未更新、未到重试间隔），跳过重算
-        if (rejectShouldSkip(productId, price)) return;
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
         console.log('[鸣潮监控-盼之] 重新评估: ' + product.productUniqueNo + ' ¥' + price);
@@ -3895,19 +3711,17 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于收录下限的垃圾数据不收录
-    if (valuation.totalValue < includeMinValue()) {
-      rejectRemember(productId, price, 'lowvalue', valuation.totalValue);
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
     if (valuation.levelFound && valuation.level < G().minLevel) {
-      rejectRemember(productId, price, 'lowlevel', valuation.totalValue);
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       console.log('[鸣潮监控-盼之] 等级低于70，不收录: ' + product.productUniqueNo + ' Lv.' + valuation.level);
       return;
@@ -3917,8 +3731,6 @@
     const fingerprint = generateFingerprint(parsed);
     const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
     if (dupRow) {
-      // 记入拒绝记忆：该账号已在表中（重复上架），避免每轮重复解析+估值
-      rejectRemember(productId, price, 'duplicate', valuation.totalValue);
       console.log('[鸣潮监控-盼之] 跨平台重复(指纹匹配): ' + product.productUniqueNo + ' ¥' + price + ' → 已有:' + dupRow.productId + ' ¥' + dupRow.price);
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
@@ -3979,11 +3791,12 @@
     });
 
     console.log('[鸣潮监控-盼之] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
-    rejectForget(productId);
 
     // 入详情队列条件（与螃蟹网一致）
     const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
-    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule => matchCharNotifyRule(rule, parsed));
+    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule =>
+      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
+    );
     const meetsBasicThreshold = valuation.totalValue > 500 && valuation.diff != null && valuation.diff > 100;
     if (meetsBasicThreshold || hasSC6 || matchesCharRule) {
       enqueueDetail(productId, valuation.diff || 0);
@@ -3995,8 +3808,7 @@
 
   /**
    * 处理盼之商品列表（批量模式）
-   * 列表页标题被截断，需抓详情页才能得到完整角色/武器数据。
-   * 详情改为后台并发抓取：列表先出初估行，刷新不必等待详情接口
+   * 列表页标题被截断，需先抓取详情页获取完整角色/武器数据
    */
   async function handlePZListResponse(list) {
     if (!Array.isArray(list)) return;
@@ -4008,8 +3820,9 @@
       console.log('  - ' + uniqueNo + ' ¥' + price + ' ' + title);
     });
 
-    // 需要详情页的商品（跳过超过48小时的旧商品；已在表格中但未成功获取过详情的也继续抓）
+    // 为新商品预取详情页（跳过超过48小时的旧商品；已在表格中但未成功获取过详情的也继续抓）
     const PZ_MAX_AGE_HOURS = 48;
+    const detailMap = {};
     const needDetail = list.filter(p => {
       if (p.onStandTime > 0 && (Date.now() - p.onStandTime) / 3600000 > PZ_MAX_AGE_HOURS) return false;
       if (!seenIds.includes(p.productId)) return true;
@@ -4019,37 +3832,12 @@
       if (existRow.platform === 'pzds' && !existRow._detailFetched) return true;
       return false;
     });
-
-    if (needDetail.length === 0) {
-      // 全部无需补详情：直接同步处理，无网络等待
-      processPZListBatch(list, {});
-      return;
+    if (needDetail.length > 0) {
+      console.log('[鸣潮监控-盼之] 预取' + needDetail.length + '个新商品详情页');
+      const details = await Promise.all(needDetail.map(p => fetchPZDetail(p.productUniqueNo)));
+      needDetail.forEach((p, i) => { detailMap[p.productId] = details[i]; });
     }
 
-    // 无需补详情的商品立即处理；需补详情的转后台抓取，抓完统一处理
-    const needDetailSet = new Set(needDetail.map(p => p.productId));
-    const immediate = list.filter(p => !needDetailSet.has(p.productId));
-    if (immediate.length > 0) processPZListBatch(immediate, {});
-
-    const started = runPrefetchBatch(
-      needDetail.map(p => ({ key: p.productId, fetch: () => fetchPZDetail(p.productUniqueNo) })),
-      function (results) {
-        const detailMap = {};
-        needDetail.forEach(p => { detailMap[p.productId] = results[p.productId] || ''; });
-        processPZListBatch(needDetail, detailMap);
-      }
-    );
-    if (started) {
-      console.log('[鸣潮监控-盼之] ' + needDetail.length + '个商品详情转后台抓取（不阻塞刷新），抓完即入库');
-    }
-  }
-
-  /**
-   * 盼之列表批量处理（纯同步，无网络等待）
-   * @param {Array} list - 待处理商品
-   * @param {Object} detailMap - productId → 详情页文本
-   */
-  function processPZListBatch(list, detailMap) {
     batchMode = true;
     try {
       for (const product of list) {
@@ -4447,7 +4235,6 @@
   function processKJSProduct(product) {
     const productId = product.productId;
     if (!productId) return;
-    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     const showTitle = product.showTitle || '';
     const price = product.price || 0;
@@ -4514,11 +4301,11 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于收录下限的垃圾数据不收录
-    if (valuation.totalValue < includeMinValue()) {
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
@@ -4820,7 +4607,6 @@
   function processQYProduct(product) {
     const productId = product.productId;
     if (!productId) return;
-    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     const showTitle = product.showTitle || '';
     const price = product.price || 0;
@@ -4873,11 +4659,11 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于收录下限的垃圾数据不收录
-    if (valuation.totalValue < includeMinValue()) {
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) {
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
       return;
     }
@@ -4955,46 +4741,7 @@
   }
 
   /**
-   * 用详情数据补全7881商品标题（原逻辑在抓详情后、处理前执行）
-   */
-  function applyQYDetailToTitle(p, detail) {
-    detail = detail || {};
-    const parts = [];
-
-    // 武器处理：标题有摘要格式（武器段:N个）时替换为详细数据，无武器时追加（关键词按当前游戏）
-    if (detail.weapons) {
-      const weaponKw = G().keywords.weaponSections.find(kw => p.showTitle.includes(kw));
-      const weaponSummary = weaponKw ? p.showTitle.match(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?')) : null;
-      const hasDetailedWeapons = weaponKw ? new RegExp(weaponKw + '[：:][^]*精\\d').test(p.showTitle) : false;
-      if (weaponSummary && !hasDetailedWeapons) {
-        // 移除摘要格式"武器段:N个"，替换为详细武器列表
-        p.showTitle = p.showTitle.replace(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?', 'g'), '').replace(/\s+/g, ' ').trim();
-        parts.push(detail.weapons);
-      } else if (!weaponKw) {
-        // 标题完全无武器段落，追加详细数据
-        parts.push(detail.weapons);
-      }
-    }
-
-    // 资源数据：始终追加（7881标题经常缺少星声/波纹等资源数据）
-    if (detail.resources) {
-      parts.push(detail.resources);
-    }
-
-    if (parts.length > 0) {
-      const extraStr = parts.join(' ');
-      if (p.showTitle.endsWith('】')) {
-        p.showTitle = p.showTitle.slice(0, -1) + ' ' + extraStr + '】';
-      } else {
-        p.showTitle = p.showTitle + ' ' + extraStr;
-      }
-      console.log('[鸣潮监控-7881] 详情补充: ' + p.productUniqueNo + ' → ' + extraStr);
-    }
-  }
-
-  /**
    * 处理7881商品列表（批量模式）
-   * 新商品的详情数据改为后台并发抓取：列表先出初估行，刷新不必等待详情接口
    */
   async function handleQYListResponse(list) {
     if (!Array.isArray(list)) return;
@@ -5003,34 +4750,50 @@
       console.log('  - ' + (p.productUniqueNo || '') + ' ¥' + (p.price || 0).toFixed(0) + ' [' + (p.onStandTimeStr || '') + '] ' + (p.showTitle || '').substring(0, 60));
     });
 
-    // 新商品需补详情数据（武器+资源，7881标题可能缺少这些信息）
+    // 为新商品批量获取详情数据（武器+资源，7881标题可能缺少这些信息）
     const newProducts = list.filter(p => !seenIds.includes(p.productId));
-    if (newProducts.length === 0) {
-      processQYListBatch(list);
-      return;
-    }
+    if (newProducts.length > 0) {
+      console.log('[鸣潮监控-7881] 为' + newProducts.length + '个新商品获取详情数据');
+      const concurrency = 5;
+      for (let i = 0; i < newProducts.length; i += concurrency) {
+        const batch = newProducts.slice(i, i + concurrency);
+        await Promise.all(batch.map(async p => {
+          const detail = await fetchQYDetail(p.productUniqueNo);
+          const parts = [];
 
-    // 已见商品立即处理（降价检测不必等详情）；新商品转后台抓详情，抓完补全标题再处理
-    const newSet = new Set(newProducts.map(p => p.productId));
-    const immediate = list.filter(p => !newSet.has(p.productId));
-    if (immediate.length > 0) processQYListBatch(immediate);
+          // 武器处理：标题有摘要格式（武器段:N个）时替换为详细数据，无武器时追加（关键词按当前游戏）
+          if (detail.weapons) {
+            const weaponKw = G().keywords.weaponSections.find(kw => p.showTitle.includes(kw));
+            const weaponSummary = weaponKw ? p.showTitle.match(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?')) : null;
+            const hasDetailedWeapons = weaponKw ? new RegExp(weaponKw + '[：:][^]*精\\d').test(p.showTitle) : false;
+            if (weaponSummary && !hasDetailedWeapons) {
+              // 移除摘要格式"武器段:N个"，替换为详细武器列表
+              p.showTitle = p.showTitle.replace(new RegExp(weaponKw + '[：:]\\s*\\d+\\s*个?', 'g'), '').replace(/\s+/g, ' ').trim();
+              parts.push(detail.weapons);
+            } else if (!weaponKw) {
+              // 标题完全无武器段落，追加详细数据
+              parts.push(detail.weapons);
+            }
+          }
 
-    const started = runPrefetchBatch(
-      newProducts.map(p => ({ key: p.productId, fetch: () => fetchQYDetail(p.productUniqueNo) })),
-      function (results) {
-        newProducts.forEach(p => applyQYDetailToTitle(p, results[p.productId]));
-        processQYListBatch(newProducts);
+          // 资源数据：始终追加（7881标题经常缺少星声/波纹等资源数据）
+          if (detail.resources) {
+            parts.push(detail.resources);
+          }
+
+          if (parts.length > 0) {
+            const extraStr = parts.join(' ');
+            if (p.showTitle.endsWith('】')) {
+              p.showTitle = p.showTitle.slice(0, -1) + ' ' + extraStr + '】';
+            } else {
+              p.showTitle = p.showTitle + ' ' + extraStr;
+            }
+            console.log('[鸣潮监控-7881] 详情补充: ' + p.productUniqueNo + ' → ' + extraStr);
+          }
+        }));
       }
-    );
-    if (started) {
-      console.log('[鸣潮监控-7881] ' + newProducts.length + '个新商品详情转后台抓取（不阻塞刷新），抓完即入库');
     }
-  }
 
-  /**
-   * 7881列表批量处理（纯同步，无网络等待）
-   */
-  function processQYListBatch(list) {
     batchMode = true;
     try {
       for (const product of list) {
@@ -5259,7 +5022,6 @@
   function processYSYProduct(product) {
     var productId = product.productId;
     if (!productId) return;
-    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     var showTitle = product.showTitle || '';
     var price = product.price || 0;
@@ -5306,10 +5068,10 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    if (valuation.totalValue < includeMinValue()) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
+    if (valuation.totalValue < 300) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
     if (valuation.levelFound && valuation.level < G().minLevel) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
 
     // 内容指纹去重
@@ -5498,41 +5260,6 @@
   // 请求拦截
   // ============================================================
 
-  // 记录页面自身列表请求的参数，用于判断能否复用（跳过重复请求）
-  let lastInterceptPageInfo = null;
-
-  function parseInterceptBody(body) {
-    if (!body) return null;
-    if (typeof body !== 'string') return body;
-    try { return JSON.parse(body); } catch (e) { return null; }
-  }
-
-  function recordInterceptPageInfo(body, length) {
-    const b = body || {};
-    lastInterceptPageInfo = {
-      pageIndex: b.pageIndex != null ? b.pageIndex : null,
-      sortType: b.sortType != null ? b.sortType : null,
-      filterCount: (b.filterDTOList ? b.filterDTOList.length : 0) + (b.combineFilterList ? b.combineFilterList.length : 0),
-      query: b.query || '',
-      length: length || 0,
-      time: Date.now(),
-    };
-  }
-
-  /**
-   * 页面自身的第1页请求与脚本扫描请求完全等价时（同排序、无筛选无搜索词、满页、60秒内），
-   * 可跳过脚本自己的第1页请求，避免重复调用同一接口
-   */
-  function canReuseInterceptedPage1() {
-    const info = lastInterceptPageInfo;
-    if (!info) return false;
-    if (Date.now() - info.time > 60000) return false;
-    if (info.pageIndex !== 1 || info.sortType !== 2) return false;
-    if (info.filterCount > 0 || info.query) return false;
-    if (info.length < 20) return false;
-    return true;
-  }
-
   /**
    * 设置fetch和XHR拦截
    */
@@ -5548,10 +5275,7 @@
           const data = await cloned.json();
           if (data && data.success && data.data) {
             const list = Array.isArray(data.data) ? data.data : (data.data.list || null);
-            if (list) {
-              recordInterceptPageInfo(parseInterceptBody(args[1] && args[1].body), list.length);
-              handleListResponse(list, true);
-            }
+            if (list) handleListResponse(list, true);
           }
         }
       } catch (e) {
@@ -5576,10 +5300,7 @@
             const data = JSON.parse(this.responseText);
             if (data && data.success && data.data) {
               const list = Array.isArray(data.data) ? data.data : (data.data.list || null);
-              if (list) {
-                recordInterceptPageInfo(parseInterceptBody(args[0]), list.length);
-                handleListResponse(list, true);
-              }
+              if (list) handleListResponse(list, true);
             }
           }
         } catch (e) {
@@ -5635,10 +5356,9 @@
   /**
    * 处理单个商品
    */
-  function processProduct(item, fromFlashSale, prefetchedDetail) {
+  function processProduct(item, fromFlashSale) {
     const productId = item.productId || item.id;
     if (!productId) return;
-    if (deletedIdSet.has(productId)) return; // 已手动删除，永久忽略
 
     const showTitle = item.showTitle || item.title || '';
     const originalPrice = (item.price || 0) / 100; // 分转元（原价）
@@ -5708,8 +5428,6 @@
       }
       // 表格中不存在（可能已被截断）
       // 秒杀池商品不受 seenIds 去重限制，从 seenIds 中移除以允许重新处理
-      // 若此前已被拒且条件未变（同一秒杀价、规则未更新、未到重试间隔），跳过重算
-      if (rejectShouldSkip(productId, price)) return;
       const seenIdx = seenIds.indexOf(productId);
       if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
       console.log('[鸣潮监控] 秒杀池新商品(表格中不存在): ' + productId + ' ¥' + price);
@@ -5751,8 +5469,6 @@
         return;
       } else if (!existRow) {
         // 已见过但不在表格中（之前被截断或估值过滤），移除后重新评估
-        // 若此前已被拒且条件未变（同一标价、规则未更新、未到重试间隔），跳过重算
-        if (rejectShouldSkip(productId, price)) return;
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
         console.log('[鸣潮监控] 重新评估(已见但表格中不存在): ' + (item.productUniqueNo || productId) + ' ¥' + price);
@@ -5778,12 +5494,11 @@
       ' | ' + resourceSummaryText(parsed) + ' 黄' + parsed.yellowCount +
       ' | Lv.' + valuation.level +
       ' | 估值¥' + valuation.totalValue.toFixed(0) +
-      (valuation.totalValue < includeMinValue() ? ' [低于' + includeMinValue() + '，不收录]' : '') +
+      (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于收录下限的垃圾数据不收录
-    if (valuation.totalValue < includeMinValue()) {
-      rejectRemember(productId, price, 'lowvalue', valuation.totalValue);
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) {
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
@@ -5792,7 +5507,6 @@
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤，列表页无等级信息时留待详情页判断）
     if (valuation.levelFound && valuation.level < G().minLevel) {
-      rejectRemember(productId, price, 'lowlevel', valuation.totalValue);
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
@@ -5804,8 +5518,6 @@
     const fingerprint = generateFingerprint(parsed);
     const dupRow = tableData.find(r => r.fingerprint === fingerprint && r.productId !== productId);
     if (dupRow) {
-      // 记入拒绝记忆：该账号已在表中（换链接重复上架），避免每轮重复解析+估值
-      rejectRemember(productId, price, 'duplicate', valuation.totalValue);
       // 标记新ID为已见，避免重复进详情队列
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
@@ -5860,8 +5572,7 @@
       price,
       value: valuation.totalValue,
       ratio: valuation.ratio,
-      // 页面估值已用过详情接口的完整描述，直接记为详估，避免重复拉一次详情
-      status: fromFlashSale ? '秒杀' : (prefetchedDetail ? '详估' : '初估'),
+      status: fromFlashSale ? '秒杀' : '初估',
       effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
@@ -5877,20 +5588,21 @@
       firstSeen: Date.now(),
     });
 
-    console.log('[鸣潮监控] ' + (fromFlashSale ? '秒杀池商品已入表: ' : '商品已入表: ') +
-      (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) +
-      ' (表格共' + tableData.length + '行)');
-    rejectForget(productId);
+    if (fromFlashSale) {
+      console.log('[鸣潮监控] 秒杀池商品已入表: ' + (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0));
+    }
 
     // 加入详情队列：估值>500且差价>100，或有S级满命，或匹配指定账号规则
     const hasSC6 = parsed.characters.some(c => c.tier === 'S' && c.const === 6);
     // 检查是否匹配指定账号通知规则（须满足全部角色条件）
-    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule => matchCharNotifyRule(rule, parsed));
+    const matchesCharRule = charNotifyRules.length > 0 && charNotifyRules.some(rule =>
+      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
+    );
     // 基本入队条件：估值>500且差价>100（过滤低价值账号，减少队列堆积）
     const meetsBasicThreshold = valuation.totalValue > 500 && valuation.diff != null && valuation.diff > 100;
     // 描述疑似被截断（长度恰为500）：强制入队，用详情API的完整描述覆盖
     const showTitleSuspectTruncated = showTitle.length === 500;
-    if (!prefetchedDetail && (meetsBasicThreshold || hasSC6 || matchesCharRule || showTitleSuspectTruncated)) {
+    if (meetsBasicThreshold || hasSC6 || matchesCharRule || showTitleSuspectTruncated) {
       enqueueDetail(productId, valuation.diff || 0);
     }
 
@@ -5922,7 +5634,9 @@
 
     const notifyDiff = valuation.totalValue - price;
     // 检查指定账号通知规则
-    const matchedRules = charNotifyRules.filter(rule => matchCharNotifyRule(rule, parsed));
+    const matchedRules = charNotifyRules.filter(rule =>
+      rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
+    );
     // 常规通知条件
     const shouldNotifyRegular = (notifyDiff > getNotifyDiffThreshold(valuation.totalValue))
       && valuation.totalValue >= notifyMinValue
@@ -5932,10 +5646,11 @@
     let charRuleTriggered = false;
     let triggeredRule = null;
     const priceWithinMax = (notifyMaxPrice <= 0 || price <= notifyMaxPrice);
+    const meetsMinValue = valuation.totalValue >= notifyMinValue;
     const meetsMinPrice = price >= notifyMinPrice;
-    if (matchedRules.length > 0 && priceWithinMax && meetsMinPrice) {
+    if (matchedRules.length > 0 && priceWithinMax && meetsMinValue && meetsMinPrice) {
       for (const r of matchedRules) {
-        if (matchRuleTrigger(r, valuation, notifyDiff)) {
+        if (r.minDiff === 0 || notifyDiff > r.minDiff) {
           charRuleTriggered = true;
           triggeredRule = r;
           break;
@@ -5945,7 +5660,9 @@
 
     if (!charRuleTriggered && !shouldNotifyRegular) return false;
 
-    const matchedCharNames = triggeredRule ? formatRuleChars(triggeredRule) : '';
+    const matchedCharNames = triggeredRule
+      ? triggeredRule.chars.map(c => c.name + (c.minConst > 0 ? c.minConst + '命+' : '')).join('+')
+      : '';
     const prefix = charRuleTriggered ? '指定账号' : '高差价';
     const notifyRow = {
       value: valuation.totalValue,
@@ -5969,67 +5686,6 @@
     }
     return true;
   }
-  // ============================================================
-  // 第三方平台详情预取（盼之/7881）
-  // 抓的是第三方平台详情页，与 pxb7 的 detailRateLimit 队列独立：
-  // 后台并发抓取、不阻塞刷新主流程，抓完统一回主线程批量处理，
-  // 保证估值/通知/去重逻辑与旧版完全一致
-  // ============================================================
-  const PREFETCH_CONCURRENCY = 4;   // 同时抓取数
-  const PREFETCH_GAP_MS = 250;      // 每次发起间隔，降低被WAF拦截概率
-  let prefetchRunning = 0;
-  let prefetchStepTimer = null;
-  const prefetchActiveKeys = new Set();
-
-  /**
-   * 后台并发执行一批详情抓取任务，全部完成后回调（不阻塞刷新）
-   * @param {Array<{key:string, fetch:function}>} jobs
-   * @param {function(Object|null)} onDone - 收到 {key: 结果} 映射；该批已在抓取中时收到 null
-   * @returns {boolean} 是否启动了新批次
-   */
-  function runPrefetchBatch(jobs, onDone) {
-    const pending = jobs.filter(j => !prefetchActiveKeys.has(j.key));
-    if (pending.length === 0) return false;
-    pending.forEach(j => prefetchActiveKeys.add(j.key));
-    const results = {};
-    let idx = 0;
-    let done = false;
-
-    function finish() {
-      if (done) return;
-      done = true;
-      pending.forEach(j => prefetchActiveKeys.delete(j.key));
-      onDone(results);
-    }
-
-    function step() {
-      prefetchStepTimer = null;
-      if (idx >= pending.length) {
-        if (prefetchRunning === 0) finish();
-        return;
-      }
-      if (prefetchRunning >= PREFETCH_CONCURRENCY) return;
-      const job = pending[idx++];
-      prefetchRunning++;
-      Promise.resolve()
-        .then(() => job.fetch())
-        .then(r => { results[job.key] = r; })
-        .catch(e => {
-          console.error('[鸣潮监控] 详情预取失败: ' + job.key, (e && e.message) || e);
-          results[job.key] = null;
-        })
-        .then(() => {
-          prefetchRunning--;
-          if (idx >= pending.length && prefetchRunning === 0) { finish(); return; }
-          if (!prefetchStepTimer) step();
-        });
-      prefetchStepTimer = bgSetTimeout(step, PREFETCH_GAP_MS);
-    }
-
-    step();
-    return true;
-  }
-
   // ============================================================
 
   /**
@@ -6080,7 +5736,7 @@
     // 频率限制
     if (detailCallsThisMinute >= CONFIG.detailRateLimit) {
       const waitTime = 60000 - (Date.now() - detailMinuteStart) + 100;
-      detailTimer = bgSetTimeout(processNextDetail, waitTime);
+      detailTimer = setTimeout(processNextDetail, waitTime);
       updateBottomBar();
       return;
     }
@@ -6098,6 +5754,12 @@
     fetchDetail(item.productId).then(data => {
       if (data && data.success && data.data) {
         const showTitle = data.data.showTitle || data.data.title || '';
+        // 详情内容必须像一份商品描述，否则视为被WAF/错误页污染：
+        // 用它覆盖会算出错误估值，甚至触发"估值过低"误删，等于丢号
+        if (!showTitle || showTitle.length < 20 || !gameTextPattern().test(showTitle)) {
+          console.warn('[鸣潮监控] 详情内容无效(疑似WAF/错误页)，保留列表初估: ' + item.productId + ' 长度:' + showTitle.length);
+          return;
+        }
         const detailPrice = (data.data.price || 0) / 100;
         // 改进2：从详情API提取字母编号 productUniqueNo
         const productUniqueNo = data.data.productUniqueNo || data.data.uniqueNo || '';
@@ -6106,8 +5768,8 @@
         const parsed = parseAccountInfo(showTitle);
         const valuation = calculateValue(parsed, detailPrice);
 
-        // 详估后估值低于收录下限，从表格移除
-        if (valuation.totalValue < includeMinValue()) {
+        // 详估后估值低于300，从表格移除
+        if (valuation.totalValue < 300) {
           const idx = tableData.findIndex(r => r.productId === item.productId);
           if (idx >= 0) {
             tableData.splice(idx, 1);
@@ -6169,21 +5831,25 @@
           const notifyPrice = finalPrice;
           const notifyDiff = valuation.totalValue - notifyPrice;
           // 1. 优先检查指定账号通知规则（须满足全部角色条件 + 差价）
-          const matchedRules = charNotifyRules.filter(rule => matchCharNotifyRule(rule, parsed));
+          const matchedRules = charNotifyRules.filter(rule =>
+            rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
+          );
           // 常规通知条件：差价超过阈值，且估值/标价不低于各自下限，且标价不高于上限
           const shouldNotifyRegular = (notifyDiff > getNotifyDiffThreshold(valuation.totalValue))
             && valuation.totalValue >= notifyMinValue
             && notifyPrice >= notifyMinPrice
             && (notifyMaxPrice <= 0 || notifyPrice <= notifyMaxPrice);
 
-          // 指定账号通知条件：匹配规则 + 估值范围 + 差价满足该规则的 minDiff + 标价不高于上限
+          // 指定账号通知条件：匹配规则 + 差价满足该规则的 minDiff + 最低限制 + 标价不高于上限
           let charRuleTriggered = false;
           let triggeredRule = null;
           const priceWithinMax = (notifyMaxPrice <= 0 || notifyPrice <= notifyMaxPrice);
+          const meetsMinValue = valuation.totalValue >= notifyMinValue;
           const meetsMinPrice = notifyPrice >= notifyMinPrice;
-          if (matchedRules.length > 0 && priceWithinMax && meetsMinPrice) {
+          if (matchedRules.length > 0 && priceWithinMax && meetsMinValue && meetsMinPrice) {
             for (const r of matchedRules) {
-              if (matchRuleTrigger(r, valuation, notifyDiff)) {
+              // minDiff=0 表示不限差价（始终通过），否则检查差价是否超过 minDiff
+              if (r.minDiff === 0 || notifyDiff > r.minDiff) {
                 charRuleTriggered = true;
                 triggeredRule = r;
                 break;
@@ -6193,7 +5859,9 @@
 
           if (charRuleTriggered || shouldNotifyRegular) {
             // 构建通知内容
-            const matchedCharNames = triggeredRule ? formatRuleChars(triggeredRule) : '';
+            const matchedCharNames = triggeredRule
+              ? triggeredRule.chars.map(c => c.name + (c.minConst > 0 ? c.minConst + '命+' : '')).join('+')
+              : '';
             const prefix = charRuleTriggered ? '指定账号' : '高差价';
             const notifyRow = {
               value: valuation.totalValue,
@@ -6220,7 +5888,7 @@
     }).catch(e => {
       console.error('[鸣潮监控] 详情API调用失败:', item.productId, e);
     }).finally(() => {
-      detailTimer = bgSetTimeout(processNextDetail, CONFIG.detailInterval);
+      detailTimer = setTimeout(processNextDetail, CONFIG.detailInterval);
       updateBottomBar();
     });
   }
@@ -6244,8 +5912,6 @@
    * 添加表格行
    */
   function addTableRow(row) {
-    // 已手动删除的商品不再入库（防止详情队列/重复扫描把它重新写回）
-    if (row.productId && deletedIdSet.has(row.productId)) return;
     // 入表时立即精简：移除 valuation/parsed 等可从 showTitle 重建的大字段，避免 localStorage 配额浪费
     const slim = slimRow(row);
     // 检查是否已存在
@@ -6292,8 +5958,7 @@
       saveTableData();
       refreshTableDisplay();
     } else {
-      // 行不存在（可能被挤出），重新创建；但已手动删除的忽略
-      if (deletedIdSet.has(productId)) return;
+      // 行不存在（可能被挤出），重新创建
       console.log('[鸣潮监控] 行不存在，重新创建:', productId);
       tableData.push(slimRow(Object.assign({
         productId: productId,
@@ -6381,8 +6046,8 @@
     }
   }
 
-  // 排序状态：默认按上架时间降序（最新发布在前）
-  let sortColumn = 'time';   // 'time' | 'value' | 'ratio' | 'diff' | 'price' | 'yellow' | 'pulls'（默认按上架时间，最新在前）
+  // 排序状态：默认按差价降序
+  let sortColumn = 'diff';   // 'time' | 'value' | 'ratio' | 'diff' | 'price' | 'yellow' | 'pulls'
   let sortDirection = 'desc'; // 'asc' | 'desc'
 
   /**
@@ -6566,67 +6231,6 @@
           background: #10b981;
           border-color: #10b981;
           color: white;
-        }
-        .mw-page-badge {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          z-index: 10;
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          gap: 1px;
-          padding: 5px 9px;
-          border-radius: 8px;
-          color: #fff;
-          font-size: 11px;
-          font-weight: 600;
-          line-height: 1.4;
-          text-align: right;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-          cursor: pointer;
-          user-select: none;
-        }
-        .mw-page-badge .mw-pv-val {
-          font-size: 15px;
-          font-weight: 800;
-          line-height: 1.2;
-        }
-        .mw-page-badge .mw-pv-row {
-          font-size: 10.5px;
-          opacity: 0.95;
-          white-space: nowrap;
-        }
-        .mw-page-badge .mw-pv-diff {
-          font-size: 10.5px;
-          font-weight: 800;
-          line-height: 1.4;
-          white-space: nowrap;
-        }
-        .mw-page-res {
-          position: absolute;
-          top: 8px;
-          left: 8px;
-          z-index: 10;
-          padding: 4px 9px;
-          border-radius: 8px;
-          font-size: 10.5px;
-          font-weight: 600;
-          line-height: 1.4;
-          white-space: nowrap;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-          user-select: none;
-        }
-        .mw-page-res b {
-          font-weight: 800;
-        }
-        .mw-page-est {
-          display: inline-block;
-          margin-top: 2px;
-          padding: 1px 7px;
-          border-radius: 5px;
-          font-size: 11px;
-          font-weight: 700;
         }
         .mw-input {
           width: 40px;
@@ -6841,13 +6445,12 @@
           <button class="mw-btn" id="mwBtnNotify">开启通知</button>
           <button class="mw-btn" id="mwBtnNotifySettings">通知设置</button>
           <button class="mw-btn" id="mwBtnRefresh">立即刷新</button>
-          <button class="mw-btn" id="mwBtnPageEval" title="对当前页面显示的商品估值并标注在卡片上（仅螃蟹网列表页，点击开启/再点关闭）">页面估值</button>
           <button class="mw-btn" id="mwBtnSettings">估值设置</button>
           <button class="mw-btn" id="mwBtnTestEval" title="手动粘贴账号描述测试估值（结果不录入列表，仅供调参）">测试估价</button>
-          <button class="mw-btn" id="mwBtnLog" title="查看脚本运行日志（实时输出，无需打开控制台）">日志</button>
           <button class="mw-btn" id="mwBtnCleanData">清理数据</button>
           <button class="mw-btn" id="mwBtnCheckSold">检查已售</button>
-          <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端">云端备份</button>
+          <button class="mw-btn" id="mwBtnLog" title="查看脚本运行日志（实时输出，无需打开控制台）">日志</button>
+          <button class="mw-btn" id="mwBtnCloudBackup" title="手动备份监控列表到云端（每天也会自动备份一次）">云端备份</button>
           <button class="mw-btn" id="mwBtnCloudRestore" title="从云端恢复监控列表（与本地合并，不覆盖本地已有行）">云端恢复</button>
           <button class="mw-btn" id="mwBtnMigrate" title="跨脚本管理器/跨浏览器迁移：导出或导入全部数据（监控列表+配置+通知设置）">迁移</button>
         </div>
@@ -6924,7 +6527,6 @@
     dom.btnNotify = document.getElementById('mwBtnNotify');
     dom.btnNotifySettings = document.getElementById('mwBtnNotifySettings');
     dom.btnRefresh = document.getElementById('mwBtnRefresh');
-    dom.btnPageEval = document.getElementById('mwBtnPageEval');
     dom.btnSettings = document.getElementById('mwBtnSettings');
     dom.btnTestEval = document.getElementById('mwBtnTestEval');
     dom.btnCleanData = document.getElementById('mwBtnCleanData');
@@ -7097,19 +6699,13 @@
         '<div style="font-size:16px;font-weight:600;margin-bottom:16px;color:#e94560;">通知设置</div>' +
         // 刷新间隔
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">刷新设置</div>' +
-        '<div style="display:flex;gap:12px;margin-bottom:12px;">' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">螃蟹网刷新间隔（秒）</label>' +
+        '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">刷新间隔（秒）</label>' +
         '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="5" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">最大扫描页数</label>' +
         '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="display:flex;gap:12px;margin-bottom:12px;">' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">补扫页数</label>' +
-        '<input type="number" id="mwScanBackfillPages" value="' + scanBackfillPages + '" min="1" max="20" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">补扫间隔（秒）</label>' +
-        '<input type="number" id="mwScanBackfillInterval" value="' + scanBackfillIntervalSec + '" min="60" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒（仅作用于螃蟹网，池子更新快可设小一点）；下方各平台可单独设置扫描间隔，更新慢的平台建议30~60秒。最大扫描页数=每轮增量最多翻几页（每页20条），整页都是已见商品才提前停止；补扫页数/间隔=每隔一段时间深翻页补扫一次，把停机或增量窗口外漏掉的商品捞回来（补扫第2页起捞回的号只入库、不推送）</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
         // 秒杀库池监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
@@ -7117,39 +6713,27 @@
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">扫描秒杀库池前2页，捕获还价后卖家同意的降价商品</div>' +
         // 盼之平台监控
-        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
         '<input type="checkbox" id="mwPzdsEnabled" ' + (pzdsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控盼之平台（pzds.com' + G().name + '商品池）</label>' +
-        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
-        '<input type="number" id="mwPzdsInterval" value="' + platformIntervals.pzds + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
-        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过SSR HTML抓取盼之平台商品列表，无需API token，扫描前2页</div>' +
         // 氪金兽平台监控
-        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
         '<input type="checkbox" id="mwKjsEnabled" ' + (kjsEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控氪金兽平台（kejinshou.com' + G().name + '成品号）</label>' +
-        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
-        '<input type="number" id="mwKjsInterval" value="' + platformIntervals.kjs + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
-        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过MWP API按最新发布顺序获取氪金兽商品列表（含完整角色武器数据），扫描第1页</div>' +
         // 7881平台监控
-        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
         '<input type="checkbox" id="mwQyEnabled" ' + (qyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控7881平台（search.7881.com' + G().name + '成品号）</label>' +
-        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
-        '<input type="number" id="mwQyInterval" value="' + platformIntervals.qy + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
-        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取7881商品列表（MD5签名认证），按最新发布排序</div>' +
         // 易手游平台监控
-        '<div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">' +
-        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0;">' +
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
         '<input type="checkbox" id="mwYsyEnabled" ' + (ysyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控易手游平台（swcbg.com' + G().name + '成品号）</label>' +
-        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><span style="font-size:12px;color:#888;">间隔</span>' +
-        '<input type="number" id="mwYsyInterval" value="' + platformIntervals.ysy + '" min="10" max="3600" title="该平台扫描间隔（秒）" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" />' +
-        '<span style="font-size:12px;color:#888;">秒</span></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取易手游商品列表（结构化角色武器数据），按最新发布排序</div>' +
         // 通知阈值
@@ -7181,7 +6765,7 @@
         '<div style="font-size:11px;color:#f59e0b;margin-bottom:16px;padding:8px 10px;background:rgba(245,158,11,0.1);border-radius:6px;border-left:3px solid #f59e0b;">差价超过阈值且标价不超过上限时自动打开商品页并点击"立即购买"跳转到确认页，你只需手动扫码支付。需保持螃蟹网登录状态。标价上限填0表示不限制。</div>' +
         // 指定账号通知
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">指定账号通知（须满足全部角色条件）</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，并可指定其专武的精炼等级（如"满命+满精"）；全部满足、估值落在指定范围内且差价超过阈值才通知（估值范围填0表示不限，未填则沿用上方"估值下限"）；可勾选 Server酱 接收人，只推给指定的人</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">添加角色条件，账号须同时拥有所有指定角色及命座，且差价超过阈值才通知；可勾选 Server酱 接收人，只推给指定的人</div>' +
         '<div id="mwCharNotifyList" style="margin-bottom:8px;"></div>' +
         '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">' +
         '<select id="mwCharNotifyName" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;">' +
@@ -7200,20 +6784,13 @@
         '<select id="mwCharNotifyConst" style="width:80px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;">' +
         '<option value="0">0命+</option><option value="1">1命+</option><option value="2">2命+</option><option value="3">3命+</option><option value="4">4命+</option><option value="5">5命+</option><option value="6">满命</option>' +
         '</select>' +
-        '<select id="mwCharNotifySigRefine" title="该角色专武的精炼等级要求" style="width:90px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;">' +
-        '<option value="0">专武不限</option><option value="1">精1+</option><option value="2">精2+</option><option value="3">精3+</option><option value="4">精4+</option><option value="5">满精</option>' +
-        '</select>' +
         '<button id="mwCharNotifyAddChar" style="padding:6px 12px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:12px;cursor:pointer;">添加角色</button>' +
         '</div>' +
         '<div id="mwCharNotifyPending" style="margin-bottom:8px;"></div>' +
         '<div id="mwCharNotifyRecipients" style="margin-bottom:8px;"></div>' +
-        '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">' +
+        '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;">' +
         '<label style="font-size:12px;color:#888;">最低差价(元)</label>' +
         '<input type="number" id="mwCharNotifyDiff" value="0" min="0" style="width:80px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
-        '<label style="font-size:12px;color:#888;margin-left:6px;">估值范围(元)</label>' +
-        '<input type="number" id="mwCharNotifyMinValue" value="0" min="0" placeholder="最低" title="估值下限，0=不限" style="width:70px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
-        '<span style="color:#666;">~</span>' +
-        '<input type="number" id="mwCharNotifyMaxValue" value="0" min="0" placeholder="最高" title="估值上限，0=不限" style="width:70px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
         '<button id="mwCharNotifyAddRule" style="padding:6px 12px;border:none;border-radius:4px;background:#f59e0b;color:#1a1a2e;font-size:12px;font-weight:600;cursor:pointer;">保存规则</button>' +
         '<button id="mwCharNotifyCancelEdit" style="display:none;padding:6px 12px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#aaa;font-size:12px;cursor:pointer;">取消编辑</button>' +
         '</div>' +
@@ -7227,7 +6804,7 @@
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">标价上限（元）</label>' +
         '<input type="number" id="mwNotifyMaxPrice" value="' + notifyMaxPrice + '" min="0" max="999999" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值低于下限的账号不会收录进监控列表，也不会发送通知（填0则仅过滤估值低于300的垃圾数据）；标价低于下限或高于上限时不会发送通知（填0表示不限制）</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值或标价低于各自下限时不会发送通知，标价高于上限时也不通知（填0表示不限制）</div>' +
         // 提醒方式
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">提醒方式</div>' +
         '<div style="margin-bottom:8px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwSoundAlert" ' + (pushConfig.soundAlert ? 'checked' : '') + ' style="margin-right:6px;">声音提醒（连续蜂鸣3次）</label></div>' +
@@ -7331,7 +6908,7 @@
         for (var i = 0; i < pendingChars.length; i++) {
           var pc = pendingChars[i];
           html += '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#0f3460;color:#6a9fff;">' +
-            formatCharCond(pc) +
+            pc.name + (pc.minConst > 0 ? ' ' + pc.minConst + '命+' : '') +
             ' <span class="del-pending" data-idx="' + i + '" style="color:#e94560;cursor:pointer;margin-left:4px;">✕</span></span>';
         }
         html += '</div>';
@@ -7356,18 +6933,12 @@
             var r = charNotifyRules[idx];
             var row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;background:#16213e;border-radius:6px;margin-bottom:4px;flex-wrap:wrap;';
-            var charStr = formatRuleChars(r);
+            var charStr = r.chars.map(function (c) { return c.name + (c.minConst > 0 ? c.minConst + '命+' : ''); }).join(' + ');
             var diffStr = r.minDiff !== 0 ? ('差价>' + r.minDiff + '元') : '不限差价';
-            var rMin = r.minValue || 0, rMax = r.maxValue || 0;
-            var rangeStr = '';
-            if (rMin > 0 && rMax > 0) rangeStr = '估值' + rMin + '~' + rMax + '元';
-            else if (rMin > 0) rangeStr = '估值≥' + rMin + '元';
-            else if (rMax > 0) rangeStr = '估值≤' + rMax + '元';
             var recStr = (r.recipients && r.recipients.length) ? ('→ 推给 ' + r.recipients.map(scEsc).join('、')) : '→ 推给全部接收人';
             row.innerHTML = '<span style="color:#e94560;font-weight:600;">规则' + (idx + 1) + ':</span>' +
               '<span style="color:#6a9fff;">' + charStr + '</span>' +
               '<span style="color:#888;">' + diffStr + '</span>' +
-              (rangeStr ? '<span style="color:#f59e0b;">' + rangeStr + '</span>' : '') +
               '<span style="color:#10b981;">' + recStr + '</span>' +
               '<span style="margin-left:auto;display:flex;gap:4px;">' +
               '<button class="edit-rule" style="padding:2px 8px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:11px;cursor:pointer;">编辑</button>' +
@@ -7390,10 +6961,6 @@
         pendingChars = [];
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = '0';
-        box.querySelector('#mwCharNotifyMinValue').value = '0';
-        box.querySelector('#mwCharNotifyMaxValue').value = '0';
-        var sigSelReset = box.querySelector('#mwCharNotifySigRefine');
-        if (sigSelReset) sigSelReset.value = '0';
         box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = false; });
         box.querySelector('#mwCharNotifyAddRule').textContent = '保存规则';
         var cancelBtn = box.querySelector('#mwCharNotifyCancelEdit');
@@ -7405,11 +6972,9 @@
         var r = charNotifyRules[idx];
         if (!r) return;
         editingRuleIdx = idx;
-        pendingChars = r.chars.map(function (c) { return { name: c.name, minConst: c.minConst, minSigRefine: c.minSigRefine || 0 }; });
+        pendingChars = r.chars.map(function (c) { return { name: c.name, minConst: c.minConst }; });
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = r.minDiff || 0;
-        box.querySelector('#mwCharNotifyMinValue').value = r.minValue || 0;
-        box.querySelector('#mwCharNotifyMaxValue').value = r.maxValue || 0;
         var recs = r.recipients || [];
         box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = recs.indexOf(cb.value) >= 0; });
         box.querySelector('#mwCharNotifyAddRule').textContent = '更新规则';
@@ -7423,26 +6988,21 @@
       box.querySelector('#mwCharNotifyAddChar').onclick = function () {
         var name = box.querySelector('#mwCharNotifyName').value;
         var minConst = parseInt(box.querySelector('#mwCharNotifyConst').value) || 0;
-        var minSigRefine = parseInt(box.querySelector('#mwCharNotifySigRefine').value) || 0;
         if (!name) { alert('请选择角色'); return; }
         if (pendingChars.some(function (c) { return c.name === name; })) { alert('已添加过该角色'); return; }
-        pendingChars.push({ name: name, minConst: minConst, minSigRefine: minSigRefine });
+        pendingChars.push({ name: name, minConst: minConst });
         renderPendingChars();
         box.querySelector('#mwCharNotifyName').value = '';
         box.querySelector('#mwCharNotifyConst').value = '0';
-        box.querySelector('#mwCharNotifySigRefine').value = '0';
       };
 
       box.querySelector('#mwCharNotifyAddRule').onclick = function () {
         if (pendingChars.length === 0) { alert('请至少添加一个角色'); return; }
         var minDiff = parseFloat(box.querySelector('#mwCharNotifyDiff').value) || 0;
-        var minValue = parseFloat(box.querySelector('#mwCharNotifyMinValue').value) || 0;
-        var maxValue = parseFloat(box.querySelector('#mwCharNotifyMaxValue').value) || 0;
-        if (minValue > 0 && maxValue > 0 && maxValue < minValue) { alert('估值范围有误：最高值不能小于最低值'); return; }
         // 收集勾选的 Server酱 接收人（空数组=推给所有"收全部通知"的接收人）
         var ruleRecipients = [];
         box.querySelectorAll('.mwRuleRecipient:checked').forEach(function (cb) { ruleRecipients.push(cb.value); });
-        var newRule = { chars: pendingChars.slice(), minDiff: minDiff, minValue: minValue, maxValue: maxValue, recipients: ruleRecipients };
+        var newRule = { chars: pendingChars.slice(), minDiff: minDiff, recipients: ruleRecipients };
         if (editingRuleIdx >= 0 && editingRuleIdx < charNotifyRules.length) {
           charNotifyRules[editingRuleIdx] = newRule; // 更新已有规则
         } else {
@@ -7731,7 +7291,7 @@
 
       // 测试推送
       box.querySelector('#mwTestPush').onclick = function () {
-        notify('test', '测试通知 - 账号监控助手', '如果您收到了这条通知，说明推送配置正确！\n标价100元 估值200元\n差价+100元 性价比+100%');
+        notify('test', '测试通知 - 鸣潮监控助手', '如果您收到了这条通知，说明推送配置正确！\n标价100元 估值200元\n差价+100元 性价比+100%');
       };
 
       // 云端同步
@@ -7777,17 +7337,11 @@
             // 监控设置
             box.querySelector('#mwRefreshInterval').value = refreshIntervalSec || 60;
             box.querySelector('#mwScanPages').value = scanPages || 3;
-            box.querySelector('#mwScanBackfillPages').value = scanBackfillPages || 8;
-            box.querySelector('#mwScanBackfillInterval').value = scanBackfillIntervalSec || 300;
             box.querySelector('#mwFlashSaleEnabled').checked = !!flashSaleEnabled;
             box.querySelector('#mwPzdsEnabled').checked = !!pzdsEnabled;
             box.querySelector('#mwKjsEnabled').checked = !!kjsEnabled;
             box.querySelector('#mwQyEnabled').checked = !!qyEnabled;
             box.querySelector('#mwYsyEnabled').checked = !!ysyEnabled;
-            box.querySelector('#mwPzdsInterval').value = platformIntervals.pzds;
-            box.querySelector('#mwKjsInterval').value = platformIntervals.kjs;
-            box.querySelector('#mwQyInterval').value = platformIntervals.qy;
-            box.querySelector('#mwYsyInterval').value = platformIntervals.ysy;
           } else {
             alert('服务器暂无推送配置或恢复失败');
           }
@@ -7812,29 +7366,11 @@
         if (newScanPages < 1) newScanPages = 1;
         if (newScanPages > 10) newScanPages = 10;
         scanPages = newScanPages;
-        var newBackfillPages = parseInt(box.querySelector('#mwScanBackfillPages').value) || 8;
-        if (newBackfillPages < 1) newBackfillPages = 1;
-        if (newBackfillPages > 20) newBackfillPages = 20;
-        scanBackfillPages = newBackfillPages;
-        var newBackfillInterval = parseInt(box.querySelector('#mwScanBackfillInterval').value) || 300;
-        if (newBackfillInterval < 60) newBackfillInterval = 60;
-        if (newBackfillInterval > 3600) newBackfillInterval = 3600;
-        scanBackfillIntervalSec = newBackfillInterval;
         flashSaleEnabled = box.querySelector('#mwFlashSaleEnabled').checked;
         pzdsEnabled = box.querySelector('#mwPzdsEnabled').checked;
         kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
         qyEnabled = box.querySelector('#mwQyEnabled').checked;
         ysyEnabled = box.querySelector('#mwYsyEnabled').checked;
-        // 各平台独立刷新间隔（10~3600秒）
-        var clampInterval = function (v, def) {
-          var n = parseInt(v, 10);
-          if (!n || isNaN(n)) return def;
-          return Math.min(3600, Math.max(10, n));
-        };
-        platformIntervals.pzds = clampInterval(box.querySelector('#mwPzdsInterval').value, platformIntervals.pzds);
-        platformIntervals.kjs = clampInterval(box.querySelector('#mwKjsInterval').value, platformIntervals.kjs);
-        platformIntervals.qy = clampInterval(box.querySelector('#mwQyInterval').value, platformIntervals.qy);
-        platformIntervals.ysy = clampInterval(box.querySelector('#mwYsyInterval').value, platformIntervals.ysy);
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
@@ -7847,17 +7383,6 @@
         pushConfig.syncPassword = box.querySelector('#mwSyncPassword').value.trim();
         pushConfig.devMessage = box.querySelector('#mwDevMessage').value.trim();
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
-        // 估值下限提高后，同步清理列表中低于新下限的行，避免旧数据残留
-        var minVal = includeMinValue();
-        var beforeLen = tableData.length;
-        tableData = tableData.filter(function (r) { return (r.value || 0) >= minVal; });
-        if (tableData.length !== beforeLen) {
-          console.log('[鸣潮监控] 按估值下限(' + minVal + ')清理' + (beforeLen - tableData.length) + '行');
-          saveTableData();
-          sortTableData();
-          refreshTableDisplay();
-          updateStatusText();
-        }
         saveState();
         // 如果设置了同步密码，自动上传到服务器
         if (pushConfig.syncPassword) {
@@ -7865,7 +7390,8 @@
         }
         // 如果刷新间隔变了且正在监控，重启定时器
         if (intervalChanged && monitorRunning) {
-          scheduleNextTick(refreshIntervalSec * 1000);
+          if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
+          monitorTimeout = setTimeout(monitorTick, refreshIntervalSec * 1000);
           nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
         }
         overlay.remove();
@@ -7875,14 +7401,7 @@
     });
 
     dom.btnRefresh.addEventListener('click', function () {
-      if (refreshInProgress) {
-        console.log('[鸣潮监控] 刷新进行中，忽略重复点击');
-        return;
-      }
-      refreshInProgress = true;
-      // 手动刷新：忽略各平台间隔，全部平台强制扫描一次
-      console.log('[鸣潮监控] 手动刷新：强制扫描全部平台');
-      doRefresh(true).finally(function () { refreshInProgress = false; });
+      doRefresh();
     });
 
 
@@ -7901,19 +7420,15 @@
     });
 
     dom.btnTestEval.addEventListener('click', openTestEvalDialog);
-    dom.btnPageEval.addEventListener('click', togglePageEval);
 
     dom.btnCleanData.addEventListener('click', openCleanDataDialog);
 
     // 检查已售
     dom.btnCheckSold.addEventListener('click', checkSoldAccounts);
-
-    // 运行日志（替代控制台）
     if (dom.btnLog) dom.btnLog.addEventListener('click', openLogViewer);
-    mwUpdateLogButton();
 
     // 云端备份/恢复（防止脚本重装/换浏览器丢失历史列表）
-    dom.btnCloudBackup.addEventListener('click', function () { backupTableToCloud(); });
+    dom.btnCloudBackup.addEventListener('click', function () { backupTableToCloud(false); });
     dom.btnCloudRestore.addEventListener('click', restoreTableFromCloud);
 
     // 跨管理器/跨浏览器迁移
@@ -8107,16 +7622,8 @@
     dom.filterBar.style.display = 'flex';
     const constUnit = G().constUnitDisplay;
     dom.filterCharTags.innerHTML = charFilter.map(function (cond) {
-      const constLabel = cond.minConst > 0 ? cond.minConst + constUnit + '+' : '';
-      const isS = isSTierChar(cond.name);
-      const refine = cond.minSigRefine || 0;
-      // S 级角色额外展示可点击的"精炼"徽标（非 S 级不显示）
-      const refineBadge = isS
-        ? '<span class="mw-char-filter-refine" data-char="' + cond.name + '" style="padding:0 5px;border-radius:999px;background:rgba(245,158,11,0.25);color:#f59e0b;font-size:10px;">' + (refine > 0 ? '精' + refine + '+' : '精不限') + '</span>'
-        : '';
-      const title = cond.name + '：点击移除，右键调整命座（当前' + (cond.minConst > 0 ? '≥' + cond.minConst + constUnit : '不限命座') + '）'
-        + (isS ? '，点击「精」徽标调整专武精炼（当前' + (refine > 0 ? '≥精' + refine : '不限') + '）' : '');
-      return '<span class="mw-char-filter-tag" data-char="' + cond.name + '" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid #e94560;border-radius:999px;background:rgba(233,69,96,0.15);color:#e94560;font-size:11px;cursor:pointer;" title="' + title + '">' + cond.name + constLabel + refineBadge + ' ×</span>';
+      const label = cond.name + (cond.minConst > 0 ? cond.minConst + constUnit + '+' : '');
+      return '<span class="mw-char-filter-tag" data-char="' + cond.name + '" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border:1px solid #e94560;border-radius:999px;background:rgba(233,69,96,0.15);color:#e94560;font-size:11px;cursor:pointer;" title="' + cond.name + '：点击移除，右键调整命座条件（当前' + (cond.minConst > 0 ? '≥' + cond.minConst + constUnit : '不限命座') + '）">' + label + ' ×</span>';
     }).join('');
     var filterTags = dom.filterCharTags.querySelectorAll('.mw-char-filter-tag');
     filterTags.forEach(function (t) {
@@ -8135,20 +7642,6 @@
         var cond = charFilter.find(function (c) { return c.name === name; });
         if (cond) {
           cond.minConst = (cond.minConst || 0) >= 6 ? 0 : (cond.minConst || 0) + 1;
-          currentPage = 1;
-          updateFilterBar();
-          refreshTableDisplay();
-        }
-      });
-    });
-    // S 级角色的"精炼"徽标：点击循环 不限→精1+→…→精5+→不限
-    dom.filterCharTags.querySelectorAll('.mw-char-filter-refine').forEach(function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation(); // 阻止冒泡触发标签移除
-        var name = b.getAttribute('data-char');
-        var cond = charFilter.find(function (c) { return c.name === name; });
-        if (cond) {
-          cond.minSigRefine = (cond.minSigRefine || 0) >= 5 ? 0 : (cond.minSigRefine || 0) + 1;
           currentPage = 1;
           updateFilterBar();
           refreshTableDisplay();
@@ -8178,7 +7671,7 @@
 
     var hint = document.createElement('div');
     hint.style.cssText = 'font-size:11px;color:#666;margin-top:8px;';
-    hint.textContent = '点击添加/移除筛选；标签右键调整命座，S级角色可点标签内「精」徽标调整专武精炼';
+    hint.textContent = '点击添加/移除筛选；标签右键调整命座条件';
 
     picker.appendChild(input);
     picker.appendChild(list);
@@ -8220,8 +7713,7 @@
         var active = charFilter.some(function (c) { return c.name === it.name; });
         var color = it.tier === 'S' ? '#e94560' : (it.tier === 'A' ? '#f59e0b' : '#8a8fb5');
         var bg = active ? 'background:rgba(233,69,96,.25);border-color:#e94560;' : 'border-color:#0f3460;';
-        var chipTitle = it.tier + '级，默认估值' + it.price + '元' + (it.tier === 'S' ? '（支持专武精炼筛选）' : '');
-        return '<span class="mw-picker-char" data-name="' + it.name + '" title="' + chipTitle + '" style="display:inline-block;padding:3px 8px;border:1px solid;border-radius:4px;font-size:12px;cursor:pointer;color:' + color + ';' + bg + '">' + it.name + '</span>';
+        return '<span class="mw-picker-char" data-name="' + it.name + '" title="' + it.tier + '级，默认估值' + it.price + '元" style="display:inline-block;padding:3px 8px;border:1px solid;border-radius:4px;font-size:12px;cursor:pointer;color:' + color + ';' + bg + '">' + it.name + '</span>';
       }).join('');
       list.querySelectorAll('.mw-picker-char').forEach(function (el) {
         el.addEventListener('click', function () {
@@ -8343,18 +7835,9 @@
     if (idx < 0) return;
     var delRow = tableData[idx];
     tableData.splice(idx, 1);
-    // 同步从 seenIds 移除（仅清理内存）
+    // 同步从 seenIds 移除，允许未来重新发现
     var seenIdx = seenIds.indexOf(pid);
     if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
-    // 加入永久忽略列表：扫描时直接跳过，避免 seenIds 滚动淘汰后该商品被重新入库
-    if (!deletedIdSet.has(pid)) {
-      deletedProductIds.push(pid);
-      deletedIdSet.add(pid);
-      if (deletedProductIds.length > CONFIG.maxDeletedIds) {
-        var evicted = deletedProductIds.shift();
-        deletedIdSet.delete(evicted);
-      }
-    }
     // 同步从 notifiedIds 移除
     ['_drop', '_flash'].forEach(function (suf) {
       var nIdx = notifiedIds.indexOf(pid + suf);
@@ -8363,11 +7846,10 @@
     saveTableData();
     saveStorage(STORAGE_KEYS.seen, seenIds);
     saveStorage(STORAGE_KEYS.notified, notifiedIds);
-    saveStorage(STORAGE_KEYS.deleted, deletedProductIds);
     sortTableData();
     refreshTableDisplay();
     updateStatusText();
-    console.log('[鸣潮监控] 手动删除(已加入忽略列表): ' + (delRow.productUniqueNo || pid));
+    console.log('[鸣潮监控] 手动删除: ' + (delRow.productUniqueNo || pid));
   }
 
   /**
@@ -8455,11 +7937,14 @@
         return false;
       });
     }
-    // 角色筛选（多角色+命座+专武精炼条件，全部满足才显示）
+    // 角色筛选（多角色+命座条件，全部满足才显示）
     if (charFilter && charFilter.length > 0) {
       displayData = displayData.filter(row => {
         if (!row.parsed || !row.parsed.characters) return false;
-        return charFilter.every(cond => matchCharCond(cond, row.parsed));
+        return charFilter.every(cond => {
+          const char = row.parsed.characters.find(c => c.name === cond.name);
+          return char && char.const >= (cond.minConst || 0);
+        });
       });
     }
     // 只显示已售
@@ -8718,343 +8203,12 @@
   }
 
   /**
-   * 差价配色，与页面估价助手保持一致：<-200 红、<0 灰、<200 黄、>=200 绿
-   */
-  function getDiffStyle(diff) {
-    if (diff < -200) return { bg: '#ef4444', fg: '#ffffff' };
-    if (diff < 0) return { bg: '#8888aa', fg: '#ffffff' };
-    if (diff < 200) return { bg: '#fbbf24', fg: '#1f2937' };
-    return { bg: '#10b981', fg: '#ffffff' };
-  }
-
-  /**
    * 性价比标签
    */
   function getRatioLabel(ratio) {
     if (ratio > threshold) return '高性价';
     if (ratio > 0) return '可入';
     return '普通';
-  }
-
-  // ============================================================
-  // 页面估值：点击按钮后对当前页面显示的商品估值并标注在卡片上
-  // 仅螃蟹网列表页有效（卡片为 div[productid]），不依赖监控列表。
-  // 与监控助手一致：拉详情接口（fetchDetail）拿完整描述+等级做详估，
-  // 详情失败时回退卡片文本初估。再点一次关闭并清除标注。
-  // ============================================================
-  let pageEvalActive = false;
-  let pageEvalObserver = null;
-  let pageEvalScanTimer = null;
-  let pageEvalSig = '';
-  const pageEvalDetailCache = new Map();  // productId -> { showTitle, price }（详情接口结果）
-  const pageEvalQueue = [];               // 待详估的商品
-  let pageEvalRunning = false;            // 详估工作器是否在运行
-  let pageEvalDone = 0;
-  let pageEvalTotal = 0;
-
-  // 收集页面商品卡片，读取编号、价格（元）与描述
-  function collectPageCards(cards) {
-    if (!cards) cards = document.querySelectorAll('div[productid]');
-    const items = [];
-    for (const card of cards) {
-      const productId = card.getAttribute('productid');
-      if (!productId) continue;
-      const titleEl = card.querySelector('.smallCardTitle');
-
-      let price = 0;
-      if (titleEl) {
-        const priceAttr = titleEl.getAttribute('price');
-        if (priceAttr) price = Math.round(parseInt(priceAttr, 10) / 100);
-        const promo = titleEl.getAttribute('seckillprice') || titleEl.getAttribute('activityprice');
-        if (promo) price = Math.round(parseInt(promo, 10) / 100);
-      }
-      if (price <= 0) {
-        const boldSpans = card.querySelectorAll('span.text-Bold, span[class*="text-Bold"]');
-        for (const s of boldSpans) {
-          const n = parseInt(s.textContent.replace(/[,，￥¥\s]/g, ''), 10);
-          if (!isNaN(n) && n > 0) { price = n; break; }
-        }
-      }
-      if (price <= 0) {
-        const spans = card.querySelectorAll('span, div');
-        for (const s of spans) {
-          const m = s.textContent.trim().match(/[￥¥]\s*(\d[\d,，]+)/);
-          if (m) {
-            const n = parseInt(m[1].replace(/[,，\s]/g, ''), 10);
-            if (!isNaN(n) && n > 0) { price = n; break; }
-          }
-        }
-      }
-
-      let desc = titleEl ? titleEl.textContent.trim() : '';
-      if (!desc) {
-        const descEl = card.querySelector('.text-Medium') || card.querySelector('[class*="text-Medium"]');
-        if (descEl) desc = descEl.textContent.trim();
-      }
-      if (!desc) continue;
-
-      items.push({ productId: String(productId), price: price, desc: desc, card: card, titleEl: titleEl });
-    }
-    return items;
-  }
-
-  // 计算估值并注入/更新角标（样式与页面估价助手一致）
-  function injectPageBadge(item, desc, price) {
-    let parsed, valuation;
-    try {
-      parsed = parseAccountInfo(desc);
-      valuation = calculateValue(parsed, price);
-    } catch (e) {
-      return false;
-    }
-    if (!valuation) return false;
-
-    const value = valuation.totalValue;
-    const ratio = price > 0 ? Math.round((value - price) / price * 1000) / 10 : 0;
-    // 整块配色由差价决定
-    const ds = getDiffStyle(valuation.diff);
-
-    item.card.dataset.mwPageEval = 'done';
-    item.card.dataset.mwPageEvalLen = String((desc || '').length);
-    if (getComputedStyle(item.card).position === 'static') item.card.style.position = 'relative';
-
-    let badge = item.card.querySelector('.mw-page-badge');
-    if (!badge) {
-      badge = document.createElement('div');
-      badge.className = 'mw-page-badge';
-      badge.dataset.mwPageBadge = '1';
-      item.card.appendChild(badge);
-    }
-    badge.style.background = ds.bg;
-    badge.style.color = ds.fg;
-    badge.title = '标价: ¥' + price;
-
-    const rows = ['<span class="mw-pv-val">¥' + Math.round(value) + '</span>'];
-    if (valuation.diff != null) {
-      rows.push('<span class="mw-pv-diff">差价 ' + (valuation.diff > 0 ? '+' : '') + Math.round(valuation.diff) + '</span>');
-    }
-    if (price > 0) rows.push('<span class="mw-pv-row">性价比 ' + (ratio > 0 ? '+' : '') + ratio + '%</span>');
-    if (valuation.effectiveYellow != null) {
-      rows.push('<span class="mw-pv-row">有效金 ' + (Math.round((valuation.effectiveYellow || 0) * 10) / 10) + '</span>');
-    }
-    badge.innerHTML = rows.join('');
-
-    // 抽数／皮肤／车架放左上角，与右上角角标分开
-    let res = item.card.querySelector('.mw-page-res');
-    if (!res) {
-      res = document.createElement('div');
-      res.className = 'mw-page-res';
-      res.dataset.mwPageBadge = '1';
-      item.card.appendChild(res);
-    }
-    res.style.background = ds.bg;
-    res.style.color = ds.fg;
-    res.innerHTML = '抽数 <b>' + Math.round(parsed.pulls || 0) + '</b> · 皮肤 <b>' +
-      (parsed.outfitCount || 0) + '</b> · 车架 <b>' + (parsed.motoCount || 0) + '</b>';
-
-    if (item.titleEl && item.titleEl.parentElement) {
-      let est = item.card.querySelector('.mw-page-est');
-      if (!est) {
-        est = document.createElement('div');
-        est.className = 'mw-page-est';
-        est.dataset.mwPageBadge = '1';
-        item.titleEl.parentElement.appendChild(est);
-      }
-      est.style.background = ds.bg;
-      est.style.color = ds.fg;
-      est.textContent = '估值 ¥' + Math.round(value);
-    }
-    return true;
-  }
-
-  // 占位角标（等待详情接口详估）
-  function injectPagePending(item) {
-    if (item.card.querySelector('.mw-page-badge')) return;
-    if (getComputedStyle(item.card).position === 'static') item.card.style.position = 'relative';
-    const badge = document.createElement('div');
-    badge.className = 'mw-page-badge';
-    badge.dataset.mwPageBadge = '1';
-    badge.style.background = '#6b7280';
-    badge.textContent = '估值中…';
-    item.card.appendChild(badge);
-  }
-
-  // 页面估值结果同步进监控列表：与监控扫描共用 processProduct 主流程，
-  // 收录条件（估值下限、等级下限、已删除忽略、同 productId 去重、指纹去重）与
-  // 推送 / 自动抢购规则完全一致；不符合收录条件的会在 processProduct 内部直接 return。
-  // 落盘方式与扫描保持一致（批量模式 + 每20条统一保存）：一屏商品 60+ 个，
-  // 若逐条落盘会触发 60+ 次全量 localStorage 写入与重绘，表格接近上限时
-  // saveTableData 还会走多轮降级裁剪，把主线程占满导致录入卡顿。
-  let pageEvalImportPending = 0;
-
-  function importPageEvalProduct(productId, showTitle, price, productUniqueNo) {
-    const prevBatch = batchMode;
-    batchMode = true;
-    try {
-      processProduct({
-        productId: productId,
-        showTitle: showTitle,
-        price: Math.round(price * 100),  // 元转分
-        productUniqueNo: productUniqueNo || '',
-      }, false, true);
-      pageEvalImportPending++;
-    } finally {
-      batchMode = prevBatch;
-    }
-    if (pageEvalImportPending >= 20) flushPageEvalImport();
-  }
-
-  // 统一截断、排序、保存、刷新（与 handleListResponse 尾部一致）
-  function flushPageEvalImport() {
-    if (pageEvalImportPending === 0) return;
-    pageEvalImportPending = 0;
-    const prevBatch = batchMode;
-    batchMode = false;
-    try {
-      trimTableData();
-      sortTableData();
-      saveTableData();
-      saveStorage(STORAGE_KEYS.seen, seenIds);
-      refreshTableDisplay();
-      updateStatusText();
-    } finally {
-      batchMode = prevBatch;
-    }
-  }
-
-  // 页面估值的详情请求优先走 GM_xmlhttpRequest（与「页面估价助手」一致）：
-  // 页面上下文请求量过大时会和监控扫描的列表请求争抢同一份 WAF 计数，
-  // 把监控扫描一起拖慢；GM 通道失败时回落到 fetchDetail。
-  async function fetchDetailForPageEval(productId) {
-    try {
-      const data = await gmFetch(API_URLS.detail, { productId: productId });
-      if (data && data.success) return data;
-    } catch (e) {
-      console.warn('[鸣潮监控-页面估值] GM详情请求失败，回落到页面请求:', e.message);
-    }
-    return fetchDetail(productId);
-  }
-
-  // 逐批拉详情接口详估（并发2，批间隔300ms，避免触发WAF）
-  async function runPageEvalQueue() {
-    if (pageEvalRunning) return;
-    pageEvalRunning = true;
-    while (pageEvalQueue.length > 0 && pageEvalActive) {
-      const batch = pageEvalQueue.splice(0, 2);
-      await Promise.all(batch.map(async function (item) {
-        let desc = item.desc;
-        let price = item.price;
-        let cached = pageEvalDetailCache.get(item.productId);
-        if (!cached) {
-          cached = { showTitle: '', price: 0, uniqueNo: '' };
-          try {
-            const data = await fetchDetailForPageEval(item.productId);
-            if (data && data.success && data.data) {
-              cached.showTitle = data.data.showTitle || data.data.title || '';
-              cached.price = (data.data.price || 0) / 100;
-              cached.uniqueNo = data.data.productUniqueNo || data.data.uniqueNo || '';
-            }
-          } catch (e) {
-            // 详情拉取失败：回退卡片文本初估
-          }
-          pageEvalDetailCache.set(item.productId, cached);
-        }
-        if (cached.showTitle && cached.showTitle.length > desc.length) desc = cached.showTitle;
-        if (cached.price > 0) price = cached.price;
-        injectPageBadge(item, desc, price);
-        // 只有详情拉取成功的才同步进监控列表：截断文本算出的估值不可信，不入库
-        if (cached.showTitle) {
-          importPageEvalProduct(item.productId, cached.showTitle, price, cached.uniqueNo);
-        }
-        pageEvalDone++;
-        updatePageEvalButtonText();
-      }));
-      if (pageEvalQueue.length > 0 && pageEvalActive) {
-        await new Promise(function (r) { setTimeout(r, 300); });
-      }
-    }
-    // 队列跑完统一落盘，避免剩余未满20条的导入结果丢失
-    flushPageEvalImport();
-    pageEvalRunning = false;
-    updatePageEvalButtonText();
-  }
-
-  function updatePageEvalButtonText() {
-    if (!dom.btnPageEval) return;
-    if (!pageEvalActive) { dom.btnPageEval.textContent = '页面估值'; return; }
-    dom.btnPageEval.classList.add('mw-btn-active');
-    if (pageEvalRunning || pageEvalQueue.length > 0) {
-      dom.btnPageEval.textContent = '估值中 ' + pageEvalDone + '/' + pageEvalTotal;
-    } else {
-      dom.btnPageEval.textContent = '停止页面估值';
-    }
-  }
-
-  // 扫描页面卡片：未处理的入队并显示占位角标，返回本次新增数量
-  function runPageEvalScan() {
-    const cards = document.querySelectorAll('div[productid]');
-    if (cards.length === 0) return 0;
-    // 卡片集合未变化则跳过（避免页面无关变动触发无谓重扫）
-    const sig = cards.length + '|' + (cards[0].getAttribute('productid') || '') + '|' +
-      (cards[cards.length - 1].getAttribute('productid') || '');
-    if (sig === pageEvalSig) return 0;
-    pageEvalSig = sig;
-
-    let n = 0;
-    for (const item of collectPageCards(cards)) {
-      const state = item.card.dataset.mwPageEval;
-      if (state === 'pending' || state === 'done') continue;
-      item.card.dataset.mwPageEval = 'pending';
-      injectPagePending(item);
-      pageEvalQueue.push(item);
-      pageEvalTotal++;
-      n++;
-    }
-    if (n > 0) runPageEvalQueue();
-    updatePageEvalButtonText();
-    return n;
-  }
-
-  // 页面变化时防抖重扫（仅开启状态生效）
-  function schedulePageEvalScan() {
-    if (!pageEvalActive || pageEvalScanTimer) return;
-    pageEvalScanTimer = setTimeout(function () {
-      pageEvalScanTimer = null;
-      if (pageEvalActive) runPageEvalScan();
-    }, 400);
-  }
-
-  function startPageEval() {
-    pageEvalActive = true;
-    pageEvalSig = '';
-    pageEvalDone = 0;
-    pageEvalTotal = 0;
-    const n = runPageEvalScan();
-    pageEvalObserver = new MutationObserver(schedulePageEvalScan);
-    pageEvalObserver.observe(document.body, { childList: true, subtree: true });
-    if (dom.btnPageEval) dom.btnPageEval.classList.add('mw-btn-active');
-    updatePageEvalButtonText();
-    console.log('[鸣潮监控-页面估值] ' + (n > 0 ? ('已加入 ' + n + ' 个商品，正在拉详情接口详估…') : '未发现商品卡片，当前页面可能不是螃蟹网列表页'));
-  }
-
-  function stopPageEval() {
-    pageEvalActive = false;
-    pageEvalSig = '';
-    pageEvalQueue.length = 0;
-    flushPageEvalImport();  // 关闭前落盘，避免已导入但未保存的商品丢失
-    if (pageEvalObserver) { pageEvalObserver.disconnect(); pageEvalObserver = null; }
-    if (pageEvalScanTimer) { clearTimeout(pageEvalScanTimer); pageEvalScanTimer = null; }
-    document.querySelectorAll('[data-mw-page-badge]').forEach(function (el) { el.remove(); });
-    document.querySelectorAll('div[productid][data-mw-page-eval]').forEach(function (c) {
-      delete c.dataset.mwPageEval;
-      delete c.dataset.mwPageEvalLen;
-    });
-    if (dom.btnPageEval) dom.btnPageEval.classList.remove('mw-btn-active');
-    updatePageEvalButtonText();
-  }
-
-  function togglePageEval() {
-    if (pageEvalActive) stopPageEval(); else startPageEval();
   }
 
   /**
@@ -9787,8 +8941,7 @@
 
   function mwUpdateLogButton() {
     try {
-      // 后台不写 DOM：textContent/classList 会触发样式重算，是后台 CPU 的主要来源之一。
-      // 只打标记，回前台时由 visibilitychange 监听统一补一次
+      // 后台不写 DOM：textContent/classList 会触发样式重算，是后台 CPU 的主要来源之一
       if (document.hidden) { mwLogBtnDirty = true; return; }
       mwLogBtnDirty = false;
       if (!dom.btnLog) return;
@@ -10012,8 +9165,7 @@
 
     mwLogPanel = {
       onNew: function (entry) {
-        // 后台不追加 DOM：创建节点 + 读 scrollHeight 会触发样式/布局计算。
-        // 只打标记，回前台时由 rerender 一次性重绘
+        // 后台不追加 DOM：创建节点 + 读 scrollHeight 会触发样式/布局计算
         if (document.hidden) { mwLogPanelDirty = true; return; }
         if (!mwLogMatches(entry, filter)) { updateCount(); return; }
         var atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 24;
@@ -13156,9 +12308,9 @@ function openSettings() {
       showAlertBanner('自动抢购-弹窗被拦截', '请允许弹窗后重试，或手动点击查看\n差价' + diff.toFixed(0) + '元', productId);
     } else {
       showAlertBanner('自动抢购已触发', '已打开商品页并自动点击购买\n差价' + diff.toFixed(0) + '元，请尽快扫码支付', productId);
-      // 自动抢购专属警报音（与普通提醒的单音区分：急促双音警报）
+      // 急促报警声
       if (pushConfig.soundAlert) {
-        beepAutoBuy();
+        beepMultiple(8);
       }
     }
   }
@@ -13617,36 +12769,6 @@ function openSettings() {
   }
 
   /**
-   * 自动抢购专属警报音：急促的高低双音警报，与普通提醒的单音明显区分
-   * 共用一个 AudioContext，播完后统一关闭，避免上下文泄漏
-   */
-  function beepAutoBuy() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const now = ctx.currentTime;
-      const pattern = [1240, 760, 1240, 760, 1240, 760, 1240, 760]; // 高-低交替
-      const step = 0.15;
-      pattern.forEach(function (freq, i) {
-        const t0 = now + i * step;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(freq, t0);
-        gain.gain.setValueAtTime(0.0001, t0);
-        gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.01, t0 + step);
-        osc.start(t0);
-        osc.stop(t0 + step);
-      });
-      // 全部播完后关闭上下文
-      const total = pattern.length * step + 0.1;
-      setTimeout(function () { try { ctx.close(); } catch (e) { } }, total * 1000);
-    } catch (e) { }
-  }
-
-  /**
    * 标题闪烁提醒
    */
   function startTitleBlink(alertText) {
@@ -13969,14 +13091,11 @@ function openSettings() {
       // 监控设置
       refreshIntervalSec: refreshIntervalSec != null ? refreshIntervalSec : 60,
       scanPages: scanPages != null ? scanPages : 3,
-      scanBackfillPages: scanBackfillPages != null ? scanBackfillPages : 8,
-      scanBackfillIntervalSec: scanBackfillIntervalSec != null ? scanBackfillIntervalSec : 300,
       flashSaleEnabled: flashSaleEnabled || false,
       pzdsEnabled: pzdsEnabled != null ? pzdsEnabled : true,
       kjsEnabled: kjsEnabled != null ? kjsEnabled : true,
       qyEnabled: qyEnabled != null ? qyEnabled : true,
       ysyEnabled: ysyEnabled != null ? ysyEnabled : false,
-      platformIntervals: platformIntervals,
       // 角色通知规则
       charNotifyRules: charNotifyRules || [],
     };
@@ -14045,14 +13164,11 @@ function openSettings() {
             // 监控设置
             if (remote.refreshIntervalSec != null) refreshIntervalSec = remote.refreshIntervalSec;
             if (remote.scanPages != null) scanPages = remote.scanPages;
-            if (remote.scanBackfillPages != null) scanBackfillPages = remote.scanBackfillPages;
-            if (remote.scanBackfillIntervalSec != null) scanBackfillIntervalSec = remote.scanBackfillIntervalSec;
             if (remote.flashSaleEnabled != null) flashSaleEnabled = remote.flashSaleEnabled;
             if (remote.pzdsEnabled != null) pzdsEnabled = remote.pzdsEnabled;
             if (remote.kjsEnabled != null) kjsEnabled = remote.kjsEnabled;
             if (remote.qyEnabled != null) qyEnabled = remote.qyEnabled;
             if (remote.ysyEnabled != null) ysyEnabled = remote.ysyEnabled;
-            applyPlatformIntervals(remote.platformIntervals);
             // 角色通知规则
             if (Array.isArray(remote.charNotifyRules)) charNotifyRules = remote.charNotifyRules;
             saveState();
@@ -14177,7 +13293,7 @@ function openSettings() {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = '账号监控助手迁移包_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.json';
+    a.download = '监控助手迁移包_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -14194,7 +13310,7 @@ function openSettings() {
       try {
         var pkg = JSON.parse(e.target.result);
         if (pkg.type !== 'crab-monitor-migration' || !pkg.games) {
-          onDone({ ok: false, msg: '不是有效的账号监控助手迁移包文件' });
+          onDone({ ok: false, msg: '不是有效的监控助手迁移包文件' });
           return;
         }
         var written = 0;
@@ -14343,6 +13459,8 @@ function openSettings() {
   // ============================================================
 
   var backupRunning = false;
+  var lastBackupTime = 0;                          // 上次云端备份成功时间戳
+  var BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;    // 自动备份间隔：24小时
   var BACKUP_MAX_BYTES = 3 * 1024 * 1024;          // 上传体积上限（低于服务器4MB限制）
 
   function cloudBackupPassword() {
@@ -14358,13 +13476,13 @@ function openSettings() {
   }
 
   /**
-   * 备份监控列表到云端（纯手动，仅由「云端备份」按钮触发）
+   * 备份监控列表到云端（自动备份 silent=true 不弹窗）
    */
-  function backupTableToCloud() {
-    if (backupRunning) { alert('正在备份中，请稍候...'); return; }
-    if (tableData.length === 0) { alert('表格暂无数据，无需备份'); return; }
+  function backupTableToCloud(silent) {
+    if (backupRunning) { if (!silent) alert('正在备份中，请稍候...'); return; }
+    if (tableData.length === 0) { if (!silent) alert('表格暂无数据，无需备份'); return; }
     var password = cloudBackupPassword();
-    if (!password) { alert('请先在通知设置中填写云端同步密码（管理后台密码）'); return; }
+    if (!password) { if (!silent) alert('请先在通知设置中填写云端同步密码（管理后台密码）'); return; }
 
     // 精简行数据（估值/解析缓存可由 showTitle 重算，不参与备份）
     var rows = tableData.map(slimRow);
@@ -14396,21 +13514,23 @@ function openSettings() {
         try {
           var json = JSON.parse(resp.responseText);
           if (json.success) {
+            lastBackupTime = Date.now();
+            saveStorage(STORAGE_KEYS.backup, lastBackupTime, true);
             console.log('[鸣潮监控] 云端备份成功: ' + json.rowCount + '条 (' + G().name + ')');
-            alert('云端备份成功：' + json.rowCount + ' 条记录（游戏：' + G().name + '）');
+            if (!silent) alert('云端备份成功：' + json.rowCount + ' 条记录（游戏：' + G().name + '）');
           } else {
             console.error('[鸣潮监控] 云端备份失败:', json.error);
-            alert('云端备份失败: ' + (json.error || '未知错误'));
+            if (!silent) alert('云端备份失败: ' + (json.error || '未知错误'));
           }
         } catch (e) {
           console.error('[鸣潮监控] 云端备份响应解析失败');
-          alert('云端备份失败: 服务器响应异常');
+          if (!silent) alert('云端备份失败: 服务器响应异常');
         }
       },
       onerror: function () {
         backupRunning = false;
         console.error('[鸣潮监控] 云端备份网络错误');
-        alert('云端备份失败: 网络错误');
+        if (!silent) alert('云端备份失败: 网络错误');
       },
     });
   }
@@ -14501,6 +13621,18 @@ function openSettings() {
       },
       onerror: function () {},
     });
+  }
+
+  /**
+   * 自动云端备份：距上次备份超过24小时且有密码时静默备份
+   */
+  function checkAutoBackup() {
+    if (!cloudBackupPassword()) return;
+    if (tableData.length === 0) return;
+    if (backupRunning) return;
+    if (Date.now() - lastBackupTime < BACKUP_INTERVAL_MS) return;
+    console.log('[鸣潮监控] 距上次云端备份已超过24小时，开始自动备份...');
+    backupTableToCloud(true);
   }
 
   /**
@@ -14626,8 +13758,8 @@ function openSettings() {
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
 
-    // 估值低于收录下限的垃圾数据不收录
-    if (valuation.totalValue < includeMinValue()) return '估值低于' + includeMinValue();
+    // 估值低于300的垃圾数据不收录
+    if (valuation.totalValue < 300) return '估值低于300';
     // 等级低于门槛且明确解析到等级时不收录
     if (valuation.levelFound && valuation.level < G().minLevel) return '等级低于' + G().minLevel;
 
@@ -14761,14 +13893,11 @@ function openSettings() {
       notifyMaxPrice: notifyMaxPrice,
       refreshIntervalSec: refreshIntervalSec,
       scanPages: scanPages,
-      scanBackfillPages: scanBackfillPages,
-      scanBackfillIntervalSec: scanBackfillIntervalSec,
       flashSaleEnabled: flashSaleEnabled,
       pzdsEnabled: pzdsEnabled,
       kjsEnabled: kjsEnabled,
       qyEnabled: qyEnabled,
       ysyEnabled: ysyEnabled,
-      platformIntervals: platformIntervals,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -14784,19 +13913,11 @@ function openSettings() {
     saveState();
     updateStatusText();
 
-    // 阻止后台标签页被节能模式冻结（否则定时器/事件/Promise 全部挂起）
-    holdKeepAliveLock();
-
-    // Web Lock 挡不住 macOS App Nap / 系统休眠，再叠一层"正在播放音频"豁免。
-    // 注意：Chrome 只在标签页出现喇叭图标时才认"正在播放音频"，
-    // 静默音频流不给豁免，所以增益不能压得太低（见 startKeepAliveAudio 注释）
-    startKeepAliveAudio();
-
-    // 兜底：定时器若被系统挂起后丢失，看门狗负责把刷新拉回来
-    startWatchdog();
-
     // 立即开始第一次刷新（通过monitorTick统一管理refreshInProgress）
     nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
+    holdKeepAliveLock();
+    startKeepAliveAudio();
+    startWatchdog();
     monitorTick();
 
     // 启动倒计时
@@ -14808,10 +13929,12 @@ function openSettings() {
    */
   function stopMonitor() {
     monitorRunning = false;
-    stopKeepAliveAudio();
     stopWatchdog();
-    bgClearTimeout(monitorTimeout);
-    monitorTimeout = null;
+    stopKeepAliveAudio();
+    if (monitorTimeout) {
+      clearTimeout(monitorTimeout);
+      monitorTimeout = null;
+    }
     if (countdownTimer) {
       clearInterval(countdownTimer);
       countdownTimer = null;
@@ -14823,100 +13946,10 @@ function openSettings() {
   }
 
   let refreshInProgress = false;
+  let expectedTickAt = 0;   // 本轮计划执行时间点（用于识别"后台挂起"）
 
-  // ── 后台加固（定时器节流 + 标签页冻结）─────────────────────────
-  // 隐藏标签页会被浏览器省电限制，导致"只有切回监控页才拿到新数据"：
-  //  ① 密集节流（Chrome 88+）：页面隐藏>5分钟、静音≥30秒、无 WebRTC、且"链式定时器"
-  //     计数≥5 时，定时器最慢降到每分钟才执行一次；
-  //  ② 冻结（Chrome 133+ 节能模式）：后台标签页 CPU 超阈值会被直接冻结，
-  //     定时器/事件/Promise 回调全部挂起，切回标签页才恢复。
-  // 对策：
-  //  ① 保活音频（"正在播放音频"是官方唯一明确豁免密集节流 + 节能冻结的机制）；
-  //  ② 持有 Web Lock：浏览器不会冻结持有 Web Lock 的页面；
-  //  ③ 看门狗：定时器若真的丢了，20 秒内把刷新拉回来。
-  //
-  // 历史：3.48.0 曾用 MessageChannel 把 setTimeout 的"创建"动作挪进"消息任务"来绕开密集节流。
-  // 但 MessageChannel 在页面被系统挂起/恢复后可能不再派发消息，定时器就此彻底丢失——
-  // 表现为锁屏后一行日志都没有、解锁后也永远不恢复，比"被节流到每分钟一次"更糟。
-  // 既然保活音频已经能豁免密集节流（官方唯一明确豁免项），这里退回裸 setTimeout：
-  // 行为与 3.30 之前一致，且不引入任何额外失效点。
-  const bgTimers = new Map();   // id -> 真实定时器句柄（用于取消）
-  let bgSeq = 0;
-
-  // 后台安全的 setTimeout：返回 id（用 bgClearTimeout 取消）
-  function bgSetTimeout(fn, delay) {
-    const id = ++bgSeq;
-    bgTimers.set(id, setTimeout(function () { bgTimers.delete(id); fn(); }, delay));
-    return id;
-  }
-
-  function bgClearTimeout(id) {
-    if (id == null) return;
-    const t = bgTimers.get(id);
-    if (t) { clearTimeout(t); bgTimers.delete(id); }
-  }
-
-  let expectedTickAt = 0;
-  function scheduleNextTick(delayMs) {
-    bgClearTimeout(monitorTimeout);
-    expectedTickAt = Date.now() + delayMs;
-    monitorTimeout = bgSetTimeout(function () {
-      monitorTimeout = null;
-      // 明显晚于计划时间 → 标签页被浏览器冻结/休眠，或系统睡眠（脚本无法执行，只能记录）
-      const late = Date.now() - expectedTickAt;
-      if (late > Math.max(5000, delayMs)) {
-        console.warn('[鸣潮监控] 后台挂起：本次刷新比计划晚 ' + Math.round(late / 1000) + ' 秒（浏览器冻结标签页 / 系统休眠 / App Nap；若同时有 freeze-resume 记录则为浏览器冻结）');
-      }
-      monitorTick();
-    }, delayMs);
-  }
-
-  // ── 看门狗 ────────────────────────────────────────────────────
-  // 兜底自愈：锁屏/系统休眠/浏览器挂起后，定时器有可能直接丢失（到期也不再触发）。
-  // 用一个独立于所有自定义调度的裸 setInterval 定期核对，停摆就强制补跑一轮。
-  // 它自己也可能被节流，但节流只是让检查变慢，不会让它永久失效。
-  let watchdogTimer = null;
-  const WATCHDOG_INTERVAL_MS = 20 * 1000;   // 每 20 秒核对一次
-  const WATCHDOG_STALL_MS = 90 * 1000;      // 超过计划时间 90 秒仍未刷新 → 判定停摆
-
-  function startWatchdog() {
-    if (watchdogTimer) return;
-    watchdogTimer = setInterval(function () {
-      if (!monitorRunning || refreshInProgress) return;
-      if (!expectedTickAt) return;
-      const overdue = Date.now() - expectedTickAt;
-      if (overdue < WATCHDOG_STALL_MS) return;
-      console.warn('[鸣潮监控] 看门狗：刷新已停摆 ' + Math.round(overdue / 1000) + ' 秒（定时器丢失），强制补跑一轮');
-      bgClearTimeout(monitorTimeout);
-      monitorTimeout = null;
-      monitorTick();
-    }, WATCHDOG_INTERVAL_MS);
-  }
-
-  function stopWatchdog() {
-    if (!watchdogTimer) return;
-    clearInterval(watchdogTimer);
-    watchdogTimer = null;
-  }
-
-  // 页面重新可见（解锁屏幕 / 切回标签页）：立即恢复保活音频，并补跑已过期的刷新。
-  // 系统休眠期间不会有任何事件，这一处是解锁后最快恢复的入口。
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) return;
-    if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
-      keepAliveAudioCtx.resume().catch(function () {});
-    }
-    if (!monitorRunning || refreshInProgress) return;
-    if (!expectedTickAt) return;
-    const overdue = Date.now() - expectedTickAt;
-    if (overdue < 3000) return;
-    console.log('[鸣潮监控] 页面恢复可见，刷新已过期 ' + Math.round(overdue / 1000) + ' 秒，立即补跑');
-    bgClearTimeout(monitorTimeout);
-    monitorTimeout = null;
-    monitorTick();
-  });
-
-  // 持有 Web Lock，避免页面被节能模式冻结（名称带随机后缀，避免同站多标签页互相排队）
+  // ── 防冻结：Web Lock ─────────────────────────────────────────
+  // 持有 Web Lock 可避免页面被 Chrome 节能模式冻结（名称带随机后缀，避免同站多标签页互相排队）
   let keepAliveLockHeld = false;
   function holdKeepAliveLock() {
     if (keepAliveLockHeld) return;
@@ -14930,11 +13963,9 @@ function openSettings() {
     } catch (e) { keepAliveLockHeld = false; }
   }
 
-  // ── 静音保活音频 ──────────────────────────────────────────────
-  // Web Lock 只能挡住 Chrome 自带的节能模式冻结，挡不住 macOS App Nap / 系统休眠
-  // （实测日志里出现过定时器晚 460 秒才触发，整轮 478s 只有 16s 在执行）。
-  // 官方唯一明确豁免"节能模式停用 + 密集节流"的机制是「正在播放音频」，
-  // macOS 也不会 App Nap 正在出声的进程，因此用一个听不见的振荡器维持播放状态。
+  // ── 防冻结：静音保活音频 ─────────────────────────────────────
+  // Web Lock 挡不住 macOS App Nap / 系统休眠。官方唯一明确豁免"节能模式停用 + 密集节流"的
+  // 机制是「正在播放音频」，macOS 也不会 App Nap 正在出声的进程，因此用听不见的振荡器维持播放。
   let keepAliveAudioCtx = null;
   let keepAliveGestureBound = false;
 
@@ -14947,10 +13978,9 @@ function openSettings() {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.value = 32;   // 次低频：笔记本扬声器基本放不出，耳机也几乎听不到
+        osc.frequency.value = 32;   // 次低频：扬声器基本放不出
         // 增益不能太小：Chrome 判定"正在播放音频"要求标签页出现喇叭图标，
-        // 静默音频流不给豁免（0.0015 这种量级会被当成静默）。0.02 ≈ -34dBFS，
-        // 足够被判定为有声，同时 32Hz 在人耳几乎听不出
+        // 静默音频流不给豁免。0.02 ≈ -34dBFS，足够被判为有声，32Hz 人耳几乎听不出
         gain.gain.value = 0.02;
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -14962,20 +13992,19 @@ function openSettings() {
         return;
       }
     }
-    // 自动启动（非用户手势）时 AudioContext 处于 suspended，需等首次交互才能恢复播放
+    // 自动启动（非用户手势）时 AudioContext 处于 suspended，需等首次交互才能恢复
     if (keepAliveAudioCtx.state === 'suspended') {
       keepAliveAudioCtx.resume().then(function () {
         if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'running') {
-          console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标签页标题旁出现喇叭图标即生效）');
+          console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标题旁出现喇叭图标即生效）');
         }
       }).catch(function () {});
     } else {
-      console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标签页标题旁出现喇叭图标即生效）');
+      console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标题旁出现喇叭图标即生效）');
     }
     bindKeepAliveResumeOnGesture();
   }
 
-  // 首次用户交互时恢复保活音频（绕过自动播放限制）
   function bindKeepAliveResumeOnGesture() {
     if (keepAliveGestureBound) return;
     keepAliveGestureBound = true;
@@ -14997,13 +14026,30 @@ function openSettings() {
   }
 
   /**
+   * 安排下一次 tick，并记录计划时间
+   */
+  function scheduleNextTick(delayMs) {
+    if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
+    expectedTickAt = Date.now() + delayMs;
+    monitorTimeout = setTimeout(function () {
+      monitorTimeout = null;
+      // 明显晚于计划时间 → 标签页被冻结/系统休眠，脚本本身无法执行，只能记录下来
+      const late = Date.now() - expectedTickAt;
+      if (late > Math.max(5000, delayMs)) {
+        console.warn('[鸣潮监控] 后台挂起：本次刷新比计划晚 ' + Math.round(late / 1000) + ' 秒（浏览器冻结标签页 / 系统休眠 / App Nap）');
+      }
+      monitorTick();
+    }, delayMs);
+  }
+
+  /**
    * 监控tick
    */
   function monitorTick() {
     if (!monitorRunning) return;
     if (!refreshInProgress) {
       refreshInProgress = true;
-      // 保活音频若被系统挂起（如 macOS 失焦），每轮尝试恢复，维持后台不被冻结
+      // 保活音频被系统挂起时每轮尝试恢复，维持后台不被冻结
       if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
         keepAliveAudioCtx.resume().catch(function () {});
       }
@@ -15021,17 +14067,57 @@ function openSettings() {
     }
   }
 
-  /**
-   * 刷新过程中的错误信息收集（各平台并行，结束后汇总到状态栏）
-   */
-  let refreshErrors = [];
+  // ── 看门狗 ────────────────────────────────────────────────────
+  // 兜底自愈：锁屏/系统休眠后定时器可能直接丢失（到期也不再触发）。
+  // 用独立于刷新链路的裸 setInterval 定期核对，停摆就强制补跑一轮。
+  let watchdogTimer = null;
+  const WATCHDOG_INTERVAL_MS = 20 * 1000;   // 每 20 秒核对一次
+  const WATCHDOG_STALL_MS = 90 * 1000;      // 超过计划时间 90 秒仍未刷新 → 判定停摆
+
+  function startWatchdog() {
+    if (watchdogTimer) return;
+    watchdogTimer = setInterval(function () {
+      if (!monitorRunning || refreshInProgress) return;
+      if (!expectedTickAt) return;
+      const overdue = Date.now() - expectedTickAt;
+      if (overdue < WATCHDOG_STALL_MS) return;
+      console.warn('[鸣潮监控] 看门狗：刷新已停摆 ' + Math.round(overdue / 1000) + ' 秒（定时器丢失），强制补跑一轮');
+      if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
+      monitorTick();
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  function stopWatchdog() {
+    if (!watchdogTimer) return;
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
+  }
+
+  // 页面重新可见（解锁屏幕/切回标签页）：恢复保活音频并补跑已过期的刷新。
+  // 系统休眠期间不会派发任何事件，这里是解锁后最快的恢复入口。
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
+      keepAliveAudioCtx.resume().catch(function () {});
+    }
+    if (!monitorRunning || refreshInProgress) return;
+    if (!expectedTickAt) return;
+    const overdue = Date.now() - expectedTickAt;
+    if (overdue < 3000) return;
+    console.log('[鸣潮监控] 页面恢复可见，刷新已过期 ' + Math.round(overdue / 1000) + ' 秒，立即补跑');
+    if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
+    monitorTick();
+  });
 
   /**
-   * 螃蟹网扫描（增量翻页 + 秒杀池）
-   * 列表与秒杀池共用同一接口，放在同一任务内串行，避免并发触发WAF
+   * 执行刷新（调用列表API）
    */
-  async function scanPXB7() {
-    let err = '';
+  async function doRefresh() {
+    lastRefreshTime = Date.now();
+    const refreshStartTs = Date.now();
+
+    // 螃蟹网API扫描（增量翻页，独立try-catch，失败不影响其他平台）
+    var pxb7Error = null;
     try {
       // 补扫模式：距上次补扫超过设定间隔（或脚本刚启动）时，深翻页把增量窗口外漏掉的商品捞回来
       const isBackfill = (Date.now() - lastBackfillTime) >= scanBackfillIntervalSec * 1000;
@@ -15044,16 +14130,14 @@ function openSettings() {
       let reachedEnd = false;
       let firstPageEmpty = false;
 
-      // 页面自身的列表请求与本轮扫描请求等价时，直接复用其结果，跳过重复请求
+      // 补扫上一轮没追平时，从上次停下的页继续往下补，否则每轮都从第1页重来、刚碰到"整页已见"就停
       let startPage = 1;
-      if (canReuseInterceptedPage1()) {
-        startPage = 2;
-        lastInterceptPageInfo = null;
-        console.log('[鸣潮监控] 复用页面拦截到的第1页列表，跳过重复请求');
+      if (isBackfill) {
+        // 上一轮补到页数上限仍未追平 → 记的是"下一页"，超出上限时回落到第1页重新补，
+        // 否则 startPage > maxPages 会导致循环不执行，补扫永久失效
+        if (backfillStartPage > maxPages) backfillStartPage = 1;
+        if (backfillStartPage > startPage) startPage = backfillStartPage;
       }
-      // 补扫上一轮没追平（缺口比页数上限还深）时，从上次停下的页继续往下补，
-      // 否则每轮都从第1页重新开始、刚碰到"整页已见"就停，深区永远补不到
-      if (isBackfill && backfillStartPage > startPage) startPage = backfillStartPage;
 
       for (let page = startPage; page <= maxPages; page++) {
         let data = null;
@@ -15072,9 +14156,9 @@ function openSettings() {
 
         if (page === 1 && !list) {
           if (data && !data.success) {
-            err = '螃蟹网API: ' + (data.message || data.msg || '未知错误');
+            lastRefreshError = '螃蟹网API: ' + (data.message || data.msg || '未知错误');
           } else if (!data) {
-            err = '螃蟹网API被WAF拦截（依赖拦截+其他平台正常）';
+            lastRefreshError = '螃蟹网API被WAF拦截（依赖拦截+其他平台正常）';
           }
         }
 
@@ -15085,8 +14169,8 @@ function openSettings() {
           break;
         }
 
-        // 整页都是已见ID才算追平上次扫描区间。只要本页还有新商品就继续往下翻，
-        // 否则会出现"第1页只要碰到1个旧号就停"→ 第2页的新号被永久漏掉的窗口缺口
+        // 整页都是已见ID才算追平。只要本页还有新商品就继续往下翻，
+        // 否则"第1页碰到1个旧号就停"会让第2页之后的新号被永久漏掉
         const allSeen = list.every(function (it) {
           const pid = it.productId || it.id;
           return pid && seenIds.indexOf(pid) >= 0;
@@ -15095,7 +14179,7 @@ function openSettings() {
         collected.push(...list);
         pagesScanned++;
 
-        // 补扫时第2页及以后属于"补捞区间"，这些号可能已上架较久，只入库不推送/不抢购
+        // 补扫时第2页及以后属于"补捞区间"：这些号可能已上架较久，只入库不推送/不抢购
         if (isBackfill && page >= 2) {
           list.forEach(function (it) {
             const pid = it.productId || it.id;
@@ -15112,9 +14196,10 @@ function openSettings() {
         backfillRecoveryIds = null;
         if (isBackfill) {
           lastBackfillTime = Date.now();
-          // 已追平（或翻到列表末尾）→ 下次补扫回到第1页；否则继续从更深的页往下补
+          // 已追平（或翻到末尾）→ 下次补扫回到第1页；否则继续从更深的页往下补
           backfillStartPage = (caughtUp || reachedEnd) ? 1 : maxPages + 1;
         }
+        lastRefreshError = '';  // 刷新成功，清除错误
         console.log('[鸣潮监控] 螃蟹网' + (isBackfill ? '补扫' : '增量扫描') + ': ' + pagesScanned + '页/' + collected.length + '条' +
           (caughtUp ? '（已追平上次）' : (reachedEnd ? '（已到列表末尾）' : '（达页数上限' + maxPages + '）')));
       } else if (firstPageEmpty) {
@@ -15144,143 +14229,80 @@ function openSettings() {
         }
       }
     } catch (e) {
-      err = '螃蟹网: ' + (e.message || e);
+      pxb7Error = e;
+      lastRefreshError = '螃蟹网: ' + (e.message || e);
       console.error('[鸣潮监控] 螃蟹网API失败(WAF/反爬):', e.message);
     }
-    if (err) refreshErrors.push(err);
-  }
 
-  /**
-   * 盼之平台扫描（SSR HTML抓取）
-   * 站点SSR固定返回"综合排序"且无法按发布时间排序，故多抓几页后本地按发布时间倒序合并，提升最新商品覆盖
-   */
-  async function scanPZDS() {
+    // 以下其他平台扫描不受螃蟹网API失败影响
     try {
-      let pzAll = [];
-      for (let page = 1; page <= PZ_SCAN_PAGES; page++) {
-        try {
-          const pzdsProducts = await fetchListPZ(page);
-          if (pzdsProducts.length > 0) {
-            pzAll = pzAll.concat(pzdsProducts);
-            console.log('[鸣潮监控-盼之] 第' + page + '页获取' + pzdsProducts.length + '条');
+
+      // 盼之平台扫描（SSR HTML抓取）
+      if (pzdsEnabled) {
+        let pzdsTotal = 0;
+        for (let page = 1; page <= 1; page++) {
+          try {
+            const pzdsProducts = await fetchListPZ(page);
+            if (pzdsProducts.length > 0) {
+              pzdsTotal += pzdsProducts.length;
+              await handlePZListResponse(pzdsProducts);
+              console.log('[鸣潮监控-盼之] 第' + page + '页扫描完成，获取' + pzdsProducts.length + '条');
+            }
+          } catch (e) {
+            console.error('[鸣潮监控-盼之] 第' + page + '页获取失败:', e);
           }
-        } catch (e) {
-          console.error('[鸣潮监控-盼之] 第' + page + '页获取失败:', e);
+        }
+        if (pzdsTotal > 0) {
+          console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzdsTotal + '条');
         }
       }
-      // 跨页去重 + 按发布时间倒序（最新在前）
-      const pzSeen = new Set();
-      pzAll = pzAll.filter(function (p) {
-        if (pzSeen.has(p.productId)) return false;
-        pzSeen.add(p.productId);
-        return true;
-      });
-      pzAll.sort(function (a, b) { return (b.onStandTime || 0) - (a.onStandTime || 0); });
-      if (pzAll.length > 0) {
-        await handlePZListResponse(pzAll);
-        console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzAll.length + '条（已按发布时间倒序）');
+
+      // 氪金兽平台扫描（MWP API，按最新发布排序）
+      if (kjsEnabled) {
+        try {
+          const kjsProducts = await kjsSearch(1);
+          if (kjsProducts.length > 0) {
+            await handleKJSListResponse(kjsProducts);
+            console.log('[鸣潮监控-氪金兽] 扫描完成，获取' + kjsProducts.length + '条');
+          }
+        } catch (e) {
+          console.error('[鸣潮监控-氪金兽] 扫描失败:', e);
+        }
+      }
+
+      // 7881平台扫描（API抓取，MD5签名认证，按最新发布排序）
+      if (qyEnabled) {
+        try {
+          const qyProducts = await qySearch(1);
+          if (qyProducts.length > 0) {
+            await handleQYListResponse(qyProducts);
+            console.log('[鸣潮监控-7881] 扫描完成，获取' + qyProducts.length + '条');
+          }
+        } catch (e) {
+          console.error('[鸣潮监控-7881] 扫描失败:', e);
+        }
+      }
+
+      // 易手游平台扫描（结构化API，按最新发布排序）
+      if (ysyEnabled && G().platformIds.ysy > 0) {
+        try {
+          const ysyProducts = await fetchYSYList(1);
+          if (ysyProducts.length > 0) {
+            await handleYSYListResponse(ysyProducts);
+            console.log('[鸣潮监控-易手游] 扫描完成，获取' + ysyProducts.length + '条');
+          }
+        } catch (e) {
+          console.error('[鸣潮监控-易手游] 扫描失败:', e);
+        }
       }
     } catch (e) {
-      refreshErrors.push('盼之: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
-      console.error('[鸣潮监控] 盼之扫描失败:', e);
-    }
-  }
-
-  /**
-   * 氪金兽平台扫描（MWP API，按最新发布排序）
-   */
-  async function scanKJS() {
-    try {
-      const kjsProducts = await kjsSearch(1);
-      if (kjsProducts.length > 0) {
-        await handleKJSListResponse(kjsProducts);
-        console.log('[鸣潮监控-氪金兽] 扫描完成，获取' + kjsProducts.length + '条');
-      }
-    } catch (e) {
-      refreshErrors.push('氪金兽: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
-      console.error('[鸣潮监控-氪金兽] 扫描失败:', e);
-    }
-  }
-
-  /**
-   * 7881平台扫描（API抓取，MD5签名认证，按最新发布排序）
-   */
-  async function scanQY() {
-    try {
-      const qyProducts = await qySearch(1);
-      if (qyProducts.length > 0) {
-        await handleQYListResponse(qyProducts);
-        console.log('[鸣潮监控-7881] 扫描完成，获取' + qyProducts.length + '条');
-      }
-    } catch (e) {
-      refreshErrors.push('7881: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
-      console.error('[鸣潮监控-7881] 扫描失败:', e);
-    }
-  }
-
-  /**
-   * 易手游平台扫描（结构化API，按最新发布排序）
-   */
-  async function scanYSY() {
-    try {
-      const ysyProducts = await fetchYSYList(1);
-      if (ysyProducts.length > 0) {
-        await handleYSYListResponse(ysyProducts);
-        console.log('[鸣潮监控-易手游] 扫描完成，获取' + ysyProducts.length + '条');
-      }
-    } catch (e) {
-      refreshErrors.push('易手游: ' + (e.name === 'AbortError' ? '请求超时(15s)' : (e.message || e)));
-      console.error('[鸣潮监控] 易手游扫描失败:', e);
-    }
-  }
-
-  /**
-   * 执行刷新：各平台并行扫描（总耗时取各平台最大值，而非累加）
-   * 详情抓取（盼之/7881）已转为后台异步，不再阻塞刷新完成
-   * @param {boolean} force 手动刷新时传 true，忽略各平台间隔，强制全部扫描
-   */
-  async function doRefresh(force) {
-    lastRefreshTime = Date.now();
-    refreshErrors = [];
-    const refreshStartTs = Date.now();
-
-    // 刷新按钮反馈：禁用并显示进度，避免重复点击
-    const refreshBtn = dom.btnRefresh;
-    const btnOldText = refreshBtn ? refreshBtn.textContent : '';
-    if (refreshBtn) {
-      refreshBtn.disabled = true;
-      refreshBtn.textContent = '刷新中…';
+      if (!pxb7Error) lastRefreshError = e.name === 'AbortError' ? '请求超时(15s)' : ('' + e.message || e);
+      console.error('[鸣潮监控] 其他平台扫描失败:', e);
     }
 
-    try {
-      const nowTs = Date.now();
-      // 各平台按自己的间隔决定本轮是否扫描：螃蟹网每轮都扫，其余到点才扫
-      const due = (key) => force || (nowTs - lastPlatformScan[key] >= platformIntervals[key] * 1000);
-      const tasks = [scanPXB7()];
-      lastPlatformScan.pxb7 = nowTs;
-      if (pzdsEnabled && due('pzds')) { lastPlatformScan.pzds = nowTs; tasks.push(scanPZDS()); }
-      if (kjsEnabled && due('kjs')) { lastPlatformScan.kjs = nowTs; tasks.push(scanKJS()); }
-      if (qyEnabled && due('qy')) { lastPlatformScan.qy = nowTs; tasks.push(scanQY()); }
-      if (ysyEnabled && G().platformIds.ysy > 0 && due('ysy')) { lastPlatformScan.ysy = nowTs; tasks.push(scanYSY()); }
-      // 各平台内部独立 try-catch 收集错误，互不影响
-      await Promise.all(tasks);
-      lastRefreshError = refreshErrors.length ? refreshErrors.join('；') : '';
-    } finally {
-      if (refreshBtn) {
-        refreshBtn.disabled = false;
-        refreshBtn.textContent = btnOldText;
-      }
-      updateBottomBar();
-      // 每轮刷新一条汇总，便于通过日志判断"某段时间是否真的没刷新"
-      const cost = ((Date.now() - refreshStartTs) / 1000).toFixed(1);
-      // 保活音频状态：若显示"被挂起"，说明浏览器/系统把页面冻结了，可据此判断刷新空档成因
-      const kaState = keepAliveAudioCtx
-        ? (keepAliveAudioCtx.state === 'running' ? '保活中' : '音频被挂起')
-        : '保活未启用';
-      console.log('[鸣潮监控] 本轮刷新完成 · 耗时' + cost + 's · 表格' + tableData.length + '行 · ' + kaState +
-        (lastRefreshError ? ' · 异常: ' + lastRefreshError : ''));
-      saveRejectedIfDirty();
-    }
+    updateBottomBar();
+    console.log('[鸣潮监控] 本轮刷新完成 · 耗时' + ((Date.now() - refreshStartTs) / 1000).toFixed(1) + 's · 表格' + tableData.length + '行' +
+      (lastRefreshError ? ' · 异常: ' + lastRefreshError : ''));
   }
 
   /**
@@ -15299,15 +14321,6 @@ function openSettings() {
    * 初始化
    */
   function init() {
-    // 被浏览器"内存节省"重新加载的页面（wasDiscarded）：说明标签页被整体丢弃过，
-    // 与"冻结"不同——冻结会保留内存，丢弃会重新加载，两者都会导致刷新空档
-    if (document.wasDiscarded) {
-      console.warn('[鸣潮监控] 本次页面是浏览器丢弃标签页后重新加载的（wasDiscarded）');
-    }
-    // 启动标记：页面一旦被丢弃重载，内存里的日志会清空，这条是新会话的第一条记录
-    console.log('[鸣潮监控] 脚本已加载 v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) ? GM_info.script.version : '?') +
-      (document.wasDiscarded ? '（页面被浏览器丢弃后重新加载）' : '') +
-      '，可见性=' + (document.hidden ? 'hidden' : 'visible'));
     // 加载存储数据
     tableData = loadStorage(STORAGE_KEYS.table, []);
     // 历史数据可能因旧版"无上限模式"累积过大，启动时先裁剪，避免逐行迁移时内存爆炸/卡死
@@ -15330,10 +14343,6 @@ function openSettings() {
     }
     seenIds = loadStorage(STORAGE_KEYS.seen, []);
     notifiedIds = loadStorage(STORAGE_KEYS.notified, []);
-    deletedProductIds = loadStorage(STORAGE_KEYS.deleted, []);
-    deletedIdSet = new Set(deletedProductIds);
-    rejectedList = loadStorage(STORAGE_KEYS.rejected, []);
-    rejectedMap = new Map(rejectedList.map(e => [e.id, e]));
 
     // 迁移：修复旧版截断的 showTitle（旧版 slimRow/ultraSlimRow 在存储压力下截断为500字符，
     // 导致武器列表尾部丢失、专武识别不全）。特征：showTitle 长度恰好为500。
@@ -15366,8 +14375,6 @@ function openSettings() {
     notifyMaxPrice = savedState.notifyMaxPrice != null ? savedState.notifyMaxPrice : 20000;
     refreshIntervalSec = savedState.refreshIntervalSec != null ? savedState.refreshIntervalSec : 15;
     scanPages = savedState.scanPages != null ? savedState.scanPages : 3;
-    scanBackfillPages = savedState.scanBackfillPages != null ? savedState.scanBackfillPages : 8;
-    scanBackfillIntervalSec = savedState.scanBackfillIntervalSec != null ? savedState.scanBackfillIntervalSec : 300;
     // 迁移：旧默认值20秒 → 新默认值15秒（用户手动设过其他值则保留）
     if (refreshIntervalSec === 20 && savedState._intervalMigrated !== true) {
       refreshIntervalSec = 15;
@@ -15377,7 +14384,6 @@ function openSettings() {
     kjsEnabled = savedState.kjsEnabled != null ? savedState.kjsEnabled : false;
     qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
       ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
-    applyPlatformIntervals(savedState.platformIntervals);
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
     // 加载推送配置
     if (savedState.pushConfig) {
@@ -15419,7 +14425,11 @@ function openSettings() {
     updateStatusText();
     updateBottomBar();
 
-    // 云端备份为纯手动：仅在用户点击「云端备份」按钮时上传，不做任何定时自动备份
+    // 云端备份：加载上次备份时间，启动自动备份定时器（每30分钟检查一次，24小时未备份则触发）
+    lastBackupTime = loadStorage(STORAGE_KEYS.backup, 0) || 0;
+    setInterval(checkAutoBackup, 30 * 60 * 1000);
+    setTimeout(checkAutoBackup, 60 * 1000);
+
     // 本地列表为空时静默检查云端备份（脚本重装/换浏览器丢失数据的恢复入口）
     checkCloudRestoreOnStartup();
 
