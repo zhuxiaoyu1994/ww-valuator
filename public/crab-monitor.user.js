@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.3.1
+// @version      4.3.2
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.3.0 新增交易猫最新商品展示，不做估值）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -5042,6 +5042,7 @@
   // ============================================================
 
   var JYM_MAX_ROWS = 40;        // 交易猫展示行数上限（超出移除最旧的，避免挤占估值行空间）
+  var JYM_MIN_PRICE = 800;      // 交易猫收录门槛：标价低于此值不收录不推送（v4.3.2）
 
   function jymUrls() {
     const ids = G().platformIds;
@@ -5166,21 +5167,23 @@
     return products;
   }
 
-  /** 处理交易猫商品（纯展示）：去重后直接入表，不做解析/估值/推送 */
+  /** 处理交易猫商品（纯展示+达标推送）：去重、价格门槛过滤后入表，不做估值 */
   function processJYMProduct(product) {
     const productId = product.productId;
     if (!productId) return;
 
-    // 已见商品跳过（纯展示模式不做降价检测）
-    if (seenIds.includes(productId)) {
-      if (!tableData.some(r => r.productId === productId)) {
-        const idx = seenIds.indexOf(productId);
-        if (idx > -1) seenIds.splice(idx, 1);
-      }
-      return;
-    }
+    // 已见商品跳过（纯展示模式不做降价检测；手动删除/行数裁剪处会同步移出 seenIds，
+    // 低价被拒的商品保持 seen，避免每轮重复处理）
+    if (seenIds.includes(productId)) return;
     seenIds.push(productId);
     if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    // 收录门槛：标价低于 JYM_MIN_PRICE 的不收录不推送（v4.3.2）
+    const price = product.price || 0;
+    if (price < JYM_MIN_PRICE) {
+      console.log('[鸣潮监控-交易猫] 跳过低价商品: ' + product.productUniqueNo + ' ¥' + price + ' < ' + JYM_MIN_PRICE);
+      return;
+    }
 
     addTableRow({
       productId,
@@ -5199,6 +5202,19 @@
       firstSeen: Date.now(),
     });
     console.log('[鸣潮监控-交易猫] 新商品入表: ' + product.productUniqueNo + ' ¥' + (product.price || 0) + '「' + (product.showTitle || '').substring(0, 40) + '」(表格共' + tableData.length + '行)');
+
+    // 达标新品推送（无估值对比，按收录门槛直接推；已推送过的不重复推）
+    if (!notifiedIds.includes(productId)) {
+      const shortTitle = (product.showTitle || '').substring(0, 40);
+      const title = '[交易猫] ¥' + Math.round(price) + ' ' + shortTitle;
+      const tagText = Array.isArray(product.tags) && product.tags.length > 0 ? '｜' + product.tags.join(' ') : '';
+      const body = shortTitle + '\n标价 ¥' + Math.round(price) + (product.pubTimeText ? '\n' + product.pubTimeText : '') + tagText;
+      const mdBody = '**' + shortTitle + '**\n\n💰 标价 ¥' + Math.round(price) + (product.pubTimeText ? '｜' + product.pubTimeText : '') + tagText;
+      notify(productId, title, body, mdBody);
+      notifiedIds.push(productId);
+      if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+      saveStorage(notifiedStorageKey(), notifiedIds);
+    }
   }
 
   /**
@@ -7614,9 +7630,9 @@
         // 交易猫平台（v4.3.0，纯展示模式）
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-        '<input type="checkbox" id="mwJymEnabled" ' + (jymEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控交易猫平台（jiaoyimao.com' + G().name + '成品号，仅展示）</label>' +
+        '<input type="checkbox" id="mwJymEnabled" ' + (jymEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控交易猫平台（jiaoyimao.com' + G().name + '成品号，¥800以上）</label>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">抓取交易猫最新发布商品（SSR首屏16个）仅展示标题/价格/图片/标签，不做估值不推送，最多保留40条</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">抓取交易猫最新发布商品（SSR首屏16个），标价≥800才收录并推送（无估值对比），最多保留40条</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -9054,7 +9070,7 @@
       let statusBadge = '<span class="mw-status-badge mw-badge-init" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">初估</span>';
       if (row.status === '最新') {
         // 交易猫纯展示行：不做已售检查
-        statusBadge = '<span class="mw-status-badge mw-badge-flash" title="交易猫最新商品（纯展示，不做估值）">最新</span>';
+        statusBadge = '<span class="mw-status-badge mw-badge-flash" title="交易猫最新商品（无估值，标价≥800收录）">最新</span>';
       } else if (row.status === '详估') {
         statusBadge = '<span class="mw-status-badge mw-badge-detail" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">详估</span>';
       } else if (row.status === '已售') {
