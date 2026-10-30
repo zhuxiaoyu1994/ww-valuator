@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.4.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.4.0 新增闲鱼捕获模式：hook闲鱼页面自身搜索响应，标价≥2000收录展示，不做估值）
+// @version      4.5.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.5.0 闲鱼收录门槛可设置）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -1097,6 +1097,7 @@
   let ysyEnabled = false;       // 易手游平台监控开关
   let jymEnabled = false;       // 交易猫平台开关（v4.3.0，纯展示模式：只收录最新商品不做估值）
   let xyEnabled = false;        // 闲鱼平台开关（v4.4.0，捕获模式：接收闲鱼页面捕获的商品，标价≥2000展示）
+  let xyMinPrice = 2000;        // 闲鱼收录门槛（v4.5.0 可设置，默认¥2000）
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
@@ -5281,7 +5282,7 @@
   // ============================================================
 
   var XY_MAX_ROWS = 40;         // 闲鱼展示行数上限（超出移除最旧的）
-  var XY_MIN_PRICE = 2000;      // 闲鱼收录门槛：标价低于此值不收录不推送
+  var XY_MIN_PRICE_DEFAULT = 2000;   // 闲鱼收录门槛默认值（实际值 xyMinPrice 可在设置中修改，v4.5.0）
   var XY_INBOX_KEY = 'mw_xy_inbox_v1';
 
   function isGoofishPage() {
@@ -5474,10 +5475,10 @@
     seenIds.push(productId);
     if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
 
-    // 收录门槛：标价低于 XY_MIN_PRICE 的不收录不推送
+    // 收录门槛：标价低于 xyMinPrice 的不收录不推送（v4.5.0 门槛可设置）
     const price = product.price || 0;
-    if (price < XY_MIN_PRICE) {
-      console.log('[鸣潮监控-闲鱼] 跳过低价商品: ' + product.productUniqueNo + ' ¥' + price + ' < ' + XY_MIN_PRICE);
+    if (price < xyMinPrice) {
+      console.log('[鸣潮监控-闲鱼] 跳过低价商品: ' + product.productUniqueNo + ' ¥' + price + ' < ' + xyMinPrice);
       return;
     }
 
@@ -7956,9 +7957,11 @@
         // 闲鱼平台（v4.4.0，捕获模式）
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
-        '<input type="checkbox" id="mwXyEnabled" ' + (xyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 接收闲鱼捕获商品（goofish.com，¥2000以上）</label>' +
+        '<input type="checkbox" id="mwXyEnabled" ' + (xyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 接收闲鱼捕获商品（goofish.com）</label>' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;">最低价（元）' +
+        '<input type="number" id="mwXyMinPrice" value="' + (xyMinPrice != null ? xyMinPrice : 2000) + '" min="0" max="999999" style="width:80px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></label>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">在闲鱼打开"鸣潮"搜索页（按最新排序）翻页，脚本自动捕获页面加载的商品；标价≥2000才收录并推送（无估值对比），最多保留40条</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">在闲鱼打开"鸣潮"搜索页（按最新排序）翻页，脚本自动捕获页面加载的商品；标价≥最低价才收录并推送（无估值对比），最多保留40条</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -8709,6 +8712,7 @@
             box.querySelector('#mwYsyEnabled').checked = !!ysyEnabled;
             box.querySelector('#mwJymEnabled').checked = !!jymEnabled;
             box.querySelector('#mwXyEnabled').checked = !!xyEnabled;
+            box.querySelector('#mwXyMinPrice').value = xyMinPrice != null ? xyMinPrice : 2000;
           } else {
             alert('服务器暂无推送配置或恢复失败');
           }
@@ -8740,6 +8744,8 @@
         ysyEnabled = box.querySelector('#mwYsyEnabled').checked;
         jymEnabled = box.querySelector('#mwJymEnabled').checked;
         xyEnabled = box.querySelector('#mwXyEnabled').checked;
+        xyMinPrice = parseInt(box.querySelector('#mwXyMinPrice').value, 10);
+        if (!(xyMinPrice >= 0)) xyMinPrice = 2000;
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
@@ -9398,7 +9404,7 @@
       let statusBadge = '<span class="mw-status-badge mw-badge-init" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">初估</span>';
       if (row.status === '最新') {
         // 交易猫/闲鱼纯展示行：不做已售检查
-        const npTip = row.platform === 'xy' ? '闲鱼最新商品（无估值，标价≥2000收录）' : '交易猫最新商品（无估值，标价≥800收录）';
+        const npTip = row.platform === 'xy' ? '闲鱼最新商品（无估值，标价≥' + xyMinPrice + '收录）' : '交易猫最新商品（无估值，标价≥800收录）';
         statusBadge = '<span class="mw-status-badge mw-badge-flash" title="' + npTip + '">最新</span>';
       } else if (row.status === '详估') {
         statusBadge = '<span class="mw-status-badge mw-badge-detail" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">详估</span>';
@@ -14691,6 +14697,7 @@ function openSettings() {
       ysyEnabled: ysyEnabled != null ? ysyEnabled : false,
       jymEnabled: jymEnabled != null ? jymEnabled : false,
       xyEnabled: xyEnabled != null ? xyEnabled : false,
+      xyMinPrice: xyMinPrice != null ? xyMinPrice : 2000,
       // 角色通知规则
       charNotifyRules: charNotifyRules || [],
     };
@@ -14768,6 +14775,7 @@ function openSettings() {
             if (remote.ysyEnabled != null) ysyEnabled = remote.ysyEnabled;
             if (remote.jymEnabled != null) jymEnabled = remote.jymEnabled;
             if (remote.xyEnabled != null) xyEnabled = remote.xyEnabled;
+            if (remote.xyMinPrice != null) xyMinPrice = remote.xyMinPrice;
             // 角色通知规则
             if (Array.isArray(remote.charNotifyRules)) charNotifyRules = remote.charNotifyRules;
             saveState();
@@ -15507,6 +15515,7 @@ function openSettings() {
         ysyEnabled: ysyEnabled,
         jymEnabled: jymEnabled,
         xyEnabled: xyEnabled,
+        xyMinPrice: xyMinPrice,
       }));
       // 共享 state 只更新通知/推送/估值字段；monitorRunning 与扫描设置保持螃蟹页签的值不动
       const shared = loadStorage(STORAGE_KEYS.state, {}) || {};
@@ -15550,6 +15559,7 @@ function openSettings() {
       ysyEnabled: ysyEnabled,
       jymEnabled: jymEnabled,
       xyEnabled: xyEnabled,
+      xyMinPrice: xyMinPrice,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -16534,6 +16544,7 @@ function openSettings() {
       ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
     jymEnabled = savedState.jymEnabled != null ? savedState.jymEnabled : false;
     xyEnabled = savedState.xyEnabled != null ? savedState.xyEnabled : false;
+    xyMinPrice = savedState.xyMinPrice != null ? savedState.xyMinPrice : 2000;
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
     // 加载推送配置
     if (savedState.pushConfig) {
@@ -16579,6 +16590,7 @@ function openSettings() {
       ysyEnabled = tabState.ysyEnabled != null ? tabState.ysyEnabled : true;
       jymEnabled = tabState.jymEnabled != null ? tabState.jymEnabled : true;
       xyEnabled = tabState.xyEnabled != null ? tabState.xyEnabled : true;
+      xyMinPrice = tabState.xyMinPrice != null ? tabState.xyMinPrice : 2000;
     }
 
     // 加载估值权重（改进4）
