@@ -759,8 +759,10 @@ function fetchPzdsDetail(productUniqueNo) {
       resp.on('data', (chunk) => { data += chunk; });
       resp.on('end', () => {
         try {
-          if (data.includes('errors.aliyun.com') || data.includes('window.ACS')) {
-            reject(new Error('盼之安全校验拦截'));
+          if (data.includes('errors.aliyun.com') || data.includes('window.ACS') ||
+              data.includes('aliyun_waf_aa') || data.includes('aliyun_waf_bb') ||
+              data.includes('captcha-pro-open.aliyuncs.com') || data.includes('访问验证')) {
+            reject(new Error('盼之详情页需要人机验证，请稍后重试或手动粘贴账号描述'));
             return;
           }
 
@@ -2408,6 +2410,78 @@ app.post('/api/monitor-backup/get', async (req, res) => {
     console.error('[/api/monitor-backup/get] Error:', err.message);
     res.json({ success: false, error: '读取失败: ' + err.message });
   }
+});
+
+/**
+ * 监控脚本请求转发中继（v4.2.0 防风控）
+ *
+ * 油猴脚本被平台WAF拦截时（盼之详情/螃蟹列表等），经本端点代为访问目标平台，
+ * 出口IP为服务器IP，与用户浏览器IP分离。
+ *
+ * 协议：POST /api/monitor/relay  body={url, method, headers, body, timeout, token}
+ * 返回：{status, body, contentType} 或 {error}
+ *
+ * 安全：
+ *   - 环境变量 RELAY_TOKEN 设置后，请求必须带相同 token（建议生产环境开启）
+ *   - SSRF 防护：仅允许 http/https，拒绝内网/环回地址
+ */
+const RELAY_BLOCKED_HOST_RE = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.0\.0\.0|\[?::1\]?$)/i;
+
+app.post('/api/monitor/relay', async (req, res) => {
+  const { url, method, headers, body, timeout, token } = req.body || {};
+
+  // 令牌校验（环境变量未设置则不校验，方便内网/本地使用）
+  const expectToken = process.env.RELAY_TOKEN || '';
+  if (expectToken && token !== expectToken) {
+    return res.status(403).json({ error: 'token invalid' });
+  }
+
+  if (!url || !/^https?:\/\//i.test(String(url))) {
+    return res.status(400).json({ error: 'invalid url' });
+  }
+  let parsed;
+  try { parsed = new URL(String(url)); } catch (e) {
+    return res.status(400).json({ error: 'invalid url' });
+  }
+  if (RELAY_BLOCKED_HOST_RE.test(parsed.hostname)) {
+    return res.status(403).json({ error: 'blocked host' });
+  }
+
+  const reqMethod = String(method || 'GET').toUpperCase();
+  const reqHeaders = {};
+  const srcHeaders = (headers && typeof headers === 'object') ? headers : {};
+  // 白名单转发请求头（跳过浏览器自动头，避免与Node默认冲突）
+  const allowedHeaders = ['accept', 'accept-language', 'content-type', 'origin', 'referer', 'user-agent'];
+  Object.keys(srcHeaders).forEach((k) => {
+    if (allowedHeaders.includes(String(k).toLowerCase()) && typeof srcHeaders[k] === 'string') {
+      reqHeaders[k] = srcHeaders[k];
+    }
+  });
+  if (!reqHeaders['user-agent']) {
+    reqHeaders['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  }
+
+  const to = Math.min(Number(timeout) || 15000, 25000);
+  const lib = parsed.protocol === 'https:' ? https : require('http');
+  const postData = typeof body === 'string' ? body : (body != null ? JSON.stringify(body) : null);
+  if (postData != null && (reqMethod === 'POST' || reqMethod === 'PUT')) {
+    reqHeaders['Content-Length'] = Buffer.byteLength(postData);
+  }
+
+  const relayReq = lib.request(url, { method: reqMethod, headers: reqHeaders, timeout: to }, (up) => {
+    let data = '';
+    up.setEncoding('utf8');
+    up.on('data', (chunk) => { data += chunk; if (data.length > 3 * 1024 * 1024) up.destroy(); }); // 3MB上限
+    up.on('end', () => {
+      res.json({ status: up.statusCode, body: data, contentType: up.headers['content-type'] || '' });
+    });
+  });
+  relayReq.on('timeout', () => { relayReq.destroy(new Error('upstream timeout')); });
+  relayReq.on('error', (err) => {
+    res.status(502).json({ error: 'relay failed: ' + err.message });
+  });
+  if (postData != null && (reqMethod === 'POST' || reqMethod === 'PUT')) relayReq.write(postData);
+  relayReq.end();
 });
 
 // ============================================================

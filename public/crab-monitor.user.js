@@ -1,22 +1,28 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      3.62.2
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（3.34.0 抓取逻辑 + 深翻页补扫/防冻结/日志面板）
+// @version      4.2.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.2.0 防风控转发中继 + 交易猫数据捕获模式）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
 // @match        https://www.pxb7.com/buy/10312
 // @match        https://www.pxb7.com/product/*
+// @match        https://www.pzds.com/*
+// @match        https://pzds.com/*
+// @match        https://m.jiaoyimao.com/*
+// @match        https://www.jiaoyimao.com/*
 // @grant        GM_notification
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
 // @grant        GM_openInTab
+// @grant        unsafeWindow
 // @connect      api.day.app
 // @connect      sctapi.ftqq.com
 // @connect      www.pushplus.plus
+// @connect      oapi.dingtalk.com
 // @connect      www.pzds.com
 // @connect      api.kejinshou.com
 // @connect      www.kejinshou.com
@@ -475,8 +481,22 @@
       weights: prefix + '_monitor_config',
       configVersion: prefix + '_monitor_config_version',
       backup: prefix + '_monitor_last_backup',
+      pzdsTab: prefix + '_monitor_pzds_tab_state',
+      // v3.77.0 盼之页签专属数据存储：螃蟹页签与盼之页签各自整份写回 table/seen/notified，
+      // 共享key会被后保存者覆盖（商品列表/已见记录/已推送记录互相抹掉），数据按页签隔离
+      pzdsTabTable: prefix + '_monitor_pzds_tab_table',
+      pzdsTabSeen: prefix + '_monitor_pzds_tab_seen',
+      pzdsTabNotified: prefix + '_monitor_pzds_tab_notified',
     };
   }
+
+  /**
+   * 数据存储key选择（v3.77.0）：盼之页签读写专属key，螃蟹页签维持原共享key。
+   * 首次升级迁移见 init() 中的加载逻辑（按 productId 前缀拆分历史数据）。
+   */
+  function tableStorageKey() { return (isPzdsPage() && STORAGE_KEYS.pzdsTabTable) ? STORAGE_KEYS.pzdsTabTable : STORAGE_KEYS.table; }
+  function seenStorageKey() { return (isPzdsPage() && STORAGE_KEYS.pzdsTabSeen) ? STORAGE_KEYS.pzdsTabSeen : STORAGE_KEYS.seen; }
+  function notifiedStorageKey() { return (isPzdsPage() && STORAGE_KEYS.pzdsTabNotified) ? STORAGE_KEYS.pzdsTabNotified : STORAGE_KEYS.notified; }
 
   // 按当前游戏应用配置（游戏切换时重新调用）
   function applyGameConfig() {
@@ -1076,6 +1096,11 @@
     serverChanSubscribers: [], // Server酱具名接收人 [{name, key, global}]，global=true 接收全部通知
     pushPlusToken: '',     // 旧格式：PushPlus Token字符串（兼容）
     pushPlusSubscribers: [], // PushPlus订阅者列表 [{name, token, validDays, createdAt, priority}]
+    dingtalkRobots: [],    // 钉钉群机器人列表 [{name, webhook, secret}]（v3.76.0 支持多个机器人，全部收推送）
+    dingtalkWebhook: '',   // 旧格式：单机器人Webhook（首次启动自动迁移为dingtalkRobots）
+    dingtalkSecret: '',    // 旧格式：单机器人加签密钥
+    relayUrl: '',          // 请求转发中继（v4.2.0 防风控）：自建服务地址，WAF拦截时经中继代为访问，出口IP与浏览器分离
+    relayToken: '',        // 中继访问令牌（服务端环境变量 RELAY_TOKEN 设置了才需要填）
     syncPassword: '',    // 云端同步密码（管理后台密码）
     secondaryDelay: 10,    // 从通知延迟秒数
     skipHighDiffSecondary: false, // 从通知过滤高差价（开启后差价>阈值的账号不推送给从通知用户）
@@ -1220,7 +1245,7 @@
     const freed = before - seenIds.length;
     if (freed > 0) {
       console.log('[鸣潮监控] 清理 seenIds: ' + before + ' → ' + seenIds.length + ' (释放' + freed + '条)');
-      saveStorage(STORAGE_KEYS.seen, seenIds, true);
+      saveStorage(seenStorageKey(), seenIds, true);
     }
     return freed;
   }
@@ -1236,7 +1261,7 @@
       notifiedIds = notifiedIds.slice(-200);
       const freed = before - notifiedIds.length;
       console.log('[鸣潮监控] 清理 notifiedIds: ' + before + ' → ' + notifiedIds.length + ' (释放' + freed + '条)');
-      saveStorage(STORAGE_KEYS.notified, notifiedIds, true);
+      saveStorage(notifiedStorageKey(), notifiedIds, true);
       return freed;
     }
     return 0;
@@ -1246,6 +1271,97 @@
    * 精简表格行数据（去除大字段，减小存储体积）
    * parsed 和 valuation 均可通过 showTitle 重新计算，存储时移除以节省空间
    */
+  /**
+   * 从平台API返回的商品对象中提取图片URL（v3.75.0 钉钉图文推送用；v3.76.0 加平台诊断日志）
+   * 字段优先级：secondaryGoodsImg（盼之真实图，goodsImg在列表数据里是占位变量）→ goodsImg → 其余常见字段
+   * @param {object} obj - 平台API返回的单条商品记录
+   * @param {string} tag - 平台标签（用于诊断日志，如'盼之'），取不到图时输出该平台API的全部字段名
+   * @returns {string} 图片URL（http/https绝对地址），取不到返回空串
+   */
+  var _imgScanLogged = {};   // 每平台只打一次诊断日志，避免刷屏
+  function pickProductImg(obj, tag) {
+    if (!obj || typeof obj !== 'object') return '';
+    var keys = ['secondaryGoodsImg', 'goodsImg', 'goodsPic', 'productImg', 'coverImg', 'cover', 'mainImg', 'mainPic',
+      'mainImage', 'imgUrl', 'picUrl', 'imageUrl', 'goodsPicUrl', 'picPath', 'goodsPicPath',
+      'img', 'pic', 'image', 'photo', 'thumbnail', 'thumb', 'showImg', 'titleImg'];
+    var found = '';
+    for (var i = 0; i < keys.length; i++) {
+      var v = obj[keys[i]];
+      if (typeof v === 'string') {
+        v = v.trim();
+        if (/^https?:\/\//.test(v)) { found = v; break; }
+        if (/^\/\/[^\s]/.test(v)) { found = 'https:' + v; break; }   // 协议相对地址
+      }
+    }
+    if (!found) {
+      try {
+        // 嵌套对象兜底（如 imgInfo.url / logo.url）
+        var nested = obj.imgInfo || obj.logo || obj.imageInfo;
+        if (nested && typeof nested === 'object') {
+          var u = nested.url || nested.img || nested.pic;
+          if (typeof u === 'string' && /^https?:\/\//.test(u)) found = u;
+        }
+        // 图片列表兜底（取第一张）
+        if (!found) {
+          var lists = [obj.imgList, obj.goodsImgList, obj.images, obj.imgs, obj.pics, obj.imgUrls];
+          for (var j = 0; j < lists.length; j++) {
+            var arr = lists[j];
+            if (Array.isArray(arr) && arr.length) {
+              var first = arr[0];
+              if (typeof first === 'string' && /^https?:\/\//.test(first)) { found = first; break; }
+              if (first && typeof first === 'object') {
+                var fu = first.url || first.img || first.pic;
+                if (typeof fu === 'string' && /^https?:\/\//.test(fu)) { found = fu; break; }
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+    // v3.77.1 深度扫描兜底：字段名未命中时遍历整个对象（限深度4/节点80），按两类规则找图——
+    // ① 值是图片扩展名的URL（.jpg/.png/.webp等）；② 键名含 img/pic/cover 等暗示图片的URL。
+    // 螃蟹等平台的图片字段名无法离线确认（整站WAF），此兜底保证任何命名都能抓到图
+    if (!found) {
+      try {
+        var imgExtRe = /^https?:\/\/[^\s"']+\.(?:jpg|jpeg|png|webp|gif|bmp)(?:[?#][^\s"']*)?$/i;
+        var imgKeyRe = /img|pic|photo|image|cover|avatar|thumb|logo/i;
+        var visited = 0;
+        var deepScan = function (node, depth, keyName) {
+          if (found || visited > 150 || depth > 4 || node == null) return;
+          if (typeof node === 'string') return;
+          if (typeof node !== 'object') return;
+          visited++;
+          if (Array.isArray(node)) {
+            for (var ai = 0; ai < node.length && !found; ai++) deepScan(node[ai], depth + 1, keyName);
+            return;
+          }
+          for (var k in node) {
+            if (found) return;
+            if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
+            var val = node[k];
+            if (typeof val === 'string') {
+              var sv = val.trim();
+              if (/^https?:\/\//.test(sv) && (imgKeyRe.test(k) || imgExtRe.test(sv))) { found = sv; return; }
+            } else if (typeof val === 'object') {
+              deepScan(val, depth + 1, k);
+            }
+          }
+        };
+        deepScan(obj, 0, '');
+      } catch (e) {}
+    }
+    // 诊断日志（每平台一次）：命中打字段名与URL，未命中打记录JSON片段——用户跑一轮扫描即可定位
+    if (tag && !_imgScanLogged[tag]) {
+      _imgScanLogged[tag] = true;
+      if (found) {
+        console.log('[鸣潮监控-' + tag + '] 图片字段命中: ' + found.substring(0, 80));
+      } else {
+        console.log('[鸣潮监控-' + tag + '] ⚠️ 未找到图片字段，API记录样例: ' + JSON.stringify(obj).substring(0, 400));
+      }
+    }
+    return found;
+  }
+
   function slimRow(row) {
     const slim = Object.assign({}, row);
     delete slim.valuation;
@@ -1283,13 +1399,13 @@
    */
   function saveTableData() {
     // 第一次：尝试完整写入
-    if (saveStorage(STORAGE_KEYS.table, tableData, true)) return true;
+    if (saveStorage(tableStorageKey(), tableData, true)) return true;
 
     // 第一次失败：先清理其他存储释放空间，不删表格数据
     console.warn('[鸣潮监控] 表格数据写入失败，清理冗余存储后重试...');
     cleanupSeenIds();
     cleanupNotifiedIds();
-    if (saveStorage(STORAGE_KEYS.table, tableData, true)) {
+    if (saveStorage(tableStorageKey(), tableData, true)) {
       console.log('[鸣潮监控] 清理存储后写入成功');
       return true;
     }
@@ -1297,7 +1413,7 @@
     // 第二次失败：精简每行数据（移除 valuation / parsed 等大字段），不删行
     console.warn('[鸣潮监控] 仍失败，尝试精简数据（不删行）...');
     const slimmed = tableData.map(slimRow);
-    if (saveStorage(STORAGE_KEYS.table, slimmed, true)) {
+    if (saveStorage(tableStorageKey(), slimmed, true)) {
       tableData = slimmed;
       console.log('[鸣潮监控] 精简数据后写入成功，保留' + tableData.length + '条');
       return true;
@@ -1306,7 +1422,7 @@
     // 第三次失败：超精简（截断 showTitle + 移除更多字段），仍不删行
     console.warn('[鸣潮监控] 仍失败，尝试超精简模式（不删行）...');
     const ultraed = tableData.map(ultraSlimRow);
-    if (saveStorage(STORAGE_KEYS.table, ultraed, true)) {
+    if (saveStorage(tableStorageKey(), ultraed, true)) {
       tableData = ultraed;
       console.log('[鸣潮监控] 超精简后写入成功，保留' + tableData.length + '条');
       return true;
@@ -1326,12 +1442,12 @@
     });
     for (let limit = tableData.length - 50; limit >= 100; limit -= 50) {
       const trimmed = importanceSorted.slice(0, limit).map(ultraSlimRow);
-      if (saveStorage(STORAGE_KEYS.table, trimmed, true)) {
+      if (saveStorage(tableStorageKey(), trimmed, true)) {
         console.warn('[鸣潮监控] 表格数据缩减至' + limit + '条写入成功');
         tableData = trimmed;
         const keptIds = new Set(trimmed.map(r => r.productId));
         seenIds = seenIds.filter(id => keptIds.has(id));
-        saveStorage(STORAGE_KEYS.seen, seenIds, true);
+        saveStorage(seenStorageKey(), seenIds, true);
         return true;
       }
     }
@@ -3164,6 +3280,29 @@
       console.error('[鸣潮监控] GM请求也失败:', gmErr.message);
     }
 
+    // v4.2.0 中继重试：配置了转发中继时，让服务器代为请求（出口IP与浏览器分离，绕开对本机IP的风控）
+    if ((pushConfig.relayUrl || '').trim()) {
+      console.log('[鸣潮监控] 尝试经中继获取螃蟹列表...');
+      const relData = await fetchViaRelay(API_URLS.list, 'POST', {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://www.pxb7.com',
+        'Referer': 'https://www.pxb7.com/',
+      }, JSON.stringify(listBody), 15000);
+      if (relData && relData.status === 200) {
+        try {
+          const relJson = JSON.parse(relData.body);
+          if (relJson && relJson.success) {
+            console.log('[鸣潮监控] 中继获取螃蟹列表成功');
+            return relJson;
+          }
+          console.warn('[鸣潮监控] 中继响应success=false: ' + relData.body.substring(0, 120));
+        } catch (e) {
+          console.warn('[鸣潮监控] 中继响应非JSON(可能被WAF拦): ' + relData.body.substring(0, 120));
+        }
+      }
+    }
+
     if (wafDetected) {
       console.warn('[鸣潮监控] 检测到WAF验证，启动popup解决器...');
       await solveWAFChallenge();
@@ -3344,18 +3483,23 @@
   /**
    * 抓取盼之商品列表页SSR HTML
    * 盼之使用Vite SSR，商品数据直接渲染在HTML中，无需API token
-   * @param {number} page - 页码（从1开始）
+   * @param {number} page - 页码（从1开始，服务端忽略该参数，仅保留兼容）
    * @returns {Promise<Array>} 商品数组
    */
   function fetchListPZ(page) {
     return new Promise((resolve, reject) => {
-      const url = pzdsUrls().list + '?page=' + page;
+      // 加随机参数绕过 CDN 缓存：盼之静态页 CDN 缓存 10 秒（响应头 x-swift-cachetime: 10），
+      // 不破缓存的话同一 URL 连续请求会拿到完全相同的 10 条
+      const url = pzdsUrls().list + '?page=' + page + '&_t=' + Date.now() + Math.floor(Math.random() * 1000);
       GM_xmlhttpRequest({
         method: 'GET',
         url: url,
+        nocache: true,
         headers: {
           'User-Agent': navigator.userAgent,
           'Accept': 'text/html,application/xhtml+xml',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
         },
         timeout: 15000,
         onload(res) {
@@ -3379,65 +3523,360 @@
     });
   }
 
+  // 盼之列表页的分页/排序/筛选参数全部无效：任何 query 都返回同一份推荐流（固定 10 条），
+  // 但这 10 条会随服务端推荐池滚动而变化（实测每隔几秒换一批，共约 4~5 批）。
+  // 因此用"同一 URL 连打多次 + 去重合并"来等效翻页，实测 4 次可覆盖约 30 条不同商品。
+  // 请求必须带 _t 随机参数，否则会被盼之 CDN 的 10 秒缓存挡成同一份内容。
+  const PZ_LIST_FETCH_TIMES = 4;
+  const PZ_LIST_FETCH_GAP_MS = 1200;
+
   /**
-   * 抓取盼之商品详情页SSR HTML，提取完整描述
-   * 列表页标题被截断（角色列表以...结尾），详情页有完整角色/武器列表
-   * 详情页格式: 【五星角色】:6命弗洛洛,3命维里奈,... 【金色武器】:精1焰光裁定,...
-   * @param {string} productUniqueNo - 商品编号（如MC9S1Y）
-   * @returns {Promise<string>} 完整描述文本，失败时返回空字符串
+   * 多次抓取盼之列表并去重（按上架时间降序）
+   * @returns {Promise<Array>} 合并后的商品数组
    */
-  function fetchPZDetail(productUniqueNo) {
-    return new Promise((resolve) => {
-      const url = pzdsUrls().detail + '/' + productUniqueNo + '/6';
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url: url,
-        headers: {
-          'User-Agent': navigator.userAgent,
-          'Accept': 'text/html,application/xhtml+xml',
-        },
-        timeout: 15000,
-        onload(res) {
-          try {
-            const html = res.responseText || '';
-            // WAF拦截检测：阿里云WAF页面特征
-            if (html.includes('errors.aliyun.com') || html.includes('acsAlidwError') || html.includes('window.ACS')) {
-              console.warn('[鸣潮监控-盼之] 详情页被WAF拦截: ' + productUniqueNo);
-              resolve('');
-              return;
-            }
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            const span = doc.querySelector('div.text-overflow span');
-            if (span) {
-              const text = (span.textContent || '').trim();
-              // 验证提取的文本是否为有效商品描述（关键词按当前游戏）
-              if (text.length > 20 && gameTextPattern().test(text)) {
-                resolve(text);
-                return;
-              }
-            }
-            let match = null;
-            for (const kw of G().levelKeywords) {
-              match = html.match(new RegExp('【' + kw + '】[\\s\\S]*?(?=<\\/)'));
-              if (match) break;
-            }
-            if (match) { resolve(match[0].trim()); return; }
-            resolve('');
-          } catch (e) {
-            console.error('[鸣潮监控-盼之] 详情页解析失败:', e);
-            resolve('');
+  async function fetchPZListMulti() {
+    const map = new Map();
+    try {
+      console.log('[鸣潮监控-盼之] 列表抓取开始，脚本版本 ' + (typeof GM_info !== 'undefined' ? GM_info.script.version : 'unknown') + '，连抓 ' + PZ_LIST_FETCH_TIMES + ' 次');
+    } catch (e) { /* GM_info 不可用时忽略 */ }
+    for (let i = 0; i < PZ_LIST_FETCH_TIMES; i++) {
+      try {
+        const items = await fetchListPZ(1);
+        let added = 0;
+        for (const p of items) {
+          if (!map.has(p.productId)) { map.set(p.productId, p); added++; }
+        }
+        console.log('[鸣潮监控-盼之] 第' + (i + 1) + '/' + PZ_LIST_FETCH_TIMES + '次获取' + items.length + '条，新增' + added + '条，累计去重' + map.size + '条');
+      } catch (e) {
+        console.error('[鸣潮监控-盼之] 第' + (i + 1) + '次获取失败:', e);
+      }
+      if (i < PZ_LIST_FETCH_TIMES - 1) {
+        await new Promise(r => setTimeout(r, PZ_LIST_FETCH_GAP_MS));
+      }
+    }
+    const list = Array.from(map.values());
+    list.sort((a, b) => (b.onStandTime || 0) - (a.onStandTime || 0));
+    return list;
+  }
+
+  // ============================================================
+  // 盼之列表API「发布时间降序」（仅在盼之页面静默模式可用）
+  // api.pzds.com 网关要求 Wasm-Sign 签名头（阿里云反爬SDK），脚本内无法复现签名；
+  // 但挂机脚本运行在盼之页面上下文中，可直接调用站点自身的
+  // window.$nuxt.$requestApi —— 与用户在页面上点「发布时间」排序完全等价，
+  // 由站点自己的JS完成签名，拿到按发布时间降序的完整分页数据（无旧货混入、覆盖全）。
+  // ============================================================
+
+  /** 将列表API返回的商品记录转换为 parsePZListHTML 同构的商品对象 */
+  function pzdsApiRecordToProduct(rec) {
+    if (!rec || !rec.goodsNo) return null;
+    const price = Number(rec.price) || 0;
+    if (price <= 0) return null;
+    const onStandTimeStr = rec.onStandTime ? String(rec.onStandTime) : '';
+    let onStandTime = 0;
+    if (onStandTimeStr) onStandTime = new Date(onStandTimeStr.replace(/-/g, '/')).getTime() || 0;
+    return {
+      productId: 'pz_' + rec.goodsNo,
+      productUniqueNo: rec.goodsNo,
+      showTitle: String(rec.title || rec.simpleMessage || '').trim(),
+      price: price,
+      discount: (Number(rec.originalPrice) || 0) > price ? (Number(rec.originalPrice) - price) : 0,
+      platform: 'pzds',
+      listTime: onStandTime || Date.now(),
+      onStandTime: onStandTime,
+      onStandTimeStr: onStandTimeStr,
+      goodsImg: pickProductImg(rec, '盼之'),   // v3.75.0 钉钉图文推送用（secondaryGoodsImg优先）
+    };
+  }
+
+  /** 构造列表API请求体——2026-10-29 从站点真实请求捕获照抄（用户点「最近发布」时捕获）：
+   *  {"order":"DESC","sort":"onStandTime","page":1,"pageSize":10,"action":{"gameId":"303",
+   *   "merchantMark":null,"keywords":[],"searchWords":[],"searchPropertyIds":[],
+   *   "recommendSearchConfigIds":[],"unionGameIds":[],"goodsSearchActions":[],
+   *   "goodsCatalogueId":6,"goodsSubCatalogueIds":[],"countFlag":false,"conditionSearch":false}}
+   *  注意：gameId 为字符串、goodsCatalogueId 为数字（照抄站点原样）；接口 total 恒为0，records 才是真实数据 */
+  function pzdsApiPageQuery(page, pageSize) {
+    var gameId = '';
+    var catalogueId = '';
+    try {
+      var m = location.pathname.match(/\/goodsList\/(\d+)(?:\/(\d+))?/);
+      if (m) {
+        gameId = m[1];
+        catalogueId = m[2] || new URLSearchParams(location.search).get('goodsCatalogueId') || '';
+      }
+    } catch (e) {}
+    if (!gameId) gameId = String((G().platformIds && G().platformIds.pzds) || 303);
+    return {
+      order: 'DESC',
+      sort: 'onStandTime',
+      page: page,
+      pageSize: pageSize,
+      action: {
+        gameId: gameId,
+        merchantMark: null,
+        keywords: [],
+        searchWords: [],
+        searchPropertyIds: [],
+        recommendSearchConfigIds: [],
+        unionGameIds: [],
+        goodsSearchActions: [],
+        goodsCatalogueId: Number(catalogueId) || 6,   // 6=成品号（鸣潮），站点发的是数字
+        goodsSubCatalogueIds: [],
+        countFlag: false,
+        conditionSearch: false
+      }
+    };
+  }
+
+  /**
+   * 调用页面自身的 $nuxt.$requestApi（带站点签名的请求包装器）
+   * $nuxt 在 Nuxt 应用挂载后才存在，首轮调用时可能尚未就绪——等待最多 waitMs
+   * @returns {Promise<{ok:boolean, res?:object, reason?:string}>}
+   */
+  let pzdsPageApiEverReady = false;   // 一旦就绪过，后续等待时间大幅缩短
+  function pzdsCallPageApi(url, data, waitMs) {
+    return new Promise(function (resolve) {
+      try {
+        var start = Date.now();
+        (function probe() {
+          var nuxt = null;
+          try { nuxt = (typeof unsafeWindow !== 'undefined') && unsafeWindow && unsafeWindow.$nuxt; } catch (e) {}
+          if (nuxt && typeof nuxt.$requestApi === 'function') {
+            pzdsPageApiEverReady = true;
+            Promise.resolve(nuxt.$requestApi({ url: url, method: 'post', data: data }))
+              .then(function (res) { resolve({ ok: true, res: res }); })
+              .catch(function (e) { resolve({ ok: false, reason: (e && e.message) || '请求失败' }); });
+            return;
           }
-        },
-        onerror() {
-          console.error('[鸣潮监控-盼之] 详情页请求失败: ' + productUniqueNo);
-          resolve('');
-        },
-        ontimeout() {
-          console.error('[鸣潮监控-盼之] 详情页请求超时: ' + productUniqueNo);
-          resolve('');
-        },
-      });
+          if (Date.now() - start > (waitMs || 3000)) {
+            resolve({ ok: false, reason: '页面API($nuxt)未就绪' });
+            return;
+          }
+          setTimeout(probe, 500);
+        })();
+      } catch (e) {
+        resolve({ ok: false, reason: (e && e.message) || '调用异常' });
+      }
     });
+  }
+
+  const PZ_NEWEST_PAGE_SIZE = 10;   // 与站点同款pageSize，排除参数差异
+  let pzdsLastApiFailReason = '';   // 最近一次页面API失败原因（供静默模式状态显示）
+  let pzdsWorkingQueryTpl = null;   // 探针验证过的可用请求体模板（探针命中后缓存）
+  let pzdsProbeDone = false;        // 本次页面加载只跑一轮探针
+
+  /**
+   * 探针矩阵：测试两个候选接口（成品号页面组件按 isGeneralGoods 分流：
+   * getGeneralList→general_goods/page 或 goodsList→v2/public/goodsPublic/page，
+   * 实测前者对本页返回 total:0，故优先探测后者）。命中 total>0 的作为后续请求模板。
+   */
+  async function pzdsProbeQueryVariants() {
+    if (pzdsProbeDone) return;
+    pzdsProbeDone = true;
+    const base = pzdsApiPageQuery(1, PZ_NEWEST_PAGE_SIZE);
+    const probes = [
+      { url: '/web-client/v2/public/goodsPublic/page', name: '最近发布-站点形状', make: () => base },
+      { url: '/web-client/v2/public/goodsPublic/page', name: '综合对照', make: () => Object.assign({}, base, { sort: null, order: 'ASC' }) },
+    ];
+    console.log('[鸣潮监控-盼之静默] 开始探针：测试' + probes.length + '种 接口×请求体 组合…');
+    for (const v of probes) {
+      const q = v.make();
+      const r = await pzdsCallPageApi(v.url, q, 3000);
+      let total = null, recCount = null;
+      if (r.ok) {
+        const d = r.res && r.res.data;
+        if (d && typeof d === 'object' && !Array.isArray(d)) {
+          total = d.total;
+          recCount = Array.isArray(d.records) ? d.records.length : null;
+        } else if (Array.isArray(d)) {
+          recCount = d.length;
+        }
+      }
+      console.log('[鸣潮监控-盼之静默] 探针[' + v.name + '] ' + (r.ok ? ('total=' + total + ' records=' + recCount) : ('失败: ' + r.reason)));
+      if ((total > 0) || (recCount > 0)) {
+        pzdsWorkingQueryTpl = { url: v.url, q: q };
+        console.log('[鸣潮监控-盼之静默] ★探针命中[' + v.name + ']，记录字段: ' + (function () {
+          try {
+            const d = r.res.data;
+            const rec0 = Array.isArray(d) ? d[0] : d.records[0];
+            return rec0 ? Object.keys(rec0).join(',') : '(无记录)';
+          } catch (e) { return '(解析失败)'; }
+        })());
+        return;
+      }
+      await new Promise(r2 => setTimeout(r2, 500));
+    }
+    console.warn('[鸣潮监控-盼之静默] 全部探针返回空 → 请在页面上点「价格」排序或翻页，再导出日志（★行会捕获站点真实请求体）');
+  }
+
+  /**
+   * 列表请求捕获器：拦截页面XHR，凡站点自身发出的 general_goods/page 请求
+   * （用户点「最近发布」排序等）都把请求体+响应打到日志，用于与脚本自造请求对照排障
+   */
+  function pzdsInstallApiCapture() {
+    try {
+      if (typeof unsafeWindow === 'undefined' || !unsafeWindow.XMLHttpRequest) return;
+      var WXHR = unsafeWindow.XMLHttpRequest;
+      if (WXHR.prototype.__mwPzCapture) return;
+      WXHR.prototype.__mwPzCapture = true;
+      var origOpen = WXHR.prototype.open;
+      var origSend = WXHR.prototype.send;
+      WXHR.prototype.open = function (method, url) {
+        try { this.__mwUrl = String(url || ''); this.__mwMethod = String(method || ''); } catch (e) {}
+        return origOpen.apply(this, arguments);
+      };
+      WXHR.prototype.send = function (body) {
+        var self = this;
+        try {
+          var u = self.__mwUrl || '';
+          if ((u.indexOf('general_goods/page') !== -1 || u.indexOf('goodsPublic/page') !== -1) && (self.__mwMethod || '').toUpperCase() === 'POST') {
+            self.addEventListener('load', function () {
+              try {
+                console.log('[鸣潮监控-盼之静默] ★捕获站点列表请求: ' + String(body).substring(0, 800));
+                console.log('[鸣潮监控-盼之静默] ★捕获站点列表响应: HTTP' + self.status + ' ' + String(self.responseText || '').substring(0, 800));
+              } catch (e) {}
+            });
+          }
+        } catch (e) {}
+        return origSend.apply(this, arguments);
+      };
+      console.log('[鸣潮监控-盼之静默] 已安装列表请求捕获器（在页面上点一次「最近发布」排序即可抓取站点真实请求体）');
+    } catch (e) {
+      console.warn('[鸣潮监控-盼之静默] 列表请求捕获器安装失败: ' + (e && e.message));
+    }
+  }
+
+  /**
+   * 按发布时间降序抓取盼之最新商品（走页面自身API，默认2页40条，覆盖完整、无旧货混入）
+   * @returns {Promise<Array>} 失败返回空数组，调用方回退到SSR推荐流
+   */
+  // fetchPZNewestApiList 的翻页元信息（补扫用）：caughtUp=整页已见已追平 / reachedEnd=翻到末尾 / recoveryIds=补捞区间商品
+  let pzdsFetchPagingInfo = { caughtUp: false, reachedEnd: false, pagesScanned: 0, recoveryIds: null };
+
+  async function fetchPZNewestApiList(maxPages, startPage, backfill) {
+    const pages = maxPages || 3;
+    const fromPage = Math.max(1, startPage || 1);
+    const isBackfill = !!backfill;
+    const map = new Map();
+    pzdsLastApiFailReason = '';
+    pzdsFetchPagingInfo = { caughtUp: false, reachedEnd: false, pagesScanned: 0, recoveryIds: null };
+    // 首次调用等待 $nuxt 挂载最多15秒（首轮扫描常在应用挂载完成前启动）；之后2秒即可
+    const waitMs = pzdsPageApiEverReady ? 2000 : 15000;
+    // 尚无验证过的请求体模板时先跑探针
+    if (!pzdsWorkingQueryTpl) await pzdsProbeQueryVariants();
+    if (!pzdsWorkingQueryTpl) {
+      pzdsLastApiFailReason = '探针未命中，回退SSR';
+      return [];
+    }
+    for (let p = fromPage; p <= pages; p++) {
+      const q = Object.assign({}, pzdsWorkingQueryTpl.q, { page: p });
+      const r = await pzdsCallPageApi(pzdsWorkingQueryTpl.url, q, waitMs);
+      if (!r.ok) {
+        pzdsLastApiFailReason = r.reason || '未知原因';
+        console.warn('[鸣潮监控-盼之静默] 页面API不可用: ' + pzdsLastApiFailReason);
+        return [];
+      }
+      const d = r.res && r.res.data;
+      const records = Array.isArray(d) ? d : (d && Array.isArray(d.records) ? d.records : null);
+      if (!records) {
+        console.warn('[鸣潮监控-盼之静默] 页面API响应无records: ' + JSON.stringify(r.res || {}).substring(0, 200));
+        break;
+      }
+      let added = 0;
+      for (const rec of records) {
+        const prod = pzdsApiRecordToProduct(rec);
+        if (prod && !map.has(prod.productId)) {
+          pzdsApplySellingPointLabels(prod, Array.isArray(rec.sellingPointLabels) ? rec.sellingPointLabels : []);
+          map.set(prod.productId, prod);
+          added++;
+        }
+      }
+      console.log('[鸣潮监控-盼之静默] 最新发布API第' + p + '/' + pages + '页: ' + records.length + '条，新增' + added + '，累计' + map.size + '条');
+      pzdsFetchPagingInfo.pagesScanned++;
+      // 补捞区间标记（与螃蟹补扫一致）：仅补扫模式下，第2页及以后的商品只入库不推送
+      if (isBackfill && (fromPage > 1 || p >= 2)) {
+        if (!pzdsFetchPagingInfo.recoveryIds) pzdsFetchPagingInfo.recoveryIds = new Set();
+        for (const rec of records) {
+          const no = rec && rec.goodsNo;
+          if (no) pzdsFetchPagingInfo.recoveryIds.add('pz_' + no);
+        }
+      }
+      if (records.length === 0) {
+        pzdsFetchPagingInfo.reachedEnd = true;
+        if (p === 1) {
+          // 模板失效（此前命中过但现在返回空）：清空模板，下一轮重新探针
+          console.warn('[鸣潮监控-盼之静默] 请求体模板失效（第1页返回空），下一轮重新探针');
+          pzdsWorkingQueryTpl = null;
+          pzdsProbeDone = false;
+        }
+        break;
+      }
+      // 整页都是已见ID → 已追平上次扫描区间（与螃蟹补扫同逻辑），提前停止省API调用
+      if (records.length > 0 && seenIds.length > 0) {
+        const allSeen = records.every(function (rec) {
+          const pid = rec && rec.goodsNo ? 'pz_' + rec.goodsNo : '';
+          return pid && seenIds.indexOf(pid) >= 0;
+        });
+        if (allSeen) { pzdsFetchPagingInfo.caughtUp = true; break; }
+      }
+      if (records.length < PZ_NEWEST_PAGE_SIZE) { pzdsFetchPagingInfo.reachedEnd = true; break; }  // 已到最后一页
+      if (p < pages) await new Promise(r2 => setTimeout(r2, 800));
+    }
+    const list = Array.from(map.values());
+    list.sort((a, b) => (b.onStandTime || 0) - (a.onStandTime || 0));
+    return list;
+  }
+
+  /**
+   * 用 sellingPointLabels 补全商品的角色与专武信息（追加到 product.showTitle）
+   * 标签格式1: "角色名X+Y"（Y>=1表示有专武，如 "赞妮0+1"、"卡提希娅6+2"）
+   * 标签格式2: "X命角色名"（无专武，如 "0命今汐"）
+   * 列表SSR与页面API两条数据路径共用
+   */
+  function pzdsApplySellingPointLabels(product, labels) {
+    if (!product || !Array.isArray(labels) || labels.length === 0) return;
+    const weapons = new Set();
+    const labelChars = [];
+    const seenLabelChars = new Set();
+    for (const rawLabel of labels) {
+      const label = rawLabel.trim();
+      const m1 = label.match(/^(.+?)(\d+)\+(\d+)$/);
+      if (m1) {
+        let rawName = m1[1].replace(/[・·]/g, '');
+        const canonicalName = CHAR_ALIASES[rawName] || rawName;
+        if (CHAR_LOOKUP[canonicalName] && !seenLabelChars.has(canonicalName)) {
+          seenLabelChars.add(canonicalName);
+          labelChars.push({ name: canonicalName, const: parseInt(m1[2]) });
+          // "X+Y" 中的 Y 是专武精炼等级，直接按实际精炼计入，避免精5被当成精1低估
+          const refine = parseInt(m1[3]);
+          if (refine >= 1) {
+            const sigName = SIG_WEAPONS[canonicalName];
+            if (sigName) weapons.add('精' + Math.min(refine, 5) + sigName);
+          }
+        }
+        continue;
+      }
+      let m2 = null;
+      for (const unit of G().constUnits) {
+        m2 = label.match(new RegExp('^(\\d+)' + unit + '(.+)$'));
+        if (m2) break;
+      }
+      if (m2) {
+        let rawName = m2[2].replace(/[・·]/g, '');
+        const canonicalName = CHAR_ALIASES[rawName] || rawName;
+        if (CHAR_LOOKUP[canonicalName] && !seenLabelChars.has(canonicalName)) {
+          seenLabelChars.add(canonicalName);
+          labelChars.push({ name: canonicalName, const: parseInt(m2[1]) });
+        }
+      }
+    }
+    const missingChars = labelChars.filter(c => !product.showTitle.includes(c.name));
+    if (missingChars.length > 0) {
+      product.showTitle += ' ' + missingChars.map(c => c.const + G().constUnits[0] + c.name).join('，');
+    }
+    if (weapons.size > 0) {
+      product.showTitle += ' 【' + G().keywords.weaponSections[0] + '】:' + Array.from(weapons).join(',');
+    }
   }
 
   /**
@@ -3551,47 +3990,7 @@
         let sm;
         while ((sm = strRegex.exec(ssrMatch[1])) !== null) labels.push(sm[1]);
       }
-
-      const weapons = new Set();
-      const labelChars = [];
-      const seenLabelChars = new Set();
-      for (const rawLabel of labels) {
-        const label = rawLabel.trim();
-        const m1 = label.match(/^(.+?)(\d+)\+(\d+)$/);
-        if (m1) {
-          let rawName = m1[1].replace(/[・·]/g, '');
-          const canonicalName = CHAR_ALIASES[rawName] || rawName;
-          if (CHAR_LOOKUP[canonicalName] && !seenLabelChars.has(canonicalName)) {
-            seenLabelChars.add(canonicalName);
-            labelChars.push({ name: canonicalName, const: parseInt(m1[2]) });
-            if (parseInt(m1[3]) >= 1) {
-              const sigName = SIG_WEAPONS[canonicalName];
-              if (sigName) weapons.add('精1' + sigName);
-            }
-          }
-          continue;
-        }
-        let m2 = null;
-        for (const unit of G().constUnits) {
-          m2 = label.match(new RegExp('^(\\d+)' + unit + '(.+)$'));
-          if (m2) break;
-        }
-        if (m2) {
-          let rawName = m2[2].replace(/[・·]/g, '');
-          const canonicalName = CHAR_ALIASES[rawName] || rawName;
-          if (CHAR_LOOKUP[canonicalName] && !seenLabelChars.has(canonicalName)) {
-            seenLabelChars.add(canonicalName);
-            labelChars.push({ name: canonicalName, const: parseInt(m2[1]) });
-          }
-        }
-      }
-      const missingChars = labelChars.filter(c => !product.showTitle.includes(c.name));
-      if (missingChars.length > 0) {
-        product.showTitle += ' ' + missingChars.map(c => c.const + G().constUnits[0] + c.name).join('，');
-      }
-      if (weapons.size > 0) {
-        product.showTitle += ' 【' + G().keywords.weaponSections[0] + '】:' + Array.from(weapons).join(',');
-      }
+      pzdsApplySellingPointLabels(product, labels);
     }
 
     // 按上架时间降序排序（SSR默认排序非按时间，需手动排序确保最新商品优先）
@@ -3709,7 +4108,7 @@
             notify(productId + '_drop', title, body, mdBody);
             notifiedIds.push(productId + '_drop');
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+            saveStorage(notifiedStorageKey(), notifiedIds);
           }
         }
         return;
@@ -3731,15 +4130,17 @@
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+    // 收录过滤（v3.73.0）：估值过低/差价不足/严重高估
+    const adoptReject = adoptionRejectReason(valuation);
+    if (adoptReject) {
+      console.log('[鸣潮监控-盼之] 不收录(' + adoptReject + '): 估值¥' + Math.round(valuation.totalValue) + ' 差价¥' + Math.round(valuation.diff || 0));
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
     if (valuation.levelFound && valuation.level < G().minLevel) {
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       console.log('[鸣潮监控-盼之] 等级低于70，不收录: ' + product.productUniqueNo + ' Lv.' + valuation.level);
       return;
     }
@@ -3775,10 +4176,10 @@
           notify(productId + '_drop', title, body, mdBody);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          saveStorage(notifiedStorageKey(), notifiedIds);
         }
       }
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -3793,6 +4194,7 @@
       ratio: valuation.ratio,
       status: '初估',
       platform: 'pzds',
+      goodsImg: product.goodsImg || '',
       effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
@@ -3804,7 +4206,7 @@
       valuation: valuation,
       listTime: product.listTime || Date.now(),
       firstSeen: Date.now(),
-      _detailFetched: !!(detailText && detailText.length > 20 && parseText === detailText),
+      _detailFetched: true,   // 列表页SSR数据已含完整角色与专武精炼，视为完整描述
     });
 
     console.log('[鸣潮监控-盼之] 新商品入表: ' + product.productUniqueNo + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' (表格共' + tableData.length + '行)');
@@ -3819,8 +4221,176 @@
       enqueueDetail(productId, valuation.diff || 0);
     }
 
-    // 初估即推送通知（盼之商品跳过详情队列，必须在初估阶段推送）
-    tryNotifyNewProduct(productId, parsed, valuation, price, parseText, product.productUniqueNo || '', null);
+    // 初估即推送通知（盼之商品不走通用详情队列；新商品已在入表前抓取详情页完整文本，估值即精确值）
+    // 补扫捞回来的旧号（补捞区间）只入库不推送；记入 notifiedIds 防止之后被补推
+    if (backfillRecoveryIds && backfillRecoveryIds.has(productId)) {
+      if (notifiedIds.indexOf(productId) < 0) {
+        notifiedIds.push(productId);
+        if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+        saveStorage(notifiedStorageKey(), notifiedIds);
+      }
+      console.log('[鸣潮监控-盼之] 补扫入库(不推送): ' + (product.productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0));
+    } else {
+      tryNotifyNewProduct(productId, parsed, valuation, price, parseText, product.productUniqueNo || '', null);
+    }
+  }
+
+  /**
+   * 抓取盼之商品详情页（2026-10-28 实测详情页 SSR 已可无 Cookie 直连，此前的阿里云验证拦截已解除）
+   * 详情页 NUXT 数据中含 description（完整结构化描述：【联觉等级】【黄数】【五星角色】全命座、
+   * 【四星角色】【皮肤】【金色武器】精炼等级、全部资源）与 price（当前售价，列表页展示的是原价）
+   * @param {string} goodsNo - 商品编号（productUniqueNo）
+   * @returns {Promise<{description:string, price:number, originalPrice:number}|null>} 失败/WAF拦截返回 null
+   */
+  /**
+   * 经自建转发中继发请求（v4.2.0 防风控）
+   * 中继服务器代为访问目标平台，出口IP与浏览器分离，WAF只看到中继IP；
+   * 中继协议：POST {relayUrl} body={url,method,headers,body,timeout,token} → {status, body}
+   * 服务端实现见 server.js /api/monitor/relay（或等价的Cloudflare Worker）
+   * @returns {Promise<{status:number,body:string}|null>} 中继不可用/未配置返回null
+   */
+  function fetchViaRelay(targetUrl, method, headers, body, timeoutMs) {
+    var relay = (pushConfig.relayUrl || '').trim();
+    if (!relay) return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      try {
+        GM_xmlhttpRequest({
+          method: 'POST',
+          url: relay + (relay.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now(),
+          headers: { 'Content-Type': 'application/json' },
+          data: JSON.stringify({
+            url: targetUrl,
+            method: method || 'GET',
+            headers: headers || {},
+            body: body || '',
+            timeout: timeoutMs || 15000,
+            token: (pushConfig.relayToken || '').trim(),
+          }),
+          timeout: (timeoutMs || 15000) + 8000,
+          onload: function (res) {
+            try {
+              var json = JSON.parse(res.responseText);
+              if (json && typeof json.status === 'number' && typeof json.body === 'string') {
+                resolve({ status: json.status, body: json.body });
+              } else {
+                console.warn('[鸣潮监控-中继] 响应格式异常: ' + res.responseText.substring(0, 120));
+                resolve(null);
+              }
+            } catch (e) {
+              console.warn('[鸣潮监控-中继] 响应非JSON: ' + res.responseText.substring(0, 120));
+              resolve(null);
+            }
+          },
+          onerror: function (e) { console.error('[鸣潮监控-中继] 请求失败:', e); resolve(null); },
+          ontimeout: function () { console.error('[鸣潮监控-中继] 请求超时'); resolve(null); },
+        });
+      } catch (e) { console.error('[鸣潮监控-中继] 异常:', e); resolve(null); }
+    });
+  }
+
+  function fetchPZDetail(goodsNo) {
+    return new Promise(function(resolve) {
+      const url = pzdsUrls().detail + '/' + goodsNo + '/6?_t=' + Date.now();
+      const reqHeaders = {
+        'User-Agent': navigator.userAgent,
+        'Accept': 'text/html,application/xhtml+xml',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      };
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        nocache: true,
+        headers: reqHeaders,
+        timeout: 15000,
+        onload: async function(res) {
+          let html = res.responseText || '';
+          // v4.2.0 中继重试：直连被WAF拦截（挑战页无NUXT数据）且配置了中继时，让中继代为访问
+          const wafBlocked = html.indexOf('aliyun_waf') >= 0 ||
+            (html.indexOf('window.__NUXT__=') < 0 && html.indexOf('goodsNo') < 0);
+          if (wafBlocked && (pushConfig.relayUrl || '').trim()) {
+            console.log('[鸣潮监控-盼之] 详情页直连被拦，尝试中继: ' + goodsNo);
+            const rel = await fetchViaRelay(url, 'GET', reqHeaders, '', 15000);
+            if (rel && rel.status === 200 && rel.body && rel.body.indexOf('aliyun_waf') < 0) {
+              console.log('[鸣潮监控-盼之] 详情页经中继获取成功: ' + goodsNo);
+              html = rel.body;
+            } else {
+              console.warn('[鸣潮监控-盼之] 详情页中继也失败: ' + goodsNo);
+            }
+          }
+          try {
+            resolve(parsePZDetailHTML(html));
+          } catch (e) {
+            console.error('[鸣潮监控-盼之] 详情页解析失败: ' + goodsNo, e);
+            resolve(null);
+          }
+        },
+        onerror: async function() {
+          // v4.2.0 请求失败也尝试中继
+          if ((pushConfig.relayUrl || '').trim()) {
+            const rel = await fetchViaRelay(url, 'GET', reqHeaders, '', 15000);
+            if (rel && rel.status === 200 && rel.body) {
+              console.log('[鸣潮监控-盼之] 详情页经中继获取成功(直连失败): ' + goodsNo);
+              try { resolve(parsePZDetailHTML(rel.body)); return; } catch (e) {}
+            }
+          }
+          console.error('[鸣潮监控-盼之] 详情页请求失败: ' + goodsNo);
+          resolve(null);
+        },
+        ontimeout: function() {
+          console.error('[鸣潮监控-盼之] 详情页请求超时: ' + goodsNo);
+          resolve(null);
+        },
+      });
+    });
+  }
+
+  /**
+   * 解析盼之详情页 SSR HTML
+   * 通道1：求值 window.__NUXT__（与列表页解析同款方式），递归找含 description 的商品对象
+   * 通道2（回退）：商品描述渲染在 class="text-overflow" 的 span 内，正则提取
+   * WAF 拦截页两种通道均无数据 → 返回 null（调用方回退列表页标题估值）
+   */
+  function parsePZDetailHTML(htmlText) {
+    if (!htmlText) return null;
+    try {
+      const nuxtStart = htmlText.indexOf('window.__NUXT__=');
+      if (nuxtStart >= 0) {
+        const nuxtEnd = htmlText.indexOf('</script>', nuxtStart);
+        if (nuxtEnd > nuxtStart) {
+          let nuxtCode = htmlText.substring(nuxtStart + 'window.__NUXT__='.length, nuxtEnd).trim();
+          if (nuxtCode.endsWith(';')) nuxtCode = nuxtCode.slice(0, -1);
+          const nuxt = new Function('return ' + nuxtCode)();
+          const found = [];
+          (function findGoodsObj(node, depth) {
+            if (!node || depth > 8 || found.length > 0) return;
+            if (Array.isArray(node)) { node.forEach(function(n) { findGoodsObj(n, depth + 1); }); return; }
+            if (typeof node === 'object') {
+              if (typeof node.description === 'string' && node.description.length > 20 && node.description.indexOf('【') !== -1) {
+                found.push(node);
+                return;
+              }
+              Object.keys(node).forEach(function(k) { findGoodsObj(node[k], depth + 1); });
+            }
+          })(nuxt, 0);
+          if (found.length > 0) {
+            const g = found[0];
+            return {
+              description: String(g.description),
+              price: Number(g.price) || 0,
+              originalPrice: Number(g.originalPrice) || 0,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[鸣潮监控-盼之] 详情页NUXT解析失败，尝试正则回退: ' + e.message);
+    }
+    const m = htmlText.match(/<div class="text-overflow"[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>/);
+    if (m && m[1].length > 20) {
+      return { description: m[1].trim(), price: 0, originalPrice: 0 };
+    }
+    return null;
   }
 
   /**
@@ -3837,29 +4407,39 @@
       console.log('  - ' + uniqueNo + ' ¥' + price + ' ' + title);
     });
 
-    // 为新商品预取详情页（跳过超过48小时的旧商品；已在表格中但未成功获取过详情的也继续抓）
-    const PZ_MAX_AGE_HOURS = 48;
-    const detailMap = {};
-    const needDetail = list.filter(p => {
-      if (p.onStandTime > 0 && (Date.now() - p.onStandTime) / 3600000 > PZ_MAX_AGE_HOURS) return false;
-      if (!seenIds.includes(p.productId)) return true;
-      const existRow = tableData.find(r => r.productId === p.productId);
-      if (!existRow) return true;
-      // 已在表格中但未成功获取过详情页的，继续抓取详情
-      if (existRow.platform === 'pzds' && !existRow._detailFetched) return true;
-      return false;
-    });
-    if (needDetail.length > 0) {
-      console.log('[鸣潮监控-盼之] 预取' + needDetail.length + '个新商品详情页');
-      const details = await Promise.all(needDetail.map(p => fetchPZDetail(p.productUniqueNo)));
-      needDetail.forEach((p, i) => { detailMap[p.productId] = details[i]; });
-    }
+    // 2026-10-28 实测：盼之详情页 SSR 已可无 Cookie 直连（此前的阿里云验证拦截已解除），
+    // 恢复详情页补全：新商品（未见过的）先抓详情页完整描述再估值，估值与推送通知更精确；
+    // 详情页 price 为当前实际售价（列表页展示原价），不一致时以详情页为准并打日志；
+    // 抓取失败/被 WAF 拦截时回退列表页标题估值（processPZProduct 内置 gameTextPattern 校验）。
+    // 限流：间隔 800ms、每轮最多 15 个详情，防止首轮扫描耗时过长或触发风控
+    const PZ_DETAIL_GAP_MS = 800;
+    const PZ_DETAIL_MAX = 15;
+    let detailCount = 0;
 
     batchMode = true;
     try {
       for (const product of list) {
         try {
-          processPZProduct(product, detailMap[product.productId] || '');
+          let detailText = '';
+          const isNew = seenIds.indexOf(product.productId) === -1;
+          if (isNew && detailCount < PZ_DETAIL_MAX) {
+            detailCount++;
+            if (detailCount > 1) await new Promise(r => setTimeout(r, PZ_DETAIL_GAP_MS));
+            const d = await fetchPZDetail(product.productUniqueNo || product.productId.replace(/^pz_/, ''));
+            if (d) {
+              detailText = d.description;
+              if (d.price > 0 && d.price !== (product.price || 0)) {
+                console.log('[鸣潮监控-盼之] 详情页价格修正: ' + product.productUniqueNo +
+                  ' 列表¥' + product.price + ' → 当前¥' + d.price +
+                  (d.originalPrice > 0 ? '（原价¥' + d.originalPrice + '）' : ''));
+                product.price = d.price;
+              }
+              console.log('[鸣潮监控-盼之] 详情页补全: ' + product.productUniqueNo + ' 描述' + d.description.length + '字');
+            } else {
+              console.warn('[鸣潮监控-盼之] 详情页获取失败，回退列表页估值: ' + product.productUniqueNo);
+            }
+          }
+          processPZProduct(product, detailText);
         } catch (e) {
           console.error('[鸣潮监控-盼之] 处理商品失败: ' + (product.productUniqueNo || product.productId), e);
         }
@@ -3870,7 +4450,7 @@
     trimTableData();
     sortTableData();
     saveTableData();
-    saveStorage(STORAGE_KEYS.seen, seenIds);
+    saveStorage(seenStorageKey(), seenIds);
     refreshTableDisplay();
     updateStatusText();
     console.log('[鸣潮监控-盼之] 批量处理完成，表格共' + tableData.length + '行');
@@ -4156,6 +4736,7 @@
         listTime: onStandTime || Date.now(),
         onStandTime: onStandTime,
         onStandTimeStr: (it.polishTimeDesc ? it.polishTimeDesc + ' ' : '') + (it.polishAt || ''),
+        goodsImg: pickProductImg(it, '氪金兽'),   // v3.75.0 钉钉图文推送用
       });
     }
     return products;
@@ -4300,7 +4881,7 @@
             notify(productId + '_drop', title, body, mdBody);
             notifiedIds.push(productId + '_drop');
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+            saveStorage(notifiedStorageKey(), notifiedIds);
           }
         }
         return;
@@ -4321,15 +4902,24 @@
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+    // 收录过滤（v3.73.0）：估值过低/差价不足/严重高估
+    const adoptReject = adoptionRejectReason(valuation);
+    if (adoptReject) {
+      console.log('[鸣潮监控-氪金兽] 不收录(' + adoptReject + '): 估值¥' + Math.round(valuation.totalValue) + ' 差价¥' + Math.round(valuation.diff || 0));
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
+      return;
+    }
+
+    // 氪金兽余波珊瑚经常统计错误，>2000 视为脏数据不收录（v3.73.0）
+    if ((parsed.aftermathCoral || 0) > 2000) {
+      console.log('[鸣潮监控-氪金兽] 余波珊瑚' + parsed.aftermathCoral + '>2000 疑似统计错误，不收录: ' + (product.productUniqueNo || ''));
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
     if (valuation.levelFound && valuation.level < G().minLevel) {
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -4362,10 +4952,10 @@
           notify(productId + '_drop', title, body, mdBody);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          saveStorage(notifiedStorageKey(), notifiedIds);
         }
       }
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -4380,6 +4970,7 @@
       ratio: valuation.ratio,
       status: '初估',
       platform: 'kjs',
+      goodsImg: product.goodsImg || '',
       effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
@@ -4424,7 +5015,7 @@
     trimTableData();
     sortTableData();
     saveTableData();
-    saveStorage(STORAGE_KEYS.seen, seenIds);
+    saveStorage(seenStorageKey(), seenIds);
     refreshTableDisplay();
     updateStatusText();
     console.log('[鸣潮监控-氪金兽] 批量处理完成，表格共' + tableData.length + '行');
@@ -4611,6 +5202,7 @@
         onStandTimeStr: '',
         server: serverStr,
         platform: 'qy',
+        goodsImg: pickProductImg(item, '7881'),   // v3.75.0 钉钉图文推送用
       });
     }
     console.log('[鸣潮监控-7881] 解析到' + products.length + '条商品');
@@ -4658,7 +5250,7 @@
             notify(productId + '_drop', title, body, mdBody);
             notifiedIds.push(productId + '_drop');
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+            saveStorage(notifiedStorageKey(), notifiedIds);
           }
         }
         return;
@@ -4679,15 +5271,17 @@
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+    // 收录过滤（v3.73.0）：估值过低/差价不足/严重高估
+    const adoptReject = adoptionRejectReason(valuation);
+    if (adoptReject) {
+      console.log('[鸣潮监控-7881] 不收录(' + adoptReject + '): 估值¥' + Math.round(valuation.totalValue) + ' 差价¥' + Math.round(valuation.diff || 0));
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
     // 等级低于70的账号不收录
     if (valuation.levelFound && valuation.level < G().minLevel) {
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -4720,10 +5314,10 @@
           notify(productId + '_drop', title, body, mdBody);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          saveStorage(notifiedStorageKey(), notifiedIds);
         }
       }
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -4738,6 +5332,7 @@
       ratio: valuation.ratio,
       status: '初估',
       platform: 'qy',
+      goodsImg: product.goodsImg || '',
       effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
@@ -4826,7 +5421,7 @@
     trimTableData();
     sortTableData();
     saveTableData();
-    saveStorage(STORAGE_KEYS.seen, seenIds);
+    saveStorage(seenStorageKey(), seenIds);
     refreshTableDisplay();
     updateStatusText();
     console.log('[鸣潮监控-7881] 批量处理完成，表格共' + tableData.length + '行');
@@ -5026,6 +5621,7 @@
         onStandTimeStr: timeStr,
         server: serverStr,
         platform: 'ysy',
+        goodsImg: pickProductImg(item, '易手游'),   // v3.75.0 钉钉图文推送用
         rawItem: item,
       });
     }
@@ -5067,7 +5663,7 @@
             notify(productId + '_drop', dropResult.title, dropResult.body, dropResult.mdBody);
             notifiedIds.push(productId + '_drop');
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+            saveStorage(notifiedStorageKey(), notifiedIds);
           }
         }
         return;
@@ -5088,8 +5684,9 @@
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    if (valuation.totalValue < 300) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
-    if (valuation.levelFound && valuation.level < G().minLevel) { if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds); return; }
+    const adoptReject = adoptionRejectReason(valuation);
+    if (adoptReject) { console.log('[监控-易手游] 不收录(' + adoptReject + '): 估值¥' + Math.round(valuation.totalValue) + ' 差价¥' + Math.round(valuation.diff || 0)); if (!batchMode) saveStorage(seenStorageKey(), seenIds); return; }
+    if (valuation.levelFound && valuation.level < G().minLevel) { if (!batchMode) saveStorage(seenStorageKey(), seenIds); return; }
 
     // 内容指纹去重
     var fingerprint = generateFingerprint(parsed);
@@ -5116,10 +5713,10 @@
           notify(productId + '_drop', dupDropResult.title, dupDropResult.body, dupDropResult.mdBody);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          saveStorage(notifiedStorageKey(), notifiedIds);
         }
       }
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -5133,6 +5730,7 @@
       ratio: valuation.ratio,
       status: '初估',
       platform: 'ysy',
+      goodsImg: product.goodsImg || '',
       effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
@@ -5173,7 +5771,7 @@
     trimTableData();
     sortTableData();
     saveTableData();
-    saveStorage(STORAGE_KEYS.seen, seenIds);
+    saveStorage(seenStorageKey(), seenIds);
     refreshTableDisplay();
     updateStatusText();
     console.log('[监控-易手游] 批量处理完成，表格共' + tableData.length + '行');
@@ -5365,9 +5963,26 @@
     trimTableData();
     sortTableData();
     saveTableData();
-    saveStorage(STORAGE_KEYS.seen, seenIds);
+    saveStorage(seenStorageKey(), seenIds);
     refreshTableDisplay();
     updateStatusText();
+  }
+
+  /**
+   * 收录过滤规则（v3.73.0 用户自定义，全平台统一，在售收录与详估复核共用）：
+   * 1) 估值<300 → 原有垃圾数据规则
+   * 2) 估值<600 且 差价<200 → 不收录（低估值商品必须有足够差价才值得收录）
+   * 3) 估值<20000 且 差价<-3000 → 不收录（2万以下、售价高出估值3000+的严重高估坑货）
+   * 差价 diff = 估值 - 售价（正数=划算）
+   * @returns {string} 拒绝原因；通过返回 ''
+   */
+  function adoptionRejectReason(valuation) {
+    const v = valuation.totalValue || 0;
+    const diff = (valuation.diff != null) ? valuation.diff : 0;
+    if (v < 300) return '估值低于300';
+    if (v < 600 && diff < 200) return '估值<600且差价<200';
+    if (v < 20000 && diff < -3000) return '估值<20000且差价<-3000';
+    return '';
   }
 
   /**
@@ -5394,7 +6009,7 @@
     if (/自主截图/.test(showTitle)) {
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -5428,7 +6043,7 @@
             notify(productId + '_flash', flashTitle, flashMsg, flashMd);
             notifiedIds.push(productId + '_flash');
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+            saveStorage(notifiedStorageKey(), notifiedIds);
           }
         } else {
           // 价格相同或更高，但仍标记为秒杀（在秒杀池中即代表还价成交）
@@ -5454,6 +6069,11 @@
     if (seenIds.includes(productId)) {
       // 查找表格中已有行，检测价格变化
       const existRow = tableData.find(r => r.productId === productId);
+      // v3.77.1 图片回填：旧版入库的行没有 goodsImg（钉钉图文推送上线前的数据），
+      // 重扫到该商品时补上，让降价/秒杀等后续通知也能带图
+      if (existRow && !existRow.goodsImg) {
+        existRow.goodsImg = item.goodsImg || pickProductImg(item, '螃蟹') || '';
+      }
       if (existRow && price < existRow.price) {
         // 降价了！记录价格历史并更新
         if (!existRow.priceHistory) existRow.priceHistory = [];
@@ -5481,7 +6101,7 @@
           notify(productId + '_drop', dropTitle, dropMsg, dropMd);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          saveStorage(notifiedStorageKey(), notifiedIds);
         }
         return;
       } else if (!existRow) {
@@ -5514,11 +6134,13 @@
       (valuation.totalValue < 300 ? ' [低于300，不收录]' : '') +
       (valuation.levelFound && valuation.level < G().minLevel ? ' [等级低于' + G().minLevel + '，不收录]' : ''));
 
-    // 估值低于300的垃圾数据不收录
-    if (valuation.totalValue < 300) {
+    // 收录过滤（v3.73.0）：估值过低/差价不足/严重高估
+    const adoptReject = adoptionRejectReason(valuation);
+    if (adoptReject) {
+      console.log('[鸣潮监控] 不收录(' + adoptReject + '): 估值¥' + Math.round(valuation.totalValue) + ' 差价¥' + Math.round(valuation.diff || 0) + ' ' + productId);
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       return;
     }
 
@@ -5526,7 +6148,7 @@
     if (valuation.levelFound && valuation.level < G().minLevel) {
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
-      if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+      if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       console.log('[鸣潮监控] 等级低于70，不收录: ' + (productUniqueNo || productId) + ' Lv.' + valuation.level);
       return;
     }
@@ -5566,7 +6188,7 @@
           notify(productId + '_drop', mergeTitle, mergeMsg, mergeMd);
           notifiedIds.push(productId + '_drop');
           if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-          saveStorage(STORAGE_KEYS.notified, notifiedIds);
+          saveStorage(notifiedStorageKey(), notifiedIds);
         }
       } else {
         // 价格未降但秒杀池商品仍标记为秒杀
@@ -5575,7 +6197,7 @@
           if (!batchMode) { saveTableData(); refreshTableDisplay(); }
           console.log('[鸣潮监控] 秒杀标记(指纹合并,价格未变): ' + (productUniqueNo || productId) + ' ¥' + price);
         }
-        if (!batchMode) saveStorage(STORAGE_KEYS.seen, seenIds);
+        if (!batchMode) saveStorage(seenStorageKey(), seenIds);
       }
       return;
     }
@@ -5590,6 +6212,7 @@
       value: valuation.totalValue,
       ratio: valuation.ratio,
       status: fromFlashSale ? '秒杀' : '初估',
+      goodsImg: item.goodsImg || pickProductImg(item, '螃蟹') || '',   // v3.75.0 螃蟹API字段未确认，兜底扫描+诊断日志
       effectiveYellow: valuation.effectiveYellow || 0,
       parsed: {
         yellowCount: parsed.yellowCount,
@@ -5630,7 +6253,7 @@
       if (notifiedIds.indexOf(productId) < 0) {
         notifiedIds.push(productId);
         if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-        saveStorage(STORAGE_KEYS.notified, notifiedIds);
+        saveStorage(notifiedStorageKey(), notifiedIds);
       }
       console.log('[鸣潮监控] 补扫入库(不推送): ' + (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0));
     } else {
@@ -5694,7 +6317,7 @@
     notify(productId, title, body, mdBody, triggeredRule ? triggeredRule.recipients : null);
     notifiedIds.push(productId);
     if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-    saveStorage(STORAGE_KEYS.notified, notifiedIds);
+    saveStorage(notifiedStorageKey(), notifiedIds);
     console.log('[鸣潮监控] 初估推送: ' + (productUniqueNo || productId) + ' ¥' + price + ' 估值¥' + valuation.totalValue.toFixed(0) + ' 差价¥' + notifyDiff.toFixed(0));
 
     // 自动抢购
@@ -5711,6 +6334,10 @@
    * @param {number} priority - 优先级（差价，默认0）
    */
   function enqueueDetail(productId, priority) {
+    // 盼之静默页签不跑通用详情队列：该队列只服务螃蟹网详情（pz_/kjs_/qy_/ysy_ 在
+    // processNextDetail 中被跳过），而GM请求螃蟹详情API会被其WAF拦成挑战页，
+    // 还会触发WAF解决器开标签页。盼之页签只负责盼之扫描+推送。
+    if (isPzdsPage()) return;
     // 避免重复入队
     const existItem = detailQueue.find(item => item.productId === productId);
     if (existItem) {
@@ -5785,8 +6412,8 @@
         const parsed = parseAccountInfo(showTitle);
         const valuation = calculateValue(parsed, detailPrice);
 
-        // 详估后估值低于300，从表格移除
-        if (valuation.totalValue < 300) {
+        // 详估后命中收录过滤（估值过低/差价不足/严重高估），从表格移除
+        if (adoptionRejectReason(valuation)) {
           const idx = tableData.findIndex(r => r.productId === item.productId);
           if (idx >= 0) {
             tableData.splice(idx, 1);
@@ -5893,7 +6520,7 @@
             notify(item.productId, notifyTitle, notifyBody, notifyMd, triggeredRule ? triggeredRule.recipients : null);
             notifiedIds.push(item.productId);
             if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
-            saveStorage(STORAGE_KEYS.notified, notifiedIds);
+            saveStorage(notifiedStorageKey(), notifiedIds);
 
             // 自动抢购：差价超过阈值且标价不超过上限时自动打开商品页
             if (autoBuyEnabled && notifyDiff >= autoBuyDiff && (autoBuyMaxPrice <= 0 || notifyPrice <= autoBuyMaxPrice)) {
@@ -5951,7 +6578,7 @@
     // 只有表格数据成功保存（或精简后保存），才同步 seenIds
     // 这确保刷新后 seenIds 与 tableData 始终一致，不会出现"ID已见但表格缺失"的情况
     if (saved) {
-      saveStorage(STORAGE_KEYS.seen, seenIds);
+      saveStorage(seenStorageKey(), seenIds);
     }
     refreshTableDisplay();
     updateStatusText();
@@ -6723,6 +7350,13 @@
         '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
+        // 防风控转发中继（v4.2.0）
+        '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">防风控转发中继（可选）</div>' +
+        '<div style="margin-bottom:6px;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">中继地址（留空=直连）</label>' +
+        '<input type="text" id="mwRelayUrl" placeholder="https://你的服务器/api/monitor/relay" value="' + (pushConfig.relayUrl || '') + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
+        '<div style="margin-bottom:6px;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">访问令牌（服务端设置了 RELAY_TOKEN 才需要填）</label>' +
+        '<input type="password" id="mwRelayToken" value="' + (pushConfig.relayToken || '') + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">被WAF拦截的请求（盼之详情/螃蟹列表等）自动改经中继发出，出口IP与浏览器分离。中继用你自己的服务器部署（仓库 server.js 已内置 /api/monitor/relay 端点）。首次使用时油猴会弹跨域确认，选"总是允许"</div>' +
         // 秒杀库池监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
@@ -6888,6 +7522,26 @@
           '<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">开发者留言（推送到所有订阅者消息末尾）</label>' +
           '<textarea id="mwDevMessage" rows="2" placeholder="留空则不显示，支持换行" style="width:100%;box-sizing:border-box;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:11px;resize:vertical;line-height:1.4;">' + (pushConfig.devMessage || '') + '</textarea>' +
           '</div>' +
+        '</div>' +
+        // 钉钉群机器人（v3.76.0 多机器人）
+        '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;">' +
+          '<div style="font-size:12px;font-weight:600;color:#10b981;margin-bottom:4px;">钉钉群机器人（图文推送）</div>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">钉钉群设置→智能群助手→添加机器人→自定义，可添加多个机器人，所有机器人收到全部推送；消息含商品图+摘要+「查看详情」跳转</div>' +
+          '<div id="mwDingList" style="margin-bottom:8px;"></div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">' +
+          '<div style="flex:1;min-width:60px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">备注</label>' +
+          '<input type="text" id="mwDingName" placeholder="如：主群" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<div style="flex:2;min-width:140px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Webhook（完整URL或仅access_token）</label>' +
+          '<input type="text" id="mwDingWebhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<div style="flex:1;min-width:80px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">加签密钥（可选）</label>' +
+          '<input type="text" id="mwDingSecret" placeholder="SEC...（选关键词则留空）" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<div style="min-width:70px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">通知级别</label>' +
+          '<select id="mwDingPriority" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;"><option value="primary">主通知</option><option value="secondary" selected>从通知</option></select></div>' +
+          '<div style="min-width:60px;"><label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">有效天数</label>' +
+          '<input type="number" id="mwDingDays" value="30" min="1" max="3650" style="width:100%;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" /></div>' +
+          '<button id="mwDingAddBtn" style="padding:5px 10px;border:none;border-radius:4px;background:#10b981;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">添加</button>' +
+          '</div>' +
+          '<div style="font-size:10px;color:#555;margin-top:4px;">提示：主通知立即推送，从通知延迟推送（延迟秒数/高差价过滤在PushPlus区设置，两边共用）；若机器人用「自定义关键词」安全设置，关键词请设为 鸣潮（推送标题已含）</div>' +
         '</div>' +
         // 测试按钮
         '<div style="margin-bottom:12px;text-align:center;">' +
@@ -7284,6 +7938,128 @@
 
       renderScList();
 
+      // ===== 钉钉群机器人管理（v3.76.0 多机器人） =====
+      var dingListEl = box.querySelector('#mwDingList');
+      var dingEditingIdx = -1; // 正在编辑的机器人索引，-1=新增模式
+      function dingEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+      function renderDingList() {
+        dingListEl.innerHTML = '';
+        var robots = pushConfig.dingtalkRobots || [];
+        if (robots.length === 0) {
+          dingListEl.innerHTML = '<div style="font-size:11px;color:#555;padding:4px 0;">暂无机器人，在下方添加 Webhook</div>';
+        } else {
+          var nowTs = Date.now();
+          robots.forEach(function (robot, idx) {
+            var w = robot.webhook || '';
+            var token = (w.match(/access_token=([0-9a-f]{8})/i) || [])[1];
+            var masked = token ? ('token:' + token + '...') : (w ? w.substring(0, 12) + '...' : '(未配置)');
+            // 通知级别标签（v4.1.0 与PushPlus同语义）
+            var isPrimary = (robot.priority || 'primary') === 'primary';
+            var priLabel = isPrimary
+              ? '<span style="color:#10b981;font-size:10px;">主通知</span>'
+              : '<span style="color:#6a9fff;font-size:10px;">从通知</span>';
+            // 剩余天数（无validDays=永久有效，存量迁移机器人）
+            var daysLabel = '';
+            if (robot.validDays && robot.createdAt) {
+              var remaining = robot.validDays - Math.floor((nowTs - robot.createdAt) / 86400000);
+              daysLabel = remaining > 0
+                ? '<span style="color:#f59e0b;font-size:10px;">剩' + remaining + '天</span>'
+                : '<span style="color:#ef4444;font-size:10px;">已过期</span>';
+            } else {
+              daysLabel = '<span style="color:#6b7280;font-size:10px;">永久</span>';
+            }
+            var hasSecret = (robot.secret || '').trim() ? '<span style="color:#f59e0b;font-size:10px;">加签</span>' : '';
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 6px;margin-bottom:4px;background:#0d1a3a;border-radius:4px;font-size:11px;';
+            row.innerHTML =
+              '<span style="color:#e0e0e0;min-width:45px;">' + dingEsc(robot.name || '未命名') + '</span>' +
+              priLabel + daysLabel + hasSecret +
+              '<span style="color:#888;flex:1;word-break:break-all;">' + dingEsc(masked) + '</span>' +
+              '<button data-ding-idx="' + idx + '" data-ding-act="test" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#10b981;font-size:10px;cursor:pointer;">测试</button>' +
+              '<button data-ding-idx="' + idx + '" data-ding-act="edit" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#6a9fff;font-size:10px;cursor:pointer;">编辑</button>' +
+              '<button data-ding-idx="' + idx + '" data-ding-act="del" style="padding:2px 6px;border:1px solid #0f3460;border-radius:3px;background:#16213e;color:#ef4444;font-size:10px;cursor:pointer;">删除</button>';
+            dingListEl.appendChild(row);
+          });
+        }
+      }
+
+      dingListEl.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-ding-act]');
+        if (!btn) return;
+        var idx = parseInt(btn.getAttribute('data-ding-idx'));
+        var act = btn.getAttribute('data-ding-act');
+        var robot = (pushConfig.dingtalkRobots || [])[idx];
+        if (!robot) return;
+        if (act === 'test') {
+          var sampleImg = (tableData.find(function (r) { return r.goodsImg; }) || {}).goodsImg || '';
+          sendDingTalkPush(robot, '测试通知',
+            '机器人「' + (robot.name || '未命名') + '」配置正常。\n\n发送时间：' + new Date().toLocaleString('zh-CN') +
+            '\n\n> 这条测试消息带了一张列表中的样例账号图，若能看到图片说明图片链路正常。',
+            'https://www.pzds.com/', sampleImg);
+          var oldTxt = btn.textContent;
+          btn.textContent = '已发送';
+          btn.disabled = true;
+          setTimeout(function () { btn.textContent = oldTxt; btn.disabled = false; }, 1500);
+        } else if (act === 'edit') {
+          box.querySelector('#mwDingName').value = robot.name || '';
+          box.querySelector('#mwDingWebhook').value = robot.webhook || '';
+          box.querySelector('#mwDingSecret').value = robot.secret || '';
+          box.querySelector('#mwDingPriority').value = (robot.priority || 'primary') === 'primary' ? 'primary' : 'secondary';
+          box.querySelector('#mwDingDays').value = robot.validDays || 30;
+          dingEditingIdx = idx;
+          box.querySelector('#mwDingAddBtn').textContent = '更新';
+        } else if (act === 'del') {
+          pushConfig.dingtalkRobots.splice(idx, 1);
+          dingEditingIdx = -1;
+          box.querySelector('#mwDingAddBtn').textContent = '添加';
+          box.querySelector('#mwDingName').value = '';
+          box.querySelector('#mwDingWebhook').value = '';
+          box.querySelector('#mwDingSecret').value = '';
+          box.querySelector('#mwDingPriority').value = 'secondary';
+          box.querySelector('#mwDingDays').value = 30;
+          renderDingList();
+        }
+      });
+
+      box.querySelector('#mwDingAddBtn').onclick = function () {
+        var name = box.querySelector('#mwDingName').value.trim();
+        var webhook = box.querySelector('#mwDingWebhook').value.trim();
+        var secret = box.querySelector('#mwDingSecret').value.trim();
+        var priority = box.querySelector('#mwDingPriority').value;
+        var validDays = parseInt(box.querySelector('#mwDingDays').value) || 30;
+        if (validDays < 1) validDays = 1;
+        if (!webhook) { alert('请填写钉钉机器人 Webhook'); return; }
+        if (!Array.isArray(pushConfig.dingtalkRobots)) pushConfig.dingtalkRobots = [];
+        if (!name) name = '钉钉机器人' + (pushConfig.dingtalkRobots.length + 1);
+        var nameTaken = pushConfig.dingtalkRobots.some(function (r, i) { return r.name === name && i !== dingEditingIdx; });
+        if (nameTaken) { alert('已存在同名机器人，请换个备注名'); return; }
+        if (dingEditingIdx >= 0) {
+          // 编辑：保留 createdAt（有效期从首次添加起算）
+          var oldRobot = pushConfig.dingtalkRobots[dingEditingIdx] || {};
+          pushConfig.dingtalkRobots[dingEditingIdx] = {
+            name: name, webhook: webhook, secret: secret,
+            priority: priority, validDays: validDays,
+            createdAt: oldRobot.createdAt || Date.now(),
+          };
+          dingEditingIdx = -1;
+          box.querySelector('#mwDingAddBtn').textContent = '添加';
+        } else {
+          pushConfig.dingtalkRobots.push({
+            name: name, webhook: webhook, secret: secret,
+            priority: priority, validDays: validDays, createdAt: Date.now(),
+          });
+        }
+        box.querySelector('#mwDingName').value = '';
+        box.querySelector('#mwDingWebhook').value = '';
+        box.querySelector('#mwDingSecret').value = '';
+        box.querySelector('#mwDingPriority').value = 'secondary';
+        box.querySelector('#mwDingDays').value = 30;
+        renderDingList();
+      };
+
+      renderDingList();
+
       // 一键赠送所有订阅者
       box.querySelector('#mwPpBonusAll').onclick = function () {
         var subs = pushConfig.pushPlusSubscribers || [];
@@ -7399,6 +8175,10 @@
         pushConfig.highDiffFilterPlatforms = Array.from(box.querySelectorAll('.mwHighDiffPlatform:checked')).map(function (cb) { return cb.value; });
         pushConfig.syncPassword = box.querySelector('#mwSyncPassword').value.trim();
         pushConfig.devMessage = box.querySelector('#mwDevMessage').value.trim();
+        // 钉钉机器人（v3.76.0）已在添加/编辑/删除时实时修改 pushConfig.dingtalkRobots
+        // 防风控转发中继（v4.2.0）
+        pushConfig.relayUrl = box.querySelector('#mwRelayUrl').value.trim();
+        pushConfig.relayToken = box.querySelector('#mwRelayToken').value.trim();
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
         saveState();
         // 如果设置了同步密码，自动上传到服务器
@@ -7861,8 +8641,8 @@
       if (nIdx >= 0) notifiedIds.splice(nIdx, 1);
     });
     saveTableData();
-    saveStorage(STORAGE_KEYS.seen, seenIds);
-    saveStorage(STORAGE_KEYS.notified, notifiedIds);
+    saveStorage(seenStorageKey(), seenIds);
+    saveStorage(notifiedStorageKey(), notifiedIds);
     sortTableData();
     refreshTableDisplay();
     updateStatusText();
@@ -12223,7 +13003,7 @@ function openSettings() {
     const dropCount = tableData.filter(r => r.status === '降价').length;
 
     dom.statusText.textContent =
-      'pxb7 监控 | ' + interceptStr +
+      (isPzdsPage() ? '盼之监控' : 'pxb7 监控') + ' | ' + interceptStr +
       ' | 表格' + tableData.length + '条 (上限' + CONFIG.maxTableRows + ')' +
       (dropCount > 0 ? ' | 降价' + dropCount + '条' : '') +
       ' | 估值≥' + threshold + '%' +
@@ -12916,6 +13696,29 @@ function openSettings() {
   }
 
   /**
+   * 钉钉机器人旧格式迁移（v3.76.0）：单机器人 webhook/secret → dingtalkRobots 列表
+   */
+  function migrateDingTalkRobots() {
+    if (!Array.isArray(pushConfig.dingtalkRobots)) pushConfig.dingtalkRobots = [];
+    if (pushConfig.dingtalkRobots.length === 0 && (pushConfig.dingtalkWebhook || '').trim()) {
+      pushConfig.dingtalkRobots.push({
+        name: '钉钉机器人1',
+        webhook: String(pushConfig.dingtalkWebhook).trim(),
+        secret: String(pushConfig.dingtalkSecret || '').trim(),
+      });
+      console.log('[鸣潮监控] 钉钉单机器人配置已迁移为机器人列表');
+    }
+    // v4.1.0 存量机器人补默认字段：priority=primary（维持原有"全部立即推送"行为），
+    // 无validDays=永久有效
+    if (Array.isArray(pushConfig.dingtalkRobots)) {
+      pushConfig.dingtalkRobots.forEach(function (r) { if (!r.priority) r.priority = 'primary'; });
+    }
+    // 清空旧字段，避免云端同步来回携带冗余
+    pushConfig.dingtalkWebhook = '';
+    pushConfig.dingtalkSecret = '';
+  }
+
+  /**
    * 向单个 Server酱 接收人发送测试消息（验证该 SendKey 配置是否正常）
    */
   function sendServerChanTest(name, key) {
@@ -12938,10 +13741,143 @@ function openSettings() {
   }
 
   /**
+   * 钉钉推送精简文案（v4.0.0）：只保留 价格信息 + 核心亮点，不再搬运 Server酱 的
+   * 完整估值明细（角色明细/资源明细/估价计算在群里太长），跳转链接由 sendDingTalkPush 统一追加
+   * @param {string} title - 通知标题（含类型与平台，如"差价¥990 现价¥990 估价¥1980 高差价 螃蟹网·鸣潮"）
+   * @param {object} row - 表格行（取估值结果与亮点），可为null（如测试通知）
+   * @param {string} fallbackBody - 行缺失或无估值时的兜底正文
+   */
+  function buildDingTalkText(title, row, fallbackBody) {
+    if (!row || !(row.value > 0) || !(row.price > 0)) return fallbackBody || title;
+    var value = row.value;
+    var price = row.price;
+    var diff = value - price;
+    var ratio = price > 0 ? (diff / price) * 100 : 0;
+    var text = '**💰 标价 ¥' + Math.round(price) + '｜估值 ¥' + Math.round(value) +
+      '｜差价 ' + (diff >= 0 ? '+' : '') + Math.round(diff) + '元' +
+      '（' + (ratio >= 0 ? '+' : '') + ratio.toFixed(0) + '%）**';
+
+    // 核心亮点（≤5个，从估值结果提取，与完整通知同源）
+    var highlights = [];
+    try {
+      var val = row.valuation || {};
+      if (val.level > 0) highlights.push('Lv.' + val.level);
+      var yInfo = val.yellowInfo || {};
+      var yellow = yInfo.rawYellowCount || yInfo.yellowCount || 0;
+      if (yellow > 0) highlights.push(yellow + '黄');
+      else if (val.effectiveYellow > 0) highlights.push('有效金' + (Math.round(val.effectiveYellow * 10) / 10));
+      if (val.charBreakdown && val.charBreakdown.length) {
+        var fulls = val.charBreakdown
+          .filter(function (cb) { return cb.const >= 6 && cb.tier && cb.tier !== 'E'; })
+          .sort(function (a, b) { return b.value - a.value; })
+          .slice(0, 2);
+        fulls.forEach(function (cb) { highlights.push('满命' + cb.name); });
+      }
+      if (val.fiveStarChars > 0) highlights.push('五星角色' + val.fiveStarChars);
+      if (val.satisfiedTeams && val.satisfiedTeams.length > 0) highlights.push('配队' + val.satisfiedTeams.length);
+      if (val.pullInfo && val.pullInfo.pulls > 0) highlights.push(Math.round(val.pullInfo.pulls) + '抽');
+    } catch (e) {}
+    if (highlights.length === 0) {
+      var st = String(row.showTitle || '').trim();
+      if (st) highlights.push(st.substring(0, 50));
+    }
+    var hlLine = highlights.slice(0, 5).join(' · ');
+    if (hlLine) text += '\n\n✨ ' + hlLine;
+    return text;
+  }
+
+  /**
+   * 钉钉群机器人推送（v3.75.0；v3.76.0 支持多机器人；v4.0.0 精简文案）
+   * markdown消息：商品图 + 价格/亮点摘要 + 查看详情链接，效果对标"图片卡片+点击跳转"
+   * @param {object} robot - 机器人 {name, webhook, secret}
+   * @param {string} title - 通知标题（会自动加"鸣潮"前缀，兼容自定义关键词安全设置）
+   * @param {string} mdBody - markdown正文
+   * @param {string} productUrl - 商品详情页链接
+   * @param {string} imgUrl - 商品图片URL（可为空，为空则只发文字）
+   */
+  function sendDingTalkPush(robot, title, mdBody, productUrl, imgUrl) {
+    var cfg = (robot && robot.webhook) || '';
+    if (!cfg) return;
+    // 兼容两种填法：完整Webhook URL 或 仅access_token
+    var webhook = cfg.indexOf('oapi.dingtalk.com') >= 0 ? cfg.trim()
+      : ('https://oapi.dingtalk.com/robot/send?access_token=' + cfg.trim());
+
+    // 组装markdown：标题带"鸣潮"关键词 + 图片 + 正文 + 跳转链接
+    var text = '## 🔍 鸣潮监控 | ' + title + '\n\n';
+    if (imgUrl) text += '![' + '账号图' + '](' + imgUrl + ')\n\n';
+    text += mdBody + '\n\n';
+    text += '**[🔗 查看详情](' + productUrl + ')**';
+
+    var robotLabel = robot.name || webhook.substring(0, 40);
+    var doSend = function (finalUrl) {
+      try {
+        GM_xmlhttpRequest({
+          method: 'POST',
+          url: finalUrl,
+          headers: { 'Content-Type': 'application/json' },
+          data: JSON.stringify({ msgtype: 'markdown', markdown: { title: '鸣潮监控' + title, text: text } }),
+          onload: function (res) {
+            var ok = res && res.responseText && res.responseText.indexOf('"errcode":0') >= 0;
+            console.log('[鸣潮监控] 钉钉推送[' + robotLabel + ']' + (ok ? '已发送' : '响应异常: ' + (res ? res.responseText : '')));
+          },
+          onerror: function (e) { console.error('[鸣潮监控] 钉钉推送[' + robotLabel + ']失败:', e); }
+        });
+      } catch (e) { console.error('[鸣潮监控] 钉钉推送[' + robotLabel + ']异常:', e); }
+    };
+
+    // 加签模式：secret 非空时计算 HMAC-SHA256 签名（https页面下 crypto.subtle 可用）
+    var secret = (robot.secret || '').trim();
+    if (!secret) { doSend(webhook); return; }
+    try {
+      var ts = Date.now();
+      var stringToSign = ts + '\n' + secret;
+      var enc = new TextEncoder();
+      crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+        .then(function (key) { return crypto.subtle.sign('HMAC', key, enc.encode(stringToSign)); })
+        .then(function (sig) {
+          var bytes = new Uint8Array(sig);
+          var bin = '';
+          for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+          var sign = encodeURIComponent(btoa(bin));
+          doSend(webhook + (webhook.indexOf('?') >= 0 ? '&' : '?') + 'timestamp=' + ts + '&sign=' + sign);
+        })
+        .catch(function (e) {
+          console.error('[鸣潮监控] 钉钉加签计算失败，按不加签重试:', e);
+          doSend(webhook);
+        });
+    } catch (e) {
+      console.error('[鸣潮监控] 钉钉加签异常，按不加签发送:', e);
+      doSend(webhook);
+    }
+  }
+
+  /**
    * 发送手机推送通知
-   * 支持：Server酱（微信）、PushPlus（微信）
+   * 支持：Server酱（微信）、PushPlus（微信）、钉钉群机器人
    * @param {string[]|null} ruleRecipients - 指定账号规则命中的接收人姓名列表；非空时 Server酱 仅推给这些人
    */
+  /**
+   * 从通知高差价过滤判断（v4.1.0 抽取共用，PushPlus/钉钉机器人同一套配置与语义）：
+   * 开启 skipHighDiffSecondary 后，差价超过阈值的账号不推送给从通知用户；
+   * 平台过滤列表为空=过滤全部平台，否则只过滤勾选的平台
+   * @returns {boolean} true=该通知应跳过从通知
+   */
+  function secondaryFilteredOut(title, cleanId) {
+    if (!pushConfig.skipHighDiffSecondary) return false;
+    var diffMatch = title.match(/差价¥([\d.]+)/);
+    var notifyDiffVal = diffMatch ? parseFloat(diffMatch[1]) : 0;
+    var threshold = pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400;
+    if (notifyDiffVal <= threshold) return false;
+    var filterPlatforms = pushConfig.highDiffFilterPlatforms || [];
+    var productPlatform = '';
+    if (cleanId.indexOf('pz_') === 0) productPlatform = 'pz';
+    else if (cleanId.indexOf('kjs_') === 0) productPlatform = 'kjs';
+    else if (cleanId.indexOf('qy_') === 0) productPlatform = 'qy';
+    else if (cleanId.indexOf('ysy_') === 0) productPlatform = 'ysy';
+    else productPlatform = 'pxb7';
+    return filterPlatforms.length === 0 || filterPlatforms.indexOf(productPlatform) >= 0;
+  }
+
   function sendPhonePush(title, body, productId, ruleRecipients) {
     // 清理productId后缀（如降价的 _drop、秒杀的 _flash），确保链接正确
     const cleanId = String(productId).replace(/_(drop|flash)$/, '');
@@ -12952,6 +13888,53 @@ function openSettings() {
         : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + cleanId.replace(/^ysy_/, '') + '&shop_source=2'
         : 'https://www.pxb7.com/product/' + cleanId + '/1')));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
+
+    // 钉钉群机器人推送（v4.1.0 主从分级，与PushPlus订阅者同语义）：
+    // 通知级别（主=立即/从=延迟）、有效天数（过期自动清理）、从通知延迟与高差价过滤共用同一套配置；
+    // 精简文案：价格+核心亮点+查看详情，图片从表格行反查，找不到行时回退任一带图行
+    try {
+      const dtRow = tableData.find(function (r) { return r.productId === cleanId; }) ||
+        tableData.find(function (r) { return r.goodsImg; });
+      const dtImg = (dtRow && dtRow.goodsImg) || '';
+      const dtText = buildDingTalkText(title, dtRow, body);
+      const dtRobots = Array.isArray(pushConfig.dingtalkRobots) ? pushConfig.dingtalkRobots : [];
+      if (dtRobots.length > 0) {
+        // 有效期过滤：无validDays的机器人（存量迁移）视为永久有效，过期的自动清理
+        const dtNow = Date.now();
+        let dtActive = dtRobots.filter(function (r) {
+          if (!r.validDays || !r.createdAt) return true;
+          return r.validDays - Math.floor((dtNow - r.createdAt) / 86400000) > 0;
+        });
+        if (dtActive.length < dtRobots.length) {
+          console.log('[鸣潮监控] 钉钉机器人自动清理过期: ' + dtRobots.length + ' → ' + dtActive.length + '个');
+          pushConfig.dingtalkRobots = dtActive;
+          saveState();
+        }
+        // 主从分级：primary=主通知立即发；secondary=从通知延迟发
+        const dtPrimaries = dtActive.filter(function (r) { return (r.priority || 'primary') === 'primary'; });
+        let dtSecondaries = dtActive.filter(function (r) { return (r.priority || 'primary') !== 'primary'; });
+        // 从通知高差价过滤（与PushPlus共用 skipHighDiffSecondary/highDiffThreshold/highDiffFilterPlatforms）
+        if (dtSecondaries.length > 0 && secondaryFilteredOut(title, cleanId)) {
+          console.log('[鸣潮监控] 钉钉从通知过滤：差价超过阈值，跳过从通知机器人' + dtSecondaries.length + '个');
+          dtSecondaries = [];
+        }
+        if (dtPrimaries.length > 0 || dtSecondaries.length > 0) {
+          console.log('[鸣潮监控-钉钉] 推送图片: ' + (dtImg ? dtImg.substring(0, 100) : '(无图)') +
+            '，主' + dtPrimaries.length + '/从' + dtSecondaries.length);
+        }
+        // 主通知立即发送
+        dtPrimaries.forEach(function (robot) { sendDingTalkPush(robot, title, dtText, productUrl, dtImg); });
+        // 从通知延迟发送（secondaryDelay 与PushPlus共用）
+        const dtDelaySec = pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20;
+        if (dtSecondaries.length > 0 && dtDelaySec > 0) {
+          setTimeout(function () {
+            dtSecondaries.forEach(function (robot) { sendDingTalkPush(robot, title, dtText, productUrl, dtImg); });
+          }, dtDelaySec * 1000);
+        } else {
+          dtSecondaries.forEach(function (robot) { sendDingTalkPush(robot, title, dtText, productUrl, dtImg); });
+        }
+      }
+    } catch (e) { console.error('[鸣潮监控] 钉钉推送组装异常:', e); }
 
     // Server酱推送（微信）- 具名接收人
     // 规则命中（ruleRecipients 非空）：仅推给该规则勾选的接收人，不打扰其他人
@@ -13038,26 +14021,10 @@ function openSettings() {
     var primarySubs = activeSubs.filter(function (s) { return (s.priority || 'secondary') === 'primary'; });
     var secondarySubs = activeSubs.filter(function (s) { return (s.priority || 'secondary') !== 'primary'; });
 
-    // 从通知高差价过滤：开启后差价超过阈值的账号不推送给从通知用户
-    if (pushConfig.skipHighDiffSecondary && secondarySubs.length > 0) {
-      var diffMatch = title.match(/差价¥([\d.]+)/);
-      var notifyDiffVal = diffMatch ? parseFloat(diffMatch[1]) : 0;
-      var threshold = pushConfig.highDiffThreshold != null ? pushConfig.highDiffThreshold : 400;
-      if (notifyDiffVal > threshold) {
-        // 检查平台过滤：如果设置了平台列表，只过滤选中平台；未设置则过滤全部
-        var filterPlatforms = pushConfig.highDiffFilterPlatforms || [];
-        var productPlatform = '';
-        if (cleanId.indexOf('pz_') === 0) productPlatform = 'pz';
-        else if (cleanId.indexOf('kjs_') === 0) productPlatform = 'kjs';
-        else if (cleanId.indexOf('qy_') === 0) productPlatform = 'qy';
-        else if (cleanId.indexOf('ysy_') === 0) productPlatform = 'ysy';
-        else productPlatform = 'pxb7';
-
-        if (filterPlatforms.length === 0 || filterPlatforms.indexOf(productPlatform) >= 0) {
-          console.log('[鸣潮监控] 从通知过滤：差价¥' + notifyDiffVal + ' > 阈值¥' + threshold + '，平台=' + productPlatform + '，跳过从通知推送');
-          secondarySubs = [];
-        }
-      }
+    // 从通知高差价过滤：开启后差价超过阈值的账号不推送给从通知用户（v4.1.0 与钉钉机器人共用判断）
+    if (pushConfig.skipHighDiffSecondary && secondarySubs.length > 0 && secondaryFilteredOut(title, cleanId)) {
+      console.log('[鸣潮监控] 从通知过滤：差价超过阈值，跳过从通知推送');
+      secondarySubs = [];
     }
 
     // 主通知立即发送
@@ -13086,6 +14053,7 @@ function openSettings() {
       serverChanKey: pushConfig.serverChanKey || '',
       serverChanSubscribers: pushConfig.serverChanSubscribers || [],
       pushPlusSubscribers: pushConfig.pushPlusSubscribers || [],
+      dingtalkRobots: pushConfig.dingtalkRobots || [],
       devMessage: pushConfig.devMessage || '',
       // 推送规则
       secondaryDelay: pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20,
@@ -13159,6 +14127,8 @@ function openSettings() {
             pushConfig.serverChanKey = remote.serverChanKey != null ? remote.serverChanKey : (pushConfig.serverChanKey || '');
             pushConfig.serverChanSubscribers = Array.isArray(remote.serverChanSubscribers) ? remote.serverChanSubscribers : (pushConfig.serverChanSubscribers || []);
             pushConfig.pushPlusSubscribers = Array.isArray(remote.pushPlusSubscribers) ? remote.pushPlusSubscribers : pushConfig.pushPlusSubscribers;
+            pushConfig.dingtalkRobots = Array.isArray(remote.dingtalkRobots) ? remote.dingtalkRobots : pushConfig.dingtalkRobots;
+            migrateDingTalkRobots();
             pushConfig.devMessage = remote.devMessage != null ? remote.devMessage : (pushConfig.devMessage || '');
             // 推送规则
             pushConfig.secondaryDelay = remote.secondaryDelay != null ? remote.secondaryDelay : pushConfig.secondaryDelay;
@@ -13504,6 +14474,20 @@ function openSettings() {
     // 精简行数据（估值/解析缓存可由 showTitle 重算，不参与备份）
     var rows = tableData.map(slimRow);
 
+    // v3.77.0 数据按页签隔离后，备份时合并另一页签存储的行（productId并集去重，当前页签优先），
+    // 保证云端备份始终是全量数据
+    if (STORAGE_KEYS.pzdsTabTable) {
+      var otherTabKey = isPzdsPage() ? STORAGE_KEYS.table : STORAGE_KEYS.pzdsTabTable;
+      var otherRows = loadStorage(otherTabKey, []) || [];
+      var knownIds = {};
+      rows.forEach(function (r) { knownIds[r.productId] = true; });
+      var merged = 0;
+      otherRows.forEach(function (r) {
+        if (r && r.productId && !knownIds[r.productId]) { rows.push(slimRow(r)); knownIds[r.productId] = true; merged++; }
+      });
+      if (merged > 0) console.log('[鸣潮监控] 云端备份合并另一页签数据: +' + merged + '行');
+    }
+
     // 控制上传体积：超限时按上架时间保留最新数据
     var payloadSize = JSON.stringify(rows).length;
     if (payloadSize > BACKUP_MAX_BYTES) {
@@ -13574,7 +14558,7 @@ function openSettings() {
     for (const r of tableData) { if (r.productId) seenSet.add(r.productId); }
     seenIds = Array.from(seenSet);
     saveTableData();
-    saveStorage(STORAGE_KEYS.seen, seenIds, true);
+    saveStorage(seenStorageKey(), seenIds, true);
     sortTableData();
     currentPage = 1;
     refreshTableDisplay();
@@ -13724,7 +14708,7 @@ function openSettings() {
         if (importedCount > 0) {
           console.log('[鸣潮监控] 导入成交记录: ' + importedCount + ' 条');
           sortTableData();
-          saveStorage(STORAGE_KEYS.seen, seenIds);
+          saveStorage(seenStorageKey(), seenIds);
         }
         // 未导入明细（控制台可查具体原因）
         const skipKeys = Object.keys(skipStats);
@@ -13895,6 +14879,41 @@ function openSettings() {
    * 保存状态到localStorage
    */
   function saveState() {
+    // v3.74.0 扫描类设置按页签隔离：refreshIntervalSec / scanPages / flashSaleEnabled /
+    // pzdsEnabled / kjsEnabled / qyEnabled / ysyEnabled 在盼之页签写入专属存储（pzdsTab），
+    // 共享 state 不再被盼之页签覆盖——螃蟹页签（15s只扫螃蟹秒杀）与盼之页签（60s全平台）各自独立。
+    // 通知/推送/估值类设置为全局语义，两页签共享。
+    if (isPzdsPage()) {
+      // 盼之页签：扫描设置进盼之专属存储
+      saveStorage(STORAGE_KEYS.pzdsTab, Object.assign(pzdsSilentLoad(), {
+        refreshIntervalSec: refreshIntervalSec,
+        scanPages: scanPages,
+        flashSaleEnabled: flashSaleEnabled,
+        pzdsEnabled: pzdsEnabled,
+        kjsEnabled: kjsEnabled,
+        qyEnabled: qyEnabled,
+        ysyEnabled: ysyEnabled,
+      }));
+      // 共享 state 只更新通知/推送/估值字段；monitorRunning 与扫描设置保持螃蟹页签的值不动
+      const shared = loadStorage(STORAGE_KEYS.state, {}) || {};
+      saveStorage(STORAGE_KEYS.state, Object.assign({}, shared, {
+        notifyEnabled: notifyEnabled,
+        threshold: threshold,
+        notifyRatioThreshold: notifyRatioThreshold,
+        notifyDiffThreshold: notifyDiffThreshold,
+        notifyDiffTiers: notifyDiffTiers,
+        autoBuyEnabled: autoBuyEnabled,
+        autoBuyDiff: autoBuyDiff,
+        autoBuyMaxPrice: autoBuyMaxPrice,
+        notifyMinValue: notifyMinValue,
+        notifyMinPrice: notifyMinPrice,
+        notifyMaxPrice: notifyMaxPrice,
+        charNotifyRules: charNotifyRules,
+        pushConfig: pushConfig,
+        _intervalMigrated: true,
+      }));
+      return;
+    }
     saveStorage(STORAGE_KEYS.state, {
       monitorRunning: monitorRunning,
       notifyEnabled: notifyEnabled,
@@ -13925,6 +14944,9 @@ function openSettings() {
    * 开始监控
    */
   function startMonitor() {
+    // 盼之页面：面板「开始监控」按钮重定向为盼之扫描循环（绝不能跑螃蟹监控主循环——
+    // 螃蟹API在盼之页面不可用，会触发WAF报错刷屏）
+    if (isPzdsPage()) { pzdsSilentStart(); return; }
     if (monitorRunning) return;
     monitorRunning = true;
     saveState();
@@ -13945,6 +14967,7 @@ function openSettings() {
    * 停止监控
    */
   function stopMonitor() {
+    if (isPzdsPage()) { pzdsSilentStop(); return; }
     monitorRunning = false;
     stopWatchdog();
     stopKeepAliveAudio();
@@ -14254,23 +15277,16 @@ function openSettings() {
     // 以下其他平台扫描不受螃蟹网API失败影响
     try {
 
-      // 盼之平台扫描（SSR HTML抓取）
+      // 盼之平台扫描（SSR HTML抓取，多入口聚合扩大覆盖）
       if (pzdsEnabled) {
-        let pzdsTotal = 0;
-        for (let page = 1; page <= 1; page++) {
-          try {
-            const pzdsProducts = await fetchListPZ(page);
-            if (pzdsProducts.length > 0) {
-              pzdsTotal += pzdsProducts.length;
-              await handlePZListResponse(pzdsProducts);
-              console.log('[鸣潮监控-盼之] 第' + page + '页扫描完成，获取' + pzdsProducts.length + '条');
-            }
-          } catch (e) {
-            console.error('[鸣潮监控-盼之] 第' + page + '页获取失败:', e);
+        try {
+          const pzdsProducts = await fetchPZListMulti();
+          if (pzdsProducts.length > 0) {
+            await handlePZListResponse(pzdsProducts);
+            console.log('[鸣潮监控-盼之] 多入口扫描完成，共获取' + pzdsProducts.length + '条');
           }
-        }
-        if (pzdsTotal > 0) {
-          console.log('[鸣潮监控-盼之] 扫描完成，共获取' + pzdsTotal + '条');
+        } catch (e) {
+          console.error('[鸣潮监控-盼之] 扫描失败:', e);
         }
       }
 
@@ -14331,15 +15347,501 @@ function openSettings() {
   }
 
   // ============================================================
+  // 盼之页面静默监控模式（路线B）
+  // 挂在 www.pzds.com 任意页面，仅运行盼之列表扫描 + 详情补全 + 新品/降价推送，
+  // 不注入面板UI。GM_xmlhttpRequest 从真实浏览器页面发出请求，携带浏览器指纹
+  // 与会话Cookie，可直连盼之列表/详情，绕过阿里云WAF对非浏览器客户端的拦截。
+  // 表格/已见ID/推送配置与螃蟹网页签共享同一份 GM 存储，seenIds 去重天然防止重复推送。
+  // 注意：若盼之标签页与螃蟹网标签页同时开监控，两个页签都会写同一份表格存储，
+  // 后写者覆盖先写者，建议分工：盼之页签跑盼之，螃蟹页签关掉盼之开关（pzdsEnabled）。
+  // ============================================================
+
+  const PZDS_SILENT_STORAGE_KEY = 'pzdsSilentState';
+
+  function isPzdsPage() {
+    return location.hostname === 'www.pzds.com' || location.hostname === 'pzds.com';
+  }
+
+  // ============================================================
+  // 交易猫数据捕获模式（v4.2.0 逆向侦察阶段）
+  // 交易猫是阿里系技术栈：mtop 网关签名 + baxia 风控。本模式不扫描不推送，
+  // 只拦截页面自身的 XHR/fetch 响应，把疑似商品数据的 JSON 记录下来，
+  // 用户浏览商品列表页后点浮标导出，供实现正式平台模块参考。
+  // ============================================================
+  function isJymPage() {
+    return location.hostname === 'm.jiaoyimao.com' || location.hostname === 'www.jiaoyimao.com';
+  }
+
+  function jymLooksLikeGoods(jsonText) {
+    if (!jsonText || jsonText.length < 50) return false;
+    return /itemId|goodsId|soldPrice|"price"|productDto|goodsList|itemList/i.test(jsonText);
+  }
+
+  var jymCaptured = [];
+  function jymRecord(url, text) {
+    try {
+      const u = String(url || '');
+      if (!u || u.indexOf('jiaoyimao') < 0) return;   // 只记录交易猫自身接口
+      if (jymCaptured.some(function (c) { return c.url === u; })) return;   // 每个接口只记第一次
+      jymCaptured.push({ url: u, len: text.length, at: new Date().toLocaleString('zh-CN'), sample: text.substring(0, 3000) });
+      if (jymCaptured.length > 30) jymCaptured.shift();
+      try { GM_setValue('mw_jym_capture_v1', jymCaptured); } catch (e) {}
+      const pill = document.getElementById('mw-jym-pill');
+      if (pill) pill.textContent = '🪝交易猫捕获 ' + jymCaptured.length;
+    } catch (e) {}
+  }
+
+  function jymInstallCapture() {
+    // XHR 拦截（mtop 库走 XHR）
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (method, url) { this._jymUrl = url; return origOpen.apply(this, arguments); };
+    XMLHttpRequest.prototype.send = function () {
+      this.addEventListener('load', function () {
+        try {
+          const t = this.responseText || '';
+          if (t.charAt(0) === '{' && jymLooksLikeGoods(t)) jymRecord(this._jymUrl, t);
+        } catch (e) {}
+      });
+      return origSend.apply(this, arguments);
+    };
+    // fetch 拦截（兜底覆盖）
+    try {
+      const origFetch = window.fetch;
+      if (origFetch) {
+        window.fetch = function () {
+          const args = arguments;
+          const u = typeof args[0] === 'string' ? args[0] : ((args[0] && args[0].url) || '');
+          return origFetch.apply(this, arguments).then(function (resp) {
+            try {
+              resp.clone().text().then(function (t) {
+                if (t.charAt(0) === '{' && jymLooksLikeGoods(t)) jymRecord(u, t);
+              }).catch(function () {});
+            } catch (e) {}
+            return resp;
+          });
+        };
+      }
+    } catch (e) {}
+  }
+
+  function jymBoot() {
+    jymInstallCapture();
+    try { jymCaptured = GM_getValue('mw_jym_capture_v1', []) || []; } catch (e) { jymCaptured = []; }
+    const pill = document.createElement('div');
+    pill.id = 'mw-jym-pill';
+    pill.style.cssText = 'position:fixed;left:12px;bottom:80px;z-index:2147483000;background:#1a1a2e;color:#cfd6e4;border:1px solid #2a2a4a;border-radius:16px;padding:6px 12px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+    pill.textContent = '🪝交易猫捕获 ' + jymCaptured.length;
+    pill.title = '点击导出已捕获的接口数据。使用方法：进入鸣潮商品列表页并翻页，然后点此导出发给开发者';
+    pill.addEventListener('click', function () {
+      try {
+        if (jymCaptured.length === 0) { alert('还没有捕获到数据。\n\n请先进入鸣潮商品列表页并向下翻几页，让页面发出商品列表请求，再回来导出。'); return; }
+        const blob = new Blob([JSON.stringify(jymCaptured, null, 2)], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'jym-capture-' + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + '.txt';
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      } catch (e) { alert('导出失败: ' + e.message); }
+    });
+    document.body.appendChild(pill);
+    console.log('[鸣潮监控] 交易猫捕获模式已启动（不扫描不推送）：浏览鸣潮商品列表并翻页，接口数据会自动记录');
+  }
+
+  let pzdsSilentTimer = null;   // 自调度下一轮
+  let pzdsSilentBusy = false;   // 重入保护：上一轮未跑完时不叠加
+  let pzdsSilentOn = false;     // 运行开关
+  let pzdsSilentStat = { lastRun: 0, lastCount: 0, lastError: '', rounds: 0, lastSource: '' };
+  let pzdsSilentPill = null;
+  let pzdsSilentStatusEl = null;
+  let pzdsSilentBtnEl = null;
+  // v3.77.0 盼之补扫状态（与螃蟹补扫同机制，不持久化：启动后第一轮先补一次）
+  let pzdsLastBackfillTime = 0;      // 上次补扫时间
+  let pzdsBackfillStartPage = 1;     // 补扫续扫页（上一轮没追平时从这页继续往下补）
+
+  function pzdsSilentLoad() {
+    // v3.74.0：改用 STORAGE_KEYS.pzdsTab（带游戏前缀），与 saveState 的扫描设置同存储
+    return Object.assign({ enabled: true, lastRun: 0, lastCount: 0 },
+      (STORAGE_KEYS.pzdsTab ? loadStorage(STORAGE_KEYS.pzdsTab, {}) : {}) || {});
+  }
+
+  function pzdsSilentSave() {
+    if (!STORAGE_KEYS.pzdsTab) return;
+    // 合并写入：保留扫描类设置字段（saveState 也会写同一存储），只更新运行状态字段
+    saveStorage(STORAGE_KEYS.pzdsTab, Object.assign(pzdsSilentLoad(), {
+      enabled: pzdsSilentOn,
+      lastRun: pzdsSilentStat.lastRun,
+      lastCount: pzdsSilentStat.lastCount,
+    }));
+  }
+
+  /** 静默模式的轮询间隔：盼之页签独立设置（默认60秒），与螃蟹页签（默认15秒）互不影响 */
+  function pzdsSilentIntervalSec() {
+    return Math.max(refreshIntervalSec, 10);
+  }
+
+  /** 右下角状态药丸（唯一注入的UI，极简、可启停） */
+  function pzdsSilentBuildUI() {
+    if (pzdsSilentPill || !document.body) return;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483646;'
+      + 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:20px;'
+      + 'background:rgba(15,23,42,.92);color:#e2e8f0;font-size:12px;line-height:1.4;'
+      + 'box-shadow:0 4px 16px rgba(0,0,0,.35);font-family:-apple-system,"PingFang SC",sans-serif;'
+      + 'user-select:none;';
+    const title = document.createElement('span');
+    title.textContent = '🦀盼之监控';
+    title.style.cssText = 'font-weight:bold;color:#38bdf8;white-space:nowrap;';
+    const status = document.createElement('span');
+    status.style.cssText = 'white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis;';
+    const logBtn = document.createElement('span');
+    logBtn.textContent = '📜日志';
+    logBtn.title = '查看脚本运行日志（盼之页面有反调试，请勿用F12，用此按钮）';
+    logBtn.style.cssText = 'cursor:pointer;padding:2px 10px;border-radius:12px;background:#334155;color:#e2e8f0;white-space:nowrap;';
+    logBtn.addEventListener('click', function () { openLogViewer(); });
+    const dataBtn = document.createElement('span');
+    dataBtn.textContent = '📋数据';
+    dataBtn.style.cssText = 'cursor:pointer;padding:2px 10px;border-radius:12px;background:#334155;color:#e2e8f0;white-space:nowrap;';
+    dataBtn.addEventListener('click', function () { pzdsSilentTogglePanel(); });
+    const btn = document.createElement('span');
+    btn.style.cssText = 'cursor:pointer;padding:2px 10px;border-radius:12px;font-weight:bold;white-space:nowrap;';
+    btn.addEventListener('click', function () {
+      if (pzdsSilentOn) pzdsSilentStop(); else pzdsSilentStart();
+    });
+    wrap.appendChild(title);
+    wrap.appendChild(status);
+    wrap.appendChild(logBtn);
+    wrap.appendChild(dataBtn);
+    wrap.appendChild(btn);
+    document.body.appendChild(wrap);
+    pzdsSilentPill = wrap;
+    pzdsSilentStatusEl = status;
+    pzdsSilentBtnEl = btn;
+    pzdsSilentUpdateUI();
+  }
+
+  function pzdsSilentUpdateUI() {
+    // 面板模式下状态显示由标准状态栏承担：错误文案走 lastRefreshError（底栏显示），
+    // 运行状态走 monitorRunning（updateStatusText）
+    lastRefreshError = pzdsSilentStat.lastError || '';
+    updateStatusText();
+    updateBottomBar();
+    // 数据面板打开时跟随每轮扫描刷新
+    if (pzdsSilentPanelOpen) pzdsSilentRenderPanel();
+  }
+
+  // ── 扫描数据面板：在盼之页面直接查看抓到的商品明细 ─────────────
+
+  let pzdsSilentPanelOpen = false;
+  let pzdsSilentPanelEl = null;
+
+  function pzdsSilentFmtTime(ts) {
+    if (!ts) return '-';
+    const d = new Date(ts);
+    const p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function pzdsSilentTogglePanel() {
+    pzdsSilentPanelOpen = !pzdsSilentPanelOpen;
+    if (pzdsSilentPanelOpen) {
+      pzdsSilentRenderPanel();
+    } else if (pzdsSilentPanelEl) {
+      pzdsSilentPanelEl.remove();
+      pzdsSilentPanelEl = null;
+    }
+  }
+
+  function pzdsSilentRenderPanel() {
+    if (!pzdsSilentPanelOpen || !document.body) return;
+    if (pzdsSilentPanelEl) pzdsSilentPanelEl.remove();
+
+    // 只看盼之商品（GM存储共享，表格里可能还有螃蟹/氪金兽等其他平台行），按上架时间降序，最多80条
+    const pzRows = tableData.filter(r => r.platform === 'pzds');
+    const rows = pzRows.slice()
+      .sort((a, b) => (b.listTime || b.firstSeen || 0) - (a.listTime || a.firstSeen || 0))
+      .slice(0, 80);
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;right:12px;bottom:52px;z-index:2147483646;width:680px;'
+      + 'max-height:70vh;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;'
+      + 'background:rgba(15,23,42,.96);color:#e2e8f0;font-size:12px;'
+      + 'box-shadow:0 8px 32px rgba(0,0,0,.5);font-family:-apple-system,"PingFang SC",sans-serif;';
+
+    // 头部：统计 + 关闭
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px 12px;background:rgba(56,189,248,.12);flex-shrink:0;';
+    const headTitle = document.createElement('span');
+    headTitle.textContent = '盼之扫描数据 ' + rows.length + '/' + pzRows.length + '条';
+    headTitle.style.cssText = 'font-weight:bold;color:#38bdf8;';
+    const headStat = document.createElement('span');
+    headStat.style.cssText = 'color:#94a3b8;';
+    headStat.textContent = (pzdsSilentOn ? '运行中·每' + pzdsSilentIntervalSec() + 's' : '已停止')
+      + (pzdsSilentStat.lastRun > 0 ? ' | 上次扫描' + pzdsSilentStat.lastCount + '条' : '')
+      + (pzdsSilentStat.lastSource ? '·' + pzdsSilentStat.lastSource : '')
+      + '（估值<¥300的垃圾号不收录，故列表少于扫描数）';
+    const closeBtn = document.createElement('span');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = 'margin-left:auto;cursor:pointer;padding:2px 8px;color:#94a3b8;';
+    closeBtn.addEventListener('click', function () { pzdsSilentTogglePanel(); });
+    head.appendChild(headTitle);
+    head.appendChild(headStat);
+    head.appendChild(closeBtn);
+
+    // 滚动区 + 表格
+    const scroll = document.createElement('div');
+    scroll.style.cssText = 'overflow-y:auto;';
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%;border-collapse:collapse;';
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    headRow.style.cssText = 'position:sticky;top:0;background:#1e293b;color:#94a3b8;text-align:left;';
+    ['上架', '编号', '售价', '估值', '差价', '状态', '描述'].forEach(function (h) {
+      const th = document.createElement('th');
+      th.textContent = h;
+      th.style.cssText = 'padding:6px 8px;font-weight:normal;white-space:nowrap;';
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    if (rows.length === 0) {
+      const empty = document.createElement('tr');
+      const emptyTd = document.createElement('td');
+      emptyTd.colSpan = 7;
+      emptyTd.textContent = '暂无数据，等待第一轮扫描完成…';
+      emptyTd.style.cssText = 'padding:16px;text-align:center;color:#64748b;';
+      empty.appendChild(emptyTd);
+      tbody.appendChild(empty);
+    }
+    rows.forEach(function (r) {
+      const tr = document.createElement('tr');
+      tr.style.cssText = 'border-top:1px solid rgba(148,163,184,.15);';
+      const td = function (text, color, extra) {
+        const el = document.createElement('td');
+        el.textContent = text;
+        el.style.cssText = 'padding:6px 8px;white-space:nowrap;' + (color ? 'color:' + color + ';' : '') + (extra || '');
+        return el;
+      };
+      // 上架时间
+      tr.appendChild(td(pzdsSilentFmtTime(r.listTime || r.firstSeen), '#94a3b8'));
+      // 编号 → 点击打开盼之详情页
+      const noTd = document.createElement('td');
+      noTd.style.cssText = 'padding:6px 8px;white-space:nowrap;';
+      const noLink = document.createElement('a');
+      noLink.textContent = r.productUniqueNo || (r.productId || '').replace(/^pz_/, '');
+      noLink.href = 'https://www.pzds.com/goodsDetails/' + noLink.textContent + '/6';
+      noLink.target = '_blank';
+      noLink.style.cssText = 'color:#38bdf8;text-decoration:none;';
+      noTd.appendChild(noLink);
+      tr.appendChild(noTd);
+      // 售价 / 估值
+      tr.appendChild(td(r.price > 0 ? '¥' + r.price : '-', '#e2e8f0'));
+      tr.appendChild(td(r.value > 0 ? '¥' + Math.round(r.value) : '-', '#e2e8f0'));
+      // 差价 = 估值-售价，正数（划算）红色、负数绿色（A股习惯：红好绿差）
+      const diff = (r.value || 0) - (r.price || 0);
+      tr.appendChild(td(r.value > 0 ? (diff > 0 ? '+' : '') + Math.round(diff) : '-',
+        !r.value ? '#64748b' : (diff > 0 ? '#f87171;font-weight:bold' : '#4ade80')));
+      // 状态
+      const stColor = r.status === '降价' ? '#fbbf24' : (r.status === '已售' ? '#64748b' : '#94a3b8');
+      tr.appendChild(td(r.status || '-', stColor));
+      // 描述摘要（去换行，36字）
+      const desc = String(r.showTitle || '').replace(/\s+/g, ' ').trim();
+      tr.appendChild(td(desc.length > 36 ? desc.substring(0, 36) + '…' : (desc || '-'), '#cbd5e1', 'max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    wrap.appendChild(head);
+    wrap.appendChild(scroll);
+    document.body.appendChild(wrap);
+    pzdsSilentPanelEl = wrap;
+  }
+
+  function pzdsSilentSchedule() {
+    if (pzdsSilentTimer) { clearTimeout(pzdsSilentTimer); pzdsSilentTimer = null; }
+    if (!pzdsSilentOn) return;
+    pzdsSilentTimer = setTimeout(pzdsSilentTick, pzdsSilentIntervalSec() * 1000);
+  }
+
+  async function pzdsSilentTick() {
+    if (!pzdsSilentOn) return;
+    if (pzdsSilentBusy) { pzdsSilentSchedule(); return; }
+    pzdsSilentBusy = true;
+    try {
+      // 优先走页面API「发布时间降序」：覆盖完整、无旧货混入；
+      // 页面API不可用（$nuxt缺失/接口报错）时回退到SSR推荐流连抓
+      // v3.77.0 补扫（与螃蟹页签同机制）：增量窗口只有3页，一次批量上架超过窗口深度时
+      // 新号会被挤到窗口外永久漏掉。每 scanBackfillIntervalSec 秒深翻页一次（最多
+      // scanBackfillPages 页）把窗口外的商品捞回来；补捞区间的号只入库不推送
+      const pzdsIsBackfill = (Date.now() - pzdsLastBackfillTime) >= scanBackfillIntervalSec * 1000;
+      const pzdsMaxPages = Math.max(3, pzdsIsBackfill ? Math.max(3, scanBackfillPages) : 3);
+      let pzdsStartPage = 1;
+      if (pzdsIsBackfill) {
+        // 上一轮补到页数上限仍未追平 → 记的是"下一页"，超出上限时回落到第1页重新补
+        if (pzdsBackfillStartPage > pzdsMaxPages) pzdsBackfillStartPage = 1;
+        if (pzdsBackfillStartPage > pzdsStartPage) pzdsStartPage = pzdsBackfillStartPage;
+      }
+      let products = await fetchPZNewestApiList(pzdsMaxPages, pzdsStartPage, pzdsIsBackfill);
+      let source = 'API最新';
+      if (products.length === 0) {
+        products = await fetchPZListMulti();
+        source = 'SSR推荐';
+      }
+      if (products.length > 0) {
+        // 补捞区间：只入库不推送/不抢购（processPZProduct 内检查 backfillRecoveryIds）
+        const paging = pzdsFetchPagingInfo || {};
+        backfillRecoveryIds = (pzdsIsBackfill && source === 'API最新' && paging.recoveryIds && paging.recoveryIds.size > 0)
+          ? paging.recoveryIds : null;
+        await handlePZListResponse(products);   // 新品详情补全+入表+推送，复用主流程
+        backfillRecoveryIds = null;
+        if (pzdsIsBackfill && source === 'API最新') {
+          pzdsLastBackfillTime = Date.now();
+          // 已追平（或翻到末尾）→ 下次补扫回到第1页；否则继续从更深的页往下补
+          pzdsBackfillStartPage = (paging.caughtUp || paging.reachedEnd) ? 1 : pzdsMaxPages + 1;
+          console.log('[鸣潮监控-盼之静默] 补扫: ' + (paging.pagesScanned || 0) + '页' +
+            (paging.caughtUp ? '（已追平上次）' : (paging.reachedEnd ? '（已到列表末尾）' : '（达页数上限' + pzdsMaxPages + '，下轮从第' + pzdsBackfillStartPage + '页续扫）')));
+        }
+      }
+      pzdsSilentStat.lastRun = Date.now();
+      pzdsSilentStat.lastCount = products.length;
+      pzdsSilentStat.lastSource = source;
+      lastRefreshTime = Date.now();   // 底栏「上次刷新」显示
+      // API通道失败时把原因显示在药丸上（SSR回退仍正常工作）
+      pzdsSilentStat.lastError = (source === 'SSR推荐' && pzdsLastApiFailReason)
+        ? 'API:' + pzdsLastApiFailReason : '';
+      pzdsSilentStat.rounds++;
+
+      // ── 其他平台：按分工规则，盼之页签跟随盼之循环轴扫描氪金兽/7881/易手游，
+      // 开关在「扫描与日志」设置里控制（盼之侧存储，与螃蟹页签独立），seenIds 共享去重防重复推送 ──
+      if (kjsEnabled) {
+        try {
+          const kjsProducts = await kjsSearch(1);
+          if (kjsProducts.length > 0) await handleKJSListResponse(kjsProducts);
+        } catch (e) { console.error('[鸣潮监控-盼之循环] 氪金兽扫描失败:', e); }
+      }
+      if (qyEnabled) {
+        try {
+          const qyProducts = await qySearch(1);
+          if (qyProducts.length > 0) await handleQYListResponse(qyProducts);
+        } catch (e) { console.error('[鸣潮监控-盼之循环] 7881扫描失败:', e); }
+      }
+      if (ysyEnabled && G().platformIds.ysy > 0) {
+        try {
+          const ysyProducts = await fetchYSYList(1);
+          if (ysyProducts.length > 0) await handleYSYListResponse(ysyProducts);
+        } catch (e) { console.error('[鸣潮监控-盼之循环] 易手游扫描失败:', e); }
+      }
+      console.log('[鸣潮监控-盼之静默] 第' + pzdsSilentStat.rounds + '轮完成：' + products.length + '条，表格' + tableData.length + '行');
+    } catch (e) {
+      pzdsSilentStat.lastError = (e && e.message ? String(e.message) : '扫描异常').substring(0, 30);
+      console.error('[鸣潮监控-盼之静默] 扫描异常:', e);
+    } finally {
+      pzdsSilentBusy = false;
+      pzdsSilentSave();
+      pzdsSilentUpdateUI();
+      pzdsSilentSchedule();
+    }
+  }
+
+  function pzdsSilentStart() {
+    if (pzdsSilentOn) return;
+    pzdsSilentOn = true;
+    holdKeepAliveLock();      // Web Lock 防止标签页被节能模式冻结
+    startKeepAliveAudio();    // 静音保活音频（标签页出现喇叭图标即生效，需一次点击恢复）
+    // monitorRunning 仅用于面板UI显示；不调用 saveState，避免把运行状态写进共享存储
+    // 导致螃蟹页签下次打开时误自启螃蟹监控
+    monitorRunning = true;
+    console.log('[鸣潮监控-盼之静默] 已启动：每' + pzdsSilentIntervalSec() + '秒按发布时间降序扫描盼之最新商品');
+    pzdsSilentSave();
+    pzdsSilentUpdateUI();
+    pzdsSilentTick();         // 立即跑第一轮
+  }
+
+  function pzdsSilentStop() {
+    pzdsSilentOn = false;
+    if (pzdsSilentTimer) { clearTimeout(pzdsSilentTimer); pzdsSilentTimer = null; }
+    stopKeepAliveAudio();
+    monitorRunning = false;
+    console.log('[鸣潮监控-盼之静默] 已停止');
+    pzdsSilentSave();
+    pzdsSilentUpdateUI();
+  }
+
+  /**
+   * 盼之页面静默模式初始化（由 init(true) 调用）
+   * 此前 init 已加载共享存储：表格/已见ID/推送配置/估值权重等，可直接复用主流程函数
+   * @param {object} savedState - init 已消费过的共享状态（此处不再使用，仅为签名一致）
+   */
+  function initPzdsSilent(savedState) {
+    console.log('[鸣潮监控] 检测到盼之页面 → 面板监控模式（UI与螃蟹页一致，推送配置共享）');
+    pzdsInstallApiCapture();
+    const persisted = pzdsSilentLoad();
+    pzdsSilentStat.lastRun = persisted.lastRun || 0;
+    pzdsSilentStat.lastCount = persisted.lastCount || 0;
+
+    // 与螃蟹页一致的完整面板（createDashboard 自建DOM，无页面依赖）
+    createDashboard();
+    refreshTableDisplay();
+    updateStatusText();
+    updateBottomBar();
+
+    // 按钮区追加盼之专属「📋数据」按钮（打开扫描数据面板）
+    if (dom.btnLog && dom.btnLog.parentNode) {
+      const dataBtn = document.createElement('button');
+      dataBtn.id = 'mwBtnPzdsData';
+      dataBtn.textContent = '📋数据';
+      dataBtn.title = '盼之扫描数据（仅盼之行，按上架时间排序）';
+      dataBtn.style.cssText = 'padding:5px 10px;border:1px solid #2a2a4a;border-radius:6px;background:#1a1a2e;color:#cfd6e4;font-size:12px;cursor:pointer;';
+      dataBtn.addEventListener('click', function () { pzdsSilentTogglePanel(); });
+      dom.btnLog.parentNode.insertBefore(dataBtn, dom.btnLog.nextSibling);
+    }
+
+    monitorRunning = false;
+    if (persisted.enabled !== false) {
+      pzdsSilentStart();      // 默认自动启动（开关状态持久化，手动停止后刷新不再自启）
+    } else {
+      pzdsSilentUpdateUI();
+    }
+  }
+
+  // ============================================================
   // 初始化
   // ============================================================
 
   /**
    * 初始化
+   * @param {boolean} skipUI - true 时不创建面板UI（盼之页面静默监控模式）
    */
-  function init() {
-    // 加载存储数据
-    tableData = loadStorage(STORAGE_KEYS.table, []);
+  function init(skipUI) {
+    // 加载存储数据（v3.77.0 数据按页签隔离：盼之页签读专属key，螃蟹页签读共享key）
+    if (isPzdsPage() && STORAGE_KEYS.pzdsTabTable) {
+      // 盼之页签：优先读专属存储；为空（首次升级）时从旧共享key按平台前缀迁移本页签负责的行
+      tableData = loadStorage(STORAGE_KEYS.pzdsTabTable, null);
+      if (!Array.isArray(tableData)) {
+        const legacyRows = loadStorage(STORAGE_KEYS.table, []) || [];
+        tableData = legacyRows.filter(function (r) { return /^(pz_|kjs_|qy_|ysy_)/.test(String(r.productId || '')); });
+        console.log('[鸣潮监控] 盼之页签数据迁移：从共享存储迁入' + tableData.length + '行（盼之/氪金兽/7881/易手游），共享存储保留螃蟹数据');
+      }
+      seenIds = loadStorage(STORAGE_KEYS.pzdsTabSeen, null);
+      if (!Array.isArray(seenIds)) {
+        seenIds = (loadStorage(STORAGE_KEYS.seen, []) || []).filter(function (id) { return /^(pz_|kjs_|qy_|ysy_)/.test(String(id)); });
+      }
+      notifiedIds = loadStorage(STORAGE_KEYS.pzdsTabNotified, null);
+      if (!Array.isArray(notifiedIds)) {
+        notifiedIds = (loadStorage(STORAGE_KEYS.notified, []) || []).filter(function (id) { return /^(pz_|kjs_|qy_|ysy_)/.test(String(id)); });
+      }
+    } else {
+      tableData = loadStorage(STORAGE_KEYS.table, []);
+      // 螃蟹页签：清理历史遗留的盼之行（盼之扫描只在盼之页签运行，螃蟹列表里的pz_行是
+      // 页签隔离前的旧数据，不会再更新）；kjs_/qy_/ysy_ 行保留（用户可能在螃蟹页签扫描这些平台）
+      const pzRows = tableData.filter(function (r) { return /^pz_/.test(String(r.productId || '')); });
+      if (pzRows.length > 0) {
+        tableData = tableData.filter(function (r) { return !/^pz_/.test(String(r.productId || '')); });
+        console.log('[鸣潮监控] 螃蟹页签清理历史盼之数据' + pzRows.length + '行（已归属盼之页签专属存储）');
+        saveStorage(tableStorageKey(), tableData, true);
+      }
+    }
     // 历史数据可能因旧版"无上限模式"累积过大，启动时先裁剪，避免逐行迁移时内存爆炸/卡死
     if (tableData.length > CONFIG.maxTableRows) {
       console.warn('[鸣潮监控] 启动检测到表格数据过多(' + tableData.length + '条)，先裁剪至上限');
@@ -14358,24 +15860,31 @@ function openSettings() {
       console.log('[鸣潮监控] 为' + migrated + '条旧数据补充了内容指纹');
       saveTableData();
     }
-    seenIds = loadStorage(STORAGE_KEYS.seen, []);
-    notifiedIds = loadStorage(STORAGE_KEYS.notified, []);
+    // 已见/已推送记录：盼之页签已在上面从专属key加载（含迁移），这里只加载螃蟹页签的
+    if (!(isPzdsPage() && STORAGE_KEYS.pzdsTabTable)) {
+      seenIds = loadStorage(STORAGE_KEYS.seen, []);
+      notifiedIds = loadStorage(STORAGE_KEYS.notified, []);
+    }
 
     // 迁移：修复旧版截断的 showTitle（旧版 slimRow/ultraSlimRow 在存储压力下截断为500字符，
     // 导致武器列表尾部丢失、专武识别不全）。特征：showTitle 长度恰好为500。
     // 仅处理 pxb7 行（其他平台的详情刷新走各自流程）。重新入详情队列，用完整描述覆盖。
-    let truncatedCount = 0;
-    for (const row of tableData) {
-      if (!row.platform && row.showTitle && row.showTitle.length === 500) {
-        truncatedCount++;
-        // 重置状态避免 enqueueDetail 的 '详估' 跳过检查
-        row.status = '刷新';
-        enqueueDetail(row.productId, 0);
+    // 仅在螃蟹网页面执行：盼之静默页签共享此存储，但绝不能跑螃蟹详情队列
+    // （GM请求会被螃蟹阿里云WAF拦成挑战页，还会触发WAF解决器开标签页）
+    if (!skipUI) {
+      let truncatedCount = 0;
+      for (const row of tableData) {
+        if (!row.platform && row.showTitle && row.showTitle.length === 500) {
+          truncatedCount++;
+          // 重置状态避免 enqueueDetail 的 '详估' 跳过检查
+          row.status = '刷新';
+          enqueueDetail(row.productId, 0);
+        }
       }
-    }
-    if (truncatedCount > 0) {
-      console.log('[鸣潮监控] 检测到' + truncatedCount + '条被旧版截断的描述，已加入详情刷新队列');
-      saveTableData();
+      if (truncatedCount > 0) {
+        console.log('[鸣潮监控] 检测到' + truncatedCount + '条被旧版截断的描述，已加入详情刷新队列');
+        saveTableData();
+      }
     }
 
     const savedState = loadStorage(STORAGE_KEYS.state, {});
@@ -14421,6 +15930,8 @@ function openSettings() {
     }
     // 迁移旧格式 Server酱 SendKey（无名）为具名接收人列表
     migrateServerChanSubscribers();
+    // 迁移旧格式钉钉单机器人为机器人列表（v3.76.0）
+    migrateDingTalkRobots();
 
     // 如果设置了同步密码，从服务器自动恢复推送配置（换电脑时自动恢复）
     if (pushConfig.syncPassword) {
@@ -14431,8 +15942,28 @@ function openSettings() {
       });
     }
 
+    // v3.74.0 盼之页签：扫描类设置从盼之专属存储加载（与螃蟹页签互不覆盖）。
+    // 默认值：刷新间隔60秒、全平台开——「盼之页签=盼之+氪金兽+7881+易手游」
+    if (isPzdsPage()) {
+      const tabState = loadStorage(STORAGE_KEYS.pzdsTab, {}) || {};
+      refreshIntervalSec = tabState.refreshIntervalSec != null ? tabState.refreshIntervalSec : 60;
+      scanPages = tabState.scanPages != null ? tabState.scanPages : scanPages;
+      flashSaleEnabled = tabState.flashSaleEnabled != null ? tabState.flashSaleEnabled : true;
+      pzdsEnabled = tabState.pzdsEnabled != null ? tabState.pzdsEnabled : true;
+      kjsEnabled = tabState.kjsEnabled != null ? tabState.kjsEnabled : true;
+      qyEnabled = tabState.qyEnabled != null ? tabState.qyEnabled : true;
+      ysyEnabled = tabState.ysyEnabled != null ? tabState.ysyEnabled : true;
+    }
+
     // 加载估值权重（改进4）
     weights = loadWeights();
+
+    // 盼之页面静默监控模式：共享存储已加载完毕，交给静默模式初始化（不创建面板UI、
+    // 不自动启螃蟹监控、不检查桌面通知权限——桌面通知按来源站授权，盼之站未授权时不影响手机推送）
+    if (skipUI) {
+      initPzdsSilent(savedState);
+      return;
+    }
 
     // 创建UI
     createDashboard();
@@ -14484,6 +16015,36 @@ function openSettings() {
     applyGameConfig();
     console.log('[监控] 当前游戏: ' + G().name + ' (minLevel=' + G().minLevel + ')');
   })();
+
+  // 交易猫页面：数据捕获模式（v4.2.0 侦察阶段，不扫描不推送）
+  if (isJymPage()) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', jymBoot);
+    } else {
+      jymBoot();
+    }
+    return;
+  }
+
+  // 盼之页面：静默监控模式（路线B）。
+  // 盼之详情页对非浏览器客户端返回阿里云WAF滑块挑战，但挂在本页面上的油猴脚本
+  // 携带真实浏览器指纹与会话Cookie，列表/详情均可直连。此模式只跑盼之扫描+推送，
+  // 不注入面板UI；表格/已见ID/推送配置与螃蟹网页签共享同一份 GM 存储，不会重复推送。
+  if (isPzdsPage()) {
+    // 盼之详情页不打开监控（规则：仅列表页挂机）
+    if (window.location.pathname.indexOf('/goodsDetails/') === 0) {
+      console.log('[鸣潮监控] 盼之详情页，不启动监控');
+      return;
+    }
+    currentGame = 'wuwa';
+    applyGameConfig();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { init(true); });
+    } else {
+      init(true);
+    }
+    return;
+  }
 
   // 商品详情页：仅执行自动购买逻辑，不启动监控面板
   if (window.location.pathname.indexOf('/product/') !== -1) {
