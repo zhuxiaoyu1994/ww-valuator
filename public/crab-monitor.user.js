@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.2.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.2.0 防风控转发中继 + 交易猫数据捕获模式）
+// @version      4.3.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.3.0 新增交易猫最新商品展示，不做估值）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -29,6 +29,8 @@
 // @connect      search.7881.com
 // @connect      gw.7881.com
 // @connect      www.youxigujia.cn
+// @connect      www.jiaoyimao.com
+// @connect      jiaoyimao.com
 // @connect      www.swcbg.com
 // @connect      api-pc.pxb7.com
 // @run-at       document-start
@@ -175,6 +177,8 @@
         qy: 'A5752',
         qyGtid: '100003',
         ysy: 152,
+        jym: '2007615',               // 交易猫 gameId（鸣潮）
+        jymPath: 'f7973003-c7973004', // 交易猫商品列表路径（库洛帐号-成品号）
       },
       keywords: {
         charSections: ['五星角色', '按角色', '满命角色', '三命角色', '二命角色', '一命角色'],                     // 角色段落关键词（多段落合并解析）
@@ -1088,6 +1092,7 @@
   let kjsEnabled = false;       // 氪金兽平台监控开关
   let qyEnabled = false;        // 7881平台监控开关
   let ysyEnabled = false;       // 易手游平台监控开关
+  let jymEnabled = false;       // 交易猫平台开关（v4.3.0，纯展示模式：只收录最新商品不做估值）
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
@@ -5022,6 +5027,219 @@
   }
 
   // ============================================================
+  // 交易猫平台监控（v4.3.0，纯展示模式）
+  // 只收录最新商品展示信息（标题/价格/首图/标签/发布时间/详情链接），不做估值——
+  // 交易猫卖家标题自由度太高（"61小爱""3卡"等体例），标题解析失准，估值无意义。
+  // 数据通道：PC站商品列表页SSR，https://www.jiaoyimao.com/jg{gameId}/{f-c}/?sortId=107
+  // sortId=107 即「最新发布」排序，首屏16个商品卡片（div.pcGoodsListItem）内嵌在HTML里；
+  // 商品ID全局递增，天然适合增量监控。
+  // 鸣潮：gameId=2007615，f7973003=库洛帐号，c7973004=成品号（逆向自 mtop 网关与 SSR 数据）
+  // ============================================================
+
+  var JYM_MAX_ROWS = 40;        // 交易猫展示行数上限（超出移除最旧的，避免挤占估值行空间）
+
+  function jymUrls() {
+    const ids = G().platformIds;
+    const gameId = ids.jym || '';
+    const jymPath = ids.jymPath || '';
+    return {
+      list: gameId && jymPath ? 'https://www.jiaoyimao.com/jg' + gameId + '/' + jymPath + '/?sortId=107' : '',
+      detail: 'https://www.jiaoyimao.com/jg' + gameId + '/',
+    };
+  }
+
+  /** 解析卡片上的发布时间文案（"21分钟前发布"/"3小时前发布"/"昨天发布"…）为近似时间戳 */
+  function parseJYMPubTime(text) {
+    const now = Date.now();
+    const t = String(text || '');
+    let m;
+    if (/刚刚/.test(t)) return now;
+    if ((m = t.match(/(\d+)\s*分钟前/))) return now - parseInt(m[1], 10) * 60000;
+    if ((m = t.match(/(\d+)\s*小时前/))) return now - parseInt(m[1], 10) * 3600000;
+    if (/昨天/.test(t)) return now - 86400000;
+    if (/前天/.test(t)) return now - 2 * 86400000;
+    if ((m = t.match(/(\d+)\s*天前/))) return now - parseInt(m[1], 10) * 86400000;
+    return 0;
+  }
+
+  /**
+   * 抓取交易猫最新发布商品列表（SSR首屏，按发布时间降序）
+   * @returns {Promise<Array>} 商品数组
+   */
+  function fetchJYMList() {
+    return new Promise((resolve, reject) => {
+      const url = jymUrls().list;
+      if (!url) { reject(new Error('交易猫平台ID未配置')); return; }
+      console.log('[鸣潮监控-交易猫] SSR请求: ' + url);
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        timeout: 20000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9',
+        },
+        onload: function (resp) {
+          try {
+            if (resp.status !== 200) { reject(new Error('HTTP ' + resp.status)); return; }
+            const html = resp.responseText || '';
+            // 阿里TMD风控punish页：响应只有几KB的JS跳转脚本（匿名/高频请求触发，
+            // 浏览器正常带cookie访问不会命中）。识别后报明确错误，便于用户排查
+            if (html.indexOf('_____tmd_____') >= 0 || /x5secdata|punish\?/.test(html.substring(0, 2000))) {
+              reject(new Error('触发交易猫风控(punish页)：请先在浏览器打开一次交易猫获取cookie，或稍后再试'));
+              return;
+            }
+            if (html.length < 5000) { reject(new Error('响应过短(' + html.length + '字节)，疑似被拦截')); return; }
+            const products = parseJYMListHtml(html);
+            console.log('[鸣潮监控-交易猫] 解析到' + products.length + '个商品');
+            resolve(products);
+          } catch (e) { reject(e); }
+        },
+        onerror: function () { reject(new Error('网络错误')); },
+        ontimeout: function () { reject(new Error('请求超时')); },
+      });
+    });
+  }
+
+  /** 用 DOMParser 解析列表页 SSR HTML，提取商品卡片（纯展示字段，无解析无估值） */
+  function parseJYMListHtml(html) {
+    const products = [];
+    let doc;
+    try { doc = new DOMParser().parseFromString(html, 'text/html'); } catch (e) { return products; }
+    const cards = doc.querySelectorAll('div.pcGoodsListItem[data-goodsid]');
+    cards.forEach(function (card) {
+      try {
+        const goodsId = card.getAttribute('data-goodsid');
+        if (!goodsId) return;
+        const state = card.getAttribute('data-state') || '';
+        if (/售出|已售|下架/.test(state)) return;   // 跳过已售/下架
+        // 完整标题（含【80级】等前缀）在内层 data-goods-name；data-goods_name 是短标题
+        let title = '';
+        const inner = card.querySelector('[data-goods-name]');
+        if (inner) title = inner.getAttribute('data-goods-name') || '';
+        if (!title) {
+          const tl = card.querySelector('.title-line');
+          if (tl) title = (tl.textContent || '').trim();
+        }
+        if (!title) title = card.getAttribute('data-goods_name') || '';
+        if (!title) return;
+        const price = parseFloat(card.getAttribute('data-price')) || 0;
+        if (price <= 0) return;
+        // 图片：首图 img，去掉 x-oss-process 缩放参数取原图
+        let img = '';
+        const imgEl = card.querySelector('img.lxg-image-img');
+        if (imgEl) img = (imgEl.getAttribute('src') || '').split('?')[0];
+        // 详情链接
+        let href = card.getAttribute('href') || '';
+        if (!href) href = jymUrls().detail + goodsId + '.html';
+        if (href.indexOf('http') !== 0) href = 'https://www.jiaoyimao.com' + (href.charAt(0) === '/' ? '' : '/') + href;
+        // 标签与发布时间
+        const tags = [];
+        let pubTimeText = '';
+        card.querySelectorAll('.text-type-tag-content').forEach(function (el) {
+          const s = (el.textContent || '').trim();
+          if (!s) return;
+          if (/发布|刚刚/.test(s)) pubTimeText = s;
+          else tags.push(s);
+        });
+        const promoEl = card.querySelector('.promotion-name');
+        if (promoEl) tags.push((promoEl.textContent || '').trim());
+        products.push({
+          productId: 'jym_' + goodsId,
+          productUniqueNo: goodsId,
+          showTitle: title,
+          price: price,
+          goodsImg: img,
+          url: href,
+          tags: tags,
+          pubTimeText: pubTimeText,
+          listTime: parseJYMPubTime(pubTimeText) || Date.now(),
+        });
+      } catch (e) {}
+    });
+    return products;
+  }
+
+  /** 处理交易猫商品（纯展示）：去重后直接入表，不做解析/估值/推送 */
+  function processJYMProduct(product) {
+    const productId = product.productId;
+    if (!productId) return;
+
+    // 已见商品跳过（纯展示模式不做降价检测）
+    if (seenIds.includes(productId)) {
+      if (!tableData.some(r => r.productId === productId)) {
+        const idx = seenIds.indexOf(productId);
+        if (idx > -1) seenIds.splice(idx, 1);
+      }
+      return;
+    }
+    seenIds.push(productId);
+    if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    addTableRow({
+      productId,
+      productUniqueNo: product.productUniqueNo || '',
+      showTitle: product.showTitle || '',
+      price: product.price || 0,
+      value: 0,
+      ratio: 0,
+      status: '最新',
+      platform: 'jym',
+      goodsImg: product.goodsImg || '',
+      productUrl: product.url || '',
+      tags: product.tags || [],
+      pubTimeText: product.pubTimeText || '',
+      listTime: product.listTime || Date.now(),
+      firstSeen: Date.now(),
+    });
+    console.log('[鸣潮监控-交易猫] 新商品入表: ' + product.productUniqueNo + ' ¥' + (product.price || 0) + '「' + (product.showTitle || '').substring(0, 40) + '」(表格共' + tableData.length + '行)');
+  }
+
+  /**
+   * 处理交易猫商品列表（批量模式），并裁剪交易猫行数至 JYM_MAX_ROWS
+   */
+  async function handleJYMListResponse(list) {
+    if (!Array.isArray(list)) return;
+    console.log('[鸣潮监控-交易猫] handleJYMListResponse: 收到' + list.length + '条商品，当前表格' + tableData.length + '行');
+
+    batchMode = true;
+    try {
+      for (const product of list) {
+        try {
+          processJYMProduct(product);
+        } catch (e) {
+          console.error('[鸣潮监控-交易猫] 处理商品失败: ' + (product.productUniqueNo || product.productId), e);
+        }
+      }
+    } finally {
+      batchMode = false;
+    }
+
+    // 行数治理：交易猫展示行超过上限时移除最旧的（不等 trimTableData 全局裁剪）
+    const jymRows = tableData.filter(r => r.platform === 'jym');
+    if (jymRows.length > JYM_MAX_ROWS) {
+      jymRows.sort((a, b) => (a.listTime || a.firstSeen || 0) - (b.listTime || b.firstSeen || 0));
+      const toRemove = jymRows.slice(0, jymRows.length - JYM_MAX_ROWS);
+      const removeSet = new Set(toRemove.map(r => r.productId));
+      tableData = tableData.filter(r => !removeSet.has(r.productId));
+      toRemove.forEach(r => {
+        const idx = seenIds.indexOf(r.productId);
+        if (idx > -1) seenIds.splice(idx, 1);   // 允许未来重新出现时再收录
+      });
+      console.log('[鸣潮监控-交易猫] 行数裁剪: 移除最旧' + toRemove.length + '行，保留' + JYM_MAX_ROWS + '行');
+    }
+
+    trimTableData();
+    sortTableData();
+    saveTableData();
+    saveStorage(seenStorageKey(), seenIds);
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[鸣潮监控-交易猫] 批量处理完成，表格共' + tableData.length + '行');
+  }
+
+  // ============================================================
   // 7881平台监控（API抓取，MD5签名认证）
   // ============================================================
 
@@ -7387,6 +7605,12 @@
         '<input type="checkbox" id="mwYsyEnabled" ' + (ysyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控易手游平台（swcbg.com' + G().name + '成品号）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">通过API抓取易手游商品列表（结构化角色武器数据），按最新发布排序</div>' +
+        // 交易猫平台（v4.3.0，纯展示模式）
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwJymEnabled" ' + (jymEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控交易猫平台（jiaoyimao.com' + G().name + '成品号，仅展示）</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">抓取交易猫最新发布商品（SSR首屏16个）仅展示标题/价格/图片/标签，不做估值不推送，最多保留40条</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -8135,6 +8359,7 @@
             box.querySelector('#mwKjsEnabled').checked = !!kjsEnabled;
             box.querySelector('#mwQyEnabled').checked = !!qyEnabled;
             box.querySelector('#mwYsyEnabled').checked = !!ysyEnabled;
+            box.querySelector('#mwJymEnabled').checked = !!jymEnabled;
           } else {
             alert('服务器暂无推送配置或恢复失败');
           }
@@ -8164,6 +8389,7 @@
         kjsEnabled = box.querySelector('#mwKjsEnabled').checked;
         qyEnabled = box.querySelector('#mwQyEnabled').checked;
         ysyEnabled = box.querySelector('#mwYsyEnabled').checked;
+        jymEnabled = box.querySelector('#mwJymEnabled').checked;
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
@@ -8820,7 +9046,10 @@
 
       // 状态标签（可点击检查已售）
       let statusBadge = '<span class="mw-status-badge mw-badge-init" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">初估</span>';
-      if (row.status === '详估') {
+      if (row.status === '最新') {
+        // 交易猫纯展示行：不做已售检查
+        statusBadge = '<span class="mw-status-badge mw-badge-flash" title="交易猫最新商品（纯展示，不做估值）">最新</span>';
+      } else if (row.status === '详估') {
         statusBadge = '<span class="mw-status-badge mw-badge-detail" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">详估</span>';
       } else if (row.status === '已售') {
         var soldTip = row.soldPrice ? '成交价¥' + row.soldPrice.toFixed(0) + (row.soldTime ? '（' + row.soldTime + '）' : '') + '，点击重新检查' : '点击重新检查';
@@ -8843,13 +9072,30 @@
         ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#3b82f6;background:rgba(59,130,246,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="7881">78</span>'
         : row.platform === 'ysy'
         ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#14b8a6;background:rgba(20,184,166,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="易手游">易</span>'
+        : row.platform === 'jym'
+        ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#f97316;background:rgba(249,115,22,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="交易猫">猫</span>'
         : '<span style="display:inline-block;font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="螃蟹网">蟹</span>';
+
+      // 交易猫纯展示行：估值相关列显示「—」，角色列显示商品标签（v4.3.0）
+      const isJymRow = row.platform === 'jym';
+      const jymDash = '<span style="color:#555;">—</span>';
+      const valCell = isJymRow ? jymDash : row.value.toFixed(0);
+      const diffCell = isJymRow ? '<td>' + jymDash + '</td>' : '<td class="' + diffColorClass + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(0) + '</td>';
+      const ratioCell = isJymRow ? '<td>' + jymDash + '</td>' : '<td class="' + ratioColorClass + '">' + ratio.toFixed(1) + '%</td>';
+      const yellowCell = isJymRow ? '<td>' + jymDash + '</td>' : '<td>' + (function(v){ if(v==null) return 0; return v%1===0 ? v : (Math.round(v*10)/10); })(row.effectiveYellow) + '/' + ((row.valuation && row.valuation.yellowInfo ? row.valuation.yellowInfo.limitedYellow : 0) || 0) + '/' + (row.parsed ? row.parsed.yellowCount : 0) + '</td>';
+      const pullsCell = isJymRow ? '<td>' + jymDash + '</td>' : '<td>' + (row.parsed ? row.parsed.pulls : 0) + '</td>';
+      const motoCell = isJymRow ? '<td>' + jymDash + '</td>' : '<td>' + (row.parsed ? row.parsed.motoCount : 0) + '</td>';
+      const jymCharsCell = isJymRow && Array.isArray(row.tags) && row.tags.length > 0
+        ? row.tags.map(function (t) {
+            return '<span style="display:inline-block;font-size:10px;color:#94a3b8;background:rgba(148,163,184,0.12);padding:1px 5px;border-radius:3px;margin:1px 2px 1px 0;">' + String(t).replace(/</g, '&lt;') + '</span>';
+          }).join('')
+        : '';
 
       html += '<tr class="' + rowClass + '" data-product-id="' + row.productId + '" title="' + tooltip + '">' +
         '<td>' + platformBadge + listStr + '</td>' +
-        '<td>' + row.value.toFixed(0) + '</td>' +
-        '<td class="' + diffColorClass + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(0) + '</td>' +
-        '<td class="' + ratioColorClass + '">' + ratio.toFixed(1) + '%</td>' +
+        '<td>' + valCell + '</td>' +
+        diffCell +
+        ratioCell +
         '<td>' + (row.status === '已售' && row.soldPrice
           ? '<span style="color:#666;text-decoration:line-through;font-size:11px;">¥' + row.price.toFixed(0) + '</span> <span style="color:#e94560;font-weight:600;">成交¥' + row.soldPrice.toFixed(0) + '</span>'
           : row.priceHistory && row.priceHistory.length > 0
@@ -8857,10 +9103,10 @@
           : row.status === '秒杀'
             ? '<span style="color:#e94560;font-weight:600;">秒杀 ¥' + row.price.toFixed(0) + '</span>'
             : row.price.toFixed(0)) + '</td>' +
-        '<td>' + (function(v){ if(v==null) return 0; return v%1===0 ? v : (Math.round(v*10)/10); })(row.effectiveYellow) + '/' + ((row.valuation && row.valuation.yellowInfo ? row.valuation.yellowInfo.limitedYellow : 0) || 0) + '/' + (row.parsed ? row.parsed.yellowCount : 0) + '</td>' +
-        '<td>' + (row.parsed ? row.parsed.pulls : 0) + '</td>' +
-        '<td>' + (row.parsed ? row.parsed.motoCount : 0) + '</td>' +
-        '<td class="mw-chars-cell">' + charsHtml + '</td>' +
+        yellowCell +
+        pullsCell +
+        motoCell +
+        '<td class="mw-chars-cell">' + (isJymRow ? jymCharsCell : charsHtml) + '</td>' +
         '<td>' + statusBadge + '</td>' +
         '<td><span class="mw-delete-btn" data-delete-id="' + row.productId + '" style="cursor:pointer;color:#666;font-size:16px;" title="删除此行">&times;</span></td>' +
         '</tr>';
@@ -8935,6 +9181,7 @@
    * slimRow 存储后 parsed 和 valuation 被移除，显示时按需从 showTitle 重新解析
    */
   function ensureRowData(row) {
+    if (row.platform === 'jym') return;   // 交易猫纯展示行不做估值回填（v4.3.0）
     if (row.parsed && row.valuation) return;
     if (!row.showTitle) return;
     try {
@@ -13225,7 +13472,7 @@ function openSettings() {
     }
 
     // ===== 标题：差价 + 现价 + 估价 + 类型 + 平台 =====
-    var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : (row.platform === 'ysy' ? '易手游' : '螃蟹网')));
+    var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : (row.platform === 'ysy' ? '易手游' : (row.platform === 'jym' ? '交易猫' : '螃蟹网'))));
     var title = '差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估价¥' + value.toFixed(0) + ' ' + prefix + ' ' + platformName + '·' + G().name;
     if (suffix) title += ' ' + suffix;
 
@@ -13358,7 +13605,7 @@ function openSettings() {
     // ===== 纯文本版（桌面通知用）=====
     var lines = [];
     lines.push('💰 价格信息');
-    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : '螃蟹网') + ')');
+    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : row.platform === 'jym' ? '交易猫' : '螃蟹网') + ')');
     lines.push(priceInfo);
     lines.push('估值¥' + value.toFixed(0) + ' 差价¥' + diff.toFixed(0) + ' 性价比' + ratio.toFixed(1) + '%');
     lines.push('');
@@ -13407,7 +13654,7 @@ function openSettings() {
     // 价格模块
     mdLines.push('**💰 价格信息**');
     mdLines.push('');
-    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : '螃蟹网') + ')');
+    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : row.platform === 'jym' ? '交易猫' : '螃蟹网') + ')');
     if (oldPrice != null && oldPrice !== newPrice) {
       mdLines.push('原价 ~~¥' + oldPrice.toFixed(0) + '~~ → <font color="#e94560">**现价 ¥' + newPrice.toFixed(0) + '**</font>' + (dropAmtStr ? ' 🔥**' + dropAmtStr + '**' : ''));
     } else {
@@ -13874,6 +14121,7 @@ function openSettings() {
     else if (cleanId.indexOf('kjs_') === 0) productPlatform = 'kjs';
     else if (cleanId.indexOf('qy_') === 0) productPlatform = 'qy';
     else if (cleanId.indexOf('ysy_') === 0) productPlatform = 'ysy';
+    else if (cleanId.indexOf('jym_') === 0) productPlatform = 'jym';
     else productPlatform = 'pxb7';
     return filterPlatforms.length === 0 || filterPlatforms.indexOf(productPlatform) >= 0;
   }
@@ -13886,7 +14134,8 @@ function openSettings() {
       : (cleanId.indexOf('kjs_') === 0 ? KJS_URLS.detail + cleanId.replace(/^kjs_/, '')
         : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
         : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + cleanId.replace(/^ysy_/, '') + '&shop_source=2'
-        : 'https://www.pxb7.com/product/' + cleanId + '/1')));
+        : (cleanId.indexOf('jym_') === 0 ? jymUrls().detail + cleanId.replace(/^jym_/, '') + '.html?newPage=true'
+        : 'https://www.pxb7.com/product/' + cleanId + '/1'))));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
     // 钉钉群机器人推送（v4.1.0 主从分级，与PushPlus订阅者同语义）：
@@ -14081,6 +14330,7 @@ function openSettings() {
       kjsEnabled: kjsEnabled != null ? kjsEnabled : true,
       qyEnabled: qyEnabled != null ? qyEnabled : true,
       ysyEnabled: ysyEnabled != null ? ysyEnabled : false,
+      jymEnabled: jymEnabled != null ? jymEnabled : false,
       // 角色通知规则
       charNotifyRules: charNotifyRules || [],
     };
@@ -14156,6 +14406,7 @@ function openSettings() {
             if (remote.kjsEnabled != null) kjsEnabled = remote.kjsEnabled;
             if (remote.qyEnabled != null) qyEnabled = remote.qyEnabled;
             if (remote.ysyEnabled != null) ysyEnabled = remote.ysyEnabled;
+            if (remote.jymEnabled != null) jymEnabled = remote.jymEnabled;
             // 角色通知规则
             if (Array.isArray(remote.charNotifyRules)) charNotifyRules = remote.charNotifyRules;
             saveState();
@@ -14893,6 +15144,7 @@ function openSettings() {
         kjsEnabled: kjsEnabled,
         qyEnabled: qyEnabled,
         ysyEnabled: ysyEnabled,
+        jymEnabled: jymEnabled,
       }));
       // 共享 state 只更新通知/推送/估值字段；monitorRunning 与扫描设置保持螃蟹页签的值不动
       const shared = loadStorage(STORAGE_KEYS.state, {}) || {};
@@ -14934,6 +15186,7 @@ function openSettings() {
       kjsEnabled: kjsEnabled,
       qyEnabled: qyEnabled,
       ysyEnabled: ysyEnabled,
+      jymEnabled: jymEnabled,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -15732,6 +15985,12 @@ function openSettings() {
           if (ysyProducts.length > 0) await handleYSYListResponse(ysyProducts);
         } catch (e) { console.error('[鸣潮监控-盼之循环] 易手游扫描失败:', e); }
       }
+      if (jymEnabled && G().platformIds.jym) {
+        try {
+          const jymProducts = await fetchJYMList();
+          if (jymProducts.length > 0) await handleJYMListResponse(jymProducts);
+        } catch (e) { console.error('[鸣潮监控-盼之循环] 交易猫扫描失败:', e); }
+      }
       console.log('[鸣潮监控-盼之静默] 第' + pzdsSilentStat.rounds + '轮完成：' + products.length + '条，表格' + tableData.length + '行');
     } catch (e) {
       pzdsSilentStat.lastError = (e && e.message ? String(e.message) : '扫描异常').substring(0, 30);
@@ -15910,6 +16169,7 @@ function openSettings() {
     kjsEnabled = savedState.kjsEnabled != null ? savedState.kjsEnabled : false;
     qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
       ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
+    jymEnabled = savedState.jymEnabled != null ? savedState.jymEnabled : false;
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
     // 加载推送配置
     if (savedState.pushConfig) {
@@ -15953,6 +16213,7 @@ function openSettings() {
       kjsEnabled = tabState.kjsEnabled != null ? tabState.kjsEnabled : true;
       qyEnabled = tabState.qyEnabled != null ? tabState.qyEnabled : true;
       ysyEnabled = tabState.ysyEnabled != null ? tabState.ysyEnabled : true;
+      jymEnabled = tabState.jymEnabled != null ? tabState.jymEnabled : true;
     }
 
     // 加载估值权重（改进4）
