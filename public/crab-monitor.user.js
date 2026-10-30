@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.3.0
+// @version      4.3.1
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.3.0 新增交易猫最新商品展示，不做估值）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -3470,6 +3470,11 @@
    * 获取商品链接URL（根据平台来源）
    */
   function getProductUrl(row) {
+    if (row.platform === 'jym') {
+      // 交易猫：优先用入表时保存的详情链接，兜底按 gameId 拼（v4.3.0）
+      if (row.productUrl) return row.productUrl;
+      return jymUrls().detail + (row.productUniqueNo || row.productId.replace(/^jym_/, '')) + '.html?newPage=true';
+    }
     if (row.platform === 'pzds') {
       return pzdsUrls().detail + '/' + row.productId.replace(/^pz_/, '') + '/6';
     }
@@ -7333,6 +7338,7 @@
           <option value="kjs">氪金兽</option>
           <option value="qy">7881</option>
           <option value="ysy">易手游</option>
+          <option value="jym">交易猫</option>
         </select>
         <span class="mw-input-label">标价</span>
         <input type="number" class="mw-input" id="mwFilterPriceMin" placeholder="最小" style="width:50px;">
@@ -9142,6 +9148,8 @@
     let updated = 0;
     let skipped = 0;
     for (const row of tableData) {
+      // 交易猫纯展示行不做估值重算（v4.3.0）
+      if (row.platform === 'jym') { skipped++; continue; }
       // 清除旧缓存，强制下次 getRowValuation 重新计算
       row._cachedValuation = null;
       if (!row.showTitle) {
@@ -9212,6 +9220,8 @@
    * @returns {object} 估值结果
    */
   function getRowValuation(row) {
+    // 交易猫纯展示行不做估值，返回空对象避免覆写 value=0（v4.3.0）
+    if (row.platform === 'jym') return row.valuation || {};
     ensureRowData(row);
     if (row.valuation && row.valuation.charBreakdown) return row.valuation;
     // 旧数据或 slimRow 精简后：重新解析计算
