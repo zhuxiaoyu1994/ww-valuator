@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.3.2
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.3.0 新增交易猫最新商品展示，不做估值）
+// @version      4.4.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.4.0 新增闲鱼捕获模式：hook闲鱼页面自身搜索响应，标价≥2000收录展示，不做估值）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -12,6 +12,7 @@
 // @match        https://pzds.com/*
 // @match        https://m.jiaoyimao.com/*
 // @match        https://www.jiaoyimao.com/*
+// @match        https://www.goofish.com/*
 // @grant        GM_notification
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
@@ -31,6 +32,8 @@
 // @connect      www.youxigujia.cn
 // @connect      www.jiaoyimao.com
 // @connect      jiaoyimao.com
+// @connect      www.goofish.com
+// @connect      h5api.goofish.com
 // @connect      www.swcbg.com
 // @connect      api-pc.pxb7.com
 // @run-at       document-start
@@ -1093,6 +1096,7 @@
   let qyEnabled = false;        // 7881平台监控开关
   let ysyEnabled = false;       // 易手游平台监控开关
   let jymEnabled = false;       // 交易猫平台开关（v4.3.0，纯展示模式：只收录最新商品不做估值）
+  let xyEnabled = false;        // 闲鱼平台开关（v4.4.0，捕获模式：接收闲鱼页面捕获的商品，标价≥2000展示）
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
@@ -3475,6 +3479,11 @@
       if (row.productUrl) return row.productUrl;
       return jymUrls().detail + (row.productUniqueNo || row.productId.replace(/^jym_/, '')) + '.html?newPage=true';
     }
+    if (row.platform === 'xy') {
+      // 闲鱼：优先用捕获时保存的详情链接，兜底按商品ID拼（v4.4.0）
+      if (row.productUrl) return row.productUrl;
+      return 'https://www.goofish.com/item?id=' + (row.productUniqueNo || row.productId.replace(/^xy_/, ''));
+    }
     if (row.platform === 'pzds') {
       return pzdsUrls().detail + '/' + row.productId.replace(/^pz_/, '') + '/6';
     }
@@ -5259,6 +5268,316 @@
     updateStatusText();
     console.log('[鸣潮监控-交易猫] 批量处理完成，表格共' + tableData.length + '行');
   }
+
+  // ============================================================
+  // 闲鱼捕获模式（v4.4.0，方案A：hook页面自身响应）
+  // 闲鱼搜索接口 mtop.taobao.idlemtopsearch.pc.search 有阿里账号级风控：
+  // 匿名/服务端直调必被 RGV587 滑块拦截（实测），搜索页也无 SSR 数据。
+  // 因此不做任何主动请求——在 goofish.com 页面上拦截页面自己发出的搜索响应
+  // （天然携带完整风控凭证），解析出鸣潮商品写入 GM 收件箱队列；
+  // 监控页（盼之/螃蟹）每5秒消费收件箱入表展示。
+  // 纯展示模式：不做估值，标价≥XY_MIN_PRICE 才收录并推送。
+  // 使用方法：设置里开启闲鱼平台，然后在闲鱼打开"鸣潮"搜索页（按最新排序）翻页浏览。
+  // ============================================================
+
+  var XY_MAX_ROWS = 40;         // 闲鱼展示行数上限（超出移除最旧的）
+  var XY_MIN_PRICE = 2000;      // 闲鱼收录门槛：标价低于此值不收录不推送
+  var XY_INBOX_KEY = 'mw_xy_inbox_v1';
+
+  function isGoofishPage() {
+    return location.hostname === 'www.goofish.com' || location.hostname === 'goofish.com';
+  }
+
+  /** 深度遍历 mtop 响应 JSON，按字段特征找出商品列表数组（不硬编码响应结构） */
+  function xyFindItemArrays(node, out) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      let hit = 0;
+      for (let i = 0; i < node.length; i++) {
+        const el = node[i];
+        if (el && typeof el === 'object' && !Array.isArray(el) && (el.id || el.itemId) && (el.title || el.itemTitle)) hit++;
+      }
+      if (node.length > 0 && hit >= Math.max(1, Math.floor(node.length / 2))) {
+        out.push(node);   // 过半元素呈商品特征：视为商品数组，不再深入
+        return;
+      }
+      for (let i = 0; i < node.length; i++) xyFindItemArrays(node[i], out);
+      return;
+    }
+    for (const k in node) {
+      if (Object.prototype.hasOwnProperty.call(node, k)) {
+        try { xyFindItemArrays(node[k], out); } catch (e) {}
+      }
+    }
+  }
+
+  /** 把闲鱼商品节点归一化为捕获商品对象（纯展示字段），不符合特征返回 null */
+  function xyNormalizeItem(it) {
+    try {
+      const id = String(it.id || it.itemId || it.goodsId || '');
+      if (!/^\d{5,}$/.test(id)) return null;   // 闲鱼商品ID为长纯数字
+      let title = String(it.title || it.itemTitle || '');
+      title = title.replace(/<[^>]*>/g, '').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();   // 去搜索高亮标签
+      if (!title) return null;
+      let priceRaw = it.price;
+      if (priceRaw && typeof priceRaw === 'object') priceRaw = priceRaw.price || priceRaw.showPrice;
+      if (priceRaw == null) priceRaw = it.soldPrice;
+      const price = parseFloat(String(priceRaw == null ? '' : priceRaw).replace(/[,¥\s]/g, ''));
+      if (!(price > 0)) return null;
+      const img = String(it.picUrl || it.pic || it.mainImage || (it.image && it.image.url) || '').split('?')[0];
+      const tags = [];
+      if (typeof it.area === 'string' && it.area) tags.push(it.area.trim());
+      return {
+        productId: 'xy_' + id,
+        productUniqueNo: id,
+        showTitle: title,
+        price: price,
+        goodsImg: img,
+        url: 'https://www.goofish.com/item?id=' + id,
+        tags: tags,
+        pubTimeText: (typeof it.publishTimeText === 'string' && it.publishTimeText) || '',
+        listTime: Date.now(),   // 捕获时间≈上架时间（用户按"最新"排序浏览）
+      };
+    } catch (e) { return null; }
+  }
+
+  /** 解析闲鱼搜索 mtop 响应文本。wuwaSearch=true 表示请求关键词含"鸣潮"，全量接受；否则只留标题含鸣潮的 */
+  function xyParseSearchResponse(text, wuwaSearch) {
+    const products = [];
+    if (!text || text.length < 50) return products;
+    let json;
+    try { json = JSON.parse(text); } catch (e) { return products; }
+    const api = (json && json.api) || '';
+    if (api && api.indexOf('mtop.taobao.idlemtopsearch') < 0) return products;   // 只处理搜索接口
+    const arrays = [];
+    try { xyFindItemArrays(json, arrays); } catch (e) { return products; }
+    arrays.forEach(function (arr) {
+      arr.forEach(function (it) {
+        if (!wuwaSearch && it) {
+          const t = String(it.title || it.itemTitle || '');
+          if (t.indexOf('鸣潮') < 0) return;   // 非鸣潮搜索只按标题过滤
+        }
+        const p = xyNormalizeItem(it);
+        if (p) products.push(p);
+      });
+    });
+    return products;
+  }
+
+  /** 判断请求体是否为鸣潮关键词搜索（兼容 URL 编码与 \uXXXX 转义） */
+  function xyBodyLooksWuwa(bodyText) {
+    if (!bodyText) return false;
+    let s = String(bodyText);
+    try { s = decodeURIComponent(s); } catch (e) {}
+    return s.indexOf('鸣潮') >= 0 || s.indexOf('\\u9e23\\u6f6e') >= 0 || s.indexOf('%E9%B8%A3%E6%BD%AE') >= 0;
+  }
+
+  /** 捕获侧：把解析出的商品写入 GM 收件箱（监控页消费），返回新增条数 */
+  function xyEnqueue(products) {
+    if (!Array.isArray(products) || products.length === 0) return 0;
+    let inbox = [];
+    try { inbox = GM_getValue(XY_INBOX_KEY, []) || []; } catch (e) { inbox = []; }
+    const have = {};
+    inbox.forEach(function (p) { have[p.productId] = 1; });
+    let added = 0;
+    for (const p of products) {
+      if (have[p.productId]) continue;
+      inbox.push(p);
+      have[p.productId] = 1;
+      added++;
+    }
+    while (inbox.length > 200) inbox.shift();   // 收件箱上限，防无限膨胀
+    try { GM_setValue(XY_INBOX_KEY, inbox); } catch (e) {}
+    return added;
+  }
+
+  /** 捕获侧核心：校验URL/响应 → 解析 → 入收件箱 → 更新浮标 */
+  function xyOnResponse(url, bodyText, respText) {
+    try {
+      if (!respText || respText.charAt(0) !== '{') return;
+      const u = String(url || '');
+      if (u.indexOf('mtop.taobao.idlemtopsearch') < 0 && respText.indexOf('"mtop.taobao.idlemtopsearch') < 0) return;
+      const wuwa = xyBodyLooksWuwa(bodyText);
+      let products = xyParseSearchResponse(respText, wuwa);
+      if (!wuwa) products = products.filter(function (p) { return (p.showTitle || '').indexOf('鸣潮') >= 0; });
+      if (products.length === 0) return;
+      const added = xyEnqueue(products);
+      if (added > 0) {
+        const pill = document.getElementById('mw-xy-pill');
+        if (pill) {
+          let inbox = [];
+          try { inbox = GM_getValue(XY_INBOX_KEY, []) || []; } catch (e) {}
+          pill.textContent = '🐟闲鱼已捕获 ' + inbox.length;
+        }
+        console.log('[鸣潮监控-闲鱼] 新捕获' + added + '个商品（收件箱待监控端处理）');
+      }
+    } catch (e) {}
+  }
+
+  function xyInstallHook() {
+    if (window.__mwXyHooked) return;
+    window.__mwXyHooked = true;
+    // XHR 拦截（闲鱼 mtop 网关走 XHR）
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (method, url) { this._xyUrl = url; return origOpen.apply(this, arguments); };
+    XMLHttpRequest.prototype.send = function (body) {
+      this._xyBody = (typeof body === 'string') ? body : '';
+      this.addEventListener('load', function () {
+        try { xyOnResponse(this._xyUrl, this._xyBody, this.responseText || ''); } catch (e) {}
+      });
+      return origSend.apply(this, arguments);
+    };
+    // fetch 拦截兜底
+    try {
+      const origFetch = window.fetch;
+      if (origFetch) {
+        window.fetch = function () {
+          const args = arguments;
+          const u = typeof args[0] === 'string' ? args[0] : ((args[0] && args[0].url) || '');
+          const b = (args[1] && typeof args[1].body === 'string') ? args[1].body : '';
+          return origFetch.apply(this, arguments).then(function (resp) {
+            try {
+              resp.clone().text().then(function (t) { xyOnResponse(u, b, t); }).catch(function () {});
+            } catch (e) {}
+            return resp;
+          });
+        };
+      }
+    } catch (e) {}
+  }
+
+  function xyBoot() {
+    xyInstallHook();
+    let n = 0;
+    try { n = (GM_getValue(XY_INBOX_KEY, []) || []).length; } catch (e) {}
+    const pill = document.createElement('div');
+    pill.id = 'mw-xy-pill';
+    pill.style.cssText = 'position:fixed;left:12px;bottom:80px;z-index:2147483000;background:#1a1a2e;color:#cfd6e4;border:1px solid #2a2a4a;border-radius:16px;padding:6px 12px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+    pill.textContent = '🐟闲鱼监听中（收件箱' + n + '）';
+    pill.title = '监控助手闲鱼捕获模式：搜索"鸣潮"并按"最新"排序，翻页浏览即可自动捕获（标价≥2000由监控端收录推送）。如未捕获请刷新页面或重新搜索一次。';
+    try { document.body.appendChild(pill); } catch (e) {}
+    console.log('[鸣潮监控-闲鱼] 捕获模式已启动（hook页面自身搜索响应，不主动请求）');
+  }
+
+  // ---- 监控端（盼之/螃蟹页）：消费收件箱 ----
+
+  var xyDrainStarted = false;
+
+  /** 处理闲鱼商品（纯展示+达标推送）：去重、价格门槛过滤后入表，不做估值 */
+  function processXYProduct(product) {
+    const productId = product.productId;
+    if (!productId) return;
+
+    // 已见商品跳过（手动删除/行数裁剪处会同步移出 seenIds，低价被拒的保持 seen 防重扫）
+    if (seenIds.includes(productId)) return;
+    seenIds.push(productId);
+    if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
+
+    // 收录门槛：标价低于 XY_MIN_PRICE 的不收录不推送
+    const price = product.price || 0;
+    if (price < XY_MIN_PRICE) {
+      console.log('[鸣潮监控-闲鱼] 跳过低价商品: ' + product.productUniqueNo + ' ¥' + price + ' < ' + XY_MIN_PRICE);
+      return;
+    }
+
+    addTableRow({
+      productId,
+      productUniqueNo: product.productUniqueNo || '',
+      showTitle: product.showTitle || '',
+      price: product.price || 0,
+      value: 0,
+      ratio: 0,
+      status: '最新',
+      platform: 'xy',
+      goodsImg: product.goodsImg || '',
+      productUrl: product.url || '',
+      tags: product.tags || [],
+      pubTimeText: product.pubTimeText || '',
+      listTime: product.listTime || Date.now(),
+      firstSeen: Date.now(),
+    });
+    console.log('[鸣潮监控-闲鱼] 新商品入表: ' + product.productUniqueNo + ' ¥' + (product.price || 0) + '「' + (product.showTitle || '').substring(0, 40) + '」(表格共' + tableData.length + '行)');
+
+    // 达标新品推送（无估值对比，按收录门槛直接推；已推送过的不重复推）
+    if (!notifiedIds.includes(productId)) {
+      const shortTitle = (product.showTitle || '').substring(0, 40);
+      const title = '[闲鱼] ¥' + Math.round(price) + ' ' + shortTitle;
+      const tagText = Array.isArray(product.tags) && product.tags.length > 0 ? '｜' + product.tags.join(' ') : '';
+      const body = shortTitle + '\n标价 ¥' + Math.round(price) + (product.pubTimeText ? '\n' + product.pubTimeText : '') + tagText;
+      const mdBody = '**' + shortTitle + '**\n\n💰 标价 ¥' + Math.round(price) + (product.pubTimeText ? '｜' + product.pubTimeText : '') + tagText;
+      notify(productId, title, body, mdBody);
+      notifiedIds.push(productId);
+      if (notifiedIds.length > CONFIG.maxNotifiedIds) notifiedIds.shift();
+      saveStorage(notifiedStorageKey(), notifiedIds);
+    }
+  }
+
+  /**
+   * 处理闲鱼商品列表（批量模式），并裁剪闲鱼行数至 XY_MAX_ROWS
+   */
+  async function handleXYListResponse(list) {
+    if (!Array.isArray(list)) return;
+    console.log('[鸣潮监控-闲鱼] handleXYListResponse: 收到' + list.length + '条商品，当前表格' + tableData.length + '行');
+
+    batchMode = true;
+    try {
+      for (const product of list) {
+        try {
+          processXYProduct(product);
+        } catch (e) {
+          console.error('[鸣潮监控-闲鱼] 处理商品失败: ' + (product.productUniqueNo || product.productId), e);
+        }
+      }
+    } finally {
+      batchMode = false;
+    }
+
+    // 行数治理：闲鱼展示行超过上限时移除最旧的
+    const xyRows = tableData.filter(r => r.platform === 'xy');
+    if (xyRows.length > XY_MAX_ROWS) {
+      xyRows.sort((a, b) => (a.listTime || a.firstSeen || 0) - (b.listTime || b.firstSeen || 0));
+      const toRemove = xyRows.slice(0, xyRows.length - XY_MAX_ROWS);
+      const removeSet = new Set(toRemove.map(r => r.productId));
+      tableData = tableData.filter(r => !removeSet.has(r.productId));
+      toRemove.forEach(r => {
+        const idx = seenIds.indexOf(r.productId);
+        if (idx > -1) seenIds.splice(idx, 1);   // 允许未来重新出现时再收录
+      });
+      console.log('[鸣潮监控-闲鱼] 行数裁剪: 移除最旧' + toRemove.length + '行，保留' + XY_MAX_ROWS + '行');
+    }
+
+    trimTableData();
+    sortTableData();
+    saveTableData();
+    saveStorage(seenStorageKey(), seenIds);
+    refreshTableDisplay();
+    updateStatusText();
+    console.log('[鸣潮监控-闲鱼] 批量处理完成，表格共' + tableData.length + '行');
+  }
+
+  /** 消费收件箱：取走全部待处理商品并清空队列（未开启闲鱼平台时直接丢弃防堆积） */
+  function xyDrainInbox() {
+    let inbox = [];
+    try { inbox = GM_getValue(XY_INBOX_KEY, []) || []; } catch (e) { inbox = []; }
+    if (!inbox || inbox.length === 0) return;
+    try { GM_setValue(XY_INBOX_KEY, []); } catch (e) {}
+    if (!xyEnabled) {
+      console.log('[鸣潮监控-闲鱼] 收件箱' + inbox.length + '条，但闲鱼平台未开启，已丢弃');
+      return;
+    }
+    handleXYListResponse(inbox).catch(function (e) {
+      console.error('[鸣潮监控-闲鱼] 处理收件箱失败:', e);
+    });
+  }
+
+  function startXYInboxDrain() {
+    if (xyDrainStarted) return;
+    xyDrainStarted = true;
+    setInterval(function () { try { xyDrainInbox(); } catch (e) {} }, 5000);
+    console.log('[鸣潮监控-闲鱼] 收件箱消费定时器已启动（每5秒）');
+  }
+
 
   // ============================================================
   // 7881平台监控（API抓取，MD5签名认证）
@@ -7355,6 +7674,7 @@
           <option value="qy">7881</option>
           <option value="ysy">易手游</option>
           <option value="jym">交易猫</option>
+          <option value="xy">闲鱼</option>
         </select>
         <span class="mw-input-label">标价</span>
         <input type="number" class="mw-input" id="mwFilterPriceMin" placeholder="最小" style="width:50px;">
@@ -7633,6 +7953,12 @@
         '<input type="checkbox" id="mwJymEnabled" ' + (jymEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 同时监控交易猫平台（jiaoyimao.com' + G().name + '成品号，¥800以上）</label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">抓取交易猫最新发布商品（SSR首屏16个），标价≥800才收录并推送（无估值对比），最多保留40条</div>' +
+        // 闲鱼平台（v4.4.0，捕获模式）
+        '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+        '<input type="checkbox" id="mwXyEnabled" ' + (xyEnabled ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;" /> 接收闲鱼捕获商品（goofish.com，¥2000以上）</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">在闲鱼打开"鸣潮"搜索页（按最新排序）翻页，脚本自动捕获页面加载的商品；标价≥2000才收录并推送（无估值对比），最多保留40条</div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -8382,6 +8708,7 @@
             box.querySelector('#mwQyEnabled').checked = !!qyEnabled;
             box.querySelector('#mwYsyEnabled').checked = !!ysyEnabled;
             box.querySelector('#mwJymEnabled').checked = !!jymEnabled;
+            box.querySelector('#mwXyEnabled').checked = !!xyEnabled;
           } else {
             alert('服务器暂无推送配置或恢复失败');
           }
@@ -8412,6 +8739,7 @@
         qyEnabled = box.querySelector('#mwQyEnabled').checked;
         ysyEnabled = box.querySelector('#mwYsyEnabled').checked;
         jymEnabled = box.querySelector('#mwJymEnabled').checked;
+        xyEnabled = box.querySelector('#mwXyEnabled').checked;
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
         pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
@@ -9069,8 +9397,9 @@
       // 状态标签（可点击检查已售）
       let statusBadge = '<span class="mw-status-badge mw-badge-init" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">初估</span>';
       if (row.status === '最新') {
-        // 交易猫纯展示行：不做已售检查
-        statusBadge = '<span class="mw-status-badge mw-badge-flash" title="交易猫最新商品（无估值，标价≥800收录）">最新</span>';
+        // 交易猫/闲鱼纯展示行：不做已售检查
+        const npTip = row.platform === 'xy' ? '闲鱼最新商品（无估值，标价≥2000收录）' : '交易猫最新商品（无估值，标价≥800收录）';
+        statusBadge = '<span class="mw-status-badge mw-badge-flash" title="' + npTip + '">最新</span>';
       } else if (row.status === '详估') {
         statusBadge = '<span class="mw-status-badge mw-badge-detail" data-check-sold="' + row.productId + '" style="cursor:pointer;" title="点击检查是否已售">详估</span>';
       } else if (row.status === '已售') {
@@ -9096,10 +9425,12 @@
         ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#14b8a6;background:rgba(20,184,166,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="易手游">易</span>'
         : row.platform === 'jym'
         ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#f97316;background:rgba(249,115,22,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="交易猫">猫</span>'
+        : row.platform === 'xy'
+        ? '<span style="display:inline-block;font-size:10px;font-weight:600;color:#ca8a04;background:rgba(234,179,8,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="闲鱼">鱼</span>'
         : '<span style="display:inline-block;font-size:10px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.15);padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle;" title="螃蟹网">蟹</span>';
 
-      // 交易猫纯展示行：估值相关列显示「—」，角色列显示商品标签（v4.3.0）
-      const isJymRow = row.platform === 'jym';
+      // 交易猫/闲鱼纯展示行：估值相关列显示「—」，角色列显示商品标签（v4.3.0/v4.4.0）
+      const isJymRow = row.platform === 'jym' || row.platform === 'xy';
       const jymDash = '<span style="color:#555;">—</span>';
       const valCell = isJymRow ? jymDash : row.value.toFixed(0);
       const diffCell = isJymRow ? '<td>' + jymDash + '</td>' : '<td class="' + diffColorClass + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(0) + '</td>';
@@ -9164,8 +9495,8 @@
     let updated = 0;
     let skipped = 0;
     for (const row of tableData) {
-      // 交易猫纯展示行不做估值重算（v4.3.0）
-      if (row.platform === 'jym') { skipped++; continue; }
+      // 交易猫/闲鱼纯展示行不做估值重算（v4.3.0/v4.4.0）
+      if (row.platform === 'jym' || row.platform === 'xy') { skipped++; continue; }
       // 清除旧缓存，强制下次 getRowValuation 重新计算
       row._cachedValuation = null;
       if (!row.showTitle) {
@@ -9205,7 +9536,7 @@
    * slimRow 存储后 parsed 和 valuation 被移除，显示时按需从 showTitle 重新解析
    */
   function ensureRowData(row) {
-    if (row.platform === 'jym') return;   // 交易猫纯展示行不做估值回填（v4.3.0）
+    if (row.platform === 'jym' || row.platform === 'xy') return;   // 交易猫/闲鱼纯展示行不做估值回填（v4.3.0/v4.4.0）
     if (row.parsed && row.valuation) return;
     if (!row.showTitle) return;
     try {
@@ -9236,8 +9567,8 @@
    * @returns {object} 估值结果
    */
   function getRowValuation(row) {
-    // 交易猫纯展示行不做估值，返回空对象避免覆写 value=0（v4.3.0）
-    if (row.platform === 'jym') return row.valuation || {};
+    // 交易猫/闲鱼纯展示行不做估值，返回空对象避免覆写 value=0（v4.3.0/v4.4.0）
+    if (row.platform === 'jym' || row.platform === 'xy') return row.valuation || {};
     ensureRowData(row);
     if (row.valuation && row.valuation.charBreakdown) return row.valuation;
     // 旧数据或 slimRow 精简后：重新解析计算
@@ -13498,7 +13829,7 @@ function openSettings() {
     }
 
     // ===== 标题：差价 + 现价 + 估价 + 类型 + 平台 =====
-    var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : (row.platform === 'ysy' ? '易手游' : (row.platform === 'jym' ? '交易猫' : '螃蟹网'))));
+    var platformName = row.platform === 'pzds' ? '盼之' : (row.platform === 'kjs' ? '氪金兽' : (row.platform === 'qy' ? '7881' : (row.platform === 'ysy' ? '易手游' : (row.platform === 'jym' ? '交易猫' : (row.platform === 'xy' ? '闲鱼' : '螃蟹网')))));
     var title = '差价¥' + diff.toFixed(0) + ' 现价¥' + newPrice.toFixed(0) + ' 估价¥' + value.toFixed(0) + ' ' + prefix + ' ' + platformName + '·' + G().name;
     if (suffix) title += ' ' + suffix;
 
@@ -13631,7 +13962,7 @@ function openSettings() {
     // ===== 纯文本版（桌面通知用）=====
     var lines = [];
     lines.push('💰 价格信息');
-    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : row.platform === 'jym' ? '交易猫' : '螃蟹网') + ')');
+    if (uniqueNo) lines.push('编号:' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : row.platform === 'jym' ? '交易猫' : row.platform === 'xy' ? '闲鱼' : '螃蟹网') + ')');
     lines.push(priceInfo);
     lines.push('估值¥' + value.toFixed(0) + ' 差价¥' + diff.toFixed(0) + ' 性价比' + ratio.toFixed(1) + '%');
     lines.push('');
@@ -13680,7 +14011,7 @@ function openSettings() {
     // 价格模块
     mdLines.push('**💰 价格信息**');
     mdLines.push('');
-    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : row.platform === 'jym' ? '交易猫' : '螃蟹网') + ')');
+    if (uniqueNo) mdLines.push('编号: ' + uniqueNo + ' (' + (row.platform === 'pzds' ? '盼之' : row.platform === 'kjs' ? '氪金兽' : row.platform === 'qy' ? '7881' : row.platform === 'ysy' ? '易手游' : row.platform === 'jym' ? '交易猫' : row.platform === 'xy' ? '闲鱼' : '螃蟹网') + ')');
     if (oldPrice != null && oldPrice !== newPrice) {
       mdLines.push('原价 ~~¥' + oldPrice.toFixed(0) + '~~ → <font color="#e94560">**现价 ¥' + newPrice.toFixed(0) + '**</font>' + (dropAmtStr ? ' 🔥**' + dropAmtStr + '**' : ''));
     } else {
@@ -14148,6 +14479,7 @@ function openSettings() {
     else if (cleanId.indexOf('qy_') === 0) productPlatform = 'qy';
     else if (cleanId.indexOf('ysy_') === 0) productPlatform = 'ysy';
     else if (cleanId.indexOf('jym_') === 0) productPlatform = 'jym';
+    else if (cleanId.indexOf('xy_') === 0) productPlatform = 'xy';
     else productPlatform = 'pxb7';
     return filterPlatforms.length === 0 || filterPlatforms.indexOf(productPlatform) >= 0;
   }
@@ -14161,7 +14493,8 @@ function openSettings() {
         : (cleanId.indexOf('qy_') === 0 ? qyUrls().detail + cleanId.replace(/^qy_/, '') + '.html'
         : (cleanId.indexOf('ysy_') === 0 ? ysyUrls().detail + cleanId.replace(/^ysy_/, '') + '&shop_source=2'
         : (cleanId.indexOf('jym_') === 0 ? jymUrls().detail + cleanId.replace(/^jym_/, '') + '.html?newPage=true'
-        : 'https://www.pxb7.com/product/' + cleanId + '/1'))));
+        : (cleanId.indexOf('xy_') === 0 ? 'https://www.goofish.com/item?id=' + cleanId.replace(/^xy_/, '')
+        : 'https://www.pxb7.com/product/' + cleanId + '/1')))));
     const pushBody = body + '\n\n---\n[🔗 点击跳转](' + productUrl + ')\n\n> 微信内无法直接跳转，请复制以下链接到浏览器打开：\n`' + productUrl + '`';
 
     // 钉钉群机器人推送（v4.1.0 主从分级，与PushPlus订阅者同语义）：
@@ -14357,6 +14690,7 @@ function openSettings() {
       qyEnabled: qyEnabled != null ? qyEnabled : true,
       ysyEnabled: ysyEnabled != null ? ysyEnabled : false,
       jymEnabled: jymEnabled != null ? jymEnabled : false,
+      xyEnabled: xyEnabled != null ? xyEnabled : false,
       // 角色通知规则
       charNotifyRules: charNotifyRules || [],
     };
@@ -14433,6 +14767,7 @@ function openSettings() {
             if (remote.qyEnabled != null) qyEnabled = remote.qyEnabled;
             if (remote.ysyEnabled != null) ysyEnabled = remote.ysyEnabled;
             if (remote.jymEnabled != null) jymEnabled = remote.jymEnabled;
+            if (remote.xyEnabled != null) xyEnabled = remote.xyEnabled;
             // 角色通知规则
             if (Array.isArray(remote.charNotifyRules)) charNotifyRules = remote.charNotifyRules;
             saveState();
@@ -15171,6 +15506,7 @@ function openSettings() {
         qyEnabled: qyEnabled,
         ysyEnabled: ysyEnabled,
         jymEnabled: jymEnabled,
+        xyEnabled: xyEnabled,
       }));
       // 共享 state 只更新通知/推送/估值字段；monitorRunning 与扫描设置保持螃蟹页签的值不动
       const shared = loadStorage(STORAGE_KEYS.state, {}) || {};
@@ -15213,6 +15549,7 @@ function openSettings() {
       qyEnabled: qyEnabled,
       ysyEnabled: ysyEnabled,
       jymEnabled: jymEnabled,
+      xyEnabled: xyEnabled,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -16196,6 +16533,7 @@ function openSettings() {
     qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
       ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
     jymEnabled = savedState.jymEnabled != null ? savedState.jymEnabled : false;
+    xyEnabled = savedState.xyEnabled != null ? savedState.xyEnabled : false;
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
     // 加载推送配置
     if (savedState.pushConfig) {
@@ -16240,10 +16578,14 @@ function openSettings() {
       qyEnabled = tabState.qyEnabled != null ? tabState.qyEnabled : true;
       ysyEnabled = tabState.ysyEnabled != null ? tabState.ysyEnabled : true;
       jymEnabled = tabState.jymEnabled != null ? tabState.jymEnabled : true;
+      xyEnabled = tabState.xyEnabled != null ? tabState.xyEnabled : true;
     }
 
     // 加载估值权重（改进4）
     weights = loadWeights();
+
+    // v4.4.0 闲鱼收件箱消费定时器（盼之静默页与螃蟹面板都需要：捕获数据从 goofish 页经 GM 存储桥接而来）
+    startXYInboxDrain();
 
     // 盼之页面静默监控模式：共享存储已加载完毕，交给静默模式初始化（不创建面板UI、
     // 不自动启螃蟹监控、不检查桌面通知权限——桌面通知按来源站授权，盼之站未授权时不影响手机推送）
@@ -16309,6 +16651,16 @@ function openSettings() {
       document.addEventListener('DOMContentLoaded', jymBoot);
     } else {
       jymBoot();
+    }
+    return;
+  }
+
+  // 闲鱼页面：捕获模式（v4.4.0，hook页面自身搜索响应写入收件箱，不主动请求）
+  if (isGoofishPage()) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', xyBoot);
+    } else {
+      xyBoot();
     }
     return;
   }
