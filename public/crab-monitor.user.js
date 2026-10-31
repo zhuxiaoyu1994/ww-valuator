@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.6.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.6.0 闲鱼捕获兼容性增强+调试样本导出）
+// @version      4.6.1
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.6.1 闲鱼解析器适配真实响应结构 data.resultList→card.data.item.main）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -5314,6 +5314,17 @@
     return 0;
   }
 
+  /** 价格分段数组 → 数值：[{text:'¥'},{text:'1299'}] 或 [{text:'2'},{text:','},{text:'999万'}] */
+  function xyPriceFromParts(parts) {
+    if (!Array.isArray(parts)) return 0;
+    let text = parts.map(function (p) { return (p && p.text) || ''; }).join('');
+    text = String(text).replace(/[¥￥,\s]/g, '');
+    let mult = 1;
+    if (/万$/.test(text)) { mult = 10000; text = text.slice(0, -1); }
+    const v = parseFloat(text);
+    return v > 0 ? v * mult : 0;
+  }
+
   /** 深度遍历 mtop 响应 JSON，按字段特征找出商品列表数组（不硬编码响应结构） */
   function xyFindItemArrays(node, out) {
     if (!node || typeof node !== 'object') return;
@@ -5321,7 +5332,11 @@
       let hit = 0;
       for (let i = 0; i < node.length; i++) {
         const el = node[i];
-        if (el && typeof el === 'object' && !Array.isArray(el) && (el.id || el.itemId) && xyTitleOf(el)) hit++;
+        if (!el || typeof el !== 'object' || Array.isArray(el)) continue;
+        // 特征A（v4.6.1 实测结构）：搜索卡片 card.data.item.main { exContent, clickParam }
+        if (el.data && el.data.item && el.data.item.main) { hit++; continue; }
+        // 特征B（兼容扁平结构）：元素自带 id + title
+        if ((el.id || el.itemId) && xyTitleOf(el)) hit++;
       }
       if (node.length > 0 && hit >= Math.max(1, Math.floor(node.length / 2))) {
         out.push(node);   // 过半元素呈商品特征：视为商品数组，不再深入
@@ -5337,23 +5352,55 @@
     }
   }
 
-  /** 把闲鱼商品节点归一化为捕获商品对象（纯展示字段），不符合特征返回 null */
+  /** 把闲鱼商品卡片归一化为捕获商品对象（纯展示字段），不符合特征返回 null */
   function xyNormalizeItem(it) {
     try {
-      const id = String(it.id || it.itemId || it.goodsId || '');
+      let id = '', title = '', price = 0, img = '', tags = [], listTime = Date.now(), pubTimeText = '';
+      // ---- 结构A（v4.6.1 实测）：card.data.item.main { exContent, clickParam.args } ----
+      let main = null;
+      try { main = it.data.item.main; } catch (e) {}
+      if (main && typeof main === 'object') {
+        const ex = main.exContent || {};
+        const args = (main.clickParam && main.clickParam.args) || {};
+        id = String(args.item_id || args.id || ex.itemId || '');
+        title = String(ex.title || '');
+        // 价格优先取 clickParam.args 干净数值，兜底 exContent 分段数组
+        price = parseFloat(String(args.displayPrice != null ? args.displayPrice : (args.price != null ? args.price : '')).replace(/[,¥\s]/g, ''));
+        if (!(price > 0)) price = xyPriceFromParts(ex.price);
+        img = String(ex.picUrl || '').split('?')[0];
+        if (img.indexOf('//') === 0) img = 'https:' + img;
+        try {
+          const ft = ex.fishTags || {};
+          Object.keys(ft).forEach(function (zone) {
+            const tl = (ft[zone] || {}).tagList || [];
+            tl.forEach(function (tg) {
+              const c = tg && tg.data && tg.data.content;
+              if (typeof c === 'string' && c && c.length <= 20 && tags.indexOf(c) < 0) tags.push(c);
+            });
+          });
+        } catch (e) {}
+        // 发布时间（毫秒时间戳）：列表排序与展示都用真实上架时间
+        const pt = parseInt(args.publishTime, 10);
+        if (pt > 0) {
+          listTime = pt;
+          try { pubTimeText = new Date(pt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (e) {}
+        }
+        if (typeof ex.area === 'string' && ex.area && tags.indexOf(ex.area) < 0) tags.push(ex.area);
+      } else {
+        // ---- 结构B（兼容扁平结构）：{ id, title, price, picUrl, area } ----
+        id = String(it.id || it.itemId || it.goodsId || '');
+        title = xyTitleOf(it);
+        price = xyPriceOf(it);
+        let imgRaw = it.picUrl || it.pic || it.mainImage || it.image || (it.imageInfo && it.imageInfo.url) || '';
+        img = String(typeof imgRaw === 'object' ? (imgRaw.url || '') : imgRaw).split('?')[0];
+        if (typeof it.area === 'string' && it.area) tags.push(it.area.trim());
+        const pt = parseInt(it.publishTime, 10);
+        if (pt > 0) listTime = pt;
+      }
       if (!/^\d{5,}$/.test(id)) return null;   // 闲鱼商品ID为长纯数字
-      let title = xyTitleOf(it);
       title = title.replace(/<[^>]*>/g, '').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();   // 去搜索高亮标签
       if (!title) return null;
-      const price = xyPriceOf(it);
       if (!(price > 0)) return null;
-      let img = '';
-      try {
-        const imgRaw = it.picUrl || it.pic || it.mainImage || it.image || (it.imageInfo && it.imageInfo.url) || '';
-        img = String(typeof imgRaw === 'object' ? (imgRaw.url || '') : imgRaw).split('?')[0];
-      } catch (e) {}
-      const tags = [];
-      if (typeof it.area === 'string' && it.area) tags.push(it.area.trim());
       return {
         productId: 'xy_' + id,
         productUniqueNo: id,
@@ -5362,8 +5409,8 @@
         goodsImg: img,
         url: 'https://www.goofish.com/item?id=' + id,
         tags: tags,
-        pubTimeText: (typeof it.publishTimeText === 'string' && it.publishTimeText) || '',
-        listTime: Date.now(),   // 捕获时间≈上架时间（用户按"最新"排序浏览）
+        pubTimeText: pubTimeText,
+        listTime: listTime,
       };
     } catch (e) { return null; }
   }
@@ -5383,11 +5430,10 @@
     try { xyFindItemArrays(json, arrays); } catch (e) { return products; }
     arrays.forEach(function (arr) {
       arr.forEach(function (it) {
-        if (!wuwaSearch && it) {
-          if (xyTitleOf(it).indexOf('鸣潮') < 0) return;   // 非鸣潮搜索只按标题过滤
-        }
         const p = xyNormalizeItem(it);
-        if (p) products.push(p);
+        if (!p) return;
+        if (!wuwaSearch && (p.showTitle || '').indexOf('鸣潮') < 0) return;   // 非鸣潮搜索只按标题过滤
+        products.push(p);
       });
     });
     return products;
@@ -5432,7 +5478,7 @@
       let api = '';
       try { api = (JSON.parse(respText).api) || ''; } catch (e) {}
       if (key && dbg.some(function (d) { return d.api && d.api === api; })) return;   // 同api不同端点也去重
-      dbg.push({ url: key, api: api, len: respText.length, at: new Date().toLocaleString('zh-CN'), sample: respText.substring(0, 60000) });
+      dbg.push({ url: key, api: api, len: respText.length, at: new Date().toLocaleString('zh-CN'), sample: respText.substring(0, 150000) });
       while (dbg.length > 6) dbg.shift();
       try { GM_setValue('mw_xy_debug_v1', dbg); } catch (e) {}
     } catch (e) {}
