@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.5.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.5.0 闲鱼收录门槛可设置）
+// @version      4.6.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.6.0 闲鱼捕获兼容性增强+调试样本导出）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -5289,6 +5289,31 @@
     return location.hostname === 'www.goofish.com' || location.hostname === 'goofish.com';
   }
 
+  /** 提取商品标题：兼容 string / 高亮HTML / 分段数组[{text}] / 嵌套对象 */
+  function xyTitleOf(it) {
+    let t = (it.title != null) ? it.title : it.itemTitle;
+    if (Array.isArray(t)) t = t.map(function (seg) { return (seg && (seg.text || seg.word || seg.content)) || ''; }).join('');
+    if (t && typeof t === 'object') t = t.text || t.content || t.title || '';
+    return String(t || '');
+  }
+
+  /** 提取商品价格：兼容 number / "1,234" / 嵌套对象{price} / priceInfo 等 */
+  function xyPriceOf(it) {
+    const cands = [it.price, it.soldPrice, it.showPrice, it.viewPrice,
+      it.priceInfo && (it.priceInfo.price != null ? it.priceInfo.price : it.priceInfo.showPrice),
+      it.priceInfo && it.priceInfo.priceInfo && it.priceInfo.priceInfo.price];
+    for (let i = 0; i < cands.length; i++) {
+      const c = cands[i];
+      if (c == null || c === '') continue;
+      let inner = c;
+      if (typeof inner === 'object') inner = inner.price != null ? inner.price : inner.showPrice;
+      if (inner == null || inner === '') continue;
+      const v = parseFloat(String(inner).replace(/[,¥\s]/g, ''));
+      if (v > 0) return v;
+    }
+    return 0;
+  }
+
   /** 深度遍历 mtop 响应 JSON，按字段特征找出商品列表数组（不硬编码响应结构） */
   function xyFindItemArrays(node, out) {
     if (!node || typeof node !== 'object') return;
@@ -5296,7 +5321,7 @@
       let hit = 0;
       for (let i = 0; i < node.length; i++) {
         const el = node[i];
-        if (el && typeof el === 'object' && !Array.isArray(el) && (el.id || el.itemId) && (el.title || el.itemTitle)) hit++;
+        if (el && typeof el === 'object' && !Array.isArray(el) && (el.id || el.itemId) && xyTitleOf(el)) hit++;
       }
       if (node.length > 0 && hit >= Math.max(1, Math.floor(node.length / 2))) {
         out.push(node);   // 过半元素呈商品特征：视为商品数组，不再深入
@@ -5317,15 +5342,16 @@
     try {
       const id = String(it.id || it.itemId || it.goodsId || '');
       if (!/^\d{5,}$/.test(id)) return null;   // 闲鱼商品ID为长纯数字
-      let title = String(it.title || it.itemTitle || '');
+      let title = xyTitleOf(it);
       title = title.replace(/<[^>]*>/g, '').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();   // 去搜索高亮标签
       if (!title) return null;
-      let priceRaw = it.price;
-      if (priceRaw && typeof priceRaw === 'object') priceRaw = priceRaw.price || priceRaw.showPrice;
-      if (priceRaw == null) priceRaw = it.soldPrice;
-      const price = parseFloat(String(priceRaw == null ? '' : priceRaw).replace(/[,¥\s]/g, ''));
+      const price = xyPriceOf(it);
       if (!(price > 0)) return null;
-      const img = String(it.picUrl || it.pic || it.mainImage || (it.image && it.image.url) || '').split('?')[0];
+      let img = '';
+      try {
+        const imgRaw = it.picUrl || it.pic || it.mainImage || it.image || (it.imageInfo && it.imageInfo.url) || '';
+        img = String(typeof imgRaw === 'object' ? (imgRaw.url || '') : imgRaw).split('?')[0];
+      } catch (e) {}
       const tags = [];
       if (typeof it.area === 'string' && it.area) tags.push(it.area.trim());
       return {
@@ -5342,21 +5368,23 @@
     } catch (e) { return null; }
   }
 
-  /** 解析闲鱼搜索 mtop 响应文本。wuwaSearch=true 表示请求关键词含"鸣潮"，全量接受；否则只留标题含鸣潮的 */
+  /**
+   * 解析闲鱼搜索 mtop 响应文本。wuwaSearch=true 表示请求关键词含"鸣潮"，全量接受；
+   * 否则只留标题含鸣潮的。接口名放宽为含"search"即可（页面实际接口名可能与已知不同）。
+   */
   function xyParseSearchResponse(text, wuwaSearch) {
     const products = [];
     if (!text || text.length < 50) return products;
     let json;
     try { json = JSON.parse(text); } catch (e) { return products; }
     const api = (json && json.api) || '';
-    if (api && api.indexOf('mtop.taobao.idlemtopsearch') < 0) return products;   // 只处理搜索接口
+    if (api && api.indexOf('search') < 0) return products;   // 只处理搜索类接口
     const arrays = [];
     try { xyFindItemArrays(json, arrays); } catch (e) { return products; }
     arrays.forEach(function (arr) {
       arr.forEach(function (it) {
         if (!wuwaSearch && it) {
-          const t = String(it.title || it.itemTitle || '');
-          if (t.indexOf('鸣潮') < 0) return;   // 非鸣潮搜索只按标题过滤
+          if (xyTitleOf(it).indexOf('鸣潮') < 0) return;   // 非鸣潮搜索只按标题过滤
         }
         const p = xyNormalizeItem(it);
         if (p) products.push(p);
@@ -5392,71 +5420,120 @@
     return added;
   }
 
-  /** 捕获侧核心：校验URL/响应 → 解析 → 入收件箱 → 更新浮标 */
+  /**
+   * 调试样本记录（v4.6.0）：把拦截到的 mtop 响应原文存 GM 存储（每接口只记一次，最多6条），
+   * 解析失败时用户点浮标导出，供开发者精确修正解析器。
+   */
+  function xyRecordDebug(url, respText) {
+    try {
+      let dbg = GM_getValue('mw_xy_debug_v1', []) || [];
+      const key = String(url || '').split('?')[0];
+      if (key && dbg.some(function (d) { return d.url === key; })) return;
+      let api = '';
+      try { api = (JSON.parse(respText).api) || ''; } catch (e) {}
+      if (key && dbg.some(function (d) { return d.api && d.api === api; })) return;   // 同api不同端点也去重
+      dbg.push({ url: key, api: api, len: respText.length, at: new Date().toLocaleString('zh-CN'), sample: respText.substring(0, 60000) });
+      while (dbg.length > 6) dbg.shift();
+      try { GM_setValue('mw_xy_debug_v1', dbg); } catch (e) {}
+    } catch (e) {}
+  }
+
+  /** 更新浮标文案（拦截数+收件箱数） */
+  function xyUpdatePill() {
+    try {
+      const pill = document.getElementById('mw-xy-pill');
+      if (!pill) return;
+      let inbox = 0, dbg = [];
+      try { inbox = (GM_getValue(XY_INBOX_KEY, []) || []).length; } catch (e) {}
+      try { dbg = GM_getValue('mw_xy_debug_v1', []) || []; } catch (e) {}
+      pill.textContent = '🐟闲鱼 已拦截' + dbg.length + '接口·收件箱' + inbox;
+    } catch (e) {}
+  }
+
+  /** 捕获侧核心：记录调试样本 → 解析 → 入收件箱 → 更新浮标 */
   function xyOnResponse(url, bodyText, respText) {
     try {
       if (!respText || respText.charAt(0) !== '{') return;
       const u = String(url || '');
-      if (u.indexOf('mtop.taobao.idlemtopsearch') < 0 && respText.indexOf('"mtop.taobao.idlemtopsearch') < 0) return;
+      // 只关注 mtop 网关响应（URL含 /mtop. 或 响应含 "api":"mtop.）
+      const isMtop = u.indexOf('/mtop.') >= 0 || respText.indexOf('"api":"mtop.') >= 0 || respText.indexOf('"api": "mtop.') >= 0;
+      if (!isMtop) return;
+      xyRecordDebug(u, respText);   // 无条件记录样本（每接口一次），供解析失败时排查
       const wuwa = xyBodyLooksWuwa(bodyText);
       let products = xyParseSearchResponse(respText, wuwa);
       if (!wuwa) products = products.filter(function (p) { return (p.showTitle || '').indexOf('鸣潮') >= 0; });
-      if (products.length === 0) return;
+      if (products.length === 0) { xyUpdatePill(); return; }
       const added = xyEnqueue(products);
+      xyUpdatePill();
       if (added > 0) {
-        const pill = document.getElementById('mw-xy-pill');
-        if (pill) {
-          let inbox = [];
-          try { inbox = GM_getValue(XY_INBOX_KEY, []) || []; } catch (e) {}
-          pill.textContent = '🐟闲鱼已捕获 ' + inbox.length;
-        }
         console.log('[鸣潮监控-闲鱼] 新捕获' + added + '个商品（收件箱待监控端处理）');
       }
     } catch (e) {}
   }
 
   function xyInstallHook() {
-    if (window.__mwXyHooked) return;
-    window.__mwXyHooked = true;
-    // XHR 拦截（闲鱼 mtop 网关走 XHR）
-    const origOpen = XMLHttpRequest.prototype.open;
-    const origSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function (method, url) { this._xyUrl = url; return origOpen.apply(this, arguments); };
-    XMLHttpRequest.prototype.send = function (body) {
-      this._xyBody = (typeof body === 'string') ? body : '';
-      this.addEventListener('load', function () {
-        try { xyOnResponse(this._xyUrl, this._xyBody, this.responseText || ''); } catch (e) {}
-      });
-      return origSend.apply(this, arguments);
-    };
-    // fetch 拦截兜底
-    try {
-      const origFetch = window.fetch;
-      if (origFetch) {
-        window.fetch = function () {
-          const args = arguments;
-          const u = typeof args[0] === 'string' ? args[0] : ((args[0] && args[0].url) || '');
-          const b = (args[1] && typeof args[1].body === 'string') ? args[1].body : '';
-          return origFetch.apply(this, arguments).then(function (resp) {
-            try {
-              resp.clone().text().then(function (t) { xyOnResponse(u, b, t); }).catch(function () {});
-            } catch (e) {}
-            return resp;
-          });
-        };
-      }
-    } catch (e) {}
+    // 双 realm 拦截：油猴沙箱 window 与页面原生 unsafeWindow 都打补丁
+    // （ Tampermonkey 带 GM_* 授权时脚本运行在沙箱，页面自身的 XHR/fetch 走原生 window，
+    //   只补沙箱可能拦不到页面请求——交易猫捕获桩也因同样问题一度靠 unsafeWindow 兜底）
+    function patchRealm(win) {
+      try {
+        if (!win || win.__mwXyHooked) return;
+        win.__mwXyHooked = true;
+        const XO = win.XMLHttpRequest;
+        if (XO && XO.prototype) {
+          const origOpen = XO.prototype.open;
+          const origSend = XO.prototype.send;
+          XO.prototype.open = function (method, url) { this._xyUrl = url; return origOpen.apply(this, arguments); };
+          XO.prototype.send = function (body) {
+            this._xyBody = (typeof body === 'string') ? body : '';
+            this.addEventListener('load', function () {
+              try { xyOnResponse(this._xyUrl, this._xyBody, this.responseText || ''); } catch (e) {}
+            });
+            return origSend.apply(this, arguments);
+          };
+        }
+        const origFetch = win.fetch;
+        if (origFetch) {
+          win.fetch = function () {
+            const args = arguments;
+            const u = typeof args[0] === 'string' ? args[0] : ((args[0] && args[0].url) || '');
+            const b = (args[1] && typeof args[1].body === 'string') ? args[1].body : '';
+            return origFetch.apply(this, arguments).then(function (resp) {
+              try {
+                resp.clone().text().then(function (t) { xyOnResponse(u, b, t); }).catch(function () {});
+              } catch (e) {}
+              return resp;
+            });
+          };
+        }
+        console.log('[鸣潮监控-闲鱼] 已hook' + (win === unsafeWindow ? '页面原生' : '沙箱') + 'window的XHR/fetch');
+      } catch (e) {}
+    }
+    patchRealm(window);
+    try { if (typeof unsafeWindow !== 'undefined' && unsafeWindow && unsafeWindow !== window) patchRealm(unsafeWindow); } catch (e) {}
   }
 
   function xyBoot() {
     xyInstallHook();
-    let n = 0;
-    try { n = (GM_getValue(XY_INBOX_KEY, []) || []).length; } catch (e) {}
+    xyUpdatePill();
     const pill = document.createElement('div');
     pill.id = 'mw-xy-pill';
-    pill.style.cssText = 'position:fixed;left:12px;bottom:80px;z-index:2147483000;background:#1a1a2e;color:#cfd6e4;border:1px solid #2a2a4a;border-radius:16px;padding:6px 12px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.3);';
-    pill.textContent = '🐟闲鱼监听中（收件箱' + n + '）';
-    pill.title = '监控助手闲鱼捕获模式：搜索"鸣潮"并按"最新"排序，翻页浏览即可自动捕获（标价≥2000由监控端收录推送）。如未捕获请刷新页面或重新搜索一次。';
+    pill.style.cssText = 'position:fixed;left:12px;bottom:80px;z-index:2147483000;background:#1a1a2e;color:#cfd6e4;border:1px solid #2a2a4a;border-radius:16px;padding:6px 12px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+    xyUpdatePill();
+    pill.title = '监控助手闲鱼捕获模式：搜索"鸣潮"并按"最新"排序，翻页浏览即可自动捕获。已拦截=见到的mtop接口数（0说明脚本注入晚于首个请求，请刷新页面）；收件箱=待监控端处理的商品数。点击导出接口样本（排查解析问题用）';
+    pill.addEventListener('click', function () {
+      try {
+        let dbg = [];
+        try { dbg = GM_getValue('mw_xy_debug_v1', []) || []; } catch (e) {}
+        if (dbg.length === 0) { alert('还没有拦截到 mtop 接口响应。\n\n请刷新闲鱼页面或重新执行一次搜索，让页面发出请求后再点导出。'); return; }
+        const blob = new Blob([JSON.stringify(dbg, null, 2)], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'xy-debug-' + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + '.txt';
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      } catch (e) { alert('导出失败: ' + e.message); }
+    });
     try { document.body.appendChild(pill); } catch (e) {}
     console.log('[鸣潮监控-闲鱼] 捕获模式已启动（hook页面自身搜索响应，不主动请求）');
   }
