@@ -340,6 +340,42 @@ function cacheSet(key, data) {
 }
 
 // 中间件（limit 4mb：监控列表云端备份体积可达数MB，需低于 Vercel Serverless 4.5MB 请求体上限）
+
+// ============================================================
+// 维护模式门（临时闭站用）：设置环境变量 MAINTENANCE_KEY 即开启，删除即恢复
+// - 其他人访问任何页面/接口 → 503 维护页
+// - 自己访问 https://域名/?key=<MAINTENANCE_KEY> → 种1年Cookie后正常使用（跳转去除密钥参数）
+// - /public/* 静态资源由 Vercel 文件系统直出、不经过本中间件（油猴脚本自动更新不受影响）
+// - 不设置 MAINTENANCE_KEY 时本中间件完全透传，对正常访问零影响
+// ============================================================
+const MAINTENANCE_KEY = process.env.MAINTENANCE_KEY || '';
+const MAINTENANCE_HTML = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
+  '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+  '<title>网站维护中</title>' +
+  '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f1629;color:#8a93b2;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}.box{text-align:center;padding:40px}.t{font-size:22px;color:#e0e5f2;margin-bottom:12px;font-weight:600}.s{font-size:14px;line-height:1.8}</style>' +
+  '</head><body><div class="box"><div class="t">网站维护中</div>' +
+  '<div class="s">站点暂时关闭，进行例行维护。<br>给不便之处致歉，恢复访问后会尽快回归。</div>' +
+  '</div></body></html>';
+if (MAINTENANCE_KEY) {
+  app.use(function maintenanceGate(req, res, next) {
+    try {
+      const cookie = String(req.headers.cookie || '');
+      if (cookie.indexOf('maint_ok=' + MAINTENANCE_KEY) !== -1) return next();   // 已解锁
+      if (req.query && req.query.key === MAINTENANCE_KEY) {
+        // 密钥正确：种1年Cookie，并跳转去掉密钥参数（避免留在地址栏/历史记录）
+        res.setHeader('Set-Cookie', 'maint_ok=' + MAINTENANCE_KEY + '; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax');
+        const u = new URL(req.originalUrl, 'http://internal');
+        u.searchParams.delete('key');
+        return res.redirect(302, u.pathname + (u.search || ''));
+      }
+      return res.status(503).type('html').send(MAINTENANCE_HTML);
+    } catch (e) {
+      return res.status(503).type('html').send(MAINTENANCE_HTML);
+    }
+  });
+  console.log('[维护模式] 已开启：他人访问显示维护页，凭 ?key= 参数解锁');
+}
+
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
 // 静态JS必须每次验证（ETag），避免浏览器缓存旧版 value-settings.js 导致规则面板不同步
