@@ -345,6 +345,8 @@ function cacheSet(key, data) {
 // 维护模式门（临时闭站用）：设置环境变量 MAINTENANCE_KEY 即开启，删除即恢复
 // - 其他人访问任何页面/接口 → 503 维护页
 // - 自己访问 https://域名/?key=<MAINTENANCE_KEY> → 种1年Cookie后正常使用（跳转去除密钥参数）
+// - 限时通行证：管理后台「估价Key」里发的有效密钥同样可解锁（?key=<通行证>），
+//   到期或停用后自动失效（校验走数据库，60秒缓存）；适合给朋友限时开放
 // - /public/* 静态资源由 Vercel 文件系统直出、不经过本中间件（油猴脚本自动更新不受影响）
 // - 不设置 MAINTENANCE_KEY 时本中间件完全透传，对正常访问零影响
 // ============================================================
@@ -357,23 +359,58 @@ const MAINTENANCE_HTML = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset=
   '<div class="s">站点暂时关闭，进行例行维护。<br>给不便之处致歉，恢复访问后会尽快回归。</div>' +
   '</div></body></html>';
 if (MAINTENANCE_KEY) {
-  app.use(function maintenanceGate(req, res, next) {
+  // 通行证密钥缓存（60秒TTL）：来源=管理后台「估价Key」表，到期/停用后最迟60秒生效
+  const maintenancePassCache = { list: null, expiresAt: 0 };
+  async function getMaintenancePassList() {
+    const now = Date.now();
+    if (maintenancePassCache.list && maintenancePassCache.expiresAt > now) return maintenancePassCache.list;
+    let list = [];
+    try { list = await db.listEvalKeys(); } catch (e) { list = []; }
+    maintenancePassCache.list = list;
+    maintenancePassCache.expiresAt = now + 60 * 1000;
+    return list;
+  }
+  function isMaintenancePassValid(list, key) {
+    const now = Date.now();
+    return list.some(function (r) {
+      return r && r.key === key && r.status === 'active' && (!r.expiresAt || new Date(r.expiresAt).getTime() > now);
+    });
+  }
+  app.use(async function maintenanceGate(req, res, next) {
     try {
-      const cookie = String(req.headers.cookie || '');
-      if (cookie.indexOf('maint_ok=' + MAINTENANCE_KEY) !== -1) return next();   // 已解锁
-      if (req.query && req.query.key === MAINTENANCE_KEY) {
-        // 密钥正确：种1年Cookie，并跳转去掉密钥参数（避免留在地址栏/历史记录）
-        res.setHeader('Set-Cookie', 'maint_ok=' + MAINTENANCE_KEY + '; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax');
-        const u = new URL(req.originalUrl, 'http://internal');
-        u.searchParams.delete('key');
-        return res.redirect(302, u.pathname + (u.search || ''));
+      // 0. 管理后台与封禁管理豁免（自身有独立密码保护）：闭站期间仍可登录 /admin 发放/管理通行证
+      if (req.path === '/admin' || req.path.startsWith('/admin/api/') ||
+          req.path === '/blocklist' || req.path.startsWith('/blocklist/api/')) {
+        return next();
+      }
+      // 1. Cookie 已解锁：主密钥直接放行；通行证密钥需复查有效期（过期立即失效）
+      const cm = String(req.headers.cookie || '').match(/(?:^|;\s*)maint_ok=([^;]*)/);
+      const cookieKey = cm ? decodeURIComponent(cm[1]) : '';
+      if (cookieKey) {
+        if (cookieKey === MAINTENANCE_KEY) return next();
+        if (isMaintenancePassValid(await getMaintenancePassList(), cookieKey)) return next();
+      }
+      // 2. URL 带密钥解锁：主密钥或有效通行证 → 种Cookie并跳转去除密钥参数
+      const qk = (req.query && req.query.key) ? String(req.query.key) : '';
+      if (qk) {
+        let ok = qk === MAINTENANCE_KEY;
+        if (!ok) {
+          ok = isMaintenancePassValid(await getMaintenancePassList(), qk);
+          if (ok) { try { db.touchEvalKey(qk).catch(function () {}); } catch (e) {} }
+        }
+        if (ok) {
+          res.setHeader('Set-Cookie', 'maint_ok=' + encodeURIComponent(qk) + '; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax');
+          const u = new URL(req.originalUrl, 'http://internal');
+          u.searchParams.delete('key');
+          return res.redirect(302, u.pathname + (u.search || ''));
+        }
       }
       return res.status(503).type('html').send(MAINTENANCE_HTML);
     } catch (e) {
       return res.status(503).type('html').send(MAINTENANCE_HTML);
     }
   });
-  console.log('[维护模式] 已开启：他人访问显示维护页，凭 ?key= 参数解锁');
+  console.log('[维护模式] 已开启：他人访问显示维护页；凭主密钥或管理后台「估价Key」的有效密钥解锁（通行证到期/停用自动失效）');
 }
 
 app.use(express.json({ limit: '4mb' }));
