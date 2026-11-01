@@ -49,9 +49,15 @@ function verifyEd25519(publicKeyHex, timestamp, rawBody, sigHex) {
   }
 }
 
-/** 回调地址验证挑战：用 AppSecret 对 plainToken 做 HMAC-SHA256 */
-function signPlainToken(appSecret, plainToken) {
-  return crypto.createHmac('sha256', appSecret).update(plainToken).digest('hex');
+/** 回调地址验证挑战（新版协议）：用 AppSecret 派生 Ed25519 私钥，对 event_ts+plain_token 签名。
+ *  Go 参考: seed=secret 重复填充到32字节 → ed25519.GenerateKey → Sign(event_ts + plain_token) */
+function signValidation(appSecret, eventTs, plainToken) {
+  let seed = Buffer.from(appSecret, 'utf8');
+  while (seed.length < 32) seed = Buffer.concat([seed, seed]);
+  seed = seed.subarray(0, 32);
+  const pkcs8 = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]);
+  const key = crypto.createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
+  return crypto.sign(null, Buffer.from(eventTs + plainToken, 'utf8'), key).toString('hex');
 }
 
 /** AES-256-GCM 解密加密推送：hex = iv(12B) + authTag(16B) + 密文 */
@@ -288,12 +294,14 @@ function createQQBotHandler(opts) {
       }
 
       if (bodyObj.d && (bodyObj.d.plainToken || bodyObj.d.plain_token)) {
-        // 新版控制台挑战协议：请求字段为下划线 plain_token/event_ts，响应要求驼峰 plainToken/signature
+        // 新版验证协议（官方文档 webhook.html）：Ed25519 签名，msg = event_ts + plain_token，
+        // 响应字段为下划线 plain_token/signature
         const plainToken = String(bodyObj.d.plainToken || bodyObj.d.plain_token);
-        const sig = signPlainToken(cfg.appSecret, plainToken);
-        recordDebug(req, '验证挑战：已用 AppSecret 计算 HMAC-SHA256 应答', 200);
+        const eventTs = String(bodyObj.d.event_ts || bodyObj.d.eventTs || '');
+        const sig = signValidation(cfg.appSecret, eventTs, plainToken);
+        recordDebug(req, '验证挑战：已用 AppSecret 派生 Ed25519 签名应答', 200);
         console.log('[QQ机器人] 回调地址验证挑战已应答，plainToken=' + plainToken);
-        return res.json({ plainToken: plainToken, signature: sig });
+        return res.json({ plain_token: plainToken, signature: sig });
       }
 
       // 1. Ed25519 验签（对 timestamp + 原始body）
