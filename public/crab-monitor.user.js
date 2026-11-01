@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.9.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.9.0 移除防风控转发中继：中继无法解决滑块验证）
+// @version      4.9.1
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.9.1 请求间隔随机化±25%抖动，降低滑块验证触发）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -1110,10 +1110,15 @@
   let qyLastScanAt = 0;
   let ysyLastScanAt = 0;
   let jymLastScanAt = 0;
-  /** 平台是否到扫描时间：间隔≤0=每轮都扫（跟随全局），否则按独立间隔节流 */
+  /** 请求间隔随机化（v4.9.1）：对间隔做 ±25% 抖动。精准等间隔（如每60秒整）是最典型的机器特征，
+   *  打散请求节奏可显著降低风控/滑块验证的触发概率。返回秒。 */
+  function jitterIntervalSec(sec) {
+    return sec * (0.75 + Math.random() * 0.5);   // 0.75 ~ 1.25 倍
+  }
+  /** 平台是否到扫描时间：间隔≤0=每轮都扫（跟随全局），否则按独立间隔节流（v4.9.1 起带随机抖动） */
   function platformScanDue(lastAt, intervalSec) {
     if (!intervalSec || intervalSec <= 0) return true;
-    return (Date.now() - lastAt) >= intervalSec * 1000;
+    return (Date.now() - lastAt) >= jitterIntervalSec(intervalSec) * 1000;
   }
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
@@ -8877,11 +8882,12 @@
         if (pushConfig.syncPassword) {
           syncPushConfigToServer(pushConfig.syncPassword, true);
         }
-        // 如果刷新间隔变了且正在监控，重启定时器
+        // 如果刷新间隔变了且正在监控，重启定时器（v4.9.1 起带随机抖动）
         if (intervalChanged && monitorRunning) {
+          const jitteredMs = jitterIntervalSec(refreshIntervalSec) * 1000;
           if (monitorTimeout) { clearTimeout(monitorTimeout); monitorTimeout = null; }
-          monitorTimeout = setTimeout(monitorTick, refreshIntervalSec * 1000);
-          nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
+          monitorTimeout = setTimeout(monitorTick, jitteredMs);
+          nextRefreshTime = Date.now() + jitteredMs;
         }
         overlay.remove();
       };
@@ -15690,7 +15696,7 @@ function openSettings() {
     updateStatusText();
 
     // 立即开始第一次刷新（通过monitorTick统一管理refreshInProgress）
-    nextRefreshTime = Date.now() + refreshIntervalSec * 1000;
+    nextRefreshTime = Date.now() + jitterIntervalSec(refreshIntervalSec) * 1000;
     holdKeepAliveLock();
     startKeepAliveAudio();
     startWatchdog();
@@ -15835,7 +15841,8 @@ function openSettings() {
       doRefresh().finally(() => {
         refreshInProgress = false;
         // 按"轮次起点 + 间隔"对齐：单轮耗时不再累加进周期，快轮时才能真正做到每 N 秒调用一次
-        const wait = Math.max(1000, tickStartAt + refreshIntervalSec * 1000 - Date.now());
+        // v4.9.1：全局刷新间隔加 ±25% 随机抖动，打散等间隔请求特征
+        const wait = Math.max(1000, tickStartAt + jitterIntervalSec(refreshIntervalSec) * 1000 - Date.now());
         nextRefreshTime = Date.now() + wait;
         scheduleNextTick(wait);
       });
@@ -16403,7 +16410,8 @@ function openSettings() {
   function pzdsSilentSchedule() {
     if (pzdsSilentTimer) { clearTimeout(pzdsSilentTimer); pzdsSilentTimer = null; }
     if (!pzdsSilentOn) return;
-    pzdsSilentTimer = setTimeout(pzdsSilentTick, pzdsSilentIntervalSec() * 1000);
+    // v4.9.1：扫描间隔加 ±25% 随机抖动，打散等间隔请求特征
+    pzdsSilentTimer = setTimeout(pzdsSilentTick, jitterIntervalSec(pzdsSilentIntervalSec()) * 1000);
   }
 
   async function pzdsSilentTick() {
