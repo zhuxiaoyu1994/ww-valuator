@@ -213,6 +213,7 @@ function createQQBotHandler(opts) {
   const rateMap = new Map();
   // 调试：记录最后一次 webhook 请求（供 /api/qq-bot-debug 排查回调验证问题）
   let lastDebug = { time: null, path: null, headers: null, bodyHead: null, note: null, status: null };
+  let lastError = null;   // 异步处理（回复消息）失败的详情
   function recordDebug(req, note, status) {
     lastDebug = {
       time: new Date().toISOString(),
@@ -335,13 +336,19 @@ function createQQBotHandler(opts) {
       if (type === 'GROUP_AT_MESSAGE_CREATE') {
         recordDebug(req, '群消息事件已受理', 200);
         res.json({ success: true });
-        handleMessage(d, true).catch(e => console.error('[QQ机器人] 群消息处理失败:', e.message));
+        handleMessage(d, true).catch(e => {
+          lastError = { time: new Date().toISOString(), scene: '群消息回复', message: e.message, stack: String(e.stack || '').substring(0, 400) };
+          console.error('[QQ机器人] 群消息处理失败:', e.message);
+        });
         return;
       }
       if (type === 'C2C_MESSAGE_CREATE') {
         recordDebug(req, '私聊消息事件已受理', 200);
         res.json({ success: true });
-        handleMessage(d, false).catch(e => console.error('[QQ机器人] 私聊消息处理失败:', e.message));
+        handleMessage(d, false).catch(e => {
+          lastError = { time: new Date().toISOString(), scene: '私聊回复', message: e.message, stack: String(e.stack || '').substring(0, 400) };
+          console.error('[QQ机器人] 私聊消息处理失败:', e.message);
+        });
         return;
       }
       // 其他事件（频道消息/生命周期事件等）直接确认
@@ -356,7 +363,7 @@ function createQQBotHandler(opts) {
 
   return {
     webhook: webhook,
-    getLastDebug: function () { return lastDebug; },
+    getLastDebug: function () { return Object.assign({}, lastDebug, { lastError: lastError }); },
   };
 }
 
