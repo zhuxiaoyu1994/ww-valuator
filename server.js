@@ -388,7 +388,7 @@ if (MAINTENANCE_KEY) {
       //    QQ 机器人 WebHook 豁免：QQ 服务器无法携带维护密钥，闭站期间估价机器人需保持可用
       if (req.path === '/admin' || req.path.startsWith('/admin/api/') ||
           req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
-          req.path === '/api/qq-bot') {
+          req.path === '/api/qq-bot' || req.path === '/api/qq-bot-debug') {
         return next();
       }
       // 1. Cookie 已解锁：主密钥直接放行；通行证密钥需复查有效期（过期立即失效）
@@ -546,7 +546,14 @@ const qqBotWebhook = createQQBotHandler({
     db.insertLog(logEntry); // 异步写入数据库
   },
 });
-app.post('/api/qq-bot', qqBotWebhook);
+app.post('/api/qq-bot', qqBotWebhook.webhook);
+// 调试端点：查看最后一次 QQ webhook 请求（需管理员密码，用于排查回调验证问题）
+app.get('/api/qq-bot-debug', (req, res) => {
+  if ((req.query.key || '') !== ADMIN_PASSWORD) {
+    return res.status(401).json({ success: false, error: '未授权' });
+  }
+  res.json({ success: true, data: qqBotWebhook.getLastDebug() });
+});
 
 app.get('/api/defaults', async (req, res) => {
   // 仅管理后台的估值设置面板使用；需管理员密码，避免公开泄露完整规则参数

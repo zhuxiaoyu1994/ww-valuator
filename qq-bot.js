@@ -194,6 +194,23 @@ function createQQBotHandler(opts) {
 
   // 限频表：openid -> [timestamps]
   const rateMap = new Map();
+  // 调试：记录最后一次 webhook 请求（供 /api/qq-bot-debug 排查回调验证问题）
+  let lastDebug = { time: null, path: null, headers: null, bodyHead: null, note: null, status: null };
+  function recordDebug(req, note, status) {
+    lastDebug = {
+      time: new Date().toISOString(),
+      path: req.originalUrl,
+      headers: {
+        'x-signature-ed25519': String(req.headers['x-signature-ed25519'] || '').substring(0, 20) + '...',
+        'x-signature-timestamp': req.headers['x-signature-timestamp'] || '',
+        'content-type': req.headers['content-type'] || '',
+        'user-agent': req.headers['user-agent'] || '',
+      },
+      bodyHead: JSON.stringify(req.body || {}).substring(0, 600),
+      note: note || '',
+      status: status || null,
+    };
+  }
   function rateCheck(openid) {
     const now = Date.now();
     let arr = rateMap.get(openid) || [];
@@ -247,62 +264,84 @@ function createQQBotHandler(opts) {
     await sendReply(cfg, openid, isGroup, reply, d.id);
   }
 
-  return async function webhook(req, res) {
+  async function webhook(req, res) {
     const rawBody = req.rawBody ? Buffer.from(req.rawBody) : Buffer.from(JSON.stringify(req.body || {}));
 
-    // 0. 回调地址验证挑战（op=13）
+    // 0. 回调地址验证挑战（op=13；兼容加密推送与任意 op 值，只要带 plainToken 即按挑战处理）
     try {
-      const bodyObj = req.body || {};
-      if (bodyObj.op === 13 && bodyObj.d && bodyObj.d.plainToken) {
+      let bodyObj = req.body || {};
+
+      // 加密推送：先解密再判断（验证挑战也可能是加密的）
+      if (bodyObj && typeof bodyObj.encrypted === 'string' && bodyObj.encrypted.length > 0) {
+        if (!cfg.encryptKey) {
+          recordDebug(req, '收到加密推送但未配置 QQ_BOT_ENCRYPT_KEY，无法解密', 400);
+          console.error('[QQ机器人] 收到加密推送但未配置 QQ_BOT_ENCRYPT_KEY，无法解密。请到QQ开放平台复制加密密钥并配置到 Vercel');
+          return res.status(400).json({ success: false, error: '未配置解密密钥' });
+        }
+        try {
+          bodyObj = JSON.parse(decryptPayload(cfg.encryptKey, bodyObj.encrypted));
+        } catch (e) {
+          recordDebug(req, '解密失败: ' + e.message, 400);
+          console.error('[QQ机器人] 解密失败:', e.message);
+          return res.status(400).json({ success: false, error: '解密失败' });
+        }
+      }
+
+      if (bodyObj.d && bodyObj.d.plainToken) {
         const plainToken = String(bodyObj.d.plainToken);
-        return res.json({ plainToken: plainToken, signature: signPlainToken(cfg.appSecret, plainToken) });
+        const sig = signPlainToken(cfg.appSecret, plainToken);
+        recordDebug(req, '验证挑战：已用 AppSecret 计算 HMAC-SHA256 应答', 200);
+        console.log('[QQ机器人] 回调地址验证挑战已应答，plainToken=' + plainToken);
+        return res.json({ plainToken: plainToken, signature: sig });
       }
 
       // 1. Ed25519 验签（对 timestamp + 原始body）
       const sig = req.headers['x-signature-ed25519'] || '';
       const ts = req.headers['x-signature-timestamp'] || '';
       if (!sig || !ts) {
+        recordDebug(req, '缺少验签头', 401);
         console.warn('[QQ机器人] 缺少验签头，拒绝处理');
         return res.status(401).json({ success: false, error: '缺少验签头' });
       }
       if (!cfg.publicKey) {
+        recordDebug(req, '收到事件推送但未配置 QQ_BOT_PUBLIC_KEY，无法验签', 401);
         console.error('[QQ机器人] 收到事件推送但未配置 QQ_BOT_PUBLIC_KEY，无法验签。请到QQ开放平台复制机器人公钥并配置到 Vercel');
         return res.status(401).json({ success: false, error: '服务端未配置公钥' });
       }
       if (!verifyEd25519(cfg.publicKey, ts, rawBody, sig)) {
+        recordDebug(req, 'Ed25519 验签失败', 401);
         console.warn('[QQ机器人] 验签失败，拒绝处理');
         return res.status(401).json({ success: false, error: '签名校验失败' });
       }
 
-      // 2. 解密（若启用加密推送）
-      let payload = bodyObj;
-      if (bodyObj && typeof bodyObj.encrypted === 'string') {
-        if (!cfg.encryptKey) {
-          console.error('[QQ机器人] 收到加密推送但未配置 QQ_BOT_ENCRYPT_KEY');
-          return res.status(400).json({ success: false, error: '未配置解密密钥' });
-        }
-        payload = JSON.parse(decryptPayload(cfg.encryptKey, bodyObj.encrypted));
-      }
-
-      // 3. 事件分发（全部先 200，再异步处理，避免 QQ 超时重推）
-      const type = payload.t || '';
-      const d = payload.d || {};
+      // 2. 事件分发（全部先 200，再异步处理，避免 QQ 超时重推）
+      const type = bodyObj.t || '';
+      const d = bodyObj.d || {};
       if (type === 'GROUP_AT_MESSAGE_CREATE') {
+        recordDebug(req, '群消息事件已受理', 200);
         res.json({ success: true });
         handleMessage(d, true).catch(e => console.error('[QQ机器人] 群消息处理失败:', e.message));
         return;
       }
       if (type === 'C2C_MESSAGE_CREATE') {
+        recordDebug(req, '私聊消息事件已受理', 200);
         res.json({ success: true });
         handleMessage(d, false).catch(e => console.error('[QQ机器人] 私聊消息处理失败:', e.message));
         return;
       }
       // 其他事件（频道消息/生命周期事件等）直接确认
+      recordDebug(req, '其他事件已确认: ' + (type || 'unknown'), 200);
       return res.json({ success: true, ignored: type || 'unknown' });
     } catch (e) {
+      recordDebug(req, '处理异常: ' + e.message, 200);
       console.error('[QQ机器人] webhook处理异常:', e.message);
       return res.status(200).json({ success: false, error: e.message });
     }
+  };
+
+  return {
+    webhook: webhook,
+    getLastDebug: function () { return lastDebug; },
   };
 }
 
