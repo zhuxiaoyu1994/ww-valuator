@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.8.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.8.0 默认关闭保活音频去除音量图标、通知设置布局调整：监控开关在前刷新设置在后）
+// @version      4.9.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.9.0 移除防风控转发中继：中继无法解决滑块验证）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -1126,8 +1126,6 @@
     dingtalkRobots: [],    // 钉钉群机器人列表 [{name, webhook, secret}]（v3.76.0 支持多个机器人，全部收推送）
     dingtalkWebhook: '',   // 旧格式：单机器人Webhook（首次启动自动迁移为dingtalkRobots）
     dingtalkSecret: '',    // 旧格式：单机器人加签密钥
-    relayUrl: '',          // 请求转发中继（v4.2.0 防风控）：自建服务地址，WAF拦截时经中继代为访问，出口IP与浏览器分离
-    relayToken: '',        // 中继访问令牌（服务端环境变量 RELAY_TOKEN 设置了才需要填）
     syncPassword: '',    // 云端同步密码（管理后台密码）
     secondaryDelay: 10,    // 从通知延迟秒数
     skipHighDiffSecondary: false, // 从通知过滤高差价（开启后差价>阈值的账号不推送给从通知用户）
@@ -3307,28 +3305,7 @@
       console.error('[鸣潮监控] GM请求也失败:', gmErr.message);
     }
 
-    // v4.2.0 中继重试：配置了转发中继时，让服务器代为请求（出口IP与浏览器分离，绕开对本机IP的风控）
-    if ((pushConfig.relayUrl || '').trim()) {
-      console.log('[鸣潮监控] 尝试经中继获取螃蟹列表...');
-      const relData = await fetchViaRelay(API_URLS.list, 'POST', {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/plain, */*',
-        'Origin': 'https://www.pxb7.com',
-        'Referer': 'https://www.pxb7.com/',
-      }, JSON.stringify(listBody), 15000);
-      if (relData && relData.status === 200) {
-        try {
-          const relJson = JSON.parse(relData.body);
-          if (relJson && relJson.success) {
-            console.log('[鸣潮监控] 中继获取螃蟹列表成功');
-            return relJson;
-          }
-          console.warn('[鸣潮监控] 中继响应success=false: ' + relData.body.substring(0, 120));
-        } catch (e) {
-          console.warn('[鸣潮监控] 中继响应非JSON(可能被WAF拦): ' + relData.body.substring(0, 120));
-        }
-      }
-    }
+    // v4.2.0 中继重试已移除（v4.9.0）：中继无法解决滑块验证，仅对IP级拦截有效
 
     if (wafDetected) {
       console.warn('[鸣潮监控] 检测到WAF验证，启动popup解决器...');
@@ -4280,51 +4257,12 @@
    * @returns {Promise<{description:string, price:number, originalPrice:number}|null>} 失败/WAF拦截返回 null
    */
   /**
-   * 经自建转发中继发请求（v4.2.0 防风控）
-   * 中继服务器代为访问目标平台，出口IP与浏览器分离，WAF只看到中继IP；
-   * 中继协议：POST {relayUrl} body={url,method,headers,body,timeout,token} → {status, body}
-   * 服务端实现见 server.js /api/monitor/relay（或等价的Cloudflare Worker）
-   * @returns {Promise<{status:number,body:string}|null>} 中继不可用/未配置返回null
-   */
-  function fetchViaRelay(targetUrl, method, headers, body, timeoutMs) {
-    var relay = (pushConfig.relayUrl || '').trim();
-    if (!relay) return Promise.resolve(null);
-    return new Promise(function (resolve) {
-      try {
-        GM_xmlhttpRequest({
-          method: 'POST',
-          url: relay + (relay.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now(),
-          headers: { 'Content-Type': 'application/json' },
-          data: JSON.stringify({
-            url: targetUrl,
-            method: method || 'GET',
-            headers: headers || {},
-            body: body || '',
-            timeout: timeoutMs || 15000,
-            token: (pushConfig.relayToken || '').trim(),
-          }),
-          timeout: (timeoutMs || 15000) + 8000,
-          onload: function (res) {
-            try {
-              var json = JSON.parse(res.responseText);
-              if (json && typeof json.status === 'number' && typeof json.body === 'string') {
-                resolve({ status: json.status, body: json.body });
-              } else {
-                console.warn('[鸣潮监控-中继] 响应格式异常: ' + res.responseText.substring(0, 120));
-                resolve(null);
-              }
-            } catch (e) {
-              console.warn('[鸣潮监控-中继] 响应非JSON: ' + res.responseText.substring(0, 120));
-              resolve(null);
-            }
-          },
-          onerror: function (e) { console.error('[鸣潮监控-中继] 请求失败:', e); resolve(null); },
-          ontimeout: function () { console.error('[鸣潮监控-中继] 请求超时'); resolve(null); },
-        });
-      } catch (e) { console.error('[鸣潮监控-中继] 异常:', e); resolve(null); }
-    });
-  }
+   * 经自建转发中继发请求（v4.2.0）已移除（v4.9.0）：
+   * 中继只能更换出口IP，对滑块验证（浏览器端JS指纹挑战）无效，保留无意义。
 
+   * @param {string} goodsNo - 商品编号（productUniqueNo）
+   * @returns {Promise<{description:string, price:number, originalPrice:number}|null>} 失败/WAF拦截返回 null
+   */
   function fetchPZDetail(goodsNo) {
     return new Promise(function(resolve) {
       const url = pzdsUrls().detail + '/' + goodsNo + '/6?_t=' + Date.now();
@@ -4341,20 +4279,7 @@
         headers: reqHeaders,
         timeout: 15000,
         onload: async function(res) {
-          let html = res.responseText || '';
-          // v4.2.0 中继重试：直连被WAF拦截（挑战页无NUXT数据）且配置了中继时，让中继代为访问
-          const wafBlocked = html.indexOf('aliyun_waf') >= 0 ||
-            (html.indexOf('window.__NUXT__=') < 0 && html.indexOf('goodsNo') < 0);
-          if (wafBlocked && (pushConfig.relayUrl || '').trim()) {
-            console.log('[鸣潮监控-盼之] 详情页直连被拦，尝试中继: ' + goodsNo);
-            const rel = await fetchViaRelay(url, 'GET', reqHeaders, '', 15000);
-            if (rel && rel.status === 200 && rel.body && rel.body.indexOf('aliyun_waf') < 0) {
-              console.log('[鸣潮监控-盼之] 详情页经中继获取成功: ' + goodsNo);
-              html = rel.body;
-            } else {
-              console.warn('[鸣潮监控-盼之] 详情页中继也失败: ' + goodsNo);
-            }
-          }
+          const html = res.responseText || '';
           try {
             resolve(parsePZDetailHTML(html));
           } catch (e) {
@@ -4362,15 +4287,7 @@
             resolve(null);
           }
         },
-        onerror: async function() {
-          // v4.2.0 请求失败也尝试中继
-          if ((pushConfig.relayUrl || '').trim()) {
-            const rel = await fetchViaRelay(url, 'GET', reqHeaders, '', 15000);
-            if (rel && rel.status === 200 && rel.body) {
-              console.log('[鸣潮监控-盼之] 详情页经中继获取成功(直连失败): ' + goodsNo);
-              try { resolve(parsePZDetailHTML(rel.body)); return; } catch (e) {}
-            }
-          }
+        onerror: function() {
           console.error('[鸣潮监控-盼之] 详情页请求失败: ' + goodsNo);
           resolve(null);
         },
@@ -8052,13 +7969,7 @@
       box.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:24px 24px 0;width:480px;max-height:85vh;overflow-y:auto;color:#e0e0e0;';
       box.innerHTML =
         '<div style="font-size:16px;font-weight:600;margin-bottom:16px;color:#e94560;">通知设置</div>' +
-        // 防风控转发中继（v4.2.0）
-        '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">防风控转发中继（可选）</div>' +
-        '<div style="margin-bottom:6px;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">中继地址（留空=直连）</label>' +
-        '<input type="text" id="mwRelayUrl" placeholder="https://你的服务器/api/monitor/relay" value="' + (pushConfig.relayUrl || '') + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-        '<div style="margin-bottom:6px;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">访问令牌（服务端设置了 RELAY_TOKEN 才需要填）</label>' +
-        '<input type="password" id="mwRelayToken" value="' + (pushConfig.relayToken || '') + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">被WAF拦截的请求（盼之详情/螃蟹列表等）自动改经中继发出，出口IP与浏览器分离。中继用你自己的服务器部署（仓库 server.js 已内置 /api/monitor/relay 端点）。首次使用时油猴会弹跨域确认，选"总是允许"</div>' +
+        // 防风控转发中继已移除（v4.9.0）：对滑块验证无效
         // 秒杀库池监控
         '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">' +
         '<label style="font-size:12px;color:#ccc;display:flex;align-items:center;gap:6px;cursor:pointer;">' +
@@ -8960,9 +8871,6 @@
         pushConfig.syncPassword = box.querySelector('#mwSyncPassword').value.trim();
         pushConfig.devMessage = box.querySelector('#mwDevMessage').value.trim();
         // 钉钉机器人（v3.76.0）已在添加/编辑/删除时实时修改 pushConfig.dingtalkRobots
-        // 防风控转发中继（v4.2.0）
-        pushConfig.relayUrl = box.querySelector('#mwRelayUrl').value.trim();
-        pushConfig.relayToken = box.querySelector('#mwRelayToken').value.trim();
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
         saveState();
         // 如果设置了同步密码，自动上传到服务器
