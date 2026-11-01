@@ -287,8 +287,9 @@ function createQQBotHandler(opts) {
         }
       }
 
-      if (bodyObj.d && bodyObj.d.plainToken) {
-        const plainToken = String(bodyObj.d.plainToken);
+      if (bodyObj.d && (bodyObj.d.plainToken || bodyObj.d.plain_token)) {
+        // 新版控制台挑战协议：请求字段为下划线 plain_token/event_ts，响应要求驼峰 plainToken/signature
+        const plainToken = String(bodyObj.d.plainToken || bodyObj.d.plain_token);
         const sig = signPlainToken(cfg.appSecret, plainToken);
         recordDebug(req, '验证挑战：已用 AppSecret 计算 HMAC-SHA256 应答', 200);
         console.log('[QQ机器人] 回调地址验证挑战已应答，plainToken=' + plainToken);
