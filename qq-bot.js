@@ -256,14 +256,20 @@ function createQQBotHandler(opts) {
   }
 
   async function handleMessage(d, isGroup) {
-    const openid = isGroup ? d.group_openid : d.user_openid;
+    // openid 兼容多种载荷结构：C2C 在 d.user_openid 或 d.author.user_openid；群在 d.group_openid
+    const author = d.author || {};
+    const openid = isGroup
+      ? (d.group_openid || author.group_openid || '')
+      : (d.user_openid || author.user_openid || author.id || '');
     if (!openid) return;
     const text = stripMention(d.content);
     if (!text || /^(帮助|help|菜单|指令)$/i.test(text)) {
       await tryReply(openid, isGroup, HELP_TEXT, d.id);
       return;
     }
-    const limited = rateCheck(openid);
+    // 限频按发送者维度（群里避免整个群共享额度）
+    const member = author.member_openid || author.user_openid || openid;
+    const limited = rateCheck(member);
     if (limited) {
       await tryReply(openid, isGroup, limited, d.id);
       return;
