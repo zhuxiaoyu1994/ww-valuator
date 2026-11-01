@@ -348,22 +348,24 @@ function createQQBotHandler(opts) {
       const type = bodyObj.t || '';
       const d = bodyObj.d || {};
       if (type === 'GROUP_AT_MESSAGE_CREATE') {
-        recordDebug(req, '群消息事件已受理', 200);
-        res.json({ success: true });
-        handleMessage(d, true).catch(e => {
-          lastError = { time: new Date().toISOString(), scene: '群消息回复', message: e.message, stack: String(e.stack || '').substring(0, 400) };
+        // Vercel Serverless 在响应返回后会冻结函数，必须先处理完（估价+回复）再应答，
+        // 否则异步回复永远没有执行机会
+        try {
+          await handleMessage(d, true);
+        } catch (e) {
           console.error('[QQ机器人] 群消息处理失败:', e.message);
-        });
-        return;
+        }
+        recordDebug(req, '群消息事件已处理', 200);
+        return res.json({ success: true });
       }
       if (type === 'C2C_MESSAGE_CREATE') {
-        recordDebug(req, '私聊消息事件已受理', 200);
-        res.json({ success: true });
-        handleMessage(d, false).catch(e => {
-          lastError = { time: new Date().toISOString(), scene: '私聊回复', message: e.message, stack: String(e.stack || '').substring(0, 400) };
+        try {
+          await handleMessage(d, false);
+        } catch (e) {
           console.error('[QQ机器人] 私聊消息处理失败:', e.message);
-        });
-        return;
+        }
+        recordDebug(req, '私聊消息事件已处理', 200);
+        return res.json({ success: true });
       }
       // 其他事件（频道消息/生命周期事件等）直接确认
       recordDebug(req, '其他事件已确认: ' + (type || 'unknown'), 200);
