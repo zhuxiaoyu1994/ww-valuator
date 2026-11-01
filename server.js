@@ -537,7 +537,6 @@ const { createQQBotHandler } = require('./qq-bot');
 const qqBotWebhook = createQQBotHandler({
   appId: QQ_BOT_APP_ID,
   appSecret: QQ_BOT_SECRET,
-  publicKey: QQ_BOT_PUBLIC_KEY,
   encryptKey: QQ_BOT_ENCRYPT_KEY,
   getEngine: getEngine,
   onLog: function (logEntry) {

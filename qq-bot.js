@@ -35,29 +35,41 @@ function hexToBuf(hex) {
   return Buffer.from(hex, 'hex');
 }
 
-/** Ed25519 验签：QQ 公钥为 64 位 hex（32 字节裸公钥），包一层 SPKI DER 头 */
-function verifyEd25519(publicKeyHex, timestamp, rawBody, sigHex) {
-  try {
-    const spkiPrefix = Buffer.from('302a300506032b6570032100', 'hex');
-    const der = Buffer.concat([spkiPrefix, hexToBuf(publicKeyHex)]);
-    const keyObj = crypto.createPublicKey({ key: der, format: 'der', type: 'spki' });
-    const data = Buffer.concat([Buffer.from(timestamp, 'utf8'), rawBody]);
-    return crypto.verify(null, data, keyObj, Buffer.from(sigHex, 'hex'));
-  } catch (e) {
-    console.error('[QQ机器人] 验签异常:', e.message);
-    return false;
-  }
-}
+/** Ed25519 工具函数见下方：密钥对由 AppSecret 派生（官方 sign.html 规定），无需控制台公钥 */
 
 /** 回调地址验证挑战（新版协议）：用 AppSecret 派生 Ed25519 私钥，对 event_ts+plain_token 签名。
  *  Go 参考: seed=secret 重复填充到32字节 → ed25519.GenerateKey → Sign(event_ts + plain_token) */
-function signValidation(appSecret, eventTs, plainToken) {
-  let seed = Buffer.from(appSecret, 'utf8');
+function deriveSeed(secret) {
+  let seed = Buffer.from(secret, 'utf8');
   while (seed.length < 32) seed = Buffer.concat([seed, seed]);
-  seed = seed.subarray(0, 32);
-  const pkcs8 = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]);
+  return seed.subarray(0, 32);
+}
+
+function signValidation(appSecret, eventTs, plainToken) {
+  const pkcs8 = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), deriveSeed(appSecret)]);
   const key = crypto.createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
   return crypto.sign(null, Buffer.from(eventTs + plainToken, 'utf8'), key).toString('hex');
+}
+
+/** 事件推送验签用：从 AppSecret 派生 Ed25519 公钥（官方 sign.html：公钥私钥均由 Secret 派生，
+ *  控制台不提供公钥，开发者自行计算） */
+function derivePublicKey(appSecret) {
+  const pkcs8 = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), deriveSeed(appSecret)]);
+  const priv = crypto.createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
+  return crypto.createPublicKey(priv);
+}
+
+/** 验证事件推送签名：msg = timestamp + rawBody，签名取自 X-Signature-Ed25519（hex） */
+function verifyEventSignature(publicKeyObj, timestamp, rawBody, sigHex) {
+  try {
+    const sig = Buffer.from(sigHex, 'hex');
+    if (sig.length !== 64) return false;
+    const msg = Buffer.concat([Buffer.from(timestamp, 'utf8'), rawBody]);
+    return crypto.verify(null, msg, publicKeyObj, sig);
+  } catch (e) {
+    console.error('[QQ机器人] 事件验签异常:', e.message);
+    return false;
+  }
 }
 
 /** AES-256-GCM 解密加密推送：hex = iv(12B) + authTag(16B) + 密文 */
@@ -185,18 +197,17 @@ function createQQBotHandler(opts) {
   const cfg = {
     appId: opts.appId || '',
     appSecret: opts.appSecret || '',
-    publicKey: opts.publicKey || '',
     encryptKey: opts.encryptKey || '',
   };
   const getEngine = opts.getEngine;
   const onLog = opts.onLog || function () {};
-  // 只要求 AppID/Secret：回调地址验证挑战（op=13）仅需 Secret；
-  // 公钥缺失时挑战可用，真实事件消息会因验签失败被拒并给出明确日志
+  // 只要求 AppID/Secret：Ed25519 公私钥均由 Secret 派生（官方 sign.html），无需额外公钥配置
   if (!cfg.appId || !cfg.appSecret) {
     return function (req, res) {
       res.status(503).json({ success: false, error: 'QQ机器人未配置（缺少 QQ_BOT_APP_ID / QQ_BOT_SECRET）' });
     };
   }
+  const derivedPublicKey = derivePublicKey(cfg.appSecret);
 
   // 限频表：openid -> [timestamps]
   const rateMap = new Map();
@@ -304,7 +315,7 @@ function createQQBotHandler(opts) {
         return res.json({ plain_token: plainToken, signature: sig });
       }
 
-      // 1. Ed25519 验签（对 timestamp + 原始body）
+      // 1. Ed25519 验签（对 timestamp + 原始body，公钥由 AppSecret 派生）
       const sig = req.headers['x-signature-ed25519'] || '';
       const ts = req.headers['x-signature-timestamp'] || '';
       if (!sig || !ts) {
@@ -312,12 +323,7 @@ function createQQBotHandler(opts) {
         console.warn('[QQ机器人] 缺少验签头，拒绝处理');
         return res.status(401).json({ success: false, error: '缺少验签头' });
       }
-      if (!cfg.publicKey) {
-        recordDebug(req, '收到事件推送但未配置 QQ_BOT_PUBLIC_KEY，无法验签', 401);
-        console.error('[QQ机器人] 收到事件推送但未配置 QQ_BOT_PUBLIC_KEY，无法验签。请到QQ开放平台复制机器人公钥并配置到 Vercel');
-        return res.status(401).json({ success: false, error: '服务端未配置公钥' });
-      }
-      if (!verifyEd25519(cfg.publicKey, ts, rawBody, sig)) {
+      if (!verifyEventSignature(derivedPublicKey, ts, rawBody, sig)) {
         recordDebug(req, 'Ed25519 验签失败', 401);
         console.warn('[QQ机器人] 验签失败，拒绝处理');
         return res.status(401).json({ success: false, error: '签名校验失败' });
