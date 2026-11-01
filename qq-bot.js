@@ -214,6 +214,7 @@ function createQQBotHandler(opts) {
   // 调试：记录最后一次 webhook 请求（供 /api/qq-bot-debug 排查回调验证问题）
   let lastDebug = { time: null, path: null, headers: null, bodyHead: null, note: null, status: null };
   let lastError = null;   // 异步处理（回复消息）失败的详情
+  let lastReply = null;   // 最近一次回复消息调用的结果（成功也记录）
   function recordDebug(req, note, status) {
     lastDebug = {
       time: new Date().toISOString(),
@@ -241,23 +242,36 @@ function createQQBotHandler(opts) {
     return null;
   }
 
+  /** 回复并记录结果（成功/失败都进调试端点） */
+  async function tryReply(openid, isGroup, content, msgId) {
+    const t0 = Date.now();
+    try {
+      await sendReply(cfg, openid, isGroup, content, msgId);
+      lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: String(content).substring(0, 50) };
+    } catch (e) {
+      lastReply = { time: new Date().toISOString(), ok: false, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, error: e.message };
+      lastError = { time: new Date().toISOString(), scene: isGroup ? '群消息回复' : '私聊回复', message: e.message, stack: String(e.stack || '').substring(0, 400) };
+      throw e;
+    }
+  }
+
   async function handleMessage(d, isGroup) {
     const openid = isGroup ? d.group_openid : d.user_openid;
     if (!openid) return;
     const text = stripMention(d.content);
     if (!text || /^(帮助|help|菜单|指令)$/i.test(text)) {
-      await sendReply(cfg, openid, isGroup, HELP_TEXT, d.id);
+      await tryReply(openid, isGroup, HELP_TEXT, d.id);
       return;
     }
     const limited = rateCheck(openid);
     if (limited) {
-      await sendReply(cfg, openid, isGroup, limited, d.id);
+      await tryReply(openid, isGroup, limited, d.id);
       return;
     }
     const priceYuan = extractPrice(text);
     const desc = text.replace(/(?:价格|标价|售价|出价)\s*[:：]?\s*\d+(?:\.\d+)?/g, ' ').replace(/[¥￥]\s*\d+(?:\.\d+)?/g, ' ').replace(/\d+(?:\.\d+)?\s*元/g, ' ').replace(/\s+/g, ' ').trim();
     if (desc.length < 4) {
-      await sendReply(cfg, openid, isGroup, '描述太短啦，请把商品的账号描述发给我～\n\n' + HELP_TEXT, d.id);
+      await tryReply(openid, isGroup, '描述太短啦，请把商品的账号描述发给我～\n\n' + HELP_TEXT, d.id);
       return;
     }
     const t0 = Date.now();
@@ -279,7 +293,7 @@ function createQQBotHandler(opts) {
       success: true,
       costMs: Date.now() - t0,
     });
-    await sendReply(cfg, openid, isGroup, reply, d.id);
+    await tryReply(openid, isGroup, reply, d.id);
   }
 
   async function webhook(req, res) {
@@ -363,7 +377,7 @@ function createQQBotHandler(opts) {
 
   return {
     webhook: webhook,
-    getLastDebug: function () { return Object.assign({}, lastDebug, { lastError: lastError }); },
+    getLastDebug: function () { return Object.assign({}, lastDebug, { lastError: lastError, lastReply: lastReply }); },
   };
 }
 
