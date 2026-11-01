@@ -65,6 +65,12 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zhucs3336466';
 // 页面估值接口的主密钥（可选，作为管理员兜底密钥；分发给朋友的密钥存在数据库 eval_keys 表中）
 const PAGE_EVAL_KEY = process.env.PAGE_EVAL_KEY || '';
 
+// QQ 官方机器人（v4.11.0）：WebHook 回调接入，群聊 @机器人 鸣潮估价
+const QQ_BOT_APP_ID = process.env.QQ_BOT_APP_ID || '';
+const QQ_BOT_SECRET = process.env.QQ_BOT_SECRET || '';
+const QQ_BOT_PUBLIC_KEY = process.env.QQ_BOT_PUBLIC_KEY || '';   // Ed25519 公钥（64位HEX）
+const QQ_BOT_ENCRYPT_KEY = process.env.QQ_BOT_ENCRYPT_KEY || ''; // 消息加密密钥（可选）
+
 // IP黑名单（初始从环境变量加载，运行时增删时同步到数据库）
 const BLOCKLIST_KEY = 'blocked_ips_v2';
 // 封禁列表：[{ ip, type: 'manual'|'auto', reason, createdAt, expiresAt }]
@@ -379,8 +385,10 @@ if (MAINTENANCE_KEY) {
   app.use(async function maintenanceGate(req, res, next) {
     try {
       // 0. 管理后台与封禁管理豁免（自身有独立密码保护）：闭站期间仍可登录 /admin 发放/管理通行证
+      //    QQ 机器人 WebHook 豁免：QQ 服务器无法携带维护密钥，闭站期间估价机器人需保持可用
       if (req.path === '/admin' || req.path.startsWith('/admin/api/') ||
-          req.path === '/blocklist' || req.path.startsWith('/blocklist/api/')) {
+          req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
+          req.path === '/api/qq-bot') {
         return next();
       }
       // 1. Cookie 已解锁：主密钥直接放行；通行证密钥需复查有效期（过期立即失效）
@@ -413,7 +421,7 @@ if (MAINTENANCE_KEY) {
   console.log('[维护模式] 已开启：他人访问显示维护页；凭主密钥或管理后台「估价Key」的有效密钥解锁（通行证到期/停用自动失效）');
 }
 
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: '4mb', verify: function (req, res, buf) { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 // 静态JS必须每次验证（ETag），避免浏览器缓存旧版 value-settings.js 导致规则面板不同步
 app.use('/public', express.static(path.join(__dirname, 'public'), {
@@ -522,6 +530,24 @@ app.use(async (req, res, next) => {
  * 默认权重接口 - 返回估值引擎的默认权重配置（供前端设置面板初始化用）
  * 优先返回数据库中存储的服务器端配置，无则返回源码内置默认值
  */
+// ============================================================
+// QQ 官方机器人 WebHook（v4.11.0）：群聊 @机器人 鸣潮估价
+// ============================================================
+const { createQQBotHandler } = require('./qq-bot');
+const qqBotWebhook = createQQBotHandler({
+  appId: QQ_BOT_APP_ID,
+  appSecret: QQ_BOT_SECRET,
+  publicKey: QQ_BOT_PUBLIC_KEY,
+  encryptKey: QQ_BOT_ENCRYPT_KEY,
+  getEngine: getEngine,
+  onLog: function (logEntry) {
+    queryLogs.unshift(logEntry);
+    if (queryLogs.length > MAX_LOGS) queryLogs.pop();
+    db.insertLog(logEntry); // 异步写入数据库
+  },
+});
+app.post('/api/qq-bot', qqBotWebhook);
+
 app.get('/api/defaults', async (req, res) => {
   // 仅管理后台的估值设置面板使用；需管理员密码，避免公开泄露完整规则参数
   if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
