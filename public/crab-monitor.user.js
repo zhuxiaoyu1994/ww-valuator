@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.7.0
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.7.0 移除网站蜂鸣音效、各平台独立刷新间隔、指定账号通知支持标价范围）
+// @version      4.8.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.8.0 默认关闭保活音频去除音量图标、通知设置布局调整：监控开关在前刷新设置在后）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -1104,6 +1104,7 @@
   let qyIntervalSec = 0;
   let ysyIntervalSec = 0;
   let jymIntervalSec = 0;
+  let keepAliveAudioEnabled = false;   // 后台保活音频开关（v4.8.0，默认关：开启后标签页显示音量图标，换取后台不被限流）
   let pzdsLastScanAt = 0;       // 各平台上次扫描时间戳（运行时，不持久化）
   let kjsLastScanAt = 0;
   let qyLastScanAt = 0;
@@ -8051,28 +8052,6 @@
       box.style.cssText = 'background:#1a1a2e;border-radius:12px;padding:24px 24px 0;width:480px;max-height:85vh;overflow-y:auto;color:#e0e0e0;';
       box.innerHTML =
         '<div style="font-size:16px;font-weight:600;margin-bottom:16px;color:#e94560;">通知设置</div>' +
-        // 刷新间隔
-        '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">刷新设置</div>' +
-        '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">刷新间隔（秒）</label>' +
-        '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="5" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">最大扫描页数</label>' +
-        '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
-        '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:8px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
-        '<div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">' +
-        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">盼之(秒)</label>' +
-        '<input type="number" id="mwPzdsInterval" value="' + (pzdsIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
-        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">氪金兽(秒)</label>' +
-        '<input type="number" id="mwKjsInterval" value="' + (kjsIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
-        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">7881(秒)</label>' +
-        '<input type="number" id="mwQyInterval" value="' + (qyIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
-        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">易手游(秒)</label>' +
-        '<input type="number" id="mwYsyInterval" value="' + (ysyIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
-        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">交易猫(秒)</label>' +
-        '<input type="number" id="mwJymInterval" value="' + (jymIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
-        '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">各平台独立扫描间隔（v4.7.0），填0=跟随上方刷新间隔每轮都扫；例如全局60秒、交易猫300秒=交易猫每5分钟才扫一次</div>' +
         // 防风控转发中继（v4.2.0）
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">防风控转发中继（可选）</div>' +
         '<div style="margin-bottom:6px;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">中继地址（留空=直连）</label>' +
@@ -8124,6 +8103,30 @@
         '<input type="number" id="mwXyMinPrice" value="' + (xyMinPrice != null ? xyMinPrice : 2000) + '" min="0" max="999999" style="width:80px;padding:4px 6px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;" /></label>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">在闲鱼打开"鸣潮"搜索页（按最新排序）翻页，脚本自动捕获页面加载的商品；标价≥最低价才收录并推送（无估值对比），最多保留40条</div>' +
+        // 刷新间隔（v4.8.0 移到监控开关之后）
+        '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">刷新设置</div>' +
+        '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">刷新间隔（秒）</label>' +
+        '<input type="number" id="mwRefreshInterval" value="' + refreshIntervalSec + '" min="5" max="3600" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">最大扫描页数</label>' +
+        '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
+        '<div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">盼之(秒)</label>' +
+        '<input type="number" id="mwPzdsInterval" value="' + (pzdsIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">氪金兽(秒)</label>' +
+        '<input type="number" id="mwKjsInterval" value="' + (kjsIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">7881(秒)</label>' +
+        '<input type="number" id="mwQyInterval" value="' + (qyIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">易手游(秒)</label>' +
+        '<input type="number" id="mwYsyInterval" value="' + (ysyIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">交易猫(秒)</label>' +
+        '<input type="number" id="mwJymInterval" value="' + (jymIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">各平台独立扫描间隔，填0=跟随上方刷新间隔每轮都扫；例如全局60秒、交易猫300秒=交易猫每5分钟才扫一次</div>' +
+        '<div style="margin-bottom:16px;"><label style="font-size:12px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwKeepAliveAudio" ' + (keepAliveAudioEnabled ? 'checked' : '') + ' style="margin-right:6px;">后台保活音频（防浏览器对后台页签限流，标签页会显示音量图标）</label>' +
+        '<div style="font-size:11px;color:#666;margin-top:4px;">默认关闭。开启后挂在后台的页签不被冻结/限流（刷新间隔可低于60秒仍准点），代价是标签页出现音量图标；扫描间隔≥60秒时不建议开启</div></div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -8888,6 +8891,7 @@
             box.querySelector('#mwQyInterval').value = qyIntervalSec || 0;
             box.querySelector('#mwYsyInterval').value = ysyIntervalSec || 0;
             box.querySelector('#mwJymInterval').value = jymIntervalSec || 0;
+            box.querySelector('#mwKeepAliveAudio').checked = !!keepAliveAudioEnabled;
             box.querySelector('#mwScanPages').value = scanPages || 3;
             box.querySelector('#mwFlashSaleEnabled').checked = !!flashSaleEnabled;
             box.querySelector('#mwPzdsEnabled').checked = !!pzdsEnabled;
@@ -8929,6 +8933,8 @@
         qyIntervalSec = readPlatInterval('#mwQyInterval');
         ysyIntervalSec = readPlatInterval('#mwYsyInterval');
         jymIntervalSec = readPlatInterval('#mwJymInterval');
+        keepAliveAudioEnabled = box.querySelector('#mwKeepAliveAudio').checked;
+        if (!keepAliveAudioEnabled) stopKeepAliveAudio();   // 关闭时立即停掉已在播放的保活音频
         var newScanPages = parseInt(box.querySelector('#mwScanPages').value) || 3;
         if (newScanPages < 1) newScanPages = 1;
         if (newScanPages > 10) newScanPages = 10;
@@ -15706,6 +15712,7 @@ function openSettings() {
         qyIntervalSec: qyIntervalSec,
         ysyIntervalSec: ysyIntervalSec,
         jymIntervalSec: jymIntervalSec,
+        keepAliveAudioEnabled: keepAliveAudioEnabled,
       }));
       // 共享 state 只更新通知/推送/估值字段；monitorRunning 与扫描设置保持螃蟹页签的值不动
       const shared = loadStorage(STORAGE_KEYS.state, {}) || {};
@@ -15755,6 +15762,7 @@ function openSettings() {
       qyIntervalSec: qyIntervalSec,
       ysyIntervalSec: ysyIntervalSec,
       jymIntervalSec: jymIntervalSec,
+      keepAliveAudioEnabled: keepAliveAudioEnabled,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -15831,6 +15839,7 @@ function openSettings() {
   let keepAliveGestureBound = false;
 
   function startKeepAliveAudio() {
+    if (!keepAliveAudioEnabled) return;   // v4.8.0 默认关闭：音量图标困扰用户，Web Lock 仍保留防冻结
     if (!keepAliveAudioCtx) {
       try {
         const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -16752,6 +16761,7 @@ function openSettings() {
     qyIntervalSec = savedState.qyIntervalSec != null ? savedState.qyIntervalSec : 0;
     ysyIntervalSec = savedState.ysyIntervalSec != null ? savedState.ysyIntervalSec : 0;
     jymIntervalSec = savedState.jymIntervalSec != null ? savedState.jymIntervalSec : 0;
+    keepAliveAudioEnabled = savedState.keepAliveAudioEnabled != null ? savedState.keepAliveAudioEnabled : false;
     xyEnabled = savedState.xyEnabled != null ? savedState.xyEnabled : false;
     xyMinPrice = savedState.xyMinPrice != null ? savedState.xyMinPrice : 2000;
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
