@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.9.1
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.9.1 请求间隔随机化±25%抖动，降低滑块验证触发）
+// @version      4.10.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.10.0 恢复声音提醒（蜂鸣，可开关）、彻底移除后台保活音频——音爆元凶）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -1104,7 +1104,6 @@
   let qyIntervalSec = 0;
   let ysyIntervalSec = 0;
   let jymIntervalSec = 0;
-  let keepAliveAudioEnabled = false;   // 后台保活音频开关（v4.8.0，默认关：开启后标签页显示音量图标，换取后台不被限流）
   let pzdsLastScanAt = 0;       // 各平台上次扫描时间戳（运行时，不持久化）
   let kjsLastScanAt = 0;
   let qyLastScanAt = 0;
@@ -1136,7 +1135,7 @@
     skipHighDiffSecondary: false, // 从通知过滤高差价（开启后差价>阈值的账号不推送给从通知用户）
     highDiffThreshold: 400,      // 从通知差价过滤阈值(元)
     highDiffFilterPlatforms: [], // 从通知高差价过滤的平台列表（空=全部平台）
-    soundAlert: false,     // 声音提醒（v4.7.0 已永久禁用，字段保留兼容旧云同步数据）
+    soundAlert: true,      // 声音提醒（连续蜂鸣3次；v4.10.0 恢复）
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
     repeatAlert: false,    // 重复提醒（每30秒直到确认）
   };
@@ -8041,8 +8040,6 @@
         '<input type="number" id="mwJymInterval" value="' + (jymIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#666;margin-bottom:8px;">各平台独立扫描间隔，填0=跟随上方刷新间隔每轮都扫；例如全局60秒、交易猫300秒=交易猫每5分钟才扫一次</div>' +
-        '<div style="margin-bottom:16px;"><label style="font-size:12px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwKeepAliveAudio" ' + (keepAliveAudioEnabled ? 'checked' : '') + ' style="margin-right:6px;">后台保活音频（防浏览器对后台页签限流，标签页会显示音量图标）</label>' +
-        '<div style="font-size:11px;color:#666;margin-top:4px;">默认关闭。开启后挂在后台的页签不被冻结/限流（刷新间隔可低于60秒仍准点），代价是标签页出现音量图标；扫描间隔≥60秒时不建议开启</div></div>' +
         // 通知阈值
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">通知阈值</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -8119,7 +8116,7 @@
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值或标价低于各自下限时不会发送通知，标价高于上限时也不通知（填0表示不限制）</div>' +
         // 提醒方式
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">提醒方式</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:8px;">声音提醒已移除（v4.7.0，避免音爆）</div>' +
+        '<div style="margin-bottom:8px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwSoundAlert" ' + (pushConfig.soundAlert ? 'checked' : '') + ' style="margin-right:6px;">声音提醒（连续蜂鸣3次）</label></div>' +
         '<div style="margin-bottom:8px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwVisualAlert" ' + (pushConfig.visualAlert ? 'checked' : '') + ' style="margin-right:6px;">视觉提醒（标题闪烁+大横幅）</label></div>' +
         '<div style="margin-bottom:16px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwRepeatAlert" ' + (pushConfig.repeatAlert ? 'checked' : '') + ' style="margin-right:6px;">重复提醒（每30秒直到确认）</label></div>' +
         // 手机推送
@@ -8788,7 +8785,7 @@
             var savedPlatforms = pushConfig.highDiffFilterPlatforms || [];
             box.querySelectorAll('.mwHighDiffPlatform').forEach(function (cb) { cb.checked = savedPlatforms.indexOf(cb.value) >= 0; });
             // 提醒方式
-            // 声音提醒已移除（v4.7.0）
+            box.querySelector('#mwSoundAlert').checked = !!pushConfig.soundAlert;
             box.querySelector('#mwVisualAlert').checked = !!pushConfig.visualAlert;
             box.querySelector('#mwRepeatAlert').checked = !!pushConfig.repeatAlert;
             // 通知阈值
@@ -8807,7 +8804,6 @@
             box.querySelector('#mwQyInterval').value = qyIntervalSec || 0;
             box.querySelector('#mwYsyInterval').value = ysyIntervalSec || 0;
             box.querySelector('#mwJymInterval').value = jymIntervalSec || 0;
-            box.querySelector('#mwKeepAliveAudio').checked = !!keepAliveAudioEnabled;
             box.querySelector('#mwScanPages').value = scanPages || 3;
             box.querySelector('#mwFlashSaleEnabled').checked = !!flashSaleEnabled;
             box.querySelector('#mwPzdsEnabled').checked = !!pzdsEnabled;
@@ -8849,8 +8845,6 @@
         qyIntervalSec = readPlatInterval('#mwQyInterval');
         ysyIntervalSec = readPlatInterval('#mwYsyInterval');
         jymIntervalSec = readPlatInterval('#mwJymInterval');
-        keepAliveAudioEnabled = box.querySelector('#mwKeepAliveAudio').checked;
-        if (!keepAliveAudioEnabled) stopKeepAliveAudio();   // 关闭时立即停掉已在播放的保活音频
         var newScanPages = parseInt(box.querySelector('#mwScanPages').value) || 3;
         if (newScanPages < 1) newScanPages = 1;
         if (newScanPages > 10) newScanPages = 10;
@@ -8865,7 +8859,7 @@
         xyMinPrice = parseInt(box.querySelector('#mwXyMinPrice').value, 10);
         if (!(xyMinPrice >= 0)) xyMinPrice = 2000;
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
-        // pushConfig.soundAlert 不再读取（v4.7.0 已移除音效，云同步字段保留兼容）
+        pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
         // serverChanSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
@@ -13831,7 +13825,8 @@ function openSettings() {
       showAlertBanner('自动抢购-弹窗被拦截', '请允许弹窗后重试，或手动点击查看\n差价' + diff.toFixed(0) + '元', productId);
     } else {
       showAlertBanner('自动抢购已触发', '已打开商品页并自动点击购买\n差价' + diff.toFixed(0) + '元，请尽快扫码支付', productId);
-      // 急促报警声已移除（v4.7.0 音效禁用）
+      // 急促报警声（v4.10.0 恢复，受声音提醒开关控制）
+      if (pushConfig.soundAlert) beepMultiple(8);
     }
   }
 
@@ -14223,7 +14218,10 @@ function openSettings() {
       }
     } catch (e) { }
 
-    // 3. 声音提醒已移除（v4.7.0：蜂鸣音效导致电脑音爆问题，永久禁用）
+    // 3. 声音提醒（连续蜂鸣3次）— 不依赖桌面通知权限（v4.10.0 恢复）
+    if (pushConfig.soundAlert) {
+      beepMultiple(3);
+    }
 
     // 4. 视觉提醒（标题闪烁 + 大横幅）— 不依赖桌面通知权限
     if (pushConfig.visualAlert) {
@@ -14245,11 +14243,12 @@ function openSettings() {
     // 6. 手机推送
     sendPhonePush(title, mdBody || body, productId, ruleRecipients);
 
-    // 7. 重复提醒（v4.7.0 移除蜂鸣，仅标题闪烁）
+    // 7. 重复提醒（v4.10.0 恢复蜂鸣：每30秒标题闪烁+蜂鸣2声）
     if (pushConfig.repeatAlert) {
       stopRepeatAlert();
       repeatAlertTimer = setInterval(function () {
         startTitleBlink(title);
+        beepMultiple(2);
       }, 30000); // 每30秒重复
     }
   }
@@ -14264,10 +14263,24 @@ function openSettings() {
   }
 
   /**
-   * 播放提示音（v4.7.0 永久禁用：蜂鸣音效导致电脑音爆问题，保留空函数避免遗留引用报错）
+   * 播放提示音（v4.10.0 恢复：音爆元凶是后台保活音频的持续低频音，非蜂鸣提示音）
    */
   function beep() {
-    return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      // 播放结束后关闭 AudioContext，否则每次提醒都会泄漏一个上下文（浏览器上限约6个）
+      osc.onended = function () { try { ctx.close(); } catch (e) { } };
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) { }
   }
 
   /**
@@ -15626,7 +15639,6 @@ function openSettings() {
         qyIntervalSec: qyIntervalSec,
         ysyIntervalSec: ysyIntervalSec,
         jymIntervalSec: jymIntervalSec,
-        keepAliveAudioEnabled: keepAliveAudioEnabled,
       }));
       // 共享 state 只更新通知/推送/估值字段；monitorRunning 与扫描设置保持螃蟹页签的值不动
       const shared = loadStorage(STORAGE_KEYS.state, {}) || {};
@@ -15676,7 +15688,6 @@ function openSettings() {
       qyIntervalSec: qyIntervalSec,
       ysyIntervalSec: ysyIntervalSec,
       jymIntervalSec: jymIntervalSec,
-      keepAliveAudioEnabled: keepAliveAudioEnabled,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -15698,7 +15709,6 @@ function openSettings() {
     // 立即开始第一次刷新（通过monitorTick统一管理refreshInProgress）
     nextRefreshTime = Date.now() + jitterIntervalSec(refreshIntervalSec) * 1000;
     holdKeepAliveLock();
-    startKeepAliveAudio();
     startWatchdog();
     monitorTick();
 
@@ -15713,7 +15723,6 @@ function openSettings() {
     if (isPzdsPage()) { pzdsSilentStop(); return; }
     monitorRunning = false;
     stopWatchdog();
-    stopKeepAliveAudio();
     if (monitorTimeout) {
       clearTimeout(monitorTimeout);
       monitorTimeout = null;
@@ -15746,69 +15755,6 @@ function openSettings() {
     } catch (e) { keepAliveLockHeld = false; }
   }
 
-  // ── 防冻结：静音保活音频 ─────────────────────────────────────
-  // Web Lock 挡不住 macOS App Nap / 系统休眠。官方唯一明确豁免"节能模式停用 + 密集节流"的
-  // 机制是「正在播放音频」，macOS 也不会 App Nap 正在出声的进程，因此用听不见的振荡器维持播放。
-  let keepAliveAudioCtx = null;
-  let keepAliveGestureBound = false;
-
-  function startKeepAliveAudio() {
-    if (!keepAliveAudioEnabled) return;   // v4.8.0 默认关闭：音量图标困扰用户，Web Lock 仍保留防冻结
-    if (!keepAliveAudioCtx) {
-      try {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return;
-        const ctx = new Ctx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 32;   // 次低频：扬声器基本放不出
-        // 增益不能太小：Chrome 判定"正在播放音频"要求标签页出现喇叭图标，
-        // 静默音频流不给豁免。0.02 ≈ -34dBFS，足够被判为有声，32Hz 人耳几乎听不出
-        gain.gain.value = 0.02;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        keepAliveAudioCtx = ctx;
-      } catch (e) {
-        console.error('[鸣潮监控] 保活音频启动失败:', e);
-        keepAliveAudioCtx = null;
-        return;
-      }
-    }
-    // 自动启动（非用户手势）时 AudioContext 处于 suspended，需等首次交互才能恢复
-    if (keepAliveAudioCtx.state === 'suspended') {
-      keepAliveAudioCtx.resume().then(function () {
-        if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'running') {
-          console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标题旁出现喇叭图标即生效）');
-        }
-      }).catch(function () {});
-    } else {
-      console.log('[鸣潮监控] 保活音频已开始播放，后台标签不会被冻结/节流（标题旁出现喇叭图标即生效）');
-    }
-    bindKeepAliveResumeOnGesture();
-  }
-
-  function bindKeepAliveResumeOnGesture() {
-    if (keepAliveGestureBound) return;
-    keepAliveGestureBound = true;
-    const resume = function () {
-      if (monitorRunning && keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
-        keepAliveAudioCtx.resume().catch(function () {});
-      }
-    };
-    ['click', 'keydown', 'pointerdown', 'touchstart'].forEach(function (ev) {
-      document.addEventListener(ev, resume, { passive: true });
-    });
-  }
-
-  function stopKeepAliveAudio() {
-    if (!keepAliveAudioCtx) return;
-    try { keepAliveAudioCtx.close(); } catch (e) {}
-    keepAliveAudioCtx = null;
-    console.log('[鸣潮监控] 已停止保活音频');
-  }
-
   /**
    * 安排下一次 tick，并记录计划时间
    */
@@ -15833,10 +15779,6 @@ function openSettings() {
     if (!monitorRunning) return;
     if (!refreshInProgress) {
       refreshInProgress = true;
-      // 保活音频被系统挂起时每轮尝试恢复，维持后台不被冻结
-      if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
-        keepAliveAudioCtx.resume().catch(function () {});
-      }
       const tickStartAt = Date.now();
       doRefresh().finally(() => {
         refreshInProgress = false;
@@ -15878,13 +15820,10 @@ function openSettings() {
     watchdogTimer = null;
   }
 
-  // 页面重新可见（解锁屏幕/切回标签页）：恢复保活音频并补跑已过期的刷新。
+  // 页面重新可见（解锁屏幕/切回标签页）：补跑已过期的刷新。
   // 系统休眠期间不会派发任何事件，这里是解锁后最快的恢复入口。
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
-    if (keepAliveAudioCtx && keepAliveAudioCtx.state === 'suspended') {
-      keepAliveAudioCtx.resume().catch(function () {});
-    }
     if (!monitorRunning || refreshInProgress) return;
     if (!expectedTickAt) return;
     const overdue = Date.now() - expectedTickAt;
@@ -16509,7 +16448,6 @@ function openSettings() {
     if (pzdsSilentOn) return;
     pzdsSilentOn = true;
     holdKeepAliveLock();      // Web Lock 防止标签页被节能模式冻结
-    startKeepAliveAudio();    // 静音保活音频（标签页出现喇叭图标即生效，需一次点击恢复）
     // monitorRunning 仅用于面板UI显示；不调用 saveState，避免把运行状态写进共享存储
     // 导致螃蟹页签下次打开时误自启螃蟹监控
     monitorRunning = true;
@@ -16522,7 +16460,6 @@ function openSettings() {
   function pzdsSilentStop() {
     pzdsSilentOn = false;
     if (pzdsSilentTimer) { clearTimeout(pzdsSilentTimer); pzdsSilentTimer = null; }
-    stopKeepAliveAudio();
     monitorRunning = false;
     console.log('[鸣潮监控-盼之静默] 已停止');
     pzdsSilentSave();
@@ -16677,7 +16614,6 @@ function openSettings() {
     qyIntervalSec = savedState.qyIntervalSec != null ? savedState.qyIntervalSec : 0;
     ysyIntervalSec = savedState.ysyIntervalSec != null ? savedState.ysyIntervalSec : 0;
     jymIntervalSec = savedState.jymIntervalSec != null ? savedState.jymIntervalSec : 0;
-    keepAliveAudioEnabled = savedState.keepAliveAudioEnabled != null ? savedState.keepAliveAudioEnabled : false;
     xyEnabled = savedState.xyEnabled != null ? savedState.xyEnabled : false;
     xyMinPrice = savedState.xyMinPrice != null ? savedState.xyMinPrice : 2000;
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
