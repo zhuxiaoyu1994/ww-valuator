@@ -539,6 +539,7 @@ const qqBotWebhook = createQQBotHandler({
   appSecret: QQ_BOT_SECRET,
   encryptKey: QQ_BOT_ENCRYPT_KEY,
   getEngine: getEngine,
+  getWeights: function () { return getEffectiveConfig('wuwa'); },
   onLog: function (logEntry) {
     queryLogs.unshift(logEntry);
     if (queryLogs.length > MAX_LOGS) queryLogs.pop();

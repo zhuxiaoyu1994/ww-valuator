@@ -168,23 +168,45 @@ function fmtMoney(v) {
   return '¥' + Math.round(v).toLocaleString('zh-CN');
 }
 
-/** 格式化估值回复 */
+/** 保留最多两位小数，整数不带小数点 */
+function fmtValue(v) {
+  const n = Number(v);
+  return Number.isInteger(n) ? n.toLocaleString('zh-CN') : n.toFixed(2);
+}
+
+/** 格式化估值回复（对齐网站展示样式：估值+合理区间+核心数据，不做多余赘述） */
 function formatReply(result, priceYuan) {
+  const d = result.details || {};
+  const info = result.info || {};
   const lines = [];
-  lines.push('📋 鸣潮账号估值');
+  lines.push('💰 预估价值：' + fmtValue(d.finalValue) + ' 元');
+  const pr = d.priceRange;
+  if (pr && pr.low > 0 && pr.high > 0) {
+    lines.push('📐 合理交易区间：' + fmtValue(pr.low) + ' ~ ' + fmtValue(pr.high) + ' 元');
+  }
   lines.push('');
-  const shortDesc = result && result.shortDescription;
-  if (shortDesc) lines.push(shortDesc);
-  lines.push('');
-  lines.push('💰 估值：' + fmtMoney(result.details.finalValue));
+  lines.push('核心数据');
+  lines.push('· 五星角色：' + (d.fiveStarChars || 0) + ' 个');
+  const weaponCount = (info.weapons || []).length;
+  if (weaponCount > 0) lines.push('· 专武：' + weaponCount + ' 把');
+  const pulls = (d.pullInfo && d.pullInfo.pulls) || info.pulls || 0;
+  if (pulls > 0) lines.push('· 总抽数：' + pulls + ' 抽');
+  const yi = d.yellowInfo || {};
+  if (yi.totalYellow > 0 || yi.yellowCount > 0) {
+    lines.push('· 有效金/限定金/总金数：' + yi.yellowCount + '/' + yi.limitedYellow + '/' + yi.totalYellow);
+  }
+  const teams = (d.matchedTeams || []).map(t => typeof t === 'string' ? t : (t.name || t.label || '')).filter(Boolean);
+  if (teams.length > 0) {
+    lines.push('· 成型配队：' + teams.slice(0, 8).join('、') + (teams.length > 8 ? ' 等' + teams.length + '队' : ''));
+  }
   if (priceYuan > 0) {
+    lines.push('');
     lines.push('🏷️ 标价：' + fmtMoney(priceYuan));
     const ratio = result.costPerformance;
     if (ratio != null && isFinite(ratio)) {
-      const pct = Math.round(ratio * 100);
-      lines.push('📊 性价比：' + pct + '%（' + (pct >= 100 ? '估值高于标价' : '估值低于标价') + '）');
+      lines.push('📊 性价比：' + Math.round(ratio * 100) + '%（' + (ratio >= 1 ? '估值高于标价' : '估值低于标价') + '）');
     }
-    lines.push('🔍 参考差价：' + (result.details.finalValue - priceYuan >= 0 ? '+' : '') + fmtMoney(result.details.finalValue - priceYuan));
+    lines.push('🔍 参考差价：' + (d.finalValue - priceYuan >= 0 ? '+' : '') + fmtMoney(d.finalValue - priceYuan));
   }
   lines.push('');
   lines.push('⚠️ 估值仅供参考，以实际成交为准');
@@ -282,8 +304,12 @@ function createQQBotHandler(opts) {
     }
     const t0 = Date.now();
     const engine = getEngine('wuwa');
-    const result = engine.evaluateWithPrice(desc, Math.round(priceYuan * 100));
-    result.shortDescription = engine.generateShortDescription(result);
+    // 优先使用服务器数据库配置的权重（与管理后台/网站估价一致），失败回退源码内置默认值
+    let weights = null;
+    if (opts.getWeights) {
+      try { weights = await opts.getWeights(); } catch (e) { weights = null; }
+    }
+    const result = engine.evaluateWithPrice(desc, Math.round(priceYuan * 100), weights);
     const reply = formatReply(result, priceYuan);
     onLog({
       time: new Date().toISOString(),
