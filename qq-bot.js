@@ -204,7 +204,10 @@ function formatReply(result, priceYuan) {
     lines.push('🏷️ 标价：' + fmtMoney(priceYuan));
     const ratio = result.costPerformance;
     if (ratio != null && isFinite(ratio)) {
-      lines.push('📊 性价比：' + Math.round(ratio * 100) + '%（' + (ratio >= 1 ? '估值高于标价' : '估值低于标价') + '）');
+      // 引擎的 costPerformance = (估值-标价)/标价×100（已是百分比数值，勿再乘100）；
+      // 性价比 = 估值/标价×100 = 100 + costPerformance
+      const pct = Math.round((100 + ratio) * 10) / 10;
+      lines.push('📊 性价比：' + pct + '%（' + (pct >= 100 ? '估值高于标价' : '估值低于标价') + '）');
     }
     lines.push('🔍 参考差价：' + (d.finalValue - priceYuan >= 0 ? '+' : '') + fmtMoney(d.finalValue - priceYuan));
   }
