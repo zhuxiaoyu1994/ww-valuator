@@ -184,9 +184,11 @@ function createQQBotHandler(opts) {
   };
   const getEngine = opts.getEngine;
   const onLog = opts.onLog || function () {};
-  if (!cfg.appId || !cfg.appSecret || !cfg.publicKey) {
+  // 只要求 AppID/Secret：回调地址验证挑战（op=13）仅需 Secret；
+  // 公钥缺失时挑战可用，真实事件消息会因验签失败被拒并给出明确日志
+  if (!cfg.appId || !cfg.appSecret) {
     return function (req, res) {
-      res.status(503).json({ success: false, error: 'QQ机器人未配置（缺少 QQ_BOT_APP_ID / QQ_BOT_SECRET / QQ_BOT_PUBLIC_KEY）' });
+      res.status(503).json({ success: false, error: 'QQ机器人未配置（缺少 QQ_BOT_APP_ID / QQ_BOT_SECRET）' });
     };
   }
 
@@ -259,7 +261,15 @@ function createQQBotHandler(opts) {
       // 1. Ed25519 验签（对 timestamp + 原始body）
       const sig = req.headers['x-signature-ed25519'] || '';
       const ts = req.headers['x-signature-timestamp'] || '';
-      if (!sig || !ts || !verifyEd25519(cfg.publicKey, ts, rawBody, sig)) {
+      if (!sig || !ts) {
+        console.warn('[QQ机器人] 缺少验签头，拒绝处理');
+        return res.status(401).json({ success: false, error: '缺少验签头' });
+      }
+      if (!cfg.publicKey) {
+        console.error('[QQ机器人] 收到事件推送但未配置 QQ_BOT_PUBLIC_KEY，无法验签。请到QQ开放平台复制机器人公钥并配置到 Vercel');
+        return res.status(401).json({ success: false, error: '服务端未配置公钥' });
+      }
+      if (!verifyEd25519(cfg.publicKey, ts, rawBody, sig)) {
         console.warn('[QQ机器人] 验签失败，拒绝处理');
         return res.status(401).json({ success: false, error: '签名校验失败' });
       }
