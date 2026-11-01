@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.6.1
-// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.6.1 闲鱼解析器适配真实响应结构 data.resultList→card.data.item.main）
+// @version      4.7.0
+// @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.7.0 移除网站蜂鸣音效、各平台独立刷新间隔、指定账号通知支持标价范围）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
 // @match        https://www.pxb7.com/buy/10312/*
@@ -1098,6 +1098,22 @@
   let jymEnabled = false;       // 交易猫平台开关（v4.3.0，纯展示模式：只收录最新商品不做估值）
   let xyEnabled = false;        // 闲鱼平台开关（v4.4.0，捕获模式：接收闲鱼页面捕获的商品，标价≥2000展示）
   let xyMinPrice = 2000;        // 闲鱼收录门槛（v4.5.0 可设置，默认¥2000）
+  // 各平台独立扫描间隔（v4.7.0，秒；0=跟随全局刷新间隔每轮都扫）
+  let pzdsIntervalSec = 0;
+  let kjsIntervalSec = 0;
+  let qyIntervalSec = 0;
+  let ysyIntervalSec = 0;
+  let jymIntervalSec = 0;
+  let pzdsLastScanAt = 0;       // 各平台上次扫描时间戳（运行时，不持久化）
+  let kjsLastScanAt = 0;
+  let qyLastScanAt = 0;
+  let ysyLastScanAt = 0;
+  let jymLastScanAt = 0;
+  /** 平台是否到扫描时间：间隔≤0=每轮都扫（跟随全局），否则按独立间隔节流 */
+  function platformScanDue(lastAt, intervalSec) {
+    if (!intervalSec || intervalSec <= 0) return true;
+    return (Date.now() - lastAt) >= intervalSec * 1000;
+  }
   // 指定账号通知规则
   let charNotifyRules = [];   // 指定账号通知规则（游戏切换时从 G().defaultCharNotifyRules 重置）
   // 推送通知配置
@@ -1116,7 +1132,7 @@
     skipHighDiffSecondary: false, // 从通知过滤高差价（开启后差价>阈值的账号不推送给从通知用户）
     highDiffThreshold: 400,      // 从通知差价过滤阈值(元)
     highDiffFilterPlatforms: [], // 从通知高差价过滤的平台列表（空=全部平台）
-    soundAlert: true,      // 声音提醒
+    soundAlert: false,     // 声音提醒（v4.7.0 已永久禁用，字段保留兼容旧云同步数据）
     visualAlert: true,     // 视觉提醒（页面闪烁+标题闪烁）
     repeatAlert: false,    // 重复提醒（每30秒直到确认）
   };
@@ -6943,6 +6959,14 @@
     }
   }
 
+  /** v4.7.0 指定账号规则的标价范围匹配：priceMin/priceMax 任一为0表示该侧不限制 */
+  function rulePriceInRange(rule, price) {
+    if (!rule) return true;
+    if (rule.priceMin > 0 && price < rule.priceMin) return false;
+    if (rule.priceMax > 0 && price > rule.priceMax) return false;
+    return true;
+  }
+
   /**
    * 初估阶段通知检查：估值达标时立即推送，不等详情API
    * 避免详情队列堆积导致通知延迟（队列60+条时延迟可达5分钟）
@@ -6955,8 +6979,9 @@
     if ((valuation.level || 0) < 70) return false;
 
     const notifyDiff = valuation.totalValue - price;
-    // 检查指定账号通知规则
+    // 检查指定账号通知规则（v4.7.0 须同时满足标价范围）
     const matchedRules = charNotifyRules.filter(rule =>
+      rulePriceInRange(rule, price) &&
       rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
     );
     // 常规通知条件
@@ -7156,8 +7181,9 @@
           // 秒杀商品使用秒杀价计算差价和通知条件
           const notifyPrice = finalPrice;
           const notifyDiff = valuation.totalValue - notifyPrice;
-          // 1. 优先检查指定账号通知规则（须满足全部角色条件 + 差价）
+          // 1. 优先检查指定账号通知规则（须满足全部角色条件 + 标价范围 + 差价）
           const matchedRules = charNotifyRules.filter(rule =>
+            rulePriceInRange(rule, notifyPrice) &&
             rule.chars.every(rc => parsed.characters.some(c => c.name === rc.name && c.const >= rc.minConst))
           );
           // 常规通知条件：差价超过阈值，且估值/标价不低于各自下限，且标价不高于上限
@@ -8033,7 +8059,20 @@
         '<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">最大扫描页数</label>' +
         '<input type="number" id="mwScanPages" value="' + scanPages + '" min="1" max="10" style="width:100%;padding:8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:13px;" /></div>' +
         '</div>' +
-        '<div style="font-size:11px;color:#666;margin-bottom:16px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">刷新间隔建议10~60秒；最大扫描页数=每轮最多翻几页（每页20条），遇到已见商品会自动提前停止，建议2~5页</div>' +
+        '<div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">盼之(秒)</label>' +
+        '<input type="number" id="mwPzdsInterval" value="' + (pzdsIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">氪金兽(秒)</label>' +
+        '<input type="number" id="mwKjsInterval" value="' + (kjsIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">7881(秒)</label>' +
+        '<input type="number" id="mwQyInterval" value="' + (qyIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">易手游(秒)</label>' +
+        '<input type="number" id="mwYsyInterval" value="' + (ysyIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '<div><label style="font-size:11px;color:#888;display:block;margin-bottom:2px;">交易猫(秒)</label>' +
+        '<input type="number" id="mwJymInterval" value="' + (jymIntervalSec || 0) + '" min="0" max="86400" style="width:64px;padding:5px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" /></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">各平台独立扫描间隔（v4.7.0），填0=跟随上方刷新间隔每轮都扫；例如全局60秒、交易猫300秒=交易猫每5分钟才扫一次</div>' +
         // 防风控转发中继（v4.2.0）
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">防风控转发中继（可选）</div>' +
         '<div style="margin-bottom:6px;"><label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">中继地址（留空=直连）</label>' +
@@ -8137,12 +8176,17 @@
         '</div>' +
         '<div id="mwCharNotifyPending" style="margin-bottom:8px;"></div>' +
         '<div id="mwCharNotifyRecipients" style="margin-bottom:8px;"></div>' +
-        '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;">' +
+        '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">' +
         '<label style="font-size:12px;color:#888;">最低差价(元)</label>' +
         '<input type="number" id="mwCharNotifyDiff" value="0" min="0" style="width:80px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
+        '<label style="font-size:12px;color:#888;">标价范围(元)</label>' +
+        '<input type="number" id="mwCharNotifyPriceMin" value="0" min="0" placeholder="最低" style="width:64px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
+        '<span style="color:#888;font-size:12px;">-</span>' +
+        '<input type="number" id="mwCharNotifyPriceMax" value="0" min="0" placeholder="最高" style="width:64px;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#e0e0e0;font-size:12px;text-align:center;" />' +
         '<button id="mwCharNotifyAddRule" style="padding:6px 12px;border:none;border-radius:4px;background:#f59e0b;color:#1a1a2e;font-size:12px;font-weight:600;cursor:pointer;">保存规则</button>' +
         '<button id="mwCharNotifyCancelEdit" style="display:none;padding:6px 12px;border:1px solid #0f3460;border-radius:4px;background:#16213e;color:#aaa;font-size:12px;cursor:pointer;">取消编辑</button>' +
         '</div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:16px;">标价范围=商品标价在此区间才推送该规则（v4.7.0），填0表示该侧不限制，如 500-1000 只推标价500~1000元的账号</div>' +
         // 最低限制
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">最低限制</div>' +
         '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -8156,7 +8200,7 @@
         '<div style="font-size:11px;color:#666;margin-bottom:16px;">估值或标价低于各自下限时不会发送通知，标价高于上限时也不通知（填0表示不限制）</div>' +
         // 提醒方式
         '<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">提醒方式</div>' +
-        '<div style="margin-bottom:8px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwSoundAlert" ' + (pushConfig.soundAlert ? 'checked' : '') + ' style="margin-right:6px;">声音提醒（连续蜂鸣3次）</label></div>' +
+        '<div style="font-size:11px;color:#666;margin-bottom:8px;">声音提醒已移除（v4.7.0，避免音爆）</div>' +
         '<div style="margin-bottom:8px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwVisualAlert" ' + (pushConfig.visualAlert ? 'checked' : '') + ' style="margin-right:6px;">视觉提醒（标题闪烁+大横幅）</label></div>' +
         '<div style="margin-bottom:16px;"><label style="font-size:13px;color:#ccc;cursor:pointer;"><input type="checkbox" id="mwRepeatAlert" ' + (pushConfig.repeatAlert ? 'checked' : '') + ' style="margin-right:6px;">重复提醒（每30秒直到确认）</label></div>' +
         // 手机推送
@@ -8304,10 +8348,14 @@
             row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;background:#16213e;border-radius:6px;margin-bottom:4px;flex-wrap:wrap;';
             var charStr = r.chars.map(function (c) { return c.name + (c.minConst > 0 ? c.minConst + '命+' : ''); }).join(' + ');
             var diffStr = r.minDiff !== 0 ? ('差价>' + r.minDiff + '元') : '不限差价';
+            var rangeStr = (r.priceMin > 0 || r.priceMax > 0)
+              ? ('标价' + (r.priceMin > 0 ? r.priceMin : '0') + '-' + (r.priceMax > 0 ? r.priceMax : '∞') + '元')
+              : '不限标价';
             var recStr = (r.recipients && r.recipients.length) ? ('→ 推给 ' + r.recipients.map(scEsc).join('、')) : '→ 推给全部接收人';
             row.innerHTML = '<span style="color:#e94560;font-weight:600;">规则' + (idx + 1) + ':</span>' +
               '<span style="color:#6a9fff;">' + charStr + '</span>' +
               '<span style="color:#888;">' + diffStr + '</span>' +
+              '<span style="color:#f59e0b;">' + rangeStr + '</span>' +
               '<span style="color:#10b981;">' + recStr + '</span>' +
               '<span style="margin-left:auto;display:flex;gap:4px;">' +
               '<button class="edit-rule" style="padding:2px 8px;border:none;border-radius:4px;background:#0f3460;color:#6a9fff;font-size:11px;cursor:pointer;">编辑</button>' +
@@ -8330,6 +8378,8 @@
         pendingChars = [];
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = '0';
+        box.querySelector('#mwCharNotifyPriceMin').value = '0';
+        box.querySelector('#mwCharNotifyPriceMax').value = '0';
         box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = false; });
         box.querySelector('#mwCharNotifyAddRule').textContent = '保存规则';
         var cancelBtn = box.querySelector('#mwCharNotifyCancelEdit');
@@ -8344,6 +8394,8 @@
         pendingChars = r.chars.map(function (c) { return { name: c.name, minConst: c.minConst }; });
         renderPendingChars();
         box.querySelector('#mwCharNotifyDiff').value = r.minDiff || 0;
+        box.querySelector('#mwCharNotifyPriceMin').value = r.priceMin || 0;
+        box.querySelector('#mwCharNotifyPriceMax').value = r.priceMax || 0;
         var recs = r.recipients || [];
         box.querySelectorAll('.mwRuleRecipient').forEach(function (cb) { cb.checked = recs.indexOf(cb.value) >= 0; });
         box.querySelector('#mwCharNotifyAddRule').textContent = '更新规则';
@@ -8368,10 +8420,14 @@
       box.querySelector('#mwCharNotifyAddRule').onclick = function () {
         if (pendingChars.length === 0) { alert('请至少添加一个角色'); return; }
         var minDiff = parseFloat(box.querySelector('#mwCharNotifyDiff').value) || 0;
+        // v4.7.0 标价范围（0=不限制）
+        var priceMin = parseFloat(box.querySelector('#mwCharNotifyPriceMin').value) || 0;
+        var priceMax = parseFloat(box.querySelector('#mwCharNotifyPriceMax').value) || 0;
+        if (priceMin > 0 && priceMax > 0 && priceMin > priceMax) { alert('标价范围下限不能大于上限'); return; }
         // 收集勾选的 Server酱 接收人（空数组=推给所有"收全部通知"的接收人）
         var ruleRecipients = [];
         box.querySelectorAll('.mwRuleRecipient:checked').forEach(function (cb) { ruleRecipients.push(cb.value); });
-        var newRule = { chars: pendingChars.slice(), minDiff: minDiff, recipients: ruleRecipients };
+        var newRule = { chars: pendingChars.slice(), minDiff: minDiff, priceMin: priceMin, priceMax: priceMax, recipients: ruleRecipients };
         if (editingRuleIdx >= 0 && editingRuleIdx < charNotifyRules.length) {
           charNotifyRules[editingRuleIdx] = newRule; // 更新已有规则
         } else {
@@ -8813,7 +8869,7 @@
             var savedPlatforms = pushConfig.highDiffFilterPlatforms || [];
             box.querySelectorAll('.mwHighDiffPlatform').forEach(function (cb) { cb.checked = savedPlatforms.indexOf(cb.value) >= 0; });
             // 提醒方式
-            box.querySelector('#mwSoundAlert').checked = !!pushConfig.soundAlert;
+            // 声音提醒已移除（v4.7.0）
             box.querySelector('#mwVisualAlert').checked = !!pushConfig.visualAlert;
             box.querySelector('#mwRepeatAlert').checked = !!pushConfig.repeatAlert;
             // 通知阈值
@@ -8827,6 +8883,11 @@
             box.querySelector('#mwAutoBuyMaxPrice').value = autoBuyMaxPrice || 0;
             // 监控设置
             box.querySelector('#mwRefreshInterval').value = refreshIntervalSec || 60;
+            box.querySelector('#mwPzdsInterval').value = pzdsIntervalSec || 0;
+            box.querySelector('#mwKjsInterval').value = kjsIntervalSec || 0;
+            box.querySelector('#mwQyInterval').value = qyIntervalSec || 0;
+            box.querySelector('#mwYsyInterval').value = ysyIntervalSec || 0;
+            box.querySelector('#mwJymInterval').value = jymIntervalSec || 0;
             box.querySelector('#mwScanPages').value = scanPages || 3;
             box.querySelector('#mwFlashSaleEnabled').checked = !!flashSaleEnabled;
             box.querySelector('#mwPzdsEnabled').checked = !!pzdsEnabled;
@@ -8856,6 +8917,18 @@
         if (newInterval > 3600) newInterval = 3600;
         var intervalChanged = newInterval !== refreshIntervalSec;
         refreshIntervalSec = newInterval;
+        // v4.7.0 各平台独立扫描间隔（0=跟随全局）
+        function readPlatInterval(id) {
+          var v = parseInt(box.querySelector(id).value, 10);
+          if (!(v >= 0)) v = 0;
+          if (v > 86400) v = 86400;
+          return v;
+        }
+        pzdsIntervalSec = readPlatInterval('#mwPzdsInterval');
+        kjsIntervalSec = readPlatInterval('#mwKjsInterval');
+        qyIntervalSec = readPlatInterval('#mwQyInterval');
+        ysyIntervalSec = readPlatInterval('#mwYsyInterval');
+        jymIntervalSec = readPlatInterval('#mwJymInterval');
         var newScanPages = parseInt(box.querySelector('#mwScanPages').value) || 3;
         if (newScanPages < 1) newScanPages = 1;
         if (newScanPages > 10) newScanPages = 10;
@@ -8870,7 +8943,7 @@
         xyMinPrice = parseInt(box.querySelector('#mwXyMinPrice').value, 10);
         if (!(xyMinPrice >= 0)) xyMinPrice = 2000;
         // charNotifyRules 已在添加/删除时实时修改，无需额外读取
-        pushConfig.soundAlert = box.querySelector('#mwSoundAlert').checked;
+        // pushConfig.soundAlert 不再读取（v4.7.0 已移除音效，云同步字段保留兼容）
         pushConfig.visualAlert = box.querySelector('#mwVisualAlert').checked;
         pushConfig.repeatAlert = box.querySelector('#mwRepeatAlert').checked;
         // serverChanSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
@@ -13838,10 +13911,7 @@ function openSettings() {
       showAlertBanner('自动抢购-弹窗被拦截', '请允许弹窗后重试，或手动点击查看\n差价' + diff.toFixed(0) + '元', productId);
     } else {
       showAlertBanner('自动抢购已触发', '已打开商品页并自动点击购买\n差价' + diff.toFixed(0) + '元，请尽快扫码支付', productId);
-      // 急促报警声
-      if (pushConfig.soundAlert) {
-        beepMultiple(8);
-      }
+      // 急促报警声已移除（v4.7.0 音效禁用）
     }
   }
 
@@ -14233,10 +14303,7 @@ function openSettings() {
       }
     } catch (e) { }
 
-    // 3. 声音提醒（连续蜂鸣3次）— 不依赖桌面通知权限
-    if (pushConfig.soundAlert) {
-      beepMultiple(3);
-    }
+    // 3. 声音提醒已移除（v4.7.0：蜂鸣音效导致电脑音爆问题，永久禁用）
 
     // 4. 视觉提醒（标题闪烁 + 大横幅）— 不依赖桌面通知权限
     if (pushConfig.visualAlert) {
@@ -14258,11 +14325,10 @@ function openSettings() {
     // 6. 手机推送
     sendPhonePush(title, mdBody || body, productId, ruleRecipients);
 
-    // 7. 重复提醒
+    // 7. 重复提醒（v4.7.0 移除蜂鸣，仅标题闪烁）
     if (pushConfig.repeatAlert) {
       stopRepeatAlert();
       repeatAlertTimer = setInterval(function () {
-        beepMultiple(2);
         startTitleBlink(title);
       }, 30000); // 每30秒重复
     }
@@ -14278,24 +14344,10 @@ function openSettings() {
   }
 
   /**
-   * 播放提示音
+   * 播放提示音（v4.7.0 永久禁用：蜂鸣音效导致电脑音爆问题，保留空函数避免遗留引用报错）
    */
   function beep() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-      // 播放结束后关闭 AudioContext，否则每次提醒都会泄漏一个上下文（浏览器上限约6个）
-      osc.onended = function () { try { ctx.close(); } catch (e) { } };
-      osc.start();
-      osc.stop(ctx.currentTime + 0.5);
-    } catch (e) { }
+    return;
   }
 
   /**
@@ -14819,6 +14871,11 @@ function openSettings() {
       qyEnabled: qyEnabled != null ? qyEnabled : true,
       ysyEnabled: ysyEnabled != null ? ysyEnabled : false,
       jymEnabled: jymEnabled != null ? jymEnabled : false,
+      pzdsIntervalSec: pzdsIntervalSec || 0,
+      kjsIntervalSec: kjsIntervalSec || 0,
+      qyIntervalSec: qyIntervalSec || 0,
+      ysyIntervalSec: ysyIntervalSec || 0,
+      jymIntervalSec: jymIntervalSec || 0,
       xyEnabled: xyEnabled != null ? xyEnabled : false,
       xyMinPrice: xyMinPrice != null ? xyMinPrice : 2000,
       // 角色通知规则
@@ -14899,6 +14956,11 @@ function openSettings() {
             if (remote.jymEnabled != null) jymEnabled = remote.jymEnabled;
             if (remote.xyEnabled != null) xyEnabled = remote.xyEnabled;
             if (remote.xyMinPrice != null) xyMinPrice = remote.xyMinPrice;
+            if (remote.pzdsIntervalSec != null) pzdsIntervalSec = remote.pzdsIntervalSec;
+            if (remote.kjsIntervalSec != null) kjsIntervalSec = remote.kjsIntervalSec;
+            if (remote.qyIntervalSec != null) qyIntervalSec = remote.qyIntervalSec;
+            if (remote.ysyIntervalSec != null) ysyIntervalSec = remote.ysyIntervalSec;
+            if (remote.jymIntervalSec != null) jymIntervalSec = remote.jymIntervalSec;
             // 角色通知规则
             if (Array.isArray(remote.charNotifyRules)) charNotifyRules = remote.charNotifyRules;
             saveState();
@@ -15639,6 +15701,11 @@ function openSettings() {
         jymEnabled: jymEnabled,
         xyEnabled: xyEnabled,
         xyMinPrice: xyMinPrice,
+        pzdsIntervalSec: pzdsIntervalSec,
+        kjsIntervalSec: kjsIntervalSec,
+        qyIntervalSec: qyIntervalSec,
+        ysyIntervalSec: ysyIntervalSec,
+        jymIntervalSec: jymIntervalSec,
       }));
       // 共享 state 只更新通知/推送/估值字段；monitorRunning 与扫描设置保持螃蟹页签的值不动
       const shared = loadStorage(STORAGE_KEYS.state, {}) || {};
@@ -15683,6 +15750,11 @@ function openSettings() {
       jymEnabled: jymEnabled,
       xyEnabled: xyEnabled,
       xyMinPrice: xyMinPrice,
+      pzdsIntervalSec: pzdsIntervalSec,
+      kjsIntervalSec: kjsIntervalSec,
+      qyIntervalSec: qyIntervalSec,
+      ysyIntervalSec: ysyIntervalSec,
+      jymIntervalSec: jymIntervalSec,
       charNotifyRules: charNotifyRules,
       pushConfig: pushConfig,
       _intervalMigrated: true,
@@ -16027,7 +16099,8 @@ function openSettings() {
     try {
 
       // 盼之平台扫描（SSR HTML抓取，多入口聚合扩大覆盖）
-      if (pzdsEnabled) {
+      if (pzdsEnabled && platformScanDue(pzdsLastScanAt, pzdsIntervalSec)) {
+        pzdsLastScanAt = Date.now();
         try {
           const pzdsProducts = await fetchPZListMulti();
           if (pzdsProducts.length > 0) {
@@ -16040,7 +16113,8 @@ function openSettings() {
       }
 
       // 氪金兽平台扫描（MWP API，按最新发布排序）
-      if (kjsEnabled) {
+      if (kjsEnabled && platformScanDue(kjsLastScanAt, kjsIntervalSec)) {
+        kjsLastScanAt = Date.now();
         try {
           const kjsProducts = await kjsSearch(1);
           if (kjsProducts.length > 0) {
@@ -16053,7 +16127,8 @@ function openSettings() {
       }
 
       // 7881平台扫描（API抓取，MD5签名认证，按最新发布排序）
-      if (qyEnabled) {
+      if (qyEnabled && platformScanDue(qyLastScanAt, qyIntervalSec)) {
+        qyLastScanAt = Date.now();
         try {
           const qyProducts = await qySearch(1);
           if (qyProducts.length > 0) {
@@ -16066,7 +16141,8 @@ function openSettings() {
       }
 
       // 易手游平台扫描（结构化API，按最新发布排序）
-      if (ysyEnabled && G().platformIds.ysy > 0) {
+      if (ysyEnabled && G().platformIds.ysy > 0 && platformScanDue(ysyLastScanAt, ysyIntervalSec)) {
+        ysyLastScanAt = Date.now();
         try {
           const ysyProducts = await fetchYSYList(1);
           if (ysyProducts.length > 0) {
@@ -16461,27 +16537,32 @@ function openSettings() {
         ? 'API:' + pzdsLastApiFailReason : '';
       pzdsSilentStat.rounds++;
 
-      // ── 其他平台：按分工规则，盼之页签跟随盼之循环轴扫描氪金兽/7881/易手游，
-      // 开关在「扫描与日志」设置里控制（盼之侧存储，与螃蟹页签独立），seenIds 共享去重防重复推送 ──
-      if (kjsEnabled) {
+      // ── 其他平台：按分工规则，盼之页签跟随盼之循环轴扫描氪金兽/7881/易手游/交易猫，
+      // 开关在「扫描与日志」设置里控制（盼之侧存储，与螃蟹页签独立），seenIds 共享去重防重复推送。
+      // v4.7.0 各平台支持独立扫描间隔（0=每轮都扫），不到时间的平台本轮跳过 ──
+      if (kjsEnabled && platformScanDue(kjsLastScanAt, kjsIntervalSec)) {
+        kjsLastScanAt = Date.now();
         try {
           const kjsProducts = await kjsSearch(1);
           if (kjsProducts.length > 0) await handleKJSListResponse(kjsProducts);
         } catch (e) { console.error('[鸣潮监控-盼之循环] 氪金兽扫描失败:', e); }
       }
-      if (qyEnabled) {
+      if (qyEnabled && platformScanDue(qyLastScanAt, qyIntervalSec)) {
+        qyLastScanAt = Date.now();
         try {
           const qyProducts = await qySearch(1);
           if (qyProducts.length > 0) await handleQYListResponse(qyProducts);
         } catch (e) { console.error('[鸣潮监控-盼之循环] 7881扫描失败:', e); }
       }
-      if (ysyEnabled && G().platformIds.ysy > 0) {
+      if (ysyEnabled && G().platformIds.ysy > 0 && platformScanDue(ysyLastScanAt, ysyIntervalSec)) {
+        ysyLastScanAt = Date.now();
         try {
           const ysyProducts = await fetchYSYList(1);
           if (ysyProducts.length > 0) await handleYSYListResponse(ysyProducts);
         } catch (e) { console.error('[鸣潮监控-盼之循环] 易手游扫描失败:', e); }
       }
-      if (jymEnabled && G().platformIds.jym) {
+      if (jymEnabled && G().platformIds.jym && platformScanDue(jymLastScanAt, jymIntervalSec)) {
+        jymLastScanAt = Date.now();
         try {
           const jymProducts = await fetchJYMList();
           if (jymProducts.length > 0) await handleJYMListResponse(jymProducts);
@@ -16666,6 +16747,11 @@ function openSettings() {
     qyEnabled = savedState.qyEnabled != null ? savedState.qyEnabled : false;
       ysyEnabled = savedState.ysyEnabled != null ? savedState.ysyEnabled : false;
     jymEnabled = savedState.jymEnabled != null ? savedState.jymEnabled : false;
+    pzdsIntervalSec = savedState.pzdsIntervalSec != null ? savedState.pzdsIntervalSec : 0;
+    kjsIntervalSec = savedState.kjsIntervalSec != null ? savedState.kjsIntervalSec : 0;
+    qyIntervalSec = savedState.qyIntervalSec != null ? savedState.qyIntervalSec : 0;
+    ysyIntervalSec = savedState.ysyIntervalSec != null ? savedState.ysyIntervalSec : 0;
+    jymIntervalSec = savedState.jymIntervalSec != null ? savedState.jymIntervalSec : 0;
     xyEnabled = savedState.xyEnabled != null ? savedState.xyEnabled : false;
     xyMinPrice = savedState.xyMinPrice != null ? savedState.xyMinPrice : 2000;
     charNotifyRules = Array.isArray(savedState.charNotifyRules) ? savedState.charNotifyRules : charNotifyRules;
@@ -16712,6 +16798,11 @@ function openSettings() {
       qyEnabled = tabState.qyEnabled != null ? tabState.qyEnabled : true;
       ysyEnabled = tabState.ysyEnabled != null ? tabState.ysyEnabled : true;
       jymEnabled = tabState.jymEnabled != null ? tabState.jymEnabled : true;
+      pzdsIntervalSec = tabState.pzdsIntervalSec != null ? tabState.pzdsIntervalSec : 0;
+      kjsIntervalSec = tabState.kjsIntervalSec != null ? tabState.kjsIntervalSec : 0;
+      qyIntervalSec = tabState.qyIntervalSec != null ? tabState.qyIntervalSec : 0;
+      ysyIntervalSec = tabState.ysyIntervalSec != null ? tabState.ysyIntervalSec : 0;
+      jymIntervalSec = tabState.jymIntervalSec != null ? tabState.jymIntervalSec : 0;
       xyEnabled = tabState.xyEnabled != null ? tabState.xyEnabled : true;
       xyMinPrice = tabState.xyMinPrice != null ? tabState.xyMinPrice : 2000;
     }
