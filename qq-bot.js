@@ -259,6 +259,10 @@ function createQQBotHandler(opts) {
 
   // 限频表：openid -> [timestamps]
   const rateMap = new Map();
+  // 消息幂等去重：QQ 对处理慢的事件会重推（同 msg_id），只处理一次。
+  // 之前 msg_seq 固定为 1 时重推的回复被 QQ 去重掩盖；msg_seq 递增修复后重推会发出第二条回复，
+  // 因此必须在处理入口按消息 id 去重。
+  const handledMsgIds = new Map(); // msgId -> 首次处理时间
   // 调试：记录最后一次 webhook 请求（供 /api/qq-bot-debug 排查回调验证问题）
   let lastDebug = { time: null, path: null, headers: null, bodyHead: null, note: null, status: null };
   let lastError = null;   // 异步处理（回复消息）失败的详情
@@ -405,6 +409,24 @@ function createQQBotHandler(opts) {
       // 2. 事件分发（全部先 200，再异步处理，避免 QQ 超时重推）
       const type = bodyObj.t || '';
       const d = bodyObj.d || {};
+
+      // 2.5 消息幂等去重：同一 msg_id 只处理一次（10 分钟窗口）
+      const evtMsgId = String(d.id || '');
+      if (evtMsgId) {
+        const now = Date.now();
+        if (handledMsgIds.size > 2000) {
+          for (const [k, t] of handledMsgIds) {
+            if (now - t > 600000) handledMsgIds.delete(k);
+          }
+        }
+        if (handledMsgIds.has(evtMsgId)) {
+          recordDebug(req, '重复推送已忽略（幂等去重）', 200);
+          console.log('[QQ机器人] 重复推送已忽略: ' + evtMsgId.slice(0, 30));
+          return res.json({ success: true, duplicated: true });
+        }
+        handledMsgIds.set(evtMsgId, now);
+      }
+
       if (type === 'GROUP_AT_MESSAGE_CREATE') {
         // Vercel Serverless 在响应返回后会冻结函数，必须先处理完（估价+回复）再应答，
         // 否则异步回复永远没有执行机会
