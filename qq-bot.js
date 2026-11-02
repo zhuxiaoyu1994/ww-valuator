@@ -149,19 +149,23 @@ async function sendReply(cfg, openid, isGroup, content, msgId) {
 
 const HELP_TEXT = '🤖 鸣潮账号估价\n\n用法：@机器人 + 商品描述 +（可选）标价\n示例：\n· @机器人 今汐满命 洛可可满命 长离1命 金18 抽卡剩200发 标价3500\n· @机器人 维里奈0命 延奏金3 ¥1200\n\n标价支持写法：标价3500 / ¥3500 / 3500元\n命座范围 0~6（满命）\n⚠️ 估值仅供参考，以实际成交为准';
 
-// 调戏检测：明显不存在的命座写法（1.3命 / -99命 / π命……），回敬一句
 const TEASE_TEXTS = [
   '🙄 调戏无效，白眼已翻。命座上限就是 6（满命），小数命、负数命、π 命在这个世界都不存在。\n正经描述，正经估价～',
   '😒 检测到整活成分 ≥ 99%。命座 0~6，请按地球规则发描述。',
   '🙄 命座不是浮点数，也不是负数，更不是圆周率。再来一次，正经点。',
   '😴 这号是平行世界的吧？本机器人只估这个世界的号。命座 0~6，谢谢配合。',
 ];
+// 调戏检测：明显不存在的命座写法（1.3命 / -99命 / π命 / 99命……）
+// 返回 null=正常；'decimal'/'negative'/'letter'=无效写法；'over:N'=整数超过命座上限 N
 function detectInvalidConst(text) {
-  if (!text) return false;
-  if (/\d+\.\d+\s*命/.test(text)) return true;              // 小数命：1.3命
-  if (/-\s*\d+\s*命/.test(text)) return true;               // 负数命：-99命
-  if (/[A-Za-z\u0370-\u03FF\u2100-\u214F]\s*命/.test(text)) return true; // 字母/希腊字母命：π命
-  return false;
+  if (!text) return null;
+  if (/\d+\.\d+\s*命/.test(text)) return 'decimal';              // 小数命：1.3命
+  if (/-\s*\d+\s*命/.test(text)) return 'negative';              // 负数命：-99命
+  if (/[A-Za-z\u0370-\u03FF\u2100-\u214F]\s*命/.test(text)) return 'letter'; // 字母/希腊字母命：π命
+  for (const m of text.matchAll(/(\d+)\s*命/g)) {                // 整数超上限：99命
+    if (parseInt(m[1], 10) > 6) return 'over:' + parseInt(m[1], 10);
+  }
+  return null;
 }
 
 /** 提取标价：仅识别明确的价格写法，避免把描述里的数字（命座/抽数）误当价格 */
@@ -334,9 +338,12 @@ function createQQBotHandler(opts) {
       await tryReply(openid, isGroup, HELP_TEXT, d.id);
       return;
     }
-    // 调戏检测：明显无效的命座写法（1.3命 / -99命 / π命），回敬一句，不估价
-    if (detectInvalidConst(text)) {
-      const msg = TEASE_TEXTS[Math.floor(Math.random() * TEASE_TEXTS.length)];
+    // 调戏检测：明显无效的命座写法（1.3命 / -99命 / π命 / 99命），回敬一句，不估价
+    const tease = detectInvalidConst(text);
+    if (tease) {
+      const msg = String(tease).startsWith('over:')
+        ? '🙄 ' + tease.slice(5) + ' 命？把开发者都惊动了。命座上限就是 6（满命），调戏无效，白眼已翻。'
+        : TEASE_TEXTS[Math.floor(Math.random() * TEASE_TEXTS.length)];
       await tryReply(openid, isGroup, msg, d.id);
       return;
     }
