@@ -562,6 +562,32 @@ app.get('/api/qq-bot-debug', (req, res) => {
 // ============================================================
 const SITE_EVAL_OFFLINE = true;
 
+// ---- 管理员估价后门 ----
+// 用法：访问任意下线页面并在 URL 带上 key=管理员密码（如 /wuwa?key=xxx），
+// 验证通过后种 90 天 HttpOnly Cookie，之后直接访问原页面/估价API，与他人不可见。
+// 恢复网站（SITE_EVAL_OFFLINE=false）后本段逻辑自动旁路，无需改动。
+function getCookie(req, name) {
+  const raw = req.headers.cookie || '';
+  for (const part of raw.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx > -1 && part.slice(0, idx).trim() === name) {
+      return decodeURIComponent(part.slice(idx + 1).trim());
+    }
+  }
+  return '';
+}
+function evalBackdoorGate(req, res, next) {
+  if (!SITE_EVAL_OFFLINE) return next();
+  // URL 带正确 key：种 Cookie 后放行（90天免重新验证）
+  if (req.query.key === ADMIN_PASSWORD) {
+    res.setHeader('Set-Cookie', 'ek=' + encodeURIComponent(ADMIN_PASSWORD) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + (90 * 24 * 3600));
+    return next();
+  }
+  // 已有有效通行证 Cookie：直接放行
+  if (getCookie(req, 'ek') === ADMIN_PASSWORD) return next();
+  return res.send(getOfflineNoticePage());
+}
+
 // 下线公告页：引导用户改用群机器人估价
 function getOfflineNoticePage() {
   return `<!DOCTYPE html>
@@ -648,7 +674,9 @@ function getOfflineNoticePage() {
 // 下线期间：拦截网站估价相关页面（API 拦截见各路由处）
 const OFFLINE_EVAL_APIS = ['/api/x9k2-eval', '/api/page-eval', '/api/x9k2-find'];
 if (SITE_EVAL_OFFLINE) {
-  app.all(OFFLINE_EVAL_APIS, (req, res) => {
+  app.all(OFFLINE_EVAL_APIS, (req, res, next) => {
+    // 管理员通行证（ek Cookie）放行
+    if (getCookie(req, 'ek') === ADMIN_PASSWORD) return next();
     res.json({
       success: false,
       offline: true,
@@ -1702,13 +1730,11 @@ app.post('/api/deals/delete', async (req, res) => {
 // ============================================================
 // Web 页面
 // ============================================================
-app.get('/', (req, res) => {
-  if (SITE_EVAL_OFFLINE) return res.send(getOfflineNoticePage());
+app.get('/', evalBackdoorGate, (req, res) => {
   res.send(getPlatformPage());
 });
 
-app.get('/wuwa', async (req, res) => {
-  if (SITE_EVAL_OFFLINE) return res.send(getOfflineNoticePage());
+app.get('/wuwa', evalBackdoorGate, async (req, res) => {
   const engine = getEngine('wuwa');
   const defaults = engine.getDefaults();
   const charList = buildCharList(defaults);
@@ -1775,9 +1801,8 @@ function buildCharList(defaults) {
 // ============================================================
 
 // 螃蟹网估价助手下载页（公开，仅提供脚本安装说明）
-// 下线期间插件估价依赖的 /api/page-eval 已关闭，一并显示下线公告
-app.get('/lite', (req, res) => {
-  if (SITE_EVAL_OFFLINE) return res.send(getOfflineNoticePage());
+// 下线期间插件估价依赖的 /api/page-eval 已关闭，一并显示下线公告（管理员通行证可绕过）
+app.get('/lite', evalBackdoorGate, (req, res) => {
   res.send(getLitePage());
 });
 
