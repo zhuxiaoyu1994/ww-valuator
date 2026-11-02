@@ -147,7 +147,7 @@ async function sendReply(cfg, openid, isGroup, content, msgId) {
 
 // ── 消息解析与回复格式化 ─────────────────────────────────────
 
-const HELP_TEXT = '🤖 鸣潮账号估价\n\n用法：@机器人 + 商品描述 +（可选）标价\n示例：\n· @机器人 今汐满命 洛可可满命 长离1命 金18 抽卡剩200发 标价3500\n· @机器人 维里奈0命 延奏金3 ¥1200\n\n标价支持写法：标价3500 / ¥3500 / 3500元\n命座范围 0~6（满命）\n⚠️ 估值仅供参考，以实际成交为准';
+const HELP_TEXT = '🤖 鸣潮账号估价\n\n用法：@机器人 + 商品描述 +（可选）标价\n示例：\n· @机器人 今汐满命 洛可可满命 长离1命 金18 抽卡剩200发 标价3500\n· @机器人 维里奈0命 延奏金3 ¥1200\n\n标价支持写法：标价3500 / ¥3500 / 3500元\n命座范围 0~6（满命）\n🧩 小游戏：发「开始猜价」来一局，「我叫昵称」上猜价榜单\n⚠️ 估值仅供参考，以实际成交为准';
 
 const TEASE_TEXTS = [
   '🙄 调戏无效，白眼已翻。命座上限就是 6（满命），小数命、负数命、π 命在这个世界都不存在。\n正经描述，正经估价～',
@@ -173,9 +173,10 @@ function detectInvalidConst(text) {
 // 字段 productId/showTitle/price(分)/payTime），通过 fetchPxb7Api（代理轮询+直连回退）拉取。
 // 局状态存 db KV（qq_guess_game），Vercel 多实例共享；30 分钟无人猜中惰性揭晓（serverless 无定时器）。
 const GUESS_STATE_KEY = 'qq_guess_game';
+const NICK_KEY = 'qq_nicknames';           // openid → 群友自报昵称（「我叫XX」登记）
 const GUESS_TOLERANCE = 0.10;              // ±10% 判中
 const GUESS_DURATION_MS = 60 * 1000;       // 1 分钟无人猜中自动揭晓
-const GUESS_PRODUCT_URL = 'https://www.pxb7.com/product/';
+const GUESS_PRODUCT_URL = 'https://www.pxb7.com/product/';  // 拼接 productId + '/1'
 
 function maskPrice(text) {
   return String(text)
@@ -354,6 +355,25 @@ function createQQBotHandler(opts) {
     if (!gameDb) return;
     try { await gameDb.setConfig(GUESS_STATE_KEY, state); } catch (e) { /* 忽略 */ }
   }
+  // 昵称表：QQ 官方机器人 webhook 拿不到群昵称（只有匿名 openid），由群友「我叫XX」自报
+  async function loadNicknames() {
+    if (!gameDb) return {};
+    try { return (await gameDb.getConfig(NICK_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  async function saveNickname(member, nick) {
+    if (!gameDb) return {};
+    let map = {};
+    try { map = (await gameDb.getConfig(NICK_KEY)) || {}; } catch (e) { /* 忽略 */ }
+    map[member] = nick;
+    try { await gameDb.setConfig(NICK_KEY, map); } catch (e) { /* 忽略 */ }
+    return map;
+  }
+  // 展示名：有昵称用昵称，否则退回 openid 尾4位
+  function displayName(member, nickMap) {
+    const n = nickMap && nickMap[member];
+    return n ? n : '...' + String(member).slice(-4);
+  }
 
   /** 出题：从螃蟹网昨日成交清单随机选一个 */
   async function startGuessGame() {
@@ -386,13 +406,13 @@ function createQQBotHandler(opts) {
       product: {
         productId: String(pick.productId),
         priceYuan: Math.round(Number(pick.price)) / 100,
-        url: GUESS_PRODUCT_URL + pick.productId,
+        url: GUESS_PRODUCT_URL + pick.productId + '/1',
       },
       maskedTitle: maskPrice(String(pick.showTitle)),
       guesses: {},
     };
     await saveGuessState(state);
-    return '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓';
+    return '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓';
   }
 
   /** 参与竞猜：每人记录最新一次猜价（可修改）；猜进 ±10% 立即揭晓 */
@@ -407,12 +427,13 @@ function createQQBotHandler(opts) {
     if (hit) st.winner = member;
     await saveGuessState(st);
     const cnt = Object.keys(st.guesses).length;
-    if (hit) return revealGuessText(st, 'solved');
+    if (hit) return await revealGuessText(st, 'solved');
     return '📥 已记录你的猜价：¥' + guess + '（第 ' + cnt + ' 位参与者）\n是否猜中暂不揭晓，等其他群友一起猜～';
   }
 
   /** 揭晓结果文案（纯展示，不改状态）；reason: solved | timeout | manual | recap */
-  function guessResultText(st, reason) {
+  async function guessResultText(st, reason) {
+    const nickMap = await loadNicknames();
     const p = st.product.priceYuan;
     const lines = [];
     const rangeLine = '💰 成交价：¥' + p + '（±10% 区间：¥' + Math.round(p * 0.9) + ' ~ ¥' + Math.round(p * 1.1) + '）';
@@ -421,14 +442,14 @@ function createQQBotHandler(opts) {
       const err = Math.round(Math.abs(wg - p) / p * 1000) / 10;
       lines.push('🎯 有人猜中，揭晓答案！');
       lines.push('💰 成交价：¥' + p);
-      lines.push('🎉 胜者：...' + String(st.winner).slice(-4) + '（猜 ¥' + wg + '，误差 ' + err + '%）');
+      lines.push('🎉 胜者：' + displayName(st.winner, nickMap) + '（猜 ¥' + wg + '，误差 ' + err + '%）');
     } else if (reason === 'recap') {
       lines.push('📢 上一局猜价结果：');
       lines.push('💰 成交价：¥' + p);
       if (st.winner) {
         const wg = (st.guesses[st.winner] || {}).guess;
         const err = Math.round(Math.abs(wg - p) / p * 1000) / 10;
-        lines.push('🎉 胜者：...' + String(st.winner).slice(-4) + '（猜 ¥' + wg + '，误差 ' + err + '%）');
+        lines.push('🎉 胜者：' + displayName(st.winner, nickMap) + '（猜 ¥' + wg + '，误差 ' + err + '%）');
       } else {
         lines.push(rangeLine);
       }
@@ -441,14 +462,14 @@ function createQQBotHandler(opts) {
     }
     const gs = Object.entries(st.guesses || {});
     if (gs.length > 0) {
-      lines.push('👥 本局猜价：' + gs.map(([k, v]) => '...' + String(k).slice(-4) + '猜¥' + v.guess).join('，'));
+      lines.push('👥 本局猜价：' + gs.map(([k, v]) => displayName(k, nickMap) + '猜¥' + v.guess).join('，'));
     }
     lines.push('🔗 商品链接：' + st.product.url);
     return lines.join('\n');
   }
 
   /** 揭晓当前局（置结束态并落盘），返回揭晓文案 */
-  function revealGuessText(st, reason) {
+  async function revealGuessText(st, reason) {
     st.active = false;
     st.revealed = true;
     st.revealedAt = Date.now();
@@ -465,7 +486,7 @@ function createQQBotHandler(opts) {
     try {
       const st = await loadGuessState();
       if (st.active && !st.revealed && now - st.startedAt > GUESS_DURATION_MS) {
-        return revealGuessText(st, 'timeout');
+        return await revealGuessText(st, 'timeout');
       }
     } catch (e) { /* 忽略 */ }
     return null;
@@ -514,22 +535,29 @@ function createQQBotHandler(opts) {
     const priceYuan = extractPrice(text);
     const desc = text.replace(/(?:价格|标价|售价|出价)\s*[:：]?\s*\d+(?:\.\d+)?/g, ' ').replace(/[¥￥]\s*\d+(?:\.\d+)?/g, ' ').replace(/\d+(?:\.\d+)?\s*元/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // 猜价游戏命令：开始猜价 / 结束猜价 / 猜 4500
+    // 猜价游戏命令：开始猜价 / 结束猜价 / 猜 4500 / 我叫XX
+    const nickCmd = text.match(/^我叫\s*([^\s]{1,12})$/);
     const guessCmd = text.match(/^(开始猜价|来局猜价|猜价游戏|结束猜价|公布答案)$/);
     const guessVal = text.match(/^猜价?[:：]?\s*(\d+(?:\.\d+)?)$/);
-    if (guessCmd || guessVal) {
+    if (nickCmd || guessCmd || guessVal) {
       if (!isGroup) {
         await tryReply(openid, isGroup, '猜价游戏请在群聊里玩～', d.id);
+        return;
+      }
+      if (nickCmd) {
+        const nick = nickCmd[1].trim();
+        await saveNickname(member, nick);
+        await tryReply(openid, isGroup, '✅ 好嘞，猜价榜单上就叫你「' + nick + '」！（下次猜价生效，再发可修改）', d.id);
         return;
       }
       if (guessCmd && (guessCmd[1] === '结束猜价' || guessCmd[1] === '公布答案')) {
         const st = await loadGuessState();
         if (st.active && !st.revealed) {
-          // 直接给结果：不等±10%，不等30分钟
-          await tryReply(openid, isGroup, revealGuessText(st, 'manual'), d.id);
+          // 直接给结果：不等±10%，不等超时
+          await tryReply(openid, isGroup, await revealGuessText(st, 'manual'), d.id);
         } else if (st.revealed && st.product) {
           // 无进行中的局：重看上一局结果
-          await tryReply(openid, isGroup, guessResultText(st, 'recap'), d.id);
+          await tryReply(openid, isGroup, await guessResultText(st, 'recap'), d.id);
         } else {
           await tryReply(openid, isGroup, '还没有猜价记录～发「开始猜价」来一局！', d.id);
         }
