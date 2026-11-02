@@ -362,6 +362,21 @@ function createQQBotHandler(opts) {
       note: note || '',
       status: status || null,
     };
+    // 持久化到 db KV：Vercel 多实例内存互不可见，调试信息必须落库才能被 debug 接口读到
+    return persistDebug();
+  }
+  const DEBUG_KEY = 'qq_bot_debug';
+  async function persistDebug() {
+    if (!gameDb) return;
+    try {
+      // 直接 await 写入（不用 setTimeout：Vercel 在响应后冻结函数，定时器不会执行）
+      await gameDb.setConfig(DEBUG_KEY, {
+        lastDebug: lastDebug,
+        lastReply: lastReply,
+        lastError: lastError,
+        lastCardError: lastCardError,
+      });
+    } catch (e) { /* 忽略 */ }
   }
   function rateCheck(openid) {
     const now = Date.now();
@@ -442,6 +457,7 @@ function createQQBotHandler(opts) {
         } catch (e) {
           lastCardError = { time: new Date().toISOString(), message: e.message, stack: String(e.stack || '').substring(0, 400) };
           lastReply = { time: new Date().toISOString(), ok: false, group: isGroup, costMs: Date.now() - t0, contentHead: '[卡片失败回退文本] ' + String(p.text).substring(0, 90), error: e.message };
+          await persistDebug();
         }
       }
     }
@@ -752,14 +768,14 @@ function createQQBotHandler(opts) {
       // 加密推送：先解密再判断（验证挑战也可能是加密的）
       if (bodyObj && typeof bodyObj.encrypted === 'string' && bodyObj.encrypted.length > 0) {
         if (!cfg.encryptKey) {
-          recordDebug(req, '收到加密推送但未配置 QQ_BOT_ENCRYPT_KEY，无法解密', 400);
+          await recordDebug(req, '收到加密推送但未配置 QQ_BOT_ENCRYPT_KEY，无法解密', 400);
           console.error('[QQ机器人] 收到加密推送但未配置 QQ_BOT_ENCRYPT_KEY，无法解密。请到QQ开放平台复制加密密钥并配置到 Vercel');
           return res.status(400).json({ success: false, error: '未配置解密密钥' });
         }
         try {
           bodyObj = JSON.parse(decryptPayload(cfg.encryptKey, bodyObj.encrypted));
         } catch (e) {
-          recordDebug(req, '解密失败: ' + e.message, 400);
+          await recordDebug(req, '解密失败: ' + e.message, 400);
           console.error('[QQ机器人] 解密失败:', e.message);
           return res.status(400).json({ success: false, error: '解密失败' });
         }
@@ -771,7 +787,7 @@ function createQQBotHandler(opts) {
         const plainToken = String(bodyObj.d.plainToken || bodyObj.d.plain_token);
         const eventTs = String(bodyObj.d.event_ts || bodyObj.d.eventTs || '');
         const sig = signValidation(cfg.appSecret, eventTs, plainToken);
-        recordDebug(req, '验证挑战：已用 AppSecret 派生 Ed25519 签名应答', 200);
+        await recordDebug(req, '验证挑战：已用 AppSecret 派生 Ed25519 签名应答', 200);
         console.log('[QQ机器人] 回调地址验证挑战已应答，plainToken=' + plainToken);
         return res.json({ plain_token: plainToken, signature: sig });
       }
@@ -780,12 +796,12 @@ function createQQBotHandler(opts) {
       const sig = req.headers['x-signature-ed25519'] || '';
       const ts = req.headers['x-signature-timestamp'] || '';
       if (!sig || !ts) {
-        recordDebug(req, '缺少验签头', 401);
+        await recordDebug(req, '缺少验签头', 401);
         console.warn('[QQ机器人] 缺少验签头，拒绝处理');
         return res.status(401).json({ success: false, error: '缺少验签头' });
       }
       if (!verifyEventSignature(derivedPublicKey, ts, rawBody, sig)) {
-        recordDebug(req, 'Ed25519 验签失败', 401);
+        await recordDebug(req, 'Ed25519 验签失败', 401);
         console.warn('[QQ机器人] 验签失败，拒绝处理');
         return res.status(401).json({ success: false, error: '签名校验失败' });
       }
@@ -804,7 +820,7 @@ function createQQBotHandler(opts) {
           }
         }
         if (handledMsgIds.has(evtMsgId)) {
-          recordDebug(req, '重复推送已忽略（幂等去重）', 200);
+          await recordDebug(req, '重复推送已忽略（幂等去重）', 200);
           console.log('[QQ机器人] 重复推送已忽略: ' + evtMsgId.slice(0, 30));
           return res.json({ success: true, duplicated: true });
         }
@@ -819,7 +835,7 @@ function createQQBotHandler(opts) {
         } catch (e) {
           console.error('[QQ机器人] 群消息处理失败:', e.message);
         }
-        recordDebug(req, '群消息事件已处理', 200);
+        await recordDebug(req, '群消息事件已处理', 200);
         return res.json({ success: true });
       }
       if (type === 'C2C_MESSAGE_CREATE') {
@@ -828,14 +844,14 @@ function createQQBotHandler(opts) {
         } catch (e) {
           console.error('[QQ机器人] 私聊消息处理失败:', e.message);
         }
-        recordDebug(req, '私聊消息事件已处理', 200);
+        await recordDebug(req, '私聊消息事件已处理', 200);
         return res.json({ success: true });
       }
       // 其他事件（频道消息/生命周期事件等）直接确认
-      recordDebug(req, '其他事件已确认: ' + (type || 'unknown'), 200);
+      await recordDebug(req, '其他事件已确认: ' + (type || 'unknown'), 200);
       return res.json({ success: true, ignored: type || 'unknown' });
     } catch (e) {
-      recordDebug(req, '处理异常: ' + e.message, 200);
+      await recordDebug(req, '处理异常: ' + e.message, 200);
       console.error('[QQ机器人] webhook处理异常:', e.message);
       return res.status(200).json({ success: false, error: e.message });
     }
@@ -843,7 +859,16 @@ function createQQBotHandler(opts) {
 
   return {
     webhook: webhook,
-    getLastDebug: function () { return Object.assign({}, lastDebug, { lastError: lastError, lastReply: lastReply, lastCardError: lastCardError }); },
+    getLastDebug: async function () {
+      // 优先读 db（多实例下处理消息的实例和响应 debug 请求的实例往往不是同一个）
+      if (gameDb) {
+        try {
+          const saved = await gameDb.getConfig(DEBUG_KEY);
+          if (saved && (saved.lastDebug || saved.lastReply || saved.lastCardError)) return saved;
+        } catch (e) { /* 回退内存 */ }
+      }
+      return { lastDebug: lastDebug, lastReply: lastReply, lastError: lastError, lastCardError: lastCardError };
+    },
     getAccessTokenForDebug: function (botCfg) { return getAccessToken(botCfg.appId, botCfg.appSecret); },
   };
 }

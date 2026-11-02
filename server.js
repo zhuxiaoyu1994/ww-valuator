@@ -550,11 +550,11 @@ const qqBotWebhook = createQQBotHandler({
 });
 app.post('/api/qq-bot', qqBotWebhook.webhook);
 // 调试端点：查看最后一次 QQ webhook 请求（需管理员密码，用于排查回调验证问题）
-app.get('/api/qq-bot-debug', (req, res) => {
+app.get('/api/qq-bot-debug', async (req, res) => {
   if ((req.query.key || '') !== ADMIN_PASSWORD) {
     return res.status(401).json({ success: false, error: '未授权' });
   }
-  res.json({ success: true, data: qqBotWebhook.getLastDebug() });
+  res.json({ success: true, data: await qqBotWebhook.getLastDebug() });
 });
 
 // 猜价卡片自检：在线上环境真实跑一次渲染，暴露缺依赖/缺字体/图片下载等问题（管理员密钥访问）
