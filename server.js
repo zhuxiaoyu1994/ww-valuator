@@ -557,6 +557,51 @@ app.get('/api/qq-bot-debug', (req, res) => {
   res.json({ success: true, data: qqBotWebhook.getLastDebug() });
 });
 
+// 猜价卡片自检：在线上环境真实跑一次渲染，暴露缺依赖/缺字体/图片下载等问题（管理员密钥访问）
+app.get('/api/qq-card-debug', async (req, res) => {
+  if ((req.query.key || '') !== ADMIN_PASSWORD) {
+    return res.status(401).json({ success: false, error: '未授权' });
+  }
+  const out = { canvasLoaded: false, fontFileExists: false, fontRegistered: false, startOk: false, revealOk: false, errors: [] };
+  try {
+    const cardMod = require('./qq-card');
+    out.canvasLoaded = true;
+    const fs = require('fs');
+    const path = require('path');
+    const fontPath = path.join(__dirname, 'assets', 'fonts', 'NotoSansSC-Regular.otf');
+    out.fontFileExists = fs.existsSync(fontPath);
+    out.fontPath = fontPath;
+    try {
+      const { GlobalFonts } = require('@napi-rs/canvas');
+      const okReg = GlobalFonts.registerFromPath(fontPath, 'DebugSans');
+      out.fontRegistered = JSON.stringify(GlobalFonts.families).includes('DebugSans');
+      if (!okReg) out.errors.push('registerFromPath 返回 falsy');
+    } catch (e) { out.errors.push('字体注册异常: ' + e.message); }
+    const t0 = Date.now();
+    const startBuf = await cardMod.renderCard({
+      type: 'start',
+      maskedTitle: '75级，25黄，星声：85，10个五星角色：满命清宵, 3命维里奈, 1命卡卡罗（自检样例）',
+      coreInfo: ['等级 75', '五星角色 10', '专武 3 把', '总抽数 40', '金数 25/31'],
+      teams: '今汐队、维里奈辅助队',
+      imageUrl: 'https://public-image.pxb7.com/AutoGame/AutoGameMainContent/2032/248129467678727/cover_imgs/248129467678727_logo_efaf2c0b01ee4f6cae60289ed1b5dc05.png?x-oss-process=image/resize,p_80',
+    });
+    out.startOk = startBuf.length > 1000;
+    out.startBytes = startBuf.length;
+    const revealBuf = await cardMod.renderCard({
+      type: 'reveal', reason: 'solved', priceYuan: 3268,
+      productUrl: 'https://www.pxb7.com/product/1/1',
+      maskedTitle: '自检样例题目', winner: { name: '测试', guess: 3268, err: 0 },
+      guesses: [{ name: '测试', guess: 3268 }],
+    });
+    out.revealOk = revealBuf.length > 1000;
+    out.revealBytes = revealBuf.length;
+    out.costMs = Date.now() - t0;
+  } catch (e) {
+    out.errors.push((e && e.message) || String(e));
+  }
+  res.json({ success: out.errors.length === 0, data: out });
+});
+
 // ============================================================
 // 网站估价下线开关（2026-11）
 // 群机器人估价走进程内 getEngine，与下方被拦截的网站估价接口完全无关，不受影响。

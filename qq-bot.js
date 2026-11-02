@@ -346,6 +346,7 @@ function createQQBotHandler(opts) {
   // 调试：记录最后一次 webhook 请求（供 /api/qq-bot-debug 排查回调验证问题）
   let lastDebug = { time: null, path: null, headers: null, bodyHead: null, note: null, status: null };
   let lastError = null;   // 异步处理（回复消息）失败的详情
+  let lastCardError = null; // 卡片渲染/上传失败的详情（回退文本时记录，便于线上排查）
   let lastReply = null;   // 最近一次回复消息调用的结果（成功也记录）
   function recordDebug(req, note, status) {
     lastDebug = {
@@ -439,6 +440,7 @@ function createQQBotHandler(opts) {
           lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: '[图片卡片] ' + String(p.text).substring(0, 100) };
           return;
         } catch (e) {
+          lastCardError = { time: new Date().toISOString(), message: e.message, stack: String(e.stack || '').substring(0, 400) };
           lastReply = { time: new Date().toISOString(), ok: false, group: isGroup, costMs: Date.now() - t0, contentHead: '[卡片失败回退文本] ' + String(p.text).substring(0, 90), error: e.message };
         }
       }
@@ -841,7 +843,7 @@ function createQQBotHandler(opts) {
 
   return {
     webhook: webhook,
-    getLastDebug: function () { return Object.assign({}, lastDebug, { lastError: lastError, lastReply: lastReply }); },
+    getLastDebug: function () { return Object.assign({}, lastDebug, { lastError: lastError, lastReply: lastReply, lastCardError: lastCardError }); },
   };
 }
 
