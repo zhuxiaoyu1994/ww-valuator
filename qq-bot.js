@@ -359,6 +359,9 @@ function createQQBotHandler(opts) {
         'user-agent': req.headers['user-agent'] || '',
       },
       bodyHead: JSON.stringify(req.body || {}).substring(0, 600),
+      groupOpenid: (() => {
+        try { return (req.body && req.body.d && req.body.d.group_openid) || null; } catch (e) { return null; }
+      })(),
       note: note || '',
       status: status || null,
     };

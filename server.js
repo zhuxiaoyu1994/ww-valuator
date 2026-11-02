@@ -557,6 +557,19 @@ app.get('/api/qq-bot-debug', async (req, res) => {
   res.json({ success: true, data: await qqBotWebhook.getLastDebug() });
 });
 
+// 猜价游戏状态查询（管理员）：直接读 db KV，判断群消息是否真的被处理过
+app.get('/api/qq-guess-debug', async (req, res) => {
+  if ((req.query.key || '') !== ADMIN_PASSWORD) {
+    return res.status(401).json({ success: false, error: '未授权' });
+  }
+  try {
+    const st = await db.getConfig('qq_guess_game');
+    res.json({ success: true, data: st || null });
+  } catch (e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
 // 猜价卡片自检：在线上环境真实跑一次渲染，暴露缺依赖/缺字体/图片下载等问题（管理员密钥访问）
 app.get('/api/qq-card-debug', async (req, res) => {
   if ((req.query.key || '') !== ADMIN_PASSWORD) {
