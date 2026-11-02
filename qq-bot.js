@@ -174,6 +174,16 @@ function fmtValue(v) {
   return Number.isInteger(n) ? n.toLocaleString('zh-CN') : n.toFixed(2);
 }
 
+/**
+ * 格式化有效金类数值：有效金是各角色/专武贡献的加权累加值（浮点），
+ * 累加会产生 32.999999999999986 这类精度尾巴，展示时四舍五入到最多1位小数
+ */
+function fmtGold(v) {
+  const n = Number(v);
+  if (v == null || !isFinite(n)) return '0';
+  return String(Math.round(n * 10) / 10);
+}
+
 /** 格式化估值回复（对齐网站展示样式：估值+合理区间+核心数据，不做多余赘述） */
 function formatReply(result, priceYuan) {
   const d = result.details || {};
@@ -193,7 +203,7 @@ function formatReply(result, priceYuan) {
   if (pulls > 0) lines.push('· 总抽数：' + pulls + ' 抽');
   const yi = d.yellowInfo || {};
   if (yi.totalYellow > 0 || yi.yellowCount > 0) {
-    lines.push('· 有效金/限定金/总金数：' + yi.yellowCount + '/' + yi.limitedYellow + '/' + yi.totalYellow);
+    lines.push('· 有效金/限定金/总金数：' + fmtGold(yi.yellowCount) + '/' + fmtGold(yi.limitedYellow) + '/' + fmtGold(yi.totalYellow));
   }
   const teams = (d.matchedTeams || []).map(t => typeof t === 'string' ? t : (t.name || t.label || '')).filter(Boolean);
   if (teams.length > 0) {
