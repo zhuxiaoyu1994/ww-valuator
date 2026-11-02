@@ -709,10 +709,18 @@ function getOfflineNoticePage() {
 const OFFLINE_EVAL_APIS = ['/api/x9k2-eval', '/api/page-eval', '/api/x9k2-find'];
 if (SITE_EVAL_OFFLINE) {
   app.all(OFFLINE_EVAL_APIS, async (req, res, next) => {
+    // CORS 预检放行（page-eval 的 OPTIONS 由后路由处理）
+    if (req.method === 'OPTIONS') return next();
     // 管理员通行证（ek Cookie）或后台密钥通行证（ep Cookie）放行
     if (getCookie(req, 'ek') === ADMIN_PASSWORD) return next();
     const ep = getCookie(req, 'ep');
     if (ep && (await isValidEvalPassKey(ep))) return next();
+    // 付费插件用户放行：/api/page-eval 带有效 x-eval-key 的请求继续可用
+    // （放行后原路由内仍会完整校验密钥状态/有效期并记录使用）
+    if (req.path === '/api/page-eval' && req.headers['x-eval-key']) {
+      const keyErr = await verifyEvalKey(req.headers['x-eval-key']);
+      if (!keyErr) return next();
+    }
     res.json({
       success: false,
       offline: true,
