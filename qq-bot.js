@@ -701,7 +701,7 @@ function createQQBotHandler(opts) {
 
     // 猜价游戏命令：开始猜价 / 结束猜价 / 猜 4500 / 我叫XX（群聊和私聊都可玩）
     const nickCmd = text.match(/^我叫\s*([^\s]{1,12})$/);
-    const guessCmd = text.match(/^(开始猜价|来局猜价|猜价游戏|结束猜价|公布答案)$/);
+    const guessCmd = text.match(/^(开始猜价|来局猜价|猜价游戏|开始估价|开始游戏|结束猜价|公布答案)$/);
     const guessVal = text.match(/^猜价?[:：]?\s*(\d+(?:\.\d+)?)$/);
     if (nickCmd || guessCmd || guessVal) {
       if (nickCmd) {
