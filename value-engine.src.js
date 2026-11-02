@@ -671,6 +671,11 @@ function parseCharacters(section) {
       name = item;
       constNum = 0;
     }
+    // 命座上限钳制：游戏内命座范围为 0~6（满命），超出视为调戏输入按满命处理
+    // （如"99命心月狐"按满命心月狐估算），避免溢价分段公式对超大命座给出离谱结果
+    if (constNum > 6) {
+      constNum = 6;
+    }
 
     // 验证是否为已知角色（别名归一化，去除间隔号·・）
     name = name.replace(/[·・]/g, '');
@@ -796,6 +801,10 @@ function findCharsInText(text) {
     if (!charMap[c.name] || c.const > charMap[c.name].const) {
       charMap[c.name] = c;
     }
+  }
+  // 命座上限统一钳制 0~6：兜底覆盖全文匹配路径（"99命心月狐"→按满命处理）
+  for (const c of Object.values(charMap)) {
+    c.const = Math.max(0, Math.min(6, c.const));
   }
   return Object.values(charMap);
 }
