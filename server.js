@@ -611,7 +611,16 @@ function getOfflineNoticePage() {
     font-size: 12px; font-weight: 600;
     margin-top: 2px;
   }
-  .warn { color: #b0621c; font-size: 12.5px; line-height: 1.7; margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef0f3; }
+  .qr-box { text-align: center; padding: 20px 0 4px; border-top: 1px solid #eef0f3; margin-top: 4px; }
+  .qr-box img {
+    width: 180px; height: 180px;
+    object-fit: contain; border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  }
+  .qr-box .gid { font-size: 13px; color: #6b7686; margin-top: 10px; line-height: 1.6; }
+  .qr-box .gid b { color: #2c3e50; }
+  .warn { color: #b0621c; font-size: 12.5px; line-height: 1.7; margin-top: 20px; padding-top: 16px; border-top: 1px solid #eef0f3; }
   code { background: #f2f3f5; border-radius: 4px; padding: 1px 6px; font-size: 13px; }
 </style>
 </head>
@@ -626,6 +635,10 @@ function getOfflineNoticePage() {
   <div class="step"><span class="n">1</span><span>加入估价 QQ 群（群公告内有入口）</span></div>
   <div class="step"><span class="n">2</span><span>在群内 <code>@机器人</code> 发送账号描述（角色、命座、抽数、标价等信息）</span></div>
   <div class="step"><span class="n">3</span><span>几秒内收到估值、合理交易区间与核心数据</span></div>
+  <div class="qr-box">
+    <img src="/public/qq-group.jpg" alt="QQ群二维码">
+    <div class="gid">扫码入群 · <b>咕嘎鸣潮估价群</b><br>群号：1064412729</div>
+  </div>
   <div class="warn">⚠️ 估价仅作行情参考，不代表最终交易价格，请自行核验账号风险，理性交易！</div>
 </div>
 </body>
