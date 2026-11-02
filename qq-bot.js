@@ -228,8 +228,12 @@ function createQQBotHandler(opts) {
   const onLog = opts.onLog || function () {};
   // 只要求 AppID/Secret：Ed25519 公私钥均由 Secret 派生（官方 sign.html），无需额外公钥配置
   if (!cfg.appId || !cfg.appSecret) {
-    return function (req, res) {
+    const stubWebhook = function (req, res) {
       res.status(503).json({ success: false, error: 'QQ机器人未配置（缺少 QQ_BOT_APP_ID / QQ_BOT_SECRET）' });
+    };
+    return {
+      webhook: stubWebhook,
+      getLastDebug: function () { return { note: '未配置 QQ_BOT_APP_ID / QQ_BOT_SECRET' }; },
     };
   }
   const derivedPublicKey = derivePublicKey(cfg.appSecret);

@@ -555,6 +555,95 @@ app.get('/api/qq-bot-debug', (req, res) => {
   res.json({ success: true, data: qqBotWebhook.getLastDebug() });
 });
 
+// ============================================================
+// 网站估价下线开关（2026-11）
+// 群机器人估价走进程内 getEngine，与下方被拦截的网站估价接口完全无关，不受影响。
+// 恢复网站：把 SITE_EVAL_OFFLINE 改为 false 即可，所有被拦截的页面/接口自动恢复原状。
+// ============================================================
+const SITE_EVAL_OFFLINE = true;
+
+// 下线公告页：引导用户改用群机器人估价
+function getOfflineNoticePage() {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鸣潮账号估价 - 服务调整公告</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6f8;
+    color: #2c3e50;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.06);
+    max-width: 520px;
+    width: 100%;
+    padding: 40px 32px;
+  }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  .sub { color: #8a94a6; font-size: 14px; margin-bottom: 24px; }
+  .notice {
+    background: #f0f7ff;
+    border-left: 4px solid #4a90d9;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 14px;
+    line-height: 1.8;
+    margin-bottom: 24px;
+  }
+  .step { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; font-size: 14px; line-height: 1.6; }
+  .step .n {
+    flex: none;
+    width: 22px; height: 22px;
+    background: #4a90d9; color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    margin-top: 2px;
+  }
+  .warn { color: #b0621c; font-size: 12.5px; line-height: 1.7; margin-top: 24px; padding-top: 16px; border-top: 1px solid #eef0f3; }
+  code { background: #f2f3f5; border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📢 服务调整公告</h1>
+  <div class="sub">网站估价暂时下线维护</div>
+  <div class="notice">
+    感谢大家一直以来的支持！网站估价已暂时下线维护，付费增值服务同步停止。
+    现在估价请使用更快、更方便的 <b>QQ 群机器人</b>——完全免费，秒出结果。
+  </div>
+  <div class="step"><span class="n">1</span><span>加入估价 QQ 群（群公告内有入口）</span></div>
+  <div class="step"><span class="n">2</span><span>在群内 <code>@机器人</code> 发送账号描述（角色、命座、抽数、标价等信息）</span></div>
+  <div class="step"><span class="n">3</span><span>几秒内收到估值、合理交易区间与核心数据</span></div>
+  <div class="warn">⚠️ 估价仅作行情参考，不代表最终交易价格，请自行核验账号风险，理性交易！</div>
+</div>
+</body>
+</html>`;
+}
+
+// 下线期间：拦截网站估价相关页面（API 拦截见各路由处）
+const OFFLINE_EVAL_APIS = ['/api/x9k2-eval', '/api/page-eval', '/api/x9k2-find'];
+if (SITE_EVAL_OFFLINE) {
+  app.all(OFFLINE_EVAL_APIS, (req, res) => {
+    res.json({
+      success: false,
+      offline: true,
+      error: '网站估价已下线维护，请加入 QQ 群 @机器人 发送账号描述即可估价。',
+    });
+  });
+}
+
 app.get('/api/defaults', async (req, res) => {
   // 仅管理后台的估值设置面板使用；需管理员密码，避免公开泄露完整规则参数
   if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
@@ -1601,10 +1690,12 @@ app.post('/api/deals/delete', async (req, res) => {
 // Web 页面
 // ============================================================
 app.get('/', (req, res) => {
+  if (SITE_EVAL_OFFLINE) return res.send(getOfflineNoticePage());
   res.send(getPlatformPage());
 });
 
 app.get('/wuwa', async (req, res) => {
+  if (SITE_EVAL_OFFLINE) return res.send(getOfflineNoticePage());
   const engine = getEngine('wuwa');
   const defaults = engine.getDefaults();
   const charList = buildCharList(defaults);
@@ -1671,7 +1762,9 @@ function buildCharList(defaults) {
 // ============================================================
 
 // 螃蟹网估价助手下载页（公开，仅提供脚本安装说明）
+// 下线期间插件估价依赖的 /api/page-eval 已关闭，一并显示下线公告
 app.get('/lite', (req, res) => {
+  if (SITE_EVAL_OFFLINE) return res.send(getOfflineNoticePage());
   res.send(getLitePage());
 });
 
