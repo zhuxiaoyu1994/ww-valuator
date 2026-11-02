@@ -424,6 +424,8 @@ function normalizePlatformText(text) {
   const plainTitles = RESOURCES.map(r => r.name)
     .concat(OUTFIT_SECTION_KEYWORDS, MOTO_SECTION_KEYWORDS, MOTO_ACCESSORY_KEYWORDS)
     .concat(LEVEL_KEYWORDS, ['等级', '黄数', '按角色', '按武器', '四星角色'])
+    .concat(CHAR_SECTION_KEYWORDS)
+    .concat(WEAPON_SECTION_KEYWORDS.filter(w => w && w.length >= 3)) // 排除"武器"这类过泛的裸词
     .concat(YELLOW_UNITS.map(u => u + '数'))
     .concat(constSectionNames.map(cs => cs + '角色'))
     .concat(refineSectionNames.map(rs => rs + '武器'))
@@ -431,6 +433,73 @@ function normalizePlatformText(text) {
     .sort((a, b) => b.length - a.length);
   const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const plainTitlePat = plainTitles.map(escapeRe).join('|');
+
+  // Format Plain(倒置): 螃蟹网概览区"数值 字段名"交替格式，如
+  //   "127 黄数 40 五星角色 3140 星声 5 浮金波纹 19 余波珊瑚 80 联觉等级"
+  // （数值在前、字段名在后，与正序"黄数 127"相反）。
+  // 检测连续"数字/标题词"交替序列（≥4个token、以数字开头）。但数字开头的交替链在纯格式上
+  // 与正序链局部同构（"19 黄数 69 月相 673"既可读成倒置也可读成正序），
+  // 因此对两种解读做字段值域合理性打分，选分高者：
+  //   倒置解读"等级=341"不合理 / 正序解读"五星角色=3140"不合理 → 一判便知。
+  if (plainTitlePat) {
+    const titleSet = new Set(plainTitles);
+    const FIELD_RANGES = {
+      '黄数': [1, 500], '五星角色': [1, 60], '四星角色': [0, 60],
+      '等级': [1, 100], '联觉等级': [1, 100], '冒险等级': [1, 100],
+      '绳网等级': [1, 100], '账号等级': [1, 100], '数据坞等级': [1, 20],
+      '星声': [0, 999999], '月相': [0, 999999], '余波珊瑚': [0, 999999],
+      '浮金波纹': [0, 999999], '铸潮波纹': [0, 999999], '唤声涡纹': [0, 999999],
+    };
+    const scorePairs = (pairs) => {
+      let s = 0;
+      for (const p of pairs) {
+        const rg = FIELD_RANGES[p[0]];
+        if (!rg) continue;
+        const n = parseInt(p[1], 10);
+        s += (n >= rg[0] && n <= rg[1]) ? 1 : -10;
+      }
+      return s;
+    };
+    const parts = text.split(/\s+/).filter(Boolean);
+    const out = [];
+    let run = [];
+    const flushRun = () => {
+      if (run.length >= 4 && /^\d+$/.test(run[0])) {
+        const invPairs = [];  // 倒置解读: (数字,标题) → 字段=标题, 值=数字
+        for (let i = 0; i + 1 < run.length; i += 2) invPairs.push([run[i + 1], run[i]]);
+        const fwdPairs = [];  // 正序解读: (标题,数字) → 字段=标题, 值=数字（run[0]属于上一字段）
+        for (let i = 1; i + 1 < run.length; i += 2) fwdPairs.push([run[i], run[i + 1]]);
+        if (scorePairs(invPairs) > scorePairs(fwdPairs)) {
+          for (let i = 0; i + 1 < run.length; i += 2) {
+            out.push('【' + run[i + 1] + '】' + run[i]);
+          }
+          if (run.length % 2 === 1) out.push(run[run.length - 1]);
+        } else {
+          for (const tk of run) out.push(tk);
+        }
+      } else {
+        for (const tk of run) out.push(tk);
+      }
+      run = [];
+    };
+    for (const tk of parts) {
+      const isNum = /^\d+$/.test(tk);
+      const isTitle = titleSet.has(tk);
+      if (!isNum && !isTitle) { flushRun(); out.push(tk); continue; }
+      if (run.length === 0) { run.push(tk); continue; }
+      const startsNum = /^\d+$/.test(run[0]);
+      const wantNum = startsNum ? (run.length % 2 === 0) : (run.length % 2 === 1);
+      if ((wantNum && isNum) || (!wantNum && isTitle)) {
+        run.push(tk);
+      } else {
+        flushRun();
+        run.push(tk);
+      }
+    }
+    flushRun();
+    text = out.join(' ');
+  }
+
   if (plainTitlePat) {
     text = text.replace(new RegExp('(^|[\\s，,、])(' + plainTitlePat + ')(?=[\\s：:])', 'g'), function (m, pre, t) {
       return pre + '【' + t + '】';
@@ -516,25 +585,40 @@ function extractSection(text, keyword) {
   const others = SECTION_KEYWORDS.filter(k => k !== keyword)
     .map(k => '【?' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[（(]\\d+[）)])?(?:[：:]|\\s*\\n|】)');
 
+  // 同一关键词可能出现多个段落（如螃蟹网页面概览区的简短列表 vs 详情区的完整列表）。
+  // 每种格式全局扫描所有匹配，取内容最丰富的段——概览区段短且可能混入页面前缀数字，
+  // 详情区段完整，取最长者可避免脏段污染解析。
+  const pick = (pattern) => {
+    let best = null;
+    const re = new RegExp(pattern, 'g');
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const content = (m[1] || '').trim();
+      if (content && (!best || content.length > best.length)) best = content;
+      if (re.lastIndex === m.index) re.lastIndex++;
+    }
+    return best;
+  };
+
   // 格式1: keyword：content（原格式，冒号后同行内容）
   const pattern1 = escaped + '[：:]\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
-  const match1 = text.match(new RegExp(pattern1));
-  if (match1) return match1[1].trim();
+  const match1 = pick(pattern1);
+  if (match1) return match1;
 
   // 格式2: keyword（N）[：:][\n] content（螃蟹网手机端格式，带数量括号）
   const pattern2 = escaped + '[（(]\\d+[）)]\\s*[：:]?\\s*\\n?\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
-  const match2 = text.match(new RegExp(pattern2));
-  if (match2) return match2[1].trim();
+  const match2 = pick(pattern2);
+  if (match2) return match2;
 
   // 格式3: 【keyword】[：:]content（盼之手机端格式，方括号包裹关键词）
   const pattern3 = '【' + escaped + '】\\s*[：:]?\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
-  const match3 = text.match(new RegExp(pattern3));
-  if (match3) return match3[1].trim();
+  const match3 = pick(pattern3);
+  if (match3) return match3;
 
   // 格式4: keyword\ncontent（螃蟹网移动端格式，换行分隔关键词和内容）
   const pattern4 = escaped + '\\n\\s*([\\s\\S]*?)(?=' + others.join('|') + '|$)';
-  const match4 = text.match(new RegExp(pattern4));
-  if (match4) return match4[1].trim();
+  const match4 = pick(pattern4);
+  if (match4) return match4;
 
   return '';
 }
@@ -755,14 +839,14 @@ function parseWeapons(section) {
  */
 function extractYellowCount(text) {
   for (const unit of YELLOW_UNITS) {
-    // "黄数：N" 或 "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
-    let m = text.match(new RegExp(unit + '[数]?[：:]\\s*(\\d+)'));
+    // "黄数：N" / "黄数量：N" / "黄：N"（优先匹配，避免"等级:80 黄数:40"中80被误匹配）
+    let m = text.match(new RegExp(unit + '(?:数量|数)?[：:]\\s*(\\d+)'));
     if (m) return parseInt(m[1]);
-    // "【黄数】:N" 或 "【黄数】：N"（盼之格式）
-    m = text.match(new RegExp('【' + unit + '[数]?】\\s*[：:]?\\s*(\\d+)'));
+    // "【黄数】:N" / "【黄数量】：N"（盼之格式）
+    m = text.match(new RegExp('【' + unit + '(?:数量|数)?】\\s*[：:]?\\s*(\\d+)'));
     if (m) return parseInt(m[1]);
     // "黄数\nN"（螃蟹网移动端格式，换行分隔）
-    m = text.match(new RegExp(unit + '[数]?\\n\\s*(\\d+)'));
+    m = text.match(new RegExp(unit + '(?:数量|数)?\\n\\s*(\\d+)'));
     if (m) return parseInt(m[1]);
   }
   // "N黄" 或 "N金"（放最后，避免误匹配前一个字段的数字）
