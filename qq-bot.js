@@ -174,7 +174,7 @@ function detectInvalidConst(text) {
 // 局状态存 db KV（qq_guess_game），Vercel 多实例共享；30 分钟无人猜中惰性揭晓（serverless 无定时器）。
 const GUESS_STATE_KEY = 'qq_guess_game';
 const GUESS_TOLERANCE = 0.10;              // ±10% 判中
-const GUESS_DURATION_MS = 30 * 60 * 1000;  // 30 分钟自动揭晓
+const GUESS_DURATION_MS = 60 * 1000;       // 1 分钟无人猜中自动揭晓
 const GUESS_PRODUCT_URL = 'https://www.pxb7.com/product/';
 
 function maskPrice(text) {
@@ -392,7 +392,7 @@ function createQQBotHandler(opts) {
       guesses: {},
     };
     await saveGuessState(state);
-    return '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🎯 有人猜进成交价 ±10% 即刻揭晓；30 分钟无人猜中自动揭晓';
+    return '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓';
   }
 
   /** 参与竞猜：每人记录最新一次猜价（可修改）；猜进 ±10% 立即揭晓 */
@@ -411,36 +411,52 @@ function createQQBotHandler(opts) {
     return '📥 已记录你的猜价：¥' + guess + '（第 ' + cnt + ' 位参与者）\n是否猜中暂不揭晓，等其他群友一起猜～';
   }
 
-  /** 揭晓文案（并落盘结束状态）；reason: solved | timeout | manual */
-  function revealGuessText(st, reason) {
+  /** 揭晓结果文案（纯展示，不改状态）；reason: solved | timeout | manual | recap */
+  function guessResultText(st, reason) {
     const p = st.product.priceYuan;
     const lines = [];
+    const rangeLine = '💰 成交价：¥' + p + '（±10% 区间：¥' + Math.round(p * 0.9) + ' ~ ¥' + Math.round(p * 1.1) + '）';
     if (reason === 'solved' && st.winner) {
       const wg = (st.guesses[st.winner] || {}).guess;
       const err = Math.round(Math.abs(wg - p) / p * 1000) / 10;
       lines.push('🎯 有人猜中，揭晓答案！');
       lines.push('💰 成交价：¥' + p);
       lines.push('🎉 胜者：...' + String(st.winner).slice(-4) + '（猜 ¥' + wg + '，误差 ' + err + '%）');
+    } else if (reason === 'recap') {
+      lines.push('📢 上一局猜价结果：');
+      lines.push('💰 成交价：¥' + p);
+      if (st.winner) {
+        const wg = (st.guesses[st.winner] || {}).guess;
+        const err = Math.round(Math.abs(wg - p) / p * 1000) / 10;
+        lines.push('🎉 胜者：...' + String(st.winner).slice(-4) + '（猜 ¥' + wg + '，误差 ' + err + '%）');
+      } else {
+        lines.push(rangeLine);
+      }
     } else if (reason === 'timeout') {
-      lines.push('⏰ 30 分钟无人猜中，揭晓答案！');
-      lines.push('💰 成交价：¥' + p + '（±10% 区间：¥' + Math.round(p * 0.9) + ' ~ ¥' + Math.round(p * 1.1) + '）');
+      lines.push('⏰ 1 分钟无人猜中，揭晓答案！');
+      lines.push(rangeLine);
     } else {
       lines.push('📢 猜价提前揭晓！');
-      lines.push('💰 成交价：¥' + p + '（±10% 区间：¥' + Math.round(p * 0.9) + ' ~ ¥' + Math.round(p * 1.1) + '）');
+      lines.push(rangeLine);
     }
     const gs = Object.entries(st.guesses || {});
     if (gs.length > 0) {
       lines.push('👥 本局猜价：' + gs.map(([k, v]) => '...' + String(k).slice(-4) + '猜¥' + v.guess).join('，'));
     }
     lines.push('🔗 商品链接：' + st.product.url);
+    return lines.join('\n');
+  }
+
+  /** 揭晓当前局（置结束态并落盘），返回揭晓文案 */
+  function revealGuessText(st, reason) {
     st.active = false;
     st.revealed = true;
     st.revealedAt = Date.now();
     saveGuessState(st);
-    return lines.join('\n');
+    return guessResultText(st, reason);
   }
 
-  /** 惰性过期检查：serverless 无定时器，每条群消息进来时看一眼这局是否超时（5秒节流） */
+  /** 惰性过期检查：serverless 无定时器，每条群消息进来时看一眼这局是否超时（3秒节流） */
   let lastGuessCheckAt = 0;
   async function checkGuessExpiry() {
     const now = Date.now();
@@ -509,9 +525,13 @@ function createQQBotHandler(opts) {
       if (guessCmd && (guessCmd[1] === '结束猜价' || guessCmd[1] === '公布答案')) {
         const st = await loadGuessState();
         if (st.active && !st.revealed) {
+          // 直接给结果：不等±10%，不等30分钟
           await tryReply(openid, isGroup, revealGuessText(st, 'manual'), d.id);
+        } else if (st.revealed && st.product) {
+          // 无进行中的局：重看上一局结果
+          await tryReply(openid, isGroup, guessResultText(st, 'recap'), d.id);
         } else {
-          await tryReply(openid, isGroup, '现在没有进行中的猜价局～发「开始猜价」来一局！', d.id);
+          await tryReply(openid, isGroup, '还没有猜价记录～发「开始猜价」来一局！', d.id);
         }
         return;
       }
