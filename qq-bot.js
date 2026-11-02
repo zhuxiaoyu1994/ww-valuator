@@ -148,20 +148,22 @@ async function sendReply(cfg, openid, isGroup, content, msgId) {
   }
 }
 
-/** 卡片回复：先 multipart 上传 PNG 富媒体拿 file_info，再以 msg_type=7 图片消息发出 */
-async function sendCardReply(cfg, openid, isGroup, png, msgId) {
+/**
+ * 卡片回复：URL 模式上传富媒体（QQ v2 接口实测不支持 multipart 直传，会报 40093007 富媒体文件下载失败）。
+ * PNG 先存 db KV，经 /api/qq-card-image/<id> 公网提供，再把 URL 交给 QQ 服务器下载。
+ */
+async function sendCardReply(cfg, openid, isGroup, imageUrl, msgId) {
   const token = await getAccessToken(cfg.appId, cfg.appSecret);
   const base = isGroup
     ? API_BASE + '/v2/groups/' + encodeURIComponent(openid)
     : API_BASE + '/v2/users/' + encodeURIComponent(openid);
-  const form = new FormData();
-  form.append('file_type', '1');
-  form.append('srv_send_msg', 'false');
-  form.append('file_data', new Blob([png], { type: 'image/png' }), 'card.png');
   const up = await fetch(base + '/files', {
     method: 'POST',
-    headers: { 'Authorization': 'QQBot ' + token },
-    body: form,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'QQBot ' + token,
+    },
+    body: JSON.stringify({ file_type: 1, url: imageUrl, srv_send_msg: false }),
   });
   const ud = await up.json().catch(() => ({}));
   if (!up.ok || !ud.file_info) {
@@ -448,13 +450,17 @@ function createQQBotHandler(opts) {
   /** 游戏回复统一入口：payload = 字符串 或 {text, card}；群聊且有卡片则发图，失败回退文本 */
   async function replyGame(openid, isGroup, msgId, payload) {
     const p = typeof payload === 'string' ? { text: payload } : (payload || {});
-    if (isGroup && p.card) {
+    if (isGroup && p.card && gameDb) {
       const cardMod = getCardModule();
       if (cardMod) {
         const t0 = Date.now();
         try {
           const png = await cardMod.renderCard(p.card);
-          await sendCardReply(cfg, openid, isGroup, png, msgId);
+          // 存 db KV → 公网 URL → QQ 服务器来下载（srv_send_msg=false 仅上传不发送）
+          const cardId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+          await gameDb.setConfig('qq_card_' + cardId, { b64: Buffer.from(png).toString('base64'), ts: Date.now() });
+          const imageUrl = (opts.cardBaseUrl || 'https://www.youxigujia.cn') + '/api/qq-card-image/' + cardId;
+          await sendCardReply(cfg, openid, isGroup, imageUrl, msgId);
           lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: '[图片卡片] ' + String(p.text).substring(0, 100) };
           return;
         } catch (e) {

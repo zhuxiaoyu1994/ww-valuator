@@ -388,7 +388,8 @@ if (MAINTENANCE_KEY) {
       //    QQ 机器人 WebHook 豁免：QQ 服务器无法携带维护密钥，闭站期间估价机器人需保持可用
       if (req.path === '/admin' || req.path.startsWith('/admin/api/') ||
           req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
-          req.path === '/api/qq-bot' || req.path === '/api/qq-bot-debug') {
+          req.path === '/api/qq-bot' || req.path === '/api/qq-bot-debug' ||
+          req.path.startsWith('/api/qq-card-image/') || req.path === '/api/qq-guess-debug') {
         return next();
       }
       // 1. Cookie 已解锁：主密钥直接放行；通行证密钥需复查有效期（过期立即失效）
@@ -557,6 +558,21 @@ app.get('/api/qq-bot-debug', async (req, res) => {
   res.json({ success: true, data: await qqBotWebhook.getLastDebug() });
 });
 
+// 猜价卡片图片服务：QQ 富媒体服务器通过此公网地址下载卡片 PNG（ID 为随机串，不可枚举）
+app.get('/api/qq-card-image/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').replace(/[^a-zA-Z0-9]/g, '');
+    if (!id || id.length > 40) return res.status(404).end();
+    const rec = await db.getConfig('qq_card_' + id);
+    if (!rec || !rec.b64) return res.status(404).end();
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=600');
+    res.send(Buffer.from(rec.b64, 'base64'));
+  } catch (e) {
+    res.status(500).end();
+  }
+});
+
 // 猜价游戏状态查询（管理员）：直接读 db KV，判断群消息是否真的被处理过
 app.get('/api/qq-guess-debug', async (req, res) => {
   if ((req.query.key || '') !== ADMIN_PASSWORD) {
@@ -609,20 +625,23 @@ app.get('/api/qq-card-debug', async (req, res) => {
     out.revealOk = revealBuf.length > 1000;
     out.revealBytes = revealBuf.length;
     out.costMs = Date.now() - t0;
-    // 富媒体上传自检：带 &group_openid=xxx 时真实走一遍上传（srv_send_msg=false，不会往群里发消息）
+    // 富媒体上传自检：带 &group_openid=xxx 时真实走一遍 URL 模式上传（srv_send_msg=false，不会往群里发消息）
     const gOpenid = String((req.query.group_openid || '')).trim();
     if (gOpenid) {
       try {
         const botCfg = { appId: process.env.QQ_BOT_APP_ID || '', appSecret: process.env.QQ_BOT_SECRET || '' };
         const token = await qqBotWebhook.getAccessTokenForDebug(botCfg);
-        const form = new FormData();
-        form.append('file_type', '1');
-        form.append('srv_send_msg', 'false');
-        form.append('file_data', new Blob([revealBuf], { type: 'image/png' }), 'card.png');
+        const cardId = 'dbg' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        await db.setConfig('qq_card_' + cardId, { b64: revealBuf.toString('base64'), ts: Date.now() });
+        const imageUrl = (process.env.CARD_BASE_URL || 'https://www.youxigujia.cn') + '/api/qq-card-image/' + cardId;
+        out.imageUrl = imageUrl;
         const up = await fetch('https://api.sgroup.qq.com/v2/groups/' + encodeURIComponent(gOpenid) + '/files', {
           method: 'POST',
-          headers: { 'Authorization': 'QQBot ' + token },
-          body: form,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'QQBot ' + token,
+          },
+          body: JSON.stringify({ file_type: 1, url: imageUrl, srv_send_msg: false }),
         });
         const ud = await up.json().catch(() => ({}));
         out.uploadStatus = up.status;
