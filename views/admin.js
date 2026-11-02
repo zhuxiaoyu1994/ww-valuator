@@ -597,7 +597,8 @@ function getAdminPage() {
         <p style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px;">
           给每位朋友发一把专属密钥，用于「页面估价助手」脚本（<code style="color:#888;">pxb7-value-lite.user.js</code>）。<br>
           收到钱后在下方新建密钥并发给对方，到期后脚本自动失效；到期前点「续期」顺延天数即可，未用完的剩余天数不会丢失。<br>
-          密钥存在服务器数据库中，停用/删除后立即生效，无需重新部署。
+          密钥存在服务器数据库中，停用/删除后立即生效，无需重新部署。<br>
+          <strong style="color:#4ade80;">网站估价通行证</strong>：网站估价下线期间，密钥同时可作为网站估价通行证——点每条记录的「估价链接」复制专属网址发给朋友，对方打开即可正常使用网站估价，有效期与密钥一致，停用/删除后同步失效。
         </p>
         <div style="font-size:13px;color:#888;margin-bottom:12px;" id="ek-stats">加载中...</div>
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
@@ -2913,6 +2914,7 @@ function getAdminPage() {
             (rec.note ? '<div style="font-size:12px;color:#9ca3af;margin-top:3px;">备注：' + escapeHtml(rec.note) + '</div>' : '') +
           '</div>' +
           '<div style="display:flex;gap:8px;flex-shrink:0;">' +
+            '<button onclick="ekCopyEvalLink(\\'' + k.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 12px;border:1px solid #a78bfa;border-radius:6px;background:transparent;color:#a78bfa;font-size:12px;cursor:pointer;">估价链接</button>' +
             '<button onclick="ekCopy(\\'' + k.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 12px;border:1px solid #4ade80;border-radius:6px;background:transparent;color:#4ade80;font-size:12px;cursor:pointer;">复制</button>' +
             '<button onclick="ekRenew(\\'' + k.replace(/'/g, "\\\\'") + '\\')" style="padding:5px 12px;border:1px solid #38bdf8;border-radius:6px;background:transparent;color:#38bdf8;font-size:12px;cursor:pointer;">续期</button>' +
             '<button onclick="ekToggle(\\'' + k.replace(/'/g, "\\\\'") + '\\', \\'' + (rec.status === 'active' ? 'disabled' : 'active') + '\\')" style="padding:5px 12px;border:1px solid #fbbf24;border-radius:6px;background:transparent;color:#fbbf24;font-size:12px;cursor:pointer;">' + (rec.status === 'active' ? '停用' : '启用') + '</button>' +
@@ -2956,7 +2958,7 @@ function getAdminPage() {
         nameEl.value = '';
         evalKeysData.unshift(result.data);
         ekRenderList();
-        alert('密钥已生成：\\n' + result.data.key + '\\n\\n有效期：' + ekExpireText(result.data) + '\\n请复制发给对方。');
+        alert('密钥已生成：\\n' + result.data.key + '\\n\\n有效期：' + ekExpireText(result.data) + '\\n\\n网站估价通行证链接（发给朋友即可）：\\n' + location.origin + '/wuwa?pass=' + encodeURIComponent(result.data.key));
       } else {
         alert(result.error || '创建失败');
       }
@@ -2972,6 +2974,20 @@ function getAdminPage() {
       });
     } else {
       window.prompt('复制下面的密钥：', key);
+    }
+  }
+
+  // 复制「网站估价通行证」链接：对方打开即获得与密钥有效期一致的估价权限
+  function ekCopyEvalLink(key) {
+    const url = location.origin + '/wuwa?pass=' + encodeURIComponent(key);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function() {
+        alert('估价通行证链接已复制：\\n' + url + '\\n\\n发给朋友即可，有效期与该密钥一致。');
+      }, function() {
+        window.prompt('复制下面的链接发给朋友：', url);
+      });
+    } else {
+      window.prompt('复制下面的链接发给朋友：', url);
     }
   }
 

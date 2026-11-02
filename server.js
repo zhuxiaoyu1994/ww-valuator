@@ -563,8 +563,11 @@ app.get('/api/qq-bot-debug', (req, res) => {
 const SITE_EVAL_OFFLINE = true;
 
 // ---- 管理员估价后门 ----
-// 用法：访问任意下线页面并在 URL 带上 key=管理员密码（如 /wuwa?key=xxx），
-// 验证通过后种 90 天 HttpOnly Cookie，之后直接访问原页面/估价API，与他人不可见。
+// 用法1（管理员）：访问任意下线页面并在 URL 带上 key=管理员密码（如 /wuwa?key=xxx），
+//   验证通过后种 90 天 HttpOnly Cookie，之后直接访问原页面/估价API，与他人不可见。
+// 用法2（好友通行证）：在管理后台「密钥管理」创建密钥（可设有效期，如1天试用），
+//   把 /wuwa?pass=密钥 链接发给朋友，打开即种与密钥有效期一致的 Cookie。
+//   密钥在后台可随时停用/续期/删除，停用后最多延迟30秒失效（实例内存缓存）。
 // 恢复网站（SITE_EVAL_OFFLINE=false）后本段逻辑自动旁路，无需改动。
 function getCookie(req, name) {
   const raw = req.headers.cookie || '';
@@ -576,15 +579,46 @@ function getCookie(req, name) {
   }
   return '';
 }
-function evalBackdoorGate(req, res, next) {
+
+// eval-key 通行证校验（30秒内存缓存，减少每次估价API的数据库读取）
+let evalPassCache = { data: null, at: 0 };
+async function isValidEvalPassKey(key) {
+  if (!key) return false;
+  const now = Date.now();
+  if (!Array.isArray(evalPassCache.data) || now - evalPassCache.at > 30000) {
+    try {
+      evalPassCache.data = (await db.listEvalKeys()) || [];
+    } catch (e) {
+      evalPassCache.data = [];
+    }
+    evalPassCache.at = now;
+  }
+  const rec = evalPassCache.data.find(r => r && r.key === key);
+  return !!(rec && rec.status === 'active' && (!rec.expiresAt || Date.parse(rec.expiresAt) > now));
+}
+
+async function evalBackdoorGate(req, res, next) {
   if (!SITE_EVAL_OFFLINE) return next();
-  // URL 带正确 key：种 Cookie 后放行（90天免重新验证）
+  // 用法1：管理员密码 → 90天 Cookie
   if (req.query.key === ADMIN_PASSWORD) {
     res.setHeader('Set-Cookie', 'ek=' + encodeURIComponent(ADMIN_PASSWORD) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + (90 * 24 * 3600));
     return next();
   }
-  // 已有有效通行证 Cookie：直接放行
   if (getCookie(req, 'ek') === ADMIN_PASSWORD) return next();
+  // 用法2：后台签发的密钥通行证（URL 首次进入种 Cookie，有效期跟随密钥剩余时长）
+  const pass = (req.query.pass || '') + '' || getCookie(req, 'ep');
+  if (pass && (await isValidEvalPassKey(pass))) {
+    if (req.query.pass) {
+      const rec = (evalPassCache.data || []).find(r => r && r.key === pass);
+      let maxAge = 90 * 24 * 3600;
+      if (rec && rec.expiresAt) {
+        maxAge = Math.min(maxAge, Math.max(60, Math.floor((Date.parse(rec.expiresAt) - Date.now()) / 1000)));
+      }
+      res.setHeader('Set-Cookie', 'ep=' + encodeURIComponent(pass) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + maxAge);
+      db.touchEvalKey(pass).catch(() => {}); // 记录使用次数（原密钥体系统计）
+    }
+    return next();
+  }
   return res.send(getOfflineNoticePage());
 }
 
@@ -674,9 +708,11 @@ function getOfflineNoticePage() {
 // 下线期间：拦截网站估价相关页面（API 拦截见各路由处）
 const OFFLINE_EVAL_APIS = ['/api/x9k2-eval', '/api/page-eval', '/api/x9k2-find'];
 if (SITE_EVAL_OFFLINE) {
-  app.all(OFFLINE_EVAL_APIS, (req, res, next) => {
-    // 管理员通行证（ek Cookie）放行
+  app.all(OFFLINE_EVAL_APIS, async (req, res, next) => {
+    // 管理员通行证（ek Cookie）或后台密钥通行证（ep Cookie）放行
     if (getCookie(req, 'ek') === ADMIN_PASSWORD) return next();
+    const ep = getCookie(req, 'ep');
+    if (ep && (await isValidEvalPassKey(ep))) return next();
     res.json({
       success: false,
       offline: true,
