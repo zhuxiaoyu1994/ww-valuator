@@ -539,6 +539,8 @@ const qqBotWebhook = createQQBotHandler({
   appSecret: QQ_BOT_SECRET,
   encryptKey: QQ_BOT_ENCRYPT_KEY,
   getEngine: getEngine,
+  fetchPxb7: fetchPxb7Api,   // 猜价游戏拉螃蟹网昨日成交清单
+  db: db,                    // 猜价游戏状态存 KV
   getWeights: function () { return getEffectiveConfig('wuwa'); },
   onLog: function (logEntry) {
     queryLogs.unshift(logEntry);
