@@ -111,12 +111,21 @@ function getAccessToken(appId, appSecret) {
   return tokenPromise;
 }
 
+// 被动回复的 msg_seq 必须在同一 msg_id 下递增，重复的 seq 会被 QQ 去重拒绝（错误码 40054005）
+const msgSeqMap = new Map(); // msgId -> 已使用的最大 seq
+
 /** 发送被动回复（群聊/私聊） */
 async function sendReply(cfg, openid, isGroup, content, msgId) {
   const token = await getAccessToken(cfg.appId, cfg.appSecret);
   const url = isGroup
     ? API_BASE + '/v2/groups/' + encodeURIComponent(openid) + '/messages'
     : API_BASE + '/v2/users/' + encodeURIComponent(openid) + '/messages';
+  let seq = 1;
+  if (msgId) {
+    seq = (msgSeqMap.get(msgId) || 0) + 1;
+    msgSeqMap.set(msgId, seq);
+    if (msgSeqMap.size > 5000) msgSeqMap.clear();
+  }
   const resp = await fetch(url, {
     method: 'POST',
     headers: {
@@ -127,7 +136,7 @@ async function sendReply(cfg, openid, isGroup, content, msgId) {
       content: content,
       msg_type: 0,
       msg_id: msgId,
-      msg_seq: 1,
+      msg_seq: seq,
     }),
   });
   const data = await resp.json().catch(() => ({}));

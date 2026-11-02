@@ -414,6 +414,29 @@ function normalizePlatformText(text) {
   const resourceNames = RESOURCES.map(r => r.name);
   const allSectionKeywords = CHAR_SECTION_KEYWORDS.concat(WEAPON_SECTION_KEYWORDS);
 
+  // Format Plain: 纯文本表单格式（无【】，标题与内容以空白分隔）→ 统一转为【标题】内容。
+  // 常见于螃蟹网账号详情页直接复制/QQ转发的描述，如：
+  //   "星声 170 黄数 69 按角色 凌阳、鉴心… 满命角色 满命维里奈、… 精一武器 精1千古洑流、…"
+  // 转换后即可复用下方全部【】格式逻辑（命座/精炼分段合并、资源提取等）。
+  // 标题词必须后跟空白或冒号才转换，避免误伤正文；长词优先防止"联觉等级"被"等级"截断。
+  const constSectionNames = ['满命', '六命', '五命', '四命', '三命', '二命', '一命', '零命'];
+  const refineSectionNames = ['精五', '精四', '精三', '精二', '精一', '精0'];
+  const plainTitles = RESOURCES.map(r => r.name)
+    .concat(OUTFIT_SECTION_KEYWORDS, MOTO_SECTION_KEYWORDS, MOTO_ACCESSORY_KEYWORDS)
+    .concat(LEVEL_KEYWORDS, ['等级', '黄数', '按角色', '按武器', '四星角色'])
+    .concat(YELLOW_UNITS.map(u => u + '数'))
+    .concat(constSectionNames.map(cs => cs + '角色'))
+    .concat(refineSectionNames.map(rs => rs + '武器'))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const plainTitlePat = plainTitles.map(escapeRe).join('|');
+  if (plainTitlePat) {
+    text = text.replace(new RegExp('(^|[\\s，,、])(' + plainTitlePat + ')(?=[\\s：:])', 'g'), function (m, pre, t) {
+      return pre + '【' + t + '】';
+    });
+  }
+
   // Format C: 资源值无冒号 → 补冒号（"星声15722" → "星声:15722"）
   text = text.replace(new RegExp('(' + resourceNames.join('|') + ')(\\d+)', 'g'), '$1:$2');
 
