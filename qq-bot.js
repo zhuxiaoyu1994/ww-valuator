@@ -147,7 +147,22 @@ async function sendReply(cfg, openid, isGroup, content, msgId) {
 
 // ── 消息解析与回复格式化 ─────────────────────────────────────
 
-const HELP_TEXT = '🤖 鸣潮账号估价\n\n用法：@机器人 + 商品描述 +（可选）标价\n示例：\n· @机器人 今汐满命 洛可可满命 长离1命 金18 抽卡剩200发 标价3500\n· @机器人 维里奈0命 延奏金3 ¥1200\n\n标价支持写法：标价3500 / ¥3500 / 3500元\n⚠️ 估值仅供参考，以实际成交为准';
+const HELP_TEXT = '🤖 鸣潮账号估价\n\n用法：@机器人 + 商品描述 +（可选）标价\n示例：\n· @机器人 今汐满命 洛可可满命 长离1命 金18 抽卡剩200发 标价3500\n· @机器人 维里奈0命 延奏金3 ¥1200\n\n标价支持写法：标价3500 / ¥3500 / 3500元\n命座范围 0~6（满命）\n⚠️ 估值仅供参考，以实际成交为准';
+
+// 调戏检测：明显不存在的命座写法（1.3命 / -99命 / π命……），回敬一句
+const TEASE_TEXTS = [
+  '🙄 调戏无效，白眼已翻。命座上限就是 6（满命），小数命、负数命、π 命在这个世界都不存在。\n正经描述，正经估价～',
+  '😒 检测到整活成分 ≥ 99%。命座 0~6，请按地球规则发描述。',
+  '🙄 命座不是浮点数，也不是负数，更不是圆周率。再来一次，正经点。',
+  '😴 这号是平行世界的吧？本机器人只估这个世界的号。命座 0~6，谢谢配合。',
+];
+function detectInvalidConst(text) {
+  if (!text) return false;
+  if (/\d+\.\d+\s*命/.test(text)) return true;              // 小数命：1.3命
+  if (/-\s*\d+\s*命/.test(text)) return true;               // 负数命：-99命
+  if (/[A-Za-z\u0370-\u03FF\u2100-\u214F]\s*命/.test(text)) return true; // 字母/希腊字母命：π命
+  return false;
+}
 
 /** 提取标价：仅识别明确的价格写法，避免把描述里的数字（命座/抽数）误当价格 */
 function extractPrice(text) {
@@ -301,7 +316,7 @@ function createQQBotHandler(opts) {
       await sendReply(cfg, openid, isGroup, content, msgId);
       lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: String(content).substring(0, 50) };
     } catch (e) {
-      lastReply = { time: new Date().toISOString(), ok: false, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, error: e.message };
+      lastReply = { time: new Date().toISOString(), ok: false, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: String(content).substring(0, 50), error: e.message };
       lastError = { time: new Date().toISOString(), scene: isGroup ? '群消息回复' : '私聊回复', message: e.message, stack: String(e.stack || '').substring(0, 400) };
       throw e;
     }
@@ -317,6 +332,12 @@ function createQQBotHandler(opts) {
     const text = stripMention(d.content);
     if (!text || /^(帮助|help|菜单|指令)$/i.test(text)) {
       await tryReply(openid, isGroup, HELP_TEXT, d.id);
+      return;
+    }
+    // 调戏检测：明显无效的命座写法（1.3命 / -99命 / π命），回敬一句，不估价
+    if (detectInvalidConst(text)) {
+      const msg = TEASE_TEXTS[Math.floor(Math.random() * TEASE_TEXTS.length)];
+      await tryReply(openid, isGroup, msg, d.id);
       return;
     }
     // 限频按发送者维度（群里避免整个群共享额度）
