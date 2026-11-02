@@ -115,17 +115,20 @@ function getAccessToken(appId, appSecret) {
 const msgSeqMap = new Map(); // msgId -> 已使用的最大 seq
 
 /** 发送被动回复（群聊/私聊） */
+function nextMsgSeq(msgId) {
+  if (!msgId) return 1;
+  const seq = (msgSeqMap.get(msgId) || 0) + 1;
+  msgSeqMap.set(msgId, seq);
+  if (msgSeqMap.size > 5000) msgSeqMap.clear();
+  return seq;
+}
+
 async function sendReply(cfg, openid, isGroup, content, msgId) {
   const token = await getAccessToken(cfg.appId, cfg.appSecret);
   const url = isGroup
     ? API_BASE + '/v2/groups/' + encodeURIComponent(openid) + '/messages'
     : API_BASE + '/v2/users/' + encodeURIComponent(openid) + '/messages';
-  let seq = 1;
-  if (msgId) {
-    seq = (msgSeqMap.get(msgId) || 0) + 1;
-    msgSeqMap.set(msgId, seq);
-    if (msgSeqMap.size > 5000) msgSeqMap.clear();
-  }
+  const seq = nextMsgSeq(msgId);
   const resp = await fetch(url, {
     method: 'POST',
     headers: {
@@ -142,6 +145,45 @@ async function sendReply(cfg, openid, isGroup, content, msgId) {
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || (data.retcode && data.retcode !== 0)) {
     throw new Error('回复消息失败 HTTP ' + resp.status + ' ' + JSON.stringify(data).substring(0, 200));
+  }
+}
+
+/** 卡片回复：先 multipart 上传 PNG 富媒体拿 file_info，再以 msg_type=7 图片消息发出 */
+async function sendCardReply(cfg, openid, isGroup, png, msgId) {
+  const token = await getAccessToken(cfg.appId, cfg.appSecret);
+  const base = isGroup
+    ? API_BASE + '/v2/groups/' + encodeURIComponent(openid)
+    : API_BASE + '/v2/users/' + encodeURIComponent(openid);
+  const form = new FormData();
+  form.append('file_type', '1');
+  form.append('srv_send_msg', 'false');
+  form.append('file_data', new Blob([png], { type: 'image/png' }), 'card.png');
+  const up = await fetch(base + '/files', {
+    method: 'POST',
+    headers: { 'Authorization': 'QQBot ' + token },
+    body: form,
+  });
+  const ud = await up.json().catch(() => ({}));
+  if (!up.ok || !ud.file_info) {
+    throw new Error('上传富媒体失败 HTTP ' + up.status + ' ' + JSON.stringify(ud).substring(0, 150));
+  }
+  const resp = await fetch(base + '/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'QQBot ' + token,
+    },
+    body: JSON.stringify({
+      content: '',
+      msg_type: 7,
+      msg_id: msgId,
+      msg_seq: nextMsgSeq(msgId),
+      media: { file_info: ud.file_info },
+    }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || (data.retcode && data.retcode !== 0)) {
+    throw new Error('发送图片消息失败 HTTP ' + resp.status + ' ' + JSON.stringify(data).substring(0, 150));
   }
 }
 
@@ -375,6 +417,60 @@ function createQQBotHandler(opts) {
     return n ? n : '...' + String(member).slice(-4);
   }
 
+  // 卡片渲染模块（懒加载；缺依赖/缺字体时返回 null，自动回退纯文本）
+  let cardModCache;
+  function getCardModule() {
+    if (cardModCache !== undefined) return cardModCache;
+    try { cardModCache = require('./qq-card'); }
+    catch (e) { cardModCache = null; }
+    return cardModCache;
+  }
+
+  /** 游戏回复统一入口：payload = 字符串 或 {text, card}；群聊且有卡片则发图，失败回退文本 */
+  async function replyGame(openid, isGroup, msgId, payload) {
+    const p = typeof payload === 'string' ? { text: payload } : (payload || {});
+    if (isGroup && p.card) {
+      const cardMod = getCardModule();
+      if (cardMod) {
+        const t0 = Date.now();
+        try {
+          const png = await cardMod.renderCard(p.card);
+          await sendCardReply(cfg, openid, isGroup, png, msgId);
+          lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: '[图片卡片] ' + String(p.text).substring(0, 100) };
+          return;
+        } catch (e) {
+          lastReply = { time: new Date().toISOString(), ok: false, group: isGroup, costMs: Date.now() - t0, contentHead: '[卡片失败回退文本] ' + String(p.text).substring(0, 90), error: e.message };
+        }
+      }
+    }
+    await tryReply(openid, isGroup, p.text, msgId);
+  }
+
+  /** 核心数据：用估价引擎解析题目文本，提炼 等级/五星角色/专武/抽数/金数/配队 */
+  function extractCoreInfo(title) {
+    const out = { items: [], teams: '' };
+    try {
+      const engine = getEngine('wuwa');
+      const r = engine.evaluateWithPrice(title, 0, null);
+      const d = r.details || {};
+      const info = r.info || {};
+      const lv = (title.match(/【?联觉等级】?\s*(\d{1,3})\s*级?/) || title.match(/^(\d{1,3})\s*级/) || [])[1];
+      if (lv) out.items.push('等级 ' + lv);
+      if (d.fiveStarChars) out.items.push('五星角色 ' + d.fiveStarChars);
+      const wc = (info.weapons || []).length;
+      if (wc > 0) out.items.push('专武 ' + wc + ' 把');
+      const pulls = (d.pullInfo && d.pullInfo.pulls) || info.pulls || 0;
+      if (pulls > 0) out.items.push('总抽数 ' + pulls);
+      const yi = d.yellowInfo || {};
+      if (yi.totalYellow > 0 || yi.yellowCount > 0) {
+        out.items.push('金数 ' + fmtGold(yi.yellowCount) + '/' + fmtGold(yi.totalYellow));
+      }
+      const teams = (d.matchedTeams || []).map(t => typeof t === 'string' ? t : (t.name || t.label || '')).filter(Boolean);
+      if (teams.length > 0) out.teams = teams.slice(0, 6).join('、') + (teams.length > 6 ? ' 等' + teams.length + '队' : '');
+    } catch (e) { /* 解析失败就不展示核心数据 */ }
+    return out;
+  }
+
   /** 出题：从螃蟹网昨日成交清单随机选一个 */
   async function startGuessGame() {
     const prev = await loadGuessState();
@@ -396,10 +492,12 @@ function createQQBotHandler(opts) {
     const pool = candidates.filter(it => {
       const t = String(it.showTitle || '');
       const yuan = Number(it.price) / 100;
-      return t.length >= 30 && t.length <= 600 && yuan >= 30 && yuan <= 50000;
+      return t.length >= 30 && t.length <= 600 && yuan >= 600 && yuan <= 50000;
     });
     if (pool.length === 0) return '螃蟹网接口暂时不通（可能被风控了），稍后再开一局吧 🙏';
     const pick = pool[Math.floor(Math.random() * pool.length)];
+    const masked = maskPrice(String(pick.showTitle));
+    const core = extractCoreInfo(masked);
     const state = {
       active: true,
       startedAt: Date.now(),
@@ -408,11 +506,19 @@ function createQQBotHandler(opts) {
         priceYuan: Math.round(Number(pick.price)) / 100,
         url: GUESS_PRODUCT_URL + pick.productId + '/1',
       },
-      maskedTitle: maskPrice(String(pick.showTitle)),
+      maskedTitle: masked,
+      imageUrl: String(pick.mainImageUrl || ''),
+      coreInfo: core.items,
+      coreTeams: core.teams,
       guesses: {},
     };
     await saveGuessState(state);
-    return '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓';
+    const coreText = core.items.length ? '\n\n📊 核心数据：' + core.items.join(' · ') : '';
+    const teamText = core.teams ? '\n👥 成型配队：' + core.teams : '';
+    return {
+      text: '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + coreText + teamText + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓',
+      card: { type: 'start', maskedTitle: state.maskedTitle, coreInfo: state.coreInfo, teams: state.coreTeams, imageUrl: state.imageUrl },
+    };
   }
 
   /** 参与竞猜：每人记录最新一次猜价（可修改）；猜进 ±10% 立即揭晓 */
@@ -468,13 +574,44 @@ function createQQBotHandler(opts) {
     return lines.join('\n');
   }
 
-  /** 揭晓当前局（置结束态并落盘），返回揭晓文案 */
+  /** 揭晓卡数据：成交价/胜者/猜价列表/二维码链接（商品图只放在题目卡，揭晓卡放二维码） */
+  async function revealCardData(st, reason) {
+    const nickMap = await loadNicknames();
+    const p = st.product.priceYuan;
+    const card = {
+      type: 'reveal',
+      reason: reason,
+      priceYuan: p,
+      productUrl: st.product.url,
+      maskedTitle: String(st.maskedTitle || '').substring(0, 60),
+      winner: null,
+      guesses: Object.entries(st.guesses || {})
+        .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0))
+        .map(([k, v]) => ({ name: displayName(k, nickMap), guess: v.guess })),
+    };
+    if (st.winner) {
+      const wg = (st.guesses[st.winner] || {}).guess;
+      const err = Math.round(Math.abs(wg - p) / p * 1000) / 10;
+      card.winner = { name: displayName(st.winner, nickMap), guess: wg, err: err };
+    }
+    return card;
+  }
+
+  /** 揭晓结果（文案+卡片，纯展示不改状态）；reason: solved | timeout | manual | recap */
+  async function guessResult(st, reason) {
+    return {
+      text: await guessResultText(st, reason),
+      card: await revealCardData(st, reason),
+    };
+  }
+
+  /** 揭晓当前局（置结束态并落盘），返回 {text, card} */
   async function revealGuessText(st, reason) {
     st.active = false;
     st.revealed = true;
     st.revealedAt = Date.now();
     saveGuessState(st);
-    return guessResultText(st, reason);
+    return guessResult(st, reason);
   }
 
   /** 惰性过期检查：serverless 无定时器，每条群消息进来时看一眼这局是否超时（3秒节流） */
@@ -501,12 +638,12 @@ function createQQBotHandler(opts) {
     if (!openid) return;
     const text = stripMention(d.content);
 
-    // 猜价游戏：惰性过期检查（仅群聊，5秒节流）
+    // 猜价游戏：惰性过期检查（仅群聊，3秒节流）
     if (isGroup) {
       try {
         const expiredMsg = await checkGuessExpiry();
         if (expiredMsg) {
-          await tryReply(openid, isGroup, expiredMsg, d.id);
+          await replyGame(openid, isGroup, d.id, expiredMsg);
           // 揭晓后继续处理当前消息的其余意图
         }
       } catch (e) { /* 忽略 */ }
@@ -554,22 +691,22 @@ function createQQBotHandler(opts) {
         const st = await loadGuessState();
         if (st.active && !st.revealed) {
           // 直接给结果：不等±10%，不等超时
-          await tryReply(openid, isGroup, await revealGuessText(st, 'manual'), d.id);
+          await replyGame(openid, isGroup, d.id, await revealGuessText(st, 'manual'));
         } else if (st.revealed && st.product) {
           // 无进行中的局：重看上一局结果
-          await tryReply(openid, isGroup, await guessResultText(st, 'recap'), d.id);
+          await replyGame(openid, isGroup, d.id, await guessResult(st, 'recap'));
         } else {
           await tryReply(openid, isGroup, '还没有猜价记录～发「开始猜价」来一局！', d.id);
         }
         return;
       }
       if (guessCmd) {
-        await tryReply(openid, isGroup, await startGuessGame(), d.id);
+        await replyGame(openid, isGroup, d.id, await startGuessGame());
         return;
       }
       if (guessVal) {
         const member = author.member_openid || author.user_openid || openid;
-        await tryReply(openid, isGroup, await handleGuess(member, guessVal[1]), d.id);
+        await replyGame(openid, isGroup, d.id, await handleGuess(member, guessVal[1]));
         return;
       }
     }

@@ -3,7 +3,8 @@
   "functions": {
     "api/server.js": {
       "memory": 1024,
-      "maxDuration": 15
+      "maxDuration": 15,
+      "includeFiles": "assets/fonts/**"
     }
   },
   "rewrites": [
