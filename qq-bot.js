@@ -374,12 +374,14 @@ function createQQBotHandler(opts) {
   async function persistDebug() {
     if (!gameDb) return;
     try {
-      // 直接 await 写入（不用 setTimeout：Vercel 在响应后冻结函数，定时器不会执行）
+      // 合并写：新实例内存里 lastReply/lastCardError 为空时，不能把库里已有的证据抹掉
+      let prev = {};
+      try { prev = (await gameDb.getConfig(DEBUG_KEY)) || {}; } catch (e) { /* 忽略 */ }
       await gameDb.setConfig(DEBUG_KEY, {
         lastDebug: lastDebug,
-        lastReply: lastReply,
-        lastError: lastError,
-        lastCardError: lastCardError,
+        lastReply: lastReply || prev.lastReply || null,
+        lastError: lastError || prev.lastError || null,
+        lastCardError: lastCardError || prev.lastCardError || null,
       });
     } catch (e) { /* 忽略 */ }
   }
@@ -503,19 +505,21 @@ function createQQBotHandler(opts) {
     const prev = await loadGuessState();
     if (prev.active && !prev.revealed) {
       const cnt = Object.keys(prev.guesses || {}).length;
-      return '🎮 猜价游戏正在进行中（' + cnt + ' 人已参与）！直接发「猜 4500」参与～\n\n📄 本局题目：\n' + (prev.maskedTitle || '');
+      const coreText = (prev.coreInfo && prev.coreInfo.length) ? '\n\n📊 核心数据：' + prev.coreInfo.join(' · ') : '';
+      const teamText = prev.coreTeams ? '\n👥 成型配队：' + prev.coreTeams : '';
+      return '🎮 猜价游戏正在进行中（' + cnt + ' 人已参与）！直接发「猜 4500」参与～\n\n📄 本局题目：\n' + (prev.maskedTitle || '') + coreText + teamText;
     }
     if (!fetchPxb7) return '猜价游戏暂不可用（未配置螃蟹接口）';
-    let candidates = [];
-    for (let p = 1; p <= 2; p++) {
+    // 两页并行拉取（串行要 2s+，会把整个回复链路拖过 QQ webhook 应答时限）
+    const pull = async function (p) {
       try {
         const r = await fetchPxb7('/api/search/product/selectSelledList', { pageIndex: p, pageSize: 100, gameId: '10302' });
         const json = JSON.parse(r.data);
-        const list = (json && json.success && Array.isArray(json.data)) ? json.data : [];
-        candidates = candidates.concat(list);
-        if (list.length < 100) break;
-      } catch (e) { break; }
-    }
+        return (json && json.success && Array.isArray(json.data)) ? json.data : [];
+      } catch (e) { return []; }
+    };
+    const [page1, page2] = await Promise.all([pull(1), pull(2)]);
+    const candidates = page1.concat(page2);
     const pool = candidates.filter(it => {
       const t = String(it.showTitle || '');
       const yuan = Number(it.price) / 100;
@@ -632,16 +636,18 @@ function createQQBotHandler(opts) {
     };
   }
 
-  /** 揭晓当前局（置结束态并落盘），返回 {text, card} */
-  async function revealGuessText(st, reason) {
+  /** 揭晓当前局（置结束态并落盘），返回 {text, card}；noCard=true 时只给文本（超时揭晓防超时） */
+  async function revealGuessText(st, reason, noCard) {
     st.active = false;
     st.revealed = true;
     st.revealedAt = Date.now();
     saveGuessState(st);
+    if (noCard) return { text: await guessResultText(st, reason), card: null };
     return guessResult(st, reason);
   }
 
-  /** 惰性过期检查：serverless 无定时器，每条群消息进来时看一眼这局是否超时（3秒节流） */
+  /** 惰性过期检查：serverless 无定时器，每条群消息进来时看一眼这局是否超时（3秒节流）
+   *  超时揭晓用纯文本（不带卡片）：它和当前消息自己的回复叠加发生，双卡片必然超过 QQ webhook 应答时限 */
   let lastGuessCheckAt = 0;
   async function checkGuessExpiry() {
     const now = Date.now();
@@ -650,7 +656,7 @@ function createQQBotHandler(opts) {
     try {
       const st = await loadGuessState();
       if (st.active && !st.revealed && now - st.startedAt > GUESS_DURATION_MS) {
-        return await revealGuessText(st, 'timeout');
+        return await revealGuessText(st, 'timeout', true);
       }
     } catch (e) { /* 忽略 */ }
     return null;
