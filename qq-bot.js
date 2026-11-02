@@ -699,15 +699,11 @@ function createQQBotHandler(opts) {
     const priceYuan = extractPrice(text);
     const desc = text.replace(/(?:价格|标价|售价|出价)\s*[:：]?\s*\d+(?:\.\d+)?/g, ' ').replace(/[¥￥]\s*\d+(?:\.\d+)?/g, ' ').replace(/\d+(?:\.\d+)?\s*元/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // 猜价游戏命令：开始猜价 / 结束猜价 / 猜 4500 / 我叫XX
+    // 猜价游戏命令：开始猜价 / 结束猜价 / 猜 4500 / 我叫XX（群聊和私聊都可玩）
     const nickCmd = text.match(/^我叫\s*([^\s]{1,12})$/);
     const guessCmd = text.match(/^(开始猜价|来局猜价|猜价游戏|结束猜价|公布答案)$/);
     const guessVal = text.match(/^猜价?[:：]?\s*(\d+(?:\.\d+)?)$/);
     if (nickCmd || guessCmd || guessVal) {
-      if (!isGroup) {
-        await tryReply(openid, isGroup, '猜价游戏请在群聊里玩～', d.id);
-        return;
-      }
       if (nickCmd) {
         const nick = nickCmd[1].trim();
         await saveNickname(member, nick);
