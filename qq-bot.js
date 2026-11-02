@@ -449,27 +449,45 @@ function createQQBotHandler(opts) {
     return cardModCache;
   }
 
-  /** 游戏回复统一入口：payload = 字符串 或 {text, card}；群聊且有卡片则发图，失败回退文本 */
+// Vercel waitUntil：响应后继续执行重活（卡片渲染/上传），webhook 本体 2 秒内应答
+// 官方文档：https://vercel.com/docs/functions/functions-wait-until
+let _waitUntil = null;
+function deferWork(promise) {
+  if (_waitUntil === null) {
+    try { _waitUntil = require('@vercel/functions').waitUntil; } catch (e) { _waitUntil = false; }
+  }
+  if (typeof _waitUntil === 'function') {
+    try { _waitUntil(promise); return; } catch (e) { /* Vercel 环境外直接后台跑 */ }
+  }
+  promise.catch(function () { /* 本地/无 waitUntil 环境：直接后台执行 */ });
+}
+
+  /** 游戏回复统一入口：payload = 字符串 或 {text, card}
+   *  卡片走 deferWork 延后发送——QQ webhook 超时会暂停群推送几十分钟，任何消息都必须 3 秒内应答；
+   *  卡片作为同 msg_id 的第二条消息（msg_seq 递增）晚几秒送达，失败自动回退文本 */
   async function replyGame(openid, isGroup, msgId, payload) {
     const p = typeof payload === 'string' ? { text: payload } : (payload || {});
     if (isGroup && p.card && gameDb) {
       const cardMod = getCardModule();
       if (cardMod) {
-        const t0 = Date.now();
-        try {
-          const png = await cardMod.renderCard(p.card);
-          // 存 db KV → 公网 URL → QQ 服务器来下载（srv_send_msg=false 仅上传不发送）
-          const cardId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-          await gameDb.setConfig('qq_card_' + cardId, { b64: Buffer.from(png).toString('base64'), ts: Date.now() });
-          const imageUrl = (opts.cardBaseUrl || 'https://www.youxigujia.cn') + '/api/qq-card-image/' + cardId;
-          await sendCardReply(cfg, openid, isGroup, imageUrl, msgId);
-          lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: '[图片卡片] ' + String(p.text).substring(0, 100) };
-          return;
-        } catch (e) {
-          lastCardError = { time: new Date().toISOString(), message: e.message, stack: String(e.stack || '').substring(0, 400) };
-          lastReply = { time: new Date().toISOString(), ok: false, group: isGroup, costMs: Date.now() - t0, contentHead: '[卡片失败回退文本] ' + String(p.text).substring(0, 90), error: e.message };
-          await persistDebug();
-        }
+        const card = p.card;
+        deferWork((async () => {
+          const t0 = Date.now();
+          try {
+            const png = await cardMod.renderCard(card);
+            const cardId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+            await gameDb.setConfig('qq_card_' + cardId, { b64: Buffer.from(png).toString('base64'), ts: Date.now() });
+            const imageUrl = (opts.cardBaseUrl || 'https://www.youxigujia.cn') + '/api/qq-card-image/' + cardId;
+            await sendCardReply(cfg, openid, isGroup, imageUrl, msgId);
+            lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: '[图片卡片] ' + String(p.text).substring(0, 100) };
+          } catch (e) {
+            lastCardError = { time: new Date().toISOString(), message: e.message, stack: String(e.stack || '').substring(0, 400) };
+            lastReply = { time: new Date().toISOString(), ok: false, group: isGroup, costMs: Date.now() - t0, contentHead: '[卡片失败回退文本] ' + String(p.text).substring(0, 90), error: e.message };
+            try { await tryReply(openid, isGroup, p.text, msgId); } catch (e2) { /* 忽略 */ }
+            await persistDebug();
+          }
+        })());
+        return;
       }
     }
     await tryReply(openid, isGroup, p.text, msgId);
