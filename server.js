@@ -596,6 +596,29 @@ app.get('/api/qq-card-debug', async (req, res) => {
     out.revealOk = revealBuf.length > 1000;
     out.revealBytes = revealBuf.length;
     out.costMs = Date.now() - t0;
+    // 富媒体上传自检：带 &group_openid=xxx 时真实走一遍上传（srv_send_msg=false，不会往群里发消息）
+    const gOpenid = String((req.query.group_openid || '')).trim();
+    if (gOpenid) {
+      try {
+        const botCfg = { appId: process.env.QQ_BOT_APP_ID || '', appSecret: process.env.QQ_BOT_SECRET || '' };
+        const token = await qqBotWebhook.getAccessTokenForDebug(botCfg);
+        const form = new FormData();
+        form.append('file_type', '1');
+        form.append('srv_send_msg', 'false');
+        form.append('file_data', new Blob([revealBuf], { type: 'image/png' }), 'card.png');
+        const up = await fetch('https://api.sgroup.qq.com/v2/groups/' + encodeURIComponent(gOpenid) + '/files', {
+          method: 'POST',
+          headers: { 'Authorization': 'QQBot ' + token },
+          body: form,
+        });
+        const ud = await up.json().catch(() => ({}));
+        out.uploadStatus = up.status;
+        out.uploadResp = JSON.stringify(ud).substring(0, 400);
+        out.uploadOk = up.ok && ud.file_info;
+      } catch (e) {
+        out.uploadError = (e && e.message) || String(e);
+      }
+    }
   } catch (e) {
     out.errors.push((e && e.message) || String(e));
   }

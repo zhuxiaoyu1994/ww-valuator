@@ -844,6 +844,7 @@ function createQQBotHandler(opts) {
   return {
     webhook: webhook,
     getLastDebug: function () { return Object.assign({}, lastDebug, { lastError: lastError, lastReply: lastReply, lastCardError: lastCardError }); },
+    getAccessTokenForDebug: function (botCfg) { return getAccessToken(botCfg.appId, botCfg.appSecret); },
   };
 }
 
