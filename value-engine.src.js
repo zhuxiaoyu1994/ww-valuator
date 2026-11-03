@@ -530,10 +530,12 @@ function normalizePlatformText(text) {
   }
 
   // Format C: 合并精炼分段到武器列表
+  // 注意 [：:] 必须可选——螃蟹网"商品编码"表单归一化后是"【精五武器】 精5xxx"（空格分隔无冒号），
+  // 强制冒号会导致整段合并被跳过，精五等短段随后丢失（估值差上千）
   const refineSections = ['精五', '精四', '精三', '精二', '精一', '精0'];
   let allWeaponsWithRefine = [];
   for (const rs of refineSections) {
-    const rsPat = '【' + rs + '武器】[：:]\\s*([^【]*)';
+    const rsPat = '【' + rs + '武器】[：:]?\\s*([^【]*)';
     const rsMatch = text.match(new RegExp(rsPat));
     if (rsMatch) {
       const rsItems = rsMatch[1].split(/[,，、\s]+/).filter(Boolean);
@@ -541,8 +543,25 @@ function normalizePlatformText(text) {
     }
   }
   if (allWeaponsWithRefine.length > 0) {
-    text = text.replace(/【按武器】[：:][\s\S]*?(?=【|$)/g, WEAPON_SECTION_KEYWORDS[0] + ':' + allWeaponsWithRefine.join(',') + ' ');
-    text = text.replace(/【精[五四三二一0]武器】[：:][\s\S]*?(?=【|$)/g, '');
+    const mergedWeaponSection = '【' + WEAPON_SECTION_KEYWORDS[0] + '】' + allWeaponsWithRefine.join('，') + ' ';
+    let mergedIntoExisting = false;
+    text = text.replace(/【按武器】[：:][\s\S]*?(?=【|$)/g, function () {
+      mergedIntoExisting = true;
+      return mergedWeaponSection;
+    });
+    if (mergedIntoExisting) {
+      // 有【按武器】段：合并进去后删除各精炼分段
+      text = text.replace(/【精[五四三二一0]武器】[：:][\s\S]*?(?=【|$)/g, '');
+    } else {
+      // 没有【按武器】段（如螃蟹网商品编码表单）：把第一个精炼分段替换为合并后的
+      // 五星武器段、其余删除。此前直接删除会导致精五等短段整段丢失
+      //（extractSection('武器') 只取最长段 → 精一 39 把在、精五 5 把凭空消失，估值少上千）。
+      let firstRefineSection = true;
+      text = text.replace(/【精[五四三二一0]武器】[：:]?\s*[^【]*/g, function () {
+        if (firstRefineSection) { firstRefineSection = false; return mergedWeaponSection; }
+        return ' ';
+      });
+    }
   }
 
   // 通用转换
