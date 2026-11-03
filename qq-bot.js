@@ -543,7 +543,7 @@ function createQQBotHandler(opts) {
       if (fd && fd.value && fd.value < 1) discounts.push('低命×' + fd.value);
       if (discounts.length > 0) out.discounts = discounts;
       const teams = (d.matchedTeams || []).map(t => typeof t === 'string' ? t : (t.name || t.label || '')).filter(Boolean);
-      if (teams.length > 0) out.teams = teams.slice(0, 6).join('、') + (teams.length > 6 ? ' 等' + teams.length + '队' : '');
+      if (teams.length > 0) out.teams = teams.join('、');
     } catch (e) { /* 解析失败就不展示核心数据 */ }
     return out;
   }

@@ -54,9 +54,17 @@ function boldText(ctx, text, x, y, lw) {
 function wrap(mctx, text, maxW, maxLines) {
   const lines = [];
   let cur = '';
+  const isWord = function (c) { return /[0-9A-Za-z\/.%±+]/.test(c); };
   for (const ch of String(text || '')) {
     if (ch === '\n') { lines.push(cur); cur = ''; continue; }
-    if (mctx.measureText(cur + ch).width > maxW && cur) { lines.push(cur); cur = ch; }
+    if (mctx.measureText(cur + ch).width > maxW && cur) {
+      // 避免把数字/英文单词（如 44/209、¥12699）从中间折断：回退到本行最后一个可断位置
+      if (isWord(ch) && isWord(cur.slice(-1))) {
+        const m2 = cur.match(/^(.*?)([0-9A-Za-z\/.%±+]+)$/);
+        if (m2 && m2[1]) { lines.push(m2[1]); cur = m2[2] + ch; continue; }
+      }
+      lines.push(cur); cur = ch;
+    }
     else cur += ch;
   }
   if (cur) lines.push(cur);
@@ -125,7 +133,8 @@ async function renderStartCard(card) {
   const items = Array.isArray(card.coreInfo) ? card.coreInfo : [];
   const itemLines = items.length ? wrap(m, items.join('   ·   '), INNER - 48, 2) : [];
   m.font = '23px GameSans';
-  const teamLines = card.teams ? wrap(m, '成型配队：' + card.teams, INNER - 48, 2) : [];
+  // 配队全部展示：行数不设上限（面板高度自适应）
+  const teamLines = card.teams ? wrap(m, '成型配队：' + card.teams, INNER - 48, 20) : [];
   const discounts = Array.isArray(card.discounts) ? card.discounts.filter(Boolean) : [];
   // 最多展示 4 条，其余折叠为「等N项」，避免长列表被截断省略号吃掉关键信息
   const discShown = discounts.slice(0, 4);
