@@ -127,31 +127,42 @@ async function renderStartCard(card) {
   m.font = '23px GameSans';
   const teamLines = card.teams ? wrap(m, '成型配队：' + card.teams, INNER - 48, 2) : [];
 
-  // 商品图（可选，失败跳过）
+  // 商品图（可选，失败跳过）；底部规则挪到右上角后省出的空间全部给图
   let img = null;
   if (card.imageUrl) { try { img = await loadImg(card.imageUrl); } catch (e) { /* 无图排版 */ } }
-  const imgH = img ? 190 : 0;
+  const imgH = img ? 280 : 0;
 
   // 面板高度
   const panelRows = itemLines.length + teamLines.length;
   const panelH = panelRows > 0 ? (26 + 40 + panelRows * 40 + 16) : 0;
 
-  let y = 118;
+  let y = 154;
   if (img) y += imgH + 20;
   y += titleLines.length * 38;
   if (titleLines.length) y += 18;
   const panelTop = y;
   y += panelH;
-  const footerTop = y + 18;
-  const H = Math.round(footerTop + 106);
+  const H = Math.round(y + 30);
   const FOOT = PAD + INNER; // 右边界
 
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
   drawBg(ctx, H);
-  header(ctx, '猜价游戏', '螃蟹网 · 昨日真实成交');
+  header(ctx, '猜价游戏', '');
+  // 玩法规则（右上角，右对齐小字，替代原徽标文字）
+  ctx.font = '18px GameSans';
+  ctx.fillStyle = C.sub;
+  ctx.textAlign = 'right';
+  const rules = [
+    '「猜 4500」参与竞猜',
+    '「我叫XX」登记昵称',
+    '猜进 ±10% 即刻揭晓',
+    '1分钟无人猜中自动揭晓',
+  ];
+  rules.forEach((r, i) => ctx.fillText(r, W - PAD, 48 + i * 26));
+  ctx.textAlign = 'left';
 
-  y = 118;
+  y = 154;
   if (img) {
     drawCover(ctx, img, PAD, y, INNER, imgH, 14);
     y += imgH + 20;
@@ -185,14 +196,6 @@ async function renderStartCard(card) {
     for (const ln of teamLines) { ctx.fillText(ln, PAD + 24, ry + 10); ry += 40; }
     y = panelTop + panelH;
   }
-  // 玩法规则
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(PAD, footerTop + 12); ctx.lineTo(FOOT, footerTop + 12); ctx.stroke();
-  ctx.font = '20px GameSans';
-  ctx.fillStyle = C.sub;
-  ctx.fillText('「猜 4500」参与竞猜（可改价）  ·  「我叫XX」登记昵称', PAD, footerTop + 46);
-  ctx.fillText('猜进成交价 ±10% 即刻揭晓 · 1分钟无人猜中自动揭晓', PAD, footerTop + 76);
   return canvas.toBuffer('image/png');
 }
 
