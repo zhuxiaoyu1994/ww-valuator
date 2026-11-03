@@ -493,14 +493,15 @@ function deferWork(promise) {
     await tryReply(openid, isGroup, p.text, msgId);
   }
 
-  /** 核心数据：用估价引擎解析题目文本，提炼 等级/五星角色/专武/抽数/金数/配队 */
+  /** 核心数据：用估价引擎解析题目文本，提炼 等级/五星角色/专武/抽数/金数/配队/系统估价 */
   function extractCoreInfo(title) {
-    const out = { items: [], teams: '' };
+    const out = { items: [], teams: '', systemValue: 0 };
     try {
       const engine = getEngine('wuwa');
       const r = engine.evaluateWithPrice(title, 0, null);
       const d = r.details || {};
       const info = r.info || {};
+      if (d.finalValue > 0) out.systemValue = Math.round(d.finalValue * 100) / 100;
       const lv = (title.match(/【?联觉等级】?\s*(\d{1,3})\s*级?/) || title.match(/^(\d{1,3})\s*级/) || [])[1];
       if (lv) out.items.push('等级 ' + lv);
       if (d.fiveStarChars) out.items.push('五星角色 ' + d.fiveStarChars);
@@ -559,6 +560,7 @@ function deferWork(promise) {
       imageUrl: String(pick.mainImageUrl || ''),
       coreInfo: core.items,
       coreTeams: core.teams,
+      systemValue: core.systemValue,
       guesses: {},
     };
     await saveGuessState(state);
@@ -616,6 +618,11 @@ function deferWork(promise) {
       lines.push(rangeLine);
     }
     const gs = Object.entries(st.guesses || {});
+    if (st.systemValue) {
+      const sv = st.systemValue;
+      const diff = Math.round((sv - p) / p * 1000) / 10;
+      lines.push('🤖 系统估价：¥' + sv + '（与成交价差 ' + (diff >= 0 ? '+' : '') + diff + '%）');
+    }
     if (gs.length > 0) {
       lines.push('👥 本局猜价：' + gs.map(([k, v]) => displayName(k, nickMap) + '猜¥' + v.guess).join('，'));
     }
@@ -631,6 +638,7 @@ function deferWork(promise) {
       type: 'reveal',
       reason: reason,
       priceYuan: p,
+      systemValue: st.systemValue || 0,
       productUrl: st.product.url,
       maskedTitle: String(st.maskedTitle || '').substring(0, 60),
       winner: null,
@@ -723,10 +731,10 @@ function deferWork(promise) {
     const priceYuan = extractPrice(text);
     const desc = text.replace(/(?:价格|标价|售价|出价)\s*[:：]?\s*\d+(?:\.\d+)?/g, ' ').replace(/[¥￥]\s*\d+(?:\.\d+)?/g, ' ').replace(/\d+(?:\.\d+)?\s*元/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // 猜价游戏命令：开始猜价 / 结束猜价 / 猜 4500 / 我叫XX（群聊和私聊都可玩）
+    // 猜价游戏命令：开局关键词 / 参与关键词（猜4500/估4500/4500）/ 我叫XX（群聊和私聊都可玩）
     const nickCmd = text.match(/^我叫\s*([^\s]{1,12})$/);
-    const guessCmd = text.match(/^(开始猜价|来局猜价|猜价游戏|开始估价|开始游戏|结束猜价|公布答案)$/);
-    const guessVal = text.match(/^猜价?[:：]?\s*(\d+(?:\.\d+)?)$/);
+    const guessCmd = text.match(/^(开始游戏|开始估价|开始猜价|猜价游戏|估价游戏|来局猜价|结束猜价|公布答案)$/);
+    const guessVal = text.match(/^(?:猜|估)?\s*价?[:：]?\s*(\d+(?:\.\d+)?)$/);
     if (nickCmd || guessCmd || guessVal) {
       if (nickCmd) {
         const nick = nickCmd[1].trim();

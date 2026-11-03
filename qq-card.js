@@ -227,8 +227,11 @@ async function renderRevealCard(card) {
 
   const titleTop = 130;
   const priceTop = titleTop + (titleLine ? 60 : 20);
-  const winnerTop = card.winner ? priceTop + 106 : 0;
-  const listTop = card.winner ? winnerTop + 24 : priceTop + 84;
+  const sysValue = Number(card.systemValue) || 0;
+  const sysDiff = sysValue ? Math.round((sysValue - p) / p * 1000) / 10 : 0;
+  // 系统估价行占 44px（有胜者时接在胜者上方区段之后统一排版）
+  const winnerTop = card.winner ? priceTop + (sysValue ? 148 : 106) : 0;
+  const listTop = card.winner ? winnerTop + 24 : priceTop + (sysValue ? 122 : 84);
   const listH = guesses.length ? (74 + guesses.length * 40 + (more > 0 ? 36 : 0)) : 0;
   const qrTop = listTop + listH + 20;
   const qrH = qrImg ? 170 : 84;
@@ -255,6 +258,12 @@ async function renderRevealCard(card) {
   ctx.textAlign = 'right';
   ctx.fillText('±10% 区间 ¥' + lo + ' ~ ¥' + hi, W - PAD, priceTop + 56);
   ctx.textAlign = 'left';
+  // 系统估价对比
+  if (sysValue) {
+    ctx.font = '24px GameSans';
+    ctx.fillStyle = C.accent;
+    boldText(ctx, '系统估价 ¥' + sysValue + '（与成交价差 ' + (sysDiff >= 0 ? '+' : '') + sysDiff + '%）', PAD, priceTop + 100, 1.2);
+  }
   // 胜者
   let y = listTop;
   if (card.winner) {
