@@ -534,6 +534,13 @@ function createQQBotHandler(opts) {
       if (yi.totalYellow > 0 || yi.yellowCount > 0) {
         out.items.push('金数 ' + fmtGold(yi.yellowCount) + '/' + fmtGold(yi.totalYellow));
       }
+      // 折扣项（缺专武/缺强绑队友/低命，与网站估价结果页口径一致），单独存放避免挤占核心数据行
+      const discounts = [];
+      if (Array.isArray(d.sigDiscountNotes)) discounts.push.apply(discounts, d.sigDiscountNotes);
+      if (Array.isArray(d.c6DepNotes)) discounts.push.apply(discounts, d.c6DepNotes);
+      const fd = d.flatDiscount;
+      if (fd && fd.value && fd.value < 1) discounts.push('低命×' + fd.value);
+      if (discounts.length > 0) out.discounts = discounts;
       const teams = (d.matchedTeams || []).map(t => typeof t === 'string' ? t : (t.name || t.label || '')).filter(Boolean);
       if (teams.length > 0) out.teams = teams.slice(0, 6).join('、') + (teams.length > 6 ? ' 等' + teams.length + '队' : '');
     } catch (e) { /* 解析失败就不展示核心数据 */ }
@@ -546,8 +553,9 @@ function createQQBotHandler(opts) {
     if (prev.active && !prev.revealed) {
       const cnt = Object.keys(prev.guesses || {}).length;
       const coreText = (prev.coreInfo && prev.coreInfo.length) ? '\n\n📊 核心数据：' + prev.coreInfo.join(' · ') : '';
+      const discText = (prev.coreDiscounts && prev.coreDiscounts.length) ? '\n🏷️ 折扣：' + prev.coreDiscounts.join('、') : '';
       const teamText = prev.coreTeams ? '\n👥 成型配队：' + prev.coreTeams : '';
-      return '🎮 猜价游戏正在进行中（' + cnt + ' 人已参与）！直接发「猜 4500」参与～\n\n📄 本局题目：\n' + (prev.maskedTitle || '') + coreText + teamText;
+      return '🎮 猜价游戏正在进行中（' + cnt + ' 人已参与）！直接发「猜 4500」参与～\n\n📄 本局题目：\n' + (prev.maskedTitle || '') + coreText + discText + teamText;
     }
     if (!fetchPxb7) return '猜价游戏暂不可用（未配置螃蟹接口）';
     // 两页并行拉取（串行要 2s+，会把整个回复链路拖过 QQ webhook 应答时限）
@@ -580,16 +588,18 @@ function createQQBotHandler(opts) {
       maskedTitle: masked,
       imageUrl: String(pick.mainImageUrl || ''),
       coreInfo: core.items,
+      coreDiscounts: core.discounts || [],
       coreTeams: core.teams,
       systemValue: core.systemValue,
       guesses: {},
     };
     await saveGuessState(state);
     const coreText = core.items.length ? '\n\n📊 核心数据：' + core.items.join(' · ') : '';
+    const discText = (core.discounts && core.discounts.length) ? '\n🏷️ 折扣：' + core.discounts.join('、') : '';
     const teamText = core.teams ? '\n👥 成型配队：' + core.teams : '';
     return {
-      text: '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + coreText + teamText + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓',
-      card: { type: 'start', maskedTitle: state.maskedTitle, coreInfo: state.coreInfo, teams: state.coreTeams, imageUrl: state.imageUrl },
+      text: '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + coreText + discText + teamText + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓',
+      card: { type: 'start', maskedTitle: state.maskedTitle, coreInfo: state.coreInfo, discounts: state.coreDiscounts, teams: state.coreTeams, imageUrl: state.imageUrl },
     };
   }
 

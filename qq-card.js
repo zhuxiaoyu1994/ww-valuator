@@ -126,6 +126,13 @@ async function renderStartCard(card) {
   const itemLines = items.length ? wrap(m, items.join('   ·   '), INNER - 48, 2) : [];
   m.font = '23px GameSans';
   const teamLines = card.teams ? wrap(m, '成型配队：' + card.teams, INNER - 48, 2) : [];
+  const discounts = Array.isArray(card.discounts) ? card.discounts.filter(Boolean) : [];
+  // 最多展示 4 条，其余折叠为「等N项」，避免长列表被截断省略号吃掉关键信息
+  const discShown = discounts.slice(0, 4);
+  const discLabel = discShown.length
+    ? '折扣 ' + discShown.join('、') + (discounts.length > 4 ? ' 等' + discounts.length + '项' : '')
+    : '';
+  const discountLines = discLabel ? wrap(m, discLabel, INNER - 48, 2) : [];
 
   // 商品图（可选，失败跳过）；底部规则挪到右上角后省出的空间全部给图
   let img = null;
@@ -133,7 +140,7 @@ async function renderStartCard(card) {
   const imgH = img ? 280 : 0;
 
   // 面板高度
-  const panelRows = itemLines.length + teamLines.length;
+  const panelRows = itemLines.length + teamLines.length + discountLines.length;
   const panelH = panelRows > 0 ? (26 + 40 + panelRows * 40 + 16) : 0;
 
   let y = 154;
@@ -197,6 +204,12 @@ async function renderStartCard(card) {
     ctx.font = '23px GameSans';
     ctx.fillStyle = C.sub;
     for (const ln of teamLines) { ctx.fillText(ln, PAD + 24, ry + 10); ry += 40; }
+    // 折扣行（缺专武/缺强绑队友/低命），粉色与网站折扣标签同色系
+    if (discountLines.length) {
+      ctx.font = '22px GameSans';
+      ctx.fillStyle = '#f472b6';
+      for (const ln of discountLines) { ctx.fillText(ln, PAD + 24, ry + 10); ry += 40; }
+    }
     y = panelTop + panelH;
   }
   return canvas.toBuffer('image/png');
