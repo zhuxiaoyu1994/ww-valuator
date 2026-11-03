@@ -191,7 +191,7 @@ async function sendCardReply(cfg, openid, isGroup, imageUrl, msgId) {
 
 // ── 消息解析与回复格式化 ─────────────────────────────────────
 
-const HELP_TEXT = '🤖 鸣潮账号估价\n\n用法：@机器人 + 商品描述 +（可选）标价\n示例：\n· @机器人 今汐满命 洛可可满命 长离1命 金18 抽卡剩200发 标价3500\n· @机器人 维里奈0命 延奏金3 ¥1200\n\n标价支持写法：标价3500 / ¥3500 / 3500元\n命座范围 0~6（满命）\n🧩 小游戏：发「开始猜价」来一局，「我叫昵称」上猜价榜单\n⚠️ 估值仅供参考，以实际成交为准';
+const HELP_TEXT = '🤖 鸣潮账号估价\n\n用法：@机器人 + 商品描述 +（可选）标价\n示例：\n· @机器人 今汐满命 洛可可满命 长离1命 金18 抽卡剩200发 标价3500\n· @机器人 维里奈0命 延奏金3 ¥1200\n\n标价支持写法：标价3500 / ¥3500 / 3500元\n命座范围 0~6（满命）\n🧩 小游戏：发「开始猜价」来一局（可带金额下限如「开始猜价5000」），「题目统计」看题库价格分布，「我叫昵称」上猜价榜单\n⚠️ 估值仅供参考，以实际成交为准';
 
 const TEASE_TEXTS = [
   '🙄 调戏无效，白眼已翻。命座上限就是 6（满命），小数命、负数命、π 命在这个世界都不存在。\n正经描述，正经估价～',
@@ -547,18 +547,9 @@ function createQQBotHandler(opts) {
     return out;
   }
 
-  /** 出题：从螃蟹网昨日成交清单随机选一个 */
-  async function startGuessGame() {
-    const prev = await loadGuessState();
-    if (prev.active && !prev.revealed) {
-      const cnt = Object.keys(prev.guesses || {}).length;
-      const coreText = (prev.coreInfo && prev.coreInfo.length) ? '\n\n📊 核心数据：' + prev.coreInfo.join(' · ') : '';
-      const discText = (prev.coreDiscounts && prev.coreDiscounts.length) ? '\n🏷️ 折扣：' + prev.coreDiscounts.join('、') : '';
-      const teamText = prev.coreTeams ? '\n👥 成型配队：' + prev.coreTeams : '';
-      return '🎮 猜价游戏正在进行中（' + cnt + ' 人已参与）！直接发「猜 4500」参与～\n\n📄 本局题目：\n' + (prev.maskedTitle || '') + coreText + discText + teamText;
-    }
-    if (!fetchPxb7) return '猜价游戏暂不可用（未配置螃蟹接口）';
-    // 两页并行拉取（串行要 2s+，会把整个回复链路拖过 QQ webhook 应答时限）
+  /** 拉取昨日成交清单（两页并行），开局与题目统计共用 */
+  async function pullCandidates() {
+    if (!fetchPxb7) return [];
     const pull = async function (p) {
       try {
         const r = await fetchPxb7('/api/search/product/selectSelledList', { pageIndex: p, pageSize: 100, gameId: '10302' });
@@ -567,13 +558,55 @@ function createQQBotHandler(opts) {
       } catch (e) { return []; }
     };
     const [page1, page2] = await Promise.all([pull(1), pull(2)]);
-    const candidates = page1.concat(page2);
-    const pool = candidates.filter(it => {
+    return page1.concat(page2);
+  }
+
+  /** 基础题目过滤：标题长度与价格区间（600~50000） */
+  function filterPool(candidates) {
+    return candidates.filter(it => {
       const t = String(it.showTitle || '');
       const yuan = Number(it.price) / 100;
       return t.length >= 30 && t.length <= 600 && yuan >= 600 && yuan <= 50000;
     });
+  }
+
+  /** 题目池统计：价格段分布 */
+  async function guessPoolStats() {
+    const pool = filterPool(await pullCandidates());
+    if (pool.length === 0) return '螃蟹网接口暂时不通（可能被风控了），稍后再试 🙏';
+    const segs = [
+      { label: '600-1000', lo: 600, hi: 1000 },
+      { label: '1000-3000', lo: 1000, hi: 3000 },
+      { label: '3000-5000', lo: 3000, hi: 5000 },
+      { label: '5000-10000', lo: 5000, hi: 10000 },
+      { label: '10000以上', lo: 10000, hi: Infinity },
+    ];
+    const lines = ['📚 题目池统计（昨日成交，共 ' + pool.length + ' 道题）'];
+    for (const s of segs) {
+      const n = pool.filter(it => { const y = Number(it.price) / 100; return y >= s.lo && y < s.hi; }).length;
+      if (n > 0) lines.push('· ' + s.label + '：' + n + ' 道');
+    }
+    lines.push('💡 发「开始猜价5000」可只从 5000 以上标价的题开局');
+    return lines.join('\n');
+  }
+
+  /** 出题：从螃蟹网昨日成交清单随机选一个；minPrice 为可选标价下限 */
+  async function startGuessGame(minPrice) {
+    const prev = await loadGuessState();
+    if (prev.active && !prev.revealed) {
+      const cnt = Object.keys(prev.guesses || {}).length;
+      const coreText = (prev.coreInfo && prev.coreInfo.length) ? '\n\n📊 核心数据：' + prev.coreInfo.join(' · ') : '';
+      const discText = (prev.coreDiscounts && prev.coreDiscounts.length) ? '\n🏷️ 折扣：' + prev.coreDiscounts.join('、') : '';
+      const teamText = prev.coreTeams ? '\n👥 成型配队：' + prev.coreTeams : '';
+      return '🎮 猜价游戏正在进行中（' + cnt + ' 人已参与）！直接发「猜 4500」参与～\n\n📄 本局题目：\n' + (prev.maskedTitle || '') + coreText + discText + teamText;
+    }
+    let pool = filterPool(await pullCandidates());
     if (pool.length === 0) return '螃蟹网接口暂时不通（可能被风控了），稍后再开一局吧 🙏';
+    let priceFiltered = false;
+    if (minPrice > 600) {
+      const hi = pool.filter(it => Number(it.price) / 100 >= minPrice);
+      if (hi.length > 0) { pool = hi; priceFiltered = true; }
+    }
     const pick = pool[Math.floor(Math.random() * pool.length)];
     const masked = maskPrice(String(pick.showTitle));
     const core = extractCoreInfo(masked);
@@ -597,8 +630,9 @@ function createQQBotHandler(opts) {
     const coreText = core.items.length ? '\n\n📊 核心数据：' + core.items.join(' · ') : '';
     const discText = (core.discounts && core.discounts.length) ? '\n🏷️ 折扣：' + core.discounts.join('、') : '';
     const teamText = core.teams ? '\n👥 成型配队：' + core.teams : '';
+    const filterText = priceFiltered ? '\n💰 本局已从标价 ≥' + minPrice + ' 的题目中抽取（共 ' + pool.length + ' 道可选）' : '';
     return {
-      text: '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + coreText + discText + teamText + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓',
+      text: '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + coreText + discText + teamText + filterText + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓',
       card: { type: 'start', maskedTitle: state.maskedTitle, coreInfo: state.coreInfo, discounts: state.coreDiscounts, teams: state.coreTeams, imageUrl: state.imageUrl },
     };
   }
@@ -762,15 +796,20 @@ function createQQBotHandler(opts) {
     const priceYuan = extractPrice(text);
     const desc = text.replace(/(?:价格|标价|售价|出价)\s*[:：]?\s*\d+(?:\.\d+)?/g, ' ').replace(/[¥￥]\s*\d+(?:\.\d+)?/g, ' ').replace(/\d+(?:\.\d+)?\s*元/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // 猜价游戏命令：开局关键词 / 参与关键词（猜4500/估4500/4500）/ 我叫XX（群聊和私聊都可玩）
+    // 猜价游戏命令：开局关键词（可带标价下限，如「开始估价5000」）/ 参与关键词（猜4500/估4500/4500）/ 我叫XX（群聊和私聊都可玩）
     const nickCmd = text.match(/^我叫\s*([^\s]{1,12})$/);
-    const guessCmd = text.match(/^(开始游戏|开始估价|开始猜价|猜价游戏|估价游戏|来局猜价|结束猜价|公布答案)$/);
+    const guessCmd = text.match(/^(开始游戏|开始估价|开始猜价|猜价游戏|估价游戏|来局猜价|结束猜价|公布答案)\s*(\d{2,6})?$/);
+    const statsCmd = text.match(/^(题目统计|题库统计|题目池)$/);
     const guessVal = text.match(/^(?:猜|估)?\s*价?[:：]?\s*(\d+(?:\.\d+)?)$/);
-    if (nickCmd || guessCmd || guessVal) {
+    if (nickCmd || guessCmd || statsCmd || guessVal) {
       if (nickCmd) {
         const nick = nickCmd[1].trim();
         await saveNickname(member, nick);
         await tryReply(openid, isGroup, '✅ 好嘞，猜价榜单上就叫你「' + nick + '」！（下次猜价生效，再发可修改）', d.id);
+        return;
+      }
+      if (statsCmd) {
+        await tryReply(openid, isGroup, await guessPoolStats(), d.id);
         return;
       }
       if (guessCmd && (guessCmd[1] === '结束猜价' || guessCmd[1] === '公布答案')) {
@@ -787,7 +826,8 @@ function createQQBotHandler(opts) {
         return;
       }
       if (guessCmd) {
-        await replyGame(openid, isGroup, d.id, await startGuessGame());
+        const minPrice = guessCmd[2] ? Number(guessCmd[2]) : 0;
+        await replyGame(openid, isGroup, d.id, await startGuessGame(minPrice));
         return;
       }
       if (guessVal) {
