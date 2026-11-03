@@ -134,16 +134,17 @@ async function renderStartCard(card) {
     : '';
   const discountLines = discLabel ? wrap(m, discLabel, INNER - 48, 2) : [];
 
-  // 商品图（可选，失败跳过）；底部规则挪到右上角后省出的空间全部给图
+  // 商品图（可选，失败跳过）；规则改2行2列后右上角空间充足：起点提前+图高加大
   let img = null;
   if (card.imageUrl) { try { img = await loadImg(card.imageUrl); } catch (e) { /* 无图排版 */ } }
-  const imgH = img ? 280 : 0;
+  const imgH = img ? 340 : 0;
 
   // 面板高度
   const panelRows = itemLines.length + teamLines.length + discountLines.length;
   const panelH = panelRows > 0 ? (26 + 40 + panelRows * 40 + 16) : 0;
 
-  let y = 154;
+  const TOP = 122;   // 规则改2行后头部空间富余，内容起点提前
+  let y = TOP;
   if (img) y += imgH + 20;
   y += titleLines.length * 38;
   if (titleLines.length) y += 18;
@@ -172,7 +173,7 @@ async function renderStartCard(card) {
   });
   ctx.textAlign = 'left';
 
-  y = 154;
+  y = TOP;
   if (img) {
     drawCover(ctx, img, PAD, y, INNER, imgH, 14);
     y += imgH + 20;
