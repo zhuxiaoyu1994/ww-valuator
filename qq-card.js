@@ -149,17 +149,20 @@ async function renderStartCard(card) {
   const ctx = canvas.getContext('2d');
   drawBg(ctx, H);
   header(ctx, '猜价游戏', '');
-  // 玩法规则（右上角，右对齐小字，替代原徽标文字）
+  // 玩法规则（右上角，2行2列网格，比4行纵排更省空间）
   ctx.font = '18px GameSans';
   ctx.fillStyle = C.sub;
   ctx.textAlign = 'right';
   const rules = [
-    '「猜 4500」参与竞猜',
-    '「我叫XX」登记昵称',
-    '猜进 ±10% 即刻揭晓',
-    '1分钟无人猜中自动揭晓',
+    ['「猜 4500」参与竞猜', '「我叫XX」登记昵称'],
+    ['猜进 ±10% 即刻揭晓', '1分钟无人猜中自动揭晓'],
   ];
-  rules.forEach((r, i) => ctx.fillText(r, W - PAD, 48 + i * 26));
+  const colGap = 36;
+  rules.forEach((row, i) => {
+    const ry = 48 + i * 26;
+    ctx.fillText(row[1], W - PAD, ry); // 右列贴右边界
+    ctx.fillText(row[0], W - PAD - ctx.measureText(row[1]).width - colGap, ry); // 左列贴右列左侧
+  });
   ctx.textAlign = 'left';
 
   y = 154;
