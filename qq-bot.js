@@ -533,7 +533,7 @@ function createQQBotHandler(opts) {
       if (pulls > 0) out.items.push('总抽数 ' + pulls);
       const yi = d.yellowInfo || {};
       if (yi.totalYellow > 0 || yi.yellowCount > 0) {
-        out.items.push('金数 ' + fmtGold(yi.yellowCount) + '/' + fmtGold(yi.totalYellow));
+        out.items.push('有效/总金 ' + fmtGold(yi.yellowCount) + '/' + fmtGold(yi.totalYellow));
       }
       // 折扣项（缺专武/缺强绑队友/低命，与网站估价结果页口径一致），单独存放避免挤占核心数据行
       const discounts = [];
