@@ -479,6 +479,24 @@ async function setConfig(key, value) {
   }
 }
 
+/**
+ * 删除指定时间之前写入的猜价卡片图（key 前缀 qq_card_，惰性清理由存图方触发）
+ * 注意 LIKE 中下划线是通配符，需 ESCAPE 转义，避免误伤其他 key
+ */
+async function deleteCardImagesBefore(iso) {
+  if (!dbClient) return 0;
+  try {
+    const r = await dbClient.execute({
+      sql: "DELETE FROM app_config WHERE key LIKE 'qq\\_card\\_%' ESCAPE '\\' AND updated_at < ?",
+      args: [iso],
+    });
+    return r.rowsAffected || 0;
+  } catch (e) {
+    console.error('[DB] 清理过期卡片图失败:', e.message);
+    return 0;
+  }
+}
+
 // ============================================================
 // 成交记录持久化
 // ============================================================
@@ -995,6 +1013,7 @@ module.exports = {
   getConfig,
   getConfigWithMeta,
   setConfig,
+  deleteCardImagesBefore,
   insertDealsBatch,
   queryDeals,
   queryAllDealsForStats,

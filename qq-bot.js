@@ -505,6 +505,12 @@ function createQQBotHandler(opts) {
       const png = await cardMod.renderCard(task.card);
       const cardId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
       await gameDb.setConfig('qq_card_' + cardId, { b64: Buffer.from(png).toString('base64'), ts: Date.now() });
+      // 惰性清理：QQ 拿到图后会缓存，3 天后的旧图不再被访问，可安全删除
+      try {
+        if (typeof gameDb.deleteCardImagesBefore === 'function') {
+          await gameDb.deleteCardImagesBefore(new Date(Date.now() - 3 * 86400 * 1000).toISOString());
+        }
+      } catch (e) { /* 清理失败不影响发图 */ }
       const imageUrl = (opts.cardBaseUrl || 'https://www.youxigujia.cn') + '/api/qq-card-image/' + cardId;
       await sendCardReply(cfg, openid, true, imageUrl, msgId);
       lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: true, costMs: Date.now() - t0, contentHead: '[图片卡片-后台任务] ' + String(task.card && task.card.type || '').substring(0, 40) };
