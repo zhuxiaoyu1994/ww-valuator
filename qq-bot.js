@@ -449,48 +449,69 @@ function createQQBotHandler(opts) {
     return cardModCache;
   }
 
-// Vercel waitUntil：响应后继续执行重活（卡片渲染/上传），webhook 本体 2 秒内应答
-// 官方文档：https://vercel.com/docs/functions/functions-wait-until
-let _waitUntil = null;
-function deferWork(promise) {
-  if (_waitUntil === null) {
-    try { _waitUntil = require('@vercel/functions').waitUntil; } catch (e) { _waitUntil = false; }
-  }
-  if (typeof _waitUntil === 'function') {
-    try { _waitUntil(promise); return; } catch (e) { /* Vercel 环境外直接后台跑 */ }
-  }
-  promise.catch(function () { /* 本地/无 waitUntil 环境：直接后台执行 */ });
-}
-
   /** 游戏回复统一入口：payload = 字符串 或 {text, card}
-   *  卡片走 deferWork 延后发送——QQ webhook 超时会暂停群推送几十分钟，任何消息都必须 3 秒内应答；
-   *  卡片作为同 msg_id 的第二条消息（msg_seq 递增）晚几秒送达，失败自动回退文本 */
+   *  架构（重要）：Vercel 响应返回后函数会冻结，waitUntil 时有时无（依赖实例是否被注入平台 context），
+   *  不能依赖响应后执行。因此：
+   *  1) 文字版先同步发（用户秒收内容，天然兜底）；
+   *  2) 卡片通过 fire-and-forget 自调用 /api/qq-card-task（HMAC 签名）触发——新请求进入
+   *     独立的 Vercel 函数执行上下文（独立 maxDuration），渲染/存图/上传在那里完整执行 */
   async function replyGame(openid, isGroup, msgId, payload) {
     const p = typeof payload === 'string' ? { text: payload } : (payload || {});
-    if (isGroup && p.card && gameDb) {
-      const cardMod = getCardModule();
-      if (cardMod) {
-        const card = p.card;
-        deferWork((async () => {
-          const t0 = Date.now();
-          try {
-            const png = await cardMod.renderCard(card);
-            const cardId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-            await gameDb.setConfig('qq_card_' + cardId, { b64: Buffer.from(png).toString('base64'), ts: Date.now() });
-            const imageUrl = (opts.cardBaseUrl || 'https://www.youxigujia.cn') + '/api/qq-card-image/' + cardId;
-            await sendCardReply(cfg, openid, isGroup, imageUrl, msgId);
-            lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: isGroup, costMs: Date.now() - t0, contentHead: '[图片卡片] ' + String(p.text).substring(0, 100) };
-          } catch (e) {
-            lastCardError = { time: new Date().toISOString(), message: e.message, stack: String(e.stack || '').substring(0, 400) };
-            lastReply = { time: new Date().toISOString(), ok: false, group: isGroup, costMs: Date.now() - t0, contentHead: '[卡片失败回退文本] ' + String(p.text).substring(0, 90), error: e.message };
-            try { await tryReply(openid, isGroup, p.text, msgId); } catch (e2) { /* 忽略 */ }
-            await persistDebug();
-          }
-        })());
-        return;
-      }
+    if (isGroup && p.card && gameDb && cfg.appSecret) {
+      try { await tryReply(openid, isGroup, p.text, msgId); } catch (e) { /* 文本失败也继续尝试卡片 */ }
+      await fireCardTask({ openid: openid, isGroup: true, msgId: msgId, card: p.card });
+      return;
     }
     await tryReply(openid, isGroup, p.text, msgId);
+  }
+
+  /** fire-and-forget 自调用：发起独立 HTTP 请求触发卡片任务。
+   *  只等请求发出（最多 300ms），不等响应（卡片链路要几秒，webhook 只有 3s 预算） */
+  async function fireCardTask(task) {
+    const t0 = Date.now();
+    try {
+      const body = JSON.stringify(task);
+      const sign = crypto.createHmac('sha256', cfg.appSecret).update(body).digest('hex');
+      const url = (opts.cardBaseUrl || 'https://www.youxigujia.cn') + '/api/qq-card-task';
+      const p = fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-card-sign': sign },
+        body: body,
+      });
+      p.then(function () { console.log('[QQ机器人] 卡片任务完成，总耗时 ' + (Date.now() - t0) + 'ms'); });
+      p.catch(function (e) { console.error('[QQ机器人] 卡片任务请求失败:', e.message); });
+      // 给连接 300ms 把请求发出去（同机房 TLS 握手足够），随后 webhook 即刻应答
+      await Promise.race([
+        p.then(function () { return 'done'; }),
+        new Promise(function (r) { setTimeout(function () { r('sent-in-300ms'); }, 300); }),
+      ]);
+    } catch (e) {
+      console.error('[QQ机器人] 卡片任务触发失败:', e.message);
+      lastCardError = { time: new Date().toISOString(), message: '触发失败: ' + e.message };
+      await persistDebug();
+    }
+  }
+
+  /** 卡片后台任务：由 /api/qq-card-task 在独立请求上下文中调用（HMAC 已在路由层验证）
+   *  文字版已先行发出，这里只负责卡片；失败仅记录 lastCardError，不再重复发文本 */
+  async function handleCardTask(task) {
+    const t0 = Date.now();
+    const openid = task.openid, msgId = task.msgId;
+    try {
+      const cardMod = getCardModule();
+      if (!cardMod) throw new Error('卡片模块加载失败');
+      if (!gameDb) throw new Error('db 未配置');
+      const png = await cardMod.renderCard(task.card);
+      const cardId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+      await gameDb.setConfig('qq_card_' + cardId, { b64: Buffer.from(png).toString('base64'), ts: Date.now() });
+      const imageUrl = (opts.cardBaseUrl || 'https://www.youxigujia.cn') + '/api/qq-card-image/' + cardId;
+      await sendCardReply(cfg, openid, true, imageUrl, msgId);
+      lastReply = { time: new Date().toISOString(), ok: true, openid: String(openid).substring(0, 10) + '...', group: true, costMs: Date.now() - t0, contentHead: '[图片卡片-后台任务] ' + String(task.card && task.card.type || '').substring(0, 40) };
+    } catch (e) {
+      lastCardError = { time: new Date().toISOString(), message: e.message, stack: String(e.stack || '').substring(0, 400) };
+      lastReply = { time: new Date().toISOString(), ok: false, group: true, costMs: Date.now() - t0, contentHead: '[卡片任务失败，文字版已先行送达] ' + String(task.card && task.card.type || '').substring(0, 40), error: e.message };
+    }
+    await persistDebug();
   }
 
   /** 核心数据：用估价引擎解析题目文本，提炼 等级/五星角色/专武/抽数/金数/配队/系统估价 */
@@ -907,6 +928,7 @@ function deferWork(promise) {
       return { lastDebug: lastDebug, lastReply: lastReply, lastError: lastError, lastCardError: lastCardError };
     },
     getAccessTokenForDebug: function (botCfg) { return getAccessToken(botCfg.appId, botCfg.appSecret); },
+    handleCardTask: handleCardTask,
   };
 }
 

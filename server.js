@@ -389,6 +389,7 @@ if (MAINTENANCE_KEY) {
       if (req.path === '/admin' || req.path.startsWith('/admin/api/') ||
           req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
           req.path === '/api/qq-bot' || req.path === '/api/qq-bot-debug' ||
+          req.path === '/api/qq-card-task' ||
           req.path.startsWith('/api/qq-card-image/') || req.path === '/api/qq-guess-debug') {
         return next();
       }
@@ -556,6 +557,25 @@ app.get('/api/qq-bot-debug', async (req, res) => {
     return res.status(401).json({ success: false, error: '未授权' });
   }
   res.json({ success: true, data: await qqBotWebhook.getLastDebug() });
+});
+
+// 猜价卡片后台任务：QQ webhook 应答内 fire-and-forget 自调用此端点，
+// 卡片渲染/存图/上传在独立请求上下文（独立 maxDuration）中执行。
+// Vercel 响应返回后函数会冻结、waitUntil 时有时无，这是响应后继续工作的可靠方式。
+// 鉴权：HMAC-SHA256(QQ_BOT_SECRET, rawBody)，与 webhook 侧 fireCardTask 的签名对应。
+app.post('/api/qq-card-task', async (req, res) => {
+  try {
+    const sign = String(req.headers['x-card-sign'] || '');
+    const body = req.rawBody ? req.rawBody : Buffer.from(JSON.stringify(req.body || {}));
+    const expect = nodeCrypto.createHmac('sha256', QQ_BOT_SECRET).update(body).digest('hex');
+    if (!QQ_BOT_SECRET || !sign || sign.length !== expect.length || sign !== expect) {
+      return res.status(401).json({ success: false, error: '签名错误' });
+    }
+    await qqBotWebhook.handleCardTask(req.body || {});
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // 猜价卡片图片服务：QQ 富媒体服务器通过此公网地址下载卡片 PNG（ID 为随机串，不可枚举）
