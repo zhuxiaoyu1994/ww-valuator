@@ -217,6 +217,7 @@ function detectInvalidConst(text) {
 // 字段 productId/showTitle/price(分)/payTime），通过 fetchPxb7Api（代理轮询+直连回退）拉取。
 // 局状态存 db KV（qq_guess_game），Vercel 多实例共享；30 分钟无人猜中惰性揭晓（serverless 无定时器）。
 const GUESS_STATE_KEY = 'qq_guess_game';
+const GUESS_HISTORY_KEY = 'qq_guess_history';   // 最近出过的题目 productId（防重复出题）
 const NICK_KEY = 'qq_nicknames';           // openid → 群友自报昵称（「我叫XX」登记）
 const GUESS_TOLERANCE = 0.10;              // ±10% 判中
 const GUESS_DURATION_MS = 60 * 1000;       // 1 分钟无人猜中自动揭晓
@@ -607,7 +608,17 @@ function createQQBotHandler(opts) {
       const hi = pool.filter(it => Number(it.price) / 100 >= minPrice);
       if (hi.length > 0) { pool = hi; priceFiltered = true; }
     }
-    const pick = pool[Math.floor(Math.random() * pool.length)];
+    // 去重：排除最近出过的题目（db 记录最近 50 道）；全部出过则清空历史重新轮换
+    let history = [];
+    try { history = (await gameDb.getConfig(GUESS_HISTORY_KEY)) || []; } catch (e) { /* 忽略 */ }
+    if (!Array.isArray(history)) history = [];
+    let fresh = pool.filter(it => history.indexOf(String(it.productId)) === -1);
+    let rotated = false;
+    if (fresh.length === 0) { fresh = pool; history = []; rotated = true; }
+    const pick = fresh[Math.floor(Math.random() * fresh.length)];
+    history.push(String(pick.productId));
+    while (history.length > 50) history.shift();
+    try { await gameDb.setConfig(GUESS_HISTORY_KEY, history); } catch (e) { /* 忽略 */ }
     const masked = maskPrice(String(pick.showTitle));
     const core = extractCoreInfo(masked);
     const state = {
@@ -630,7 +641,9 @@ function createQQBotHandler(opts) {
     const coreText = core.items.length ? '\n\n📊 核心数据：' + core.items.join(' · ') : '';
     const discText = (core.discounts && core.discounts.length) ? '\n🏷️ 折扣：' + core.discounts.join('、') : '';
     const teamText = core.teams ? '\n👥 成型配队：' + core.teams : '';
-    const filterText = priceFiltered ? '\n💰 本局已从标价 ≥' + minPrice + ' 的题目中抽取（共 ' + pool.length + ' 道可选）' : '';
+    let filterText = '';
+    if (priceFiltered) filterText += '\n💰 本局已从标价 ≥' + minPrice + ' 的题目中抽取（共 ' + fresh.length + ' 道可选）';
+    if (rotated) filterText += '\n🔄 最近题目已全部出过一轮，重新开始轮换';
     return {
       text: '🎮 猜价游戏开始！\n下面是昨日真实成交的一个鸣潮账号描述，猜猜它的成交价是多少？\n\n' + state.maskedTitle + coreText + discText + teamText + filterText + '\n\n📌 发「猜 4500」参与竞猜（可随时修改自己的猜价）\n🏷️ 发「我叫XX」登记昵称，上榜更拉风\n🎯 有人猜进成交价 ±10% 即刻揭晓；1 分钟无人猜中自动揭晓',
       card: { type: 'start', maskedTitle: state.maskedTitle, coreInfo: state.coreInfo, discounts: state.coreDiscounts, teams: state.coreTeams, imageUrl: state.imageUrl },
