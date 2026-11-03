@@ -250,12 +250,23 @@ async function renderRevealCard(card) {
   const sysValue = Number(card.systemValue) || 0;
   const sysDiff = sysValue ? Math.round((sysValue - p) / p * 1000) / 10 : 0;
   // 系统估价行占 44px（有胜者时接在胜者上方区段之后统一排版）
-  const winnerTop = card.winner ? priceTop + (sysValue ? 148 : 106) : 0;
-  const listTop = card.winner ? winnerTop + 24 : priceTop + (sysValue ? 122 : 84);
+  let winnerTop = card.winner ? priceTop + (sysValue ? 148 : 106) : 0;
+  let listTop = card.winner ? winnerTop + 24 : priceTop + (sysValue ? 122 : 84);
   const listH = guesses.length ? (74 + guesses.length * 40 + (more > 0 ? 36 : 0)) : 0;
-  const qrTop = listTop + listH + 20;
+  let qrTop = listTop + listH + 20;
   const qrH = qrImg ? 170 : 84;
-  const H = Math.round(qrTop + qrH + 34);
+  let H = Math.round(qrTop + qrH + 34);
+  // 与题目卡尺寸比例一致：内容不足时拉大间距（60% 给列表与二维码之间，40% 给价格与列表之间）
+  const MIN_H = 810;
+  if (H < MIN_H) {
+    const extra = MIN_H - H;
+    const pad1 = Math.round(extra * 0.4);
+    const pad2 = extra - pad1;
+    if (card.winner) winnerTop += pad1;
+    listTop += pad1;
+    qrTop += pad1 + pad2;
+    H = MIN_H;
+  }
   const FOOT = PAD + INNER; // 右边界
 
   const canvas = createCanvas(W, H);
