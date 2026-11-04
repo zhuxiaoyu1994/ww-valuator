@@ -76,6 +76,7 @@
     '商品字段:', '签名参数:', 'API请求: ', '详情补充:', '指纹重复更新低价',
     '重复(指纹匹配)', '  - ', '秒杀价: ', '秒杀池新商品', '秒杀标记', '存储[',
     '清理 seenIds', '清理 notifiedIds', '自动迁移存储到GM',
+    '重新评估(', '不收录(',        // v4.10.1：逐商品拒绝类日志高频重复，降级为明细
   ];
   function mwIsNoise(text) {
     for (var i = 0; i < MW_LOG_NOISE.length; i++) {
@@ -1308,6 +1309,31 @@
    * @returns {string} 图片URL（http/https绝对地址），取不到返回空串
    */
   var _imgScanLogged = {};   // 每平台只打一次诊断日志，避免刷屏
+
+  // ============================================================
+  // v4.10.1 拒绝缓存：被估值过滤拒绝的商品短期不再重新完整解析
+  // 修复死循环：不收录商品下一轮「已见但表格中不存在」→ 移出 seenIds 重新解析 → 又不收录 → 无限循环，
+  // 实测 69 秒内 117 次重复解析（42 个商品，单商品最多 4 次），是扫描期 CPU 的大头
+  // ============================================================
+  var REJECT_CACHE_TTL = 2 * 3600 * 1000;   // 2小时后允许重评一次（价格可能已变化）
+  var REJECT_CACHE_MAX = 2000;              // 缓存上限，超出按时间淘汰最旧的
+  var rejectedCache = {};                   // productId -> 拒绝时间戳
+  function markRejected(productId) {
+    if (!productId) return;
+    rejectedCache[productId] = Date.now();
+    var keys = Object.keys(rejectedCache);
+    if (keys.length > REJECT_CACHE_MAX) {
+      keys.sort(function (a, b) { return rejectedCache[a] - rejectedCache[b]; });
+      for (var i = 0; i < keys.length - REJECT_CACHE_MAX; i++) delete rejectedCache[keys[i]];
+    }
+  }
+  function isRecentlyRejected(productId) {
+    var t = rejectedCache[productId];
+    if (!t) return false;
+    if (Date.now() - t > REJECT_CACHE_TTL) { delete rejectedCache[productId]; return false; }
+    return true;
+  }
+
   function pickProductImg(obj, tag) {
     if (!obj || typeof obj !== 'object') return '';
     var keys = ['secondaryGoodsImg', 'goodsImg', 'goodsPic', 'productImg', 'coverImg', 'cover', 'mainImg', 'mainPic',
@@ -4076,7 +4102,9 @@
     if (seenIds.includes(productId)) {
       const existRow = tableData.find(r => r.productId === productId);
       if (!existRow) {
-        // 已见过但不在表格中（之前被估值过滤），移除后重新评估
+        // 已见过但不在表格中（之前被估值过滤）。
+        // v4.10.1：近期刚被拒绝的商品直接跳过，避免每轮死循环重评
+        if (isRecentlyRejected(productId)) return;
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
         console.log('[鸣潮监控-盼之] 重新评估: ' + product.productUniqueNo + ' ¥' + price);
@@ -4152,13 +4180,19 @@
     const adoptReject = adoptionRejectReason(valuation);
     if (adoptReject) {
       console.log('[鸣潮监控-盼之] 不收录(' + adoptReject + '): 估值¥' + Math.round(valuation.totalValue) + ' 差价¥' + Math.round(valuation.diff || 0));
+      seenIds.push(productId);
+      if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(seenStorageKey(), seenIds);
+      markRejected(productId);
       return;
     }
 
     // 等级低于70的账号不收录（仅在等级明确解析到时过滤）
     if (valuation.levelFound && valuation.level < G().minLevel) {
+      seenIds.push(productId);
+      if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(seenStorageKey(), seenIds);
+      markRejected(productId);
       console.log('[鸣潮监控-盼之] 等级低于70，不收录: ' + product.productUniqueNo + ' Lv.' + valuation.level);
       return;
     }
@@ -6725,7 +6759,9 @@
         }
         return;
       } else if (!existRow) {
-        // 已见过但不在表格中（之前被截断或估值过滤），移除后重新评估
+        // 已见过但不在表格中（之前被估值过滤）。
+        // v4.10.1：近期刚被拒绝的商品直接跳过，避免每轮死循环重评（CPU 大头）
+        if (isRecentlyRejected(productId)) return;
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
         console.log('[鸣潮监控] 重新评估(已见但表格中不存在): ' + (item.productUniqueNo || productId) + ' ¥' + price);
@@ -6761,6 +6797,7 @@
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(seenStorageKey(), seenIds);
+      markRejected(productId);
       return;
     }
 
@@ -6769,6 +6806,7 @@
       seenIds.push(productId);
       if (seenIds.length > CONFIG.maxSeenIds) seenIds.shift();
       if (!batchMode) saveStorage(seenStorageKey(), seenIds);
+      markRejected(productId);
       console.log('[鸣潮监控] 等级低于70，不收录: ' + (productUniqueNo || productId) + ' Lv.' + valuation.level);
       return;
     }
