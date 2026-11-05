@@ -23,10 +23,14 @@ function getAdminPage() {
   .header .logout { color: #888; cursor: pointer; font-size: 13px; }
 
   /* Tabs */
-  .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #1f1f3a; }
-  .tab-btn { padding: 10px 24px; background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #1f1f3a; }
+  .tab-btn { padding: 10px 24px; background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
   .tab-btn:hover { color: #ccc; }
   .tab-btn.active { color: #4ade80; border-bottom-color: #4ade80; font-weight: 600; }
+  @media (max-width: 640px) {
+    .tabs { row-gap: 4px; margin-bottom: 16px; }
+    .tab-btn { padding: 9px 12px; font-size: 13px; }
+  }
   .game-switch { display: flex; border: 1px solid #2a2a4a; border-radius: 6px; overflow: hidden; }
   .game-btn { padding: 6px 16px; background: transparent; border: none; color: #888; font-size: 13px; cursor: pointer; transition: all 0.2s; }
   .game-btn:hover { color: #ccc; }
@@ -1949,6 +1953,8 @@ function getAdminPage() {
   async function deleteDeal(filteredIndex) {
     var item = dealsFiltered[filteredIndex];
     if (!item) return;
+    var dealLabel = item.productUniqueNo || item.productId || '该条记录';
+    if (!confirm('确定删除成交记录「' + dealLabel + '」吗？删除后无法恢复。')) return;
     var dataIdx = dealsData.indexOf(item);
     if (dataIdx < 0) return;
 
@@ -2903,30 +2909,28 @@ function getAdminPage() {
     }).catch(e => alert('网络错误: ' + (e.message || '未知')));
   }
 
-  function ekCopy(key) {
+  async function ekCopyText(text, successMessage, promptMessage) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(key).then(function() {
-        alert('密钥已复制到剪贴板');
-      }, function() {
-        window.prompt('复制下面的密钥：', key);
-      });
-    } else {
-      window.prompt('复制下面的密钥：', key);
+      try {
+        await navigator.clipboard.writeText(text);
+        alert(successMessage);
+        return true;
+      } catch (e) {
+        // 权限拒绝或不安全上下文时回退手动复制，不能误报成功
+      }
     }
+    window.prompt(promptMessage, text);
+    return false;
+  }
+
+  function ekCopy(key) {
+    return ekCopyText(key, '密钥已复制到剪贴板', '复制下面的密钥：');
   }
 
   // 复制「网站估价通行证」链接：对方打开即获得与密钥有效期一致的估价权限
   function ekCopyEvalLink(key) {
     const url = location.origin + '/wuwa?pass=' + encodeURIComponent(key);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function() {
-        alert('估价通行证链接已复制：\\n' + url + '\\n\\n发给朋友即可，有效期与该密钥一致。');
-      }, function() {
-        window.prompt('复制下面的链接发给朋友：', url);
-      });
-    } else {
-      window.prompt('复制下面的链接发给朋友：', url);
-    }
+    return ekCopyText(url, '估价通行证链接已复制：\\n' + url + '\\n\\n发给朋友即可，有效期与该密钥一致。', '复制下面的链接发给朋友：');
   }
 
   function ekRenew(key) {
