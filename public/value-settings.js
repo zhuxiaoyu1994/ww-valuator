@@ -23,6 +23,21 @@
   // 缓存的默认配置（从 /api/defaults 获取）
   var cachedDefaults = null;
 
+  // 高频输入时每个动画帧最多重绘一次，避免同步重建整张 SVG 阻塞输入
+  function throttlePreview(fn) {
+    var pending = false;
+    return function () {
+      if (pending) return;
+      pending = true;
+      function run() {
+        pending = false;
+        fn();
+      }
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+      else setTimeout(run, 16);
+    };
+  }
+
   /**
    * 切换游戏上下文：更新存储键并清空默认配置缓存
    * @param {string} game - 游戏标识（wuwa/zzz）
@@ -1179,7 +1194,9 @@
       pullChartBox.innerHTML = svg;
     }
 
-    function updatePullChartPreview() {
+    var schedulePullChartPreview = throttlePreview(updatePullChartPreviewNow);
+    function updatePullChartPreview() { schedulePullChartPreview(); }
+    function updatePullChartPreviewNow() {
       var m = buildPullCurveModel();
       // 同步只读起点输入框（第2段起自动推算，首尾相连）
       for (var i = 1; i < pullSegInputs.length && i < m.sb.length; i++) {
@@ -1576,7 +1593,9 @@
       pc6ChartBox.innerHTML = svg;
     }
 
-    function updatePullC6Preview() {
+    var schedulePullC6Preview = throttlePreview(updatePullC6PreviewNow);
+    function updatePullC6Preview() { schedulePullC6Preview(); }
+    function updatePullC6PreviewNow() {
       var m = buildPc6CurveModel();
       // 同步只读起点输入框（第2段起自动推算，首尾相连；输入框单位为百分比）
       for (var i = 1; i < pc6SegInputs.length && i < m.sb.length; i++) {
@@ -1974,7 +1993,9 @@
       c6ChartBox.innerHTML = svg;
     }
 
-    function updateC6Preview() {
+    var scheduleC6Preview = throttlePreview(updateC6PreviewNow);
+    function updateC6Preview() { scheduleC6Preview(); }
+    function updateC6PreviewNow() {
       var m = buildC6CurveModel();
       // 同步只读起点输入框（第2段起自动推算，首尾相连；输入框单位为百分比）
       for (var i = 1; i < c6SegInputs.length && i < m.sb.length; i++) {
@@ -2311,7 +2332,9 @@
       effChartBox.innerHTML = svg;
     }
 
-    function updateYellowPreview() {
+    var scheduleYellowPreview = throttlePreview(updateYellowPreviewNow);
+    function updateYellowPreview() { scheduleYellowPreview(); }
+    function updateYellowPreviewNow() {
       var m = buildCurveModel();
       // 同步只读起点输入框（第2段起自动推算，首尾相连）
       for (var i = 1; i < effSegInputs.length && i < m.sc.length; i++) {

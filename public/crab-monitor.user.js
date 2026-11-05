@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.10.0
+// @version      4.10.4
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.10.0 恢复声音提醒（蜂鸣，可开关）、彻底移除后台保活音频——音爆元凶）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -1058,6 +1058,15 @@
   // 内存状态
   // ============================================================
   let tableData = [];            // 表格数据
+  // v4.10.4 productId→行 的 O(1) 索引：原先每次商品循环都 tableData.find 全表扫（9处热点）
+  var tableIndex = new Map();
+  function rebuildTableIndex() {
+    tableIndex = new Map();
+    for (var ti = 0; ti < tableData.length; ti++) {
+      var tr = tableData[ti];
+      if (tr && tr.productId) tableIndex.set(tr.productId, tr);
+    }
+  }
   let seenIds = [];              // 已扫描productId
   let notifiedIds = [];          // 已通知productId
   let batchMode = false;          // 批量处理模式：跳过逐条保存和刷新
@@ -1448,7 +1457,27 @@
   /**
    * 安全保存表格数据：如果写入失败，逐步精简数据后重试
    */
+  // v4.10.4 保存去抖：详情行连续更新时 400ms 内多次保存合并为一次全量序列化，
+  // 页面隐藏/关闭及云备份前强制 flush，不会丢最近更新
+  var _saveTableTimer = null;
+  function flushSaveTableData() {
+    if (_saveTableTimer) { clearTimeout(_saveTableTimer); _saveTableTimer = null; saveTableDataNow(); }
+  }
   function saveTableData() {
+    if (_saveTableTimer) return;
+    _saveTableTimer = setTimeout(function () {
+      _saveTableTimer = null;
+      saveTableDataNow();
+    }, 400);
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', function () { if (document.hidden) flushSaveTableData(); });
+    window.addEventListener('beforeunload', flushSaveTableData);
+  }
+
+  function saveTableDataNow() {
+    // 同步保存同时取消旧定时器，避免随后再做一次重复全量序列化
+    if (_saveTableTimer) { clearTimeout(_saveTableTimer); _saveTableTimer = null; }
     // 第一次：尝试完整写入
     if (saveStorage(tableStorageKey(), tableData, true)) return true;
 
@@ -1466,6 +1495,7 @@
     const slimmed = tableData.map(slimRow);
     if (saveStorage(tableStorageKey(), slimmed, true)) {
       tableData = slimmed;
+      rebuildTableIndex();
       console.log('[鸣潮监控] 精简数据后写入成功，保留' + tableData.length + '条');
       return true;
     }
@@ -1475,6 +1505,7 @@
     const ultraed = tableData.map(ultraSlimRow);
     if (saveStorage(tableStorageKey(), ultraed, true)) {
       tableData = ultraed;
+      rebuildTableIndex();
       console.log('[鸣潮监控] 超精简后写入成功，保留' + tableData.length + '条');
       return true;
     }
@@ -1496,6 +1527,7 @@
       if (saveStorage(tableStorageKey(), trimmed, true)) {
         console.warn('[鸣潮监控] 表格数据缩减至' + limit + '条写入成功');
         tableData = trimmed;
+        rebuildTableIndex();
         const keptIds = new Set(trimmed.map(r => r.productId));
         seenIds = seenIds.filter(id => keptIds.has(id));
         saveStorage(seenStorageKey(), seenIds, true);
@@ -1828,7 +1860,7 @@
     if (saveStorage(STORAGE_KEYS.weights, w)) return true;
     // 权重保存失败，可能是 localStorage 空间被表格数据占满
     console.warn('[鸣潮监控] 权重保存失败，尝试清理表格数据释放空间...');
-    saveTableData();
+    saveTableDataNow();
     return saveStorage(STORAGE_KEYS.weights, w);
   }
 
@@ -4035,7 +4067,7 @@
 
     // 去重：已见商品检查价格变化
     if (seenIds.includes(productId)) {
-      const existRow = tableData.find(r => r.productId === productId);
+      const existRow = tableIndex.get(productId);
       if (!existRow) {
         // 已见过但不在表格中（之前被估值过滤）。
         // v4.10.1：近期刚被拒绝的商品直接跳过，避免每轮死循环重评
@@ -4780,7 +4812,7 @@
 
     // 去重：已见商品检查价格变化
     if (seenIds.includes(productId)) {
-      const existRow = tableData.find(r => r.productId === productId);
+      const existRow = tableIndex.get(productId);
       if (!existRow) {
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
@@ -5161,6 +5193,7 @@
       const toRemove = jymRows.slice(0, jymRows.length - JYM_MAX_ROWS);
       const removeSet = new Set(toRemove.map(r => r.productId));
       tableData = tableData.filter(r => !removeSet.has(r.productId));
+      rebuildTableIndex();
       toRemove.forEach(r => {
         const idx = seenIds.indexOf(r.productId);
         if (idx > -1) seenIds.splice(idx, 1);   // 允许未来重新出现时再收录
@@ -5571,6 +5604,7 @@
       const toRemove = xyRows.slice(0, xyRows.length - XY_MAX_ROWS);
       const removeSet = new Set(toRemove.map(r => r.productId));
       tableData = tableData.filter(r => !removeSet.has(r.productId));
+      rebuildTableIndex();
       toRemove.forEach(r => {
         const idx = seenIds.indexOf(r.productId);
         if (idx > -1) seenIds.splice(idx, 1);   // 允许未来重新出现时再收录
@@ -5811,7 +5845,7 @@
 
     // 去重：已见商品检查价格变化
     if (seenIds.includes(productId)) {
-      const existRow = tableData.find(r => r.productId === productId);
+      const existRow = tableIndex.get(productId);
       if (!existRow) {
         const idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
@@ -6230,7 +6264,7 @@
 
     // 去重：已见商品检查价格变化
     if (seenIds.indexOf(productId) >= 0) {
-      var existRow = tableData.find(function(r) { return r.productId === productId; });
+      var existRow = tableIndex.get(productId);
       if (!existRow) {
         var idx = seenIds.indexOf(productId);
         if (idx > -1) seenIds.splice(idx, 1);
@@ -6604,7 +6638,7 @@
 
     // 秒杀池商品：即使已见过也处理（价格更低）
     if (fromFlashSale) {
-      const existRow = tableData.find(r => r.productId === productId);
+      const existRow = tableIndex.get(productId);
       if (existRow) {
         // 秒杀池价格更低，更新为秒杀价
         if (price < existRow.price) {
@@ -6657,7 +6691,7 @@
     // 去重：已见商品检查价格是否变化（秒杀池商品已在上面清除 seenIds，不会被跳过）
     if (seenIds.includes(productId)) {
       // 查找表格中已有行，检测价格变化
-      const existRow = tableData.find(r => r.productId === productId);
+      const existRow = tableIndex.get(productId);
       // v3.77.1 图片回填：旧版入库的行没有 goodsImg（钉钉图文推送上线前的数据），
       // 重扫到该商品时补上，让降价/秒杀等后续通知也能带图
       if (existRow && !existRow.goodsImg) {
@@ -6950,7 +6984,7 @@
       return;
     }
     // 避免已处理的
-    const row = tableData.find(r => r.productId === productId);
+    const row = tableIndex.get(productId);
     if (row && row.status === '详估') return;
 
     detailQueue.push({ productId, time: Date.now(), priority: priority || 0 });
@@ -7019,6 +7053,7 @@
           const idx = tableData.findIndex(r => r.productId === item.productId);
           if (idx >= 0) {
             tableData.splice(idx, 1);
+            rebuildTableIndex();
             saveTableData();
             sortTableData();
             refreshTableDisplay();
@@ -7032,6 +7067,7 @@
           const idx = tableData.findIndex(r => r.productId === item.productId);
           if (idx >= 0) {
             tableData.splice(idx, 1);
+            rebuildTableIndex();
             saveTableData();
             sortTableData();
             refreshTableDisplay();
@@ -7042,7 +7078,7 @@
         }
 
         // 更新表格行（保留"秒杀"状态和秒杀价，不被"详估"覆盖）
-        const existingRow = tableData.find(r => r.productId === item.productId);
+        const existingRow = tableIndex.get(item.productId);
         const isFlashSale = existingRow && existingRow.status === '秒杀';
         const preserveStatus = isFlashSale ? '秒杀' : '详估';
         // 秒杀商品的秒杀价低于详情API返回的标价，保留秒杀价
@@ -7162,11 +7198,12 @@
     // 入表时立即精简：移除 valuation/parsed 等可从 showTitle 重建的大字段，避免 localStorage 配额浪费
     const slim = slimRow(row);
     // 检查是否已存在
-    const existIdx = tableData.findIndex(r => r.productId === slim.productId);
-    if (existIdx >= 0) {
-      tableData[existIdx] = Object.assign(tableData[existIdx], slim);
+    const existRow = tableIndex.get(slim.productId);
+    if (existRow) {
+      Object.assign(existRow, slim);
     } else {
       tableData.push(slim);
+      tableIndex.set(slim.productId, slim);
     }
 
     // 批量模式下跳过截断、保存和刷新，由调用方统一处理
@@ -7177,7 +7214,8 @@
 
     // 先排序再保存：确保新数据处于正确位置，缩减时不会被误删
     sortTableData();
-    const saved = saveTableData();
+    // 此路径依赖保存结果同步 seenIds，必须立即执行，不能使用无返回值的去抖包装
+    const saved = saveTableDataNow();
     // 只有表格数据成功保存（或精简后保存），才同步 seenIds
     // 这确保刷新后 seenIds 与 tableData 始终一致，不会出现"ID已见但表格缺失"的情况
     if (saved) {
@@ -7191,7 +7229,7 @@
    * 更新表格行
    */
   function updateTableRow(productId, updates) {
-    const row = tableData.find(r => r.productId === productId);
+    const row = tableIndex.get(productId);
     if (row) {
       // 描述变化时需清除旧解析/估值缓存（slimRow 只剥掉 updates 里的字段，不会清掉行上已有的旧缓存）
       const titleChanged = updates.showTitle && updates.showTitle !== row.showTitle;
@@ -7212,6 +7250,7 @@
         listTime: Date.now(),
         firstSeen: Date.now(),
       }, updates)));
+      rebuildTableIndex();
       trimTableData();
       sortTableData();
       saveTableData();
@@ -7274,6 +7313,7 @@
 
     // 通过索引过滤移除，不改变原数组顺序
     tableData = tableData.filter(function (_, i) { return !toRemove.has(i); });
+    rebuildTableIndex();
 
     console.log('[鸣潮监控] 综合清理' + actualRemove + '条数据（差价低+时间旧优先，30分钟内保护），剩余' + tableData.length + '条');
     return actualRemove;
@@ -9297,6 +9337,8 @@
     if (idx < 0) return;
     var delRow = tableData[idx];
     tableData.splice(idx, 1);
+    rebuildTableIndex();
+    tableIndex.delete(pid);
     // 同步从 seenIds 移除，允许未来重新发现
     var seenIdx = seenIds.indexOf(pid);
     if (seenIdx >= 0) seenIds.splice(seenIdx, 1);
@@ -9948,7 +9990,7 @@
     if (pinnedProductId && pinnedProductId !== productId) return;
     if (pinnedProductId === productId && hoverDetailEl) return;
 
-    const row = tableData.find(function (r) { return r.productId == productId; });
+    const row = tableIndex.get(productId);
     if (!row) return;
 
     if (hoverDetailEl) hoverDetailEl.remove();
@@ -10235,6 +10277,7 @@
       if (pred == null) { alert('请至少填写一个清理条件'); return; }
       var before = tableData.length;
       tableData = tableData.filter(function (row) { return !pred(row); });
+      rebuildTableIndex();
       var removed = before - tableData.length;
       overlay.remove();
       if (removed > 0) {
@@ -14588,7 +14631,7 @@ function openSettings() {
     // 通知级别（主=立即/从=延迟）、有效天数（过期自动清理）、从通知延迟与高差价过滤共用同一套配置；
     // 精简文案：价格+核心亮点+查看详情，图片从表格行反查，找不到行时回退任一带图行
     try {
-      const dtRow = tableData.find(function (r) { return r.productId === cleanId; }) ||
+      const dtRow = tableIndex.get(cleanId) ||
         tableData.find(function (r) { return r.goodsImg; });
       const dtImg = (dtRow && dtRow.goodsImg) || '';
       const dtText = buildDingTalkText(title, dtRow, body);
@@ -15177,6 +15220,7 @@ function openSettings() {
    * 备份监控列表到云端（自动备份 silent=true 不弹窗）
    */
   function backupTableToCloud(silent) {
+    flushSaveTableData();
     if (backupRunning) { if (!silent) alert('正在备份中，请稍候...'); return; }
     if (tableData.length === 0) { if (!silent) alert('表格暂无数据，无需备份'); return; }
     var password = cloudBackupPassword();
@@ -15264,6 +15308,7 @@ function openSettings() {
       localIds.add(row.productId);
       added++;
     }
+    rebuildTableIndex();
     // seenIds 并集：恢复行不再触发"新商品"通知
     var seenSet = new Set(seenIds);
     for (const r of tableData) { if (r.productId) seenSet.add(r.productId); }
@@ -15520,7 +15565,7 @@ function openSettings() {
    * 检查单个账号是否已售
    */
   async function checkSingleSold(productId, badge) {
-    const row = tableData.find(r => r.productId === productId);
+    const row = tableIndex.get(productId);
     if (!row) return;
 
     // 临时改变标签样式
@@ -16449,9 +16494,11 @@ function openSettings() {
     if (isPzdsPage() && STORAGE_KEYS.pzdsTabTable) {
       // 盼之页签：优先读专属存储；为空（首次升级）时从旧共享key按平台前缀迁移本页签负责的行
       tableData = loadStorage(STORAGE_KEYS.pzdsTabTable, null);
+      rebuildTableIndex();
       if (!Array.isArray(tableData)) {
         const legacyRows = loadStorage(STORAGE_KEYS.table, []) || [];
         tableData = legacyRows.filter(function (r) { return /^(pz_|kjs_|qy_|ysy_)/.test(String(r.productId || '')); });
+        rebuildTableIndex();
         console.log('[鸣潮监控] 盼之页签数据迁移：从共享存储迁入' + tableData.length + '行（盼之/氪金兽/7881/易手游），共享存储保留螃蟹数据');
       }
       seenIds = loadStorage(STORAGE_KEYS.pzdsTabSeen, null);
@@ -16464,11 +16511,13 @@ function openSettings() {
       }
     } else {
       tableData = loadStorage(STORAGE_KEYS.table, []);
+      rebuildTableIndex();
       // 螃蟹页签：清理历史遗留的盼之行（盼之扫描只在盼之页签运行，螃蟹列表里的pz_行是
       // 页签隔离前的旧数据，不会再更新）；kjs_/qy_/ysy_ 行保留（用户可能在螃蟹页签扫描这些平台）
       const pzRows = tableData.filter(function (r) { return /^pz_/.test(String(r.productId || '')); });
       if (pzRows.length > 0) {
         tableData = tableData.filter(function (r) { return !/^pz_/.test(String(r.productId || '')); });
+        rebuildTableIndex();
         console.log('[鸣潮监控] 螃蟹页签清理历史盼之数据' + pzRows.length + '行（已归属盼之页签专属存储）');
         saveStorage(tableStorageKey(), tableData, true);
       }
