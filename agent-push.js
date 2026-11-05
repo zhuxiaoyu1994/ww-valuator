@@ -86,6 +86,19 @@ function validateWebhook(value) {
   return webhook;
 }
 
+function optionalExpiry(value, label) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string') badRequest(label + '必须是ISO时间或null');
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) badRequest(label + '不是有效时间');
+  return new Date(time).toISOString();
+}
+
+function isRobotActive(robot, now) {
+  now = now == null ? Date.now() : now;
+  return robot.enabled === true && (!robot.expiresAt || Date.parse(robot.expiresAt) > now);
+}
+
 function normalizeConfig(input) {
   checkFields(input, ['enabled', 'robots', 'rules'], '配置');
   const enabled = booleanField(input.enabled, 'enabled');
@@ -101,13 +114,14 @@ function normalizeConfig(input) {
   const robotIds = new Set();
   const robots = robotInputs.map((item, index) => {
     const label = '机器人[' + index + ']';
-    checkFields(item, ['id', 'name', 'webhook', 'secret', 'enabled'], label);
+    checkFields(item, ['id', 'name', 'webhook', 'secret', 'enabled', 'expiresAt'], label);
     const robot = {
       id: requiredString(item.id, label + '.id', 128),
       name: requiredString(item.name, label + '.name', 100),
       webhook: validateWebhook(item.webhook),
       secret: optionalString(item.secret, label + '.secret', 512),
       enabled: booleanField(item.enabled, label + '.enabled'),
+      expiresAt: optionalExpiry(item.expiresAt, label + '.expiresAt'),
     };
     if (robotIds.has(robot.id)) badRequest('机器人id不能重复: ' + robot.id);
     robotIds.add(robot.id);
@@ -263,19 +277,32 @@ function gameName(event) {
   return event.game === 'zzz' ? '绝区零' : '鸣潮';
 }
 
+function platformName(event) {
+  const names = { pxb7: '螃蟹网', pzds: '盼之', kjs: '氪金兽', qy: '7881', ysy: '易手游' };
+  return names[event.platform] || event.platform;
+}
+
 function buildMessage(event, rules) {
   const game = gameName(event);
-  const title = game + ' 高性价比账号提醒';
-  const lines = [
-    '游戏：' + game,
-    '商品：' + (event.showTitle || event.productId),
-    '标价：¥' + event.price,
-    '估值：¥' + event.value,
-    '差价：¥' + event.diff,
-    '命中规则：' + rules.map((rule) => rule.name).join('、'),
-    '链接：' + (event.productUrl || '暂无'),
-  ];
-  return { title, content: lines.join('\n') };
+  const diffText = (event.diff >= 0 ? '+' : '') + Math.round(event.diff);
+  const ratio = event.price > 0 ? (event.diff / event.price) * 100 : 0;
+  const title = '差价¥' + diffText + ' 现价¥' + Math.round(event.price) +
+    ' 估价¥' + Math.round(event.value) + ' ' + platformName(event) + '·' + game;
+  let text = '## 🔍 账号监控 | ' + title + '\n\n';
+  if (event.goodsImg) text += '![账号图](' + event.goodsImg + ')\n\n';
+  text += '**💰 标价 ¥' + Math.round(event.price) + '｜估值 ¥' + Math.round(event.value) +
+    '｜差价 ' + diffText + '元（' + (ratio >= 0 ? '+' : '') + ratio.toFixed(0) + '%）**\n\n';
+  if (event.showTitle) text += '📋 ' + event.showTitle.slice(0, 300) + '\n\n';
+  if (event.characters.length) {
+    text += '🎮 ' + event.characters.map((character) =>
+      character.name + (character.const > 0 ? character.const + '命' : '')
+    ).join('、') + '\n\n';
+  }
+  text += '🎯 命中：' + rules.map((rule) => rule.name).join('、') + '\n\n';
+  text += event.productUrl ?
+    '**[🔗 查看详情](' + event.productUrl + ')**' :
+    '链接：暂无';
+  return { title, content: text };
 }
 
 function safeEqual(secret, candidate) {
@@ -354,6 +381,7 @@ function createAgentPushService(options) {
     const config = await getConfig();
     const robot = config.robots.find((item) => item.id === id);
     if (!robot) throw httpError(404, '机器人不存在', 'ROBOT_NOT_FOUND');
+    if (!isRobotActive(robot)) throw httpError(400, '机器人已停用或已过期', 'ROBOT_INACTIVE');
     try {
       const result = await runWithDeadline(
         () => sendRobot(robot, '鸣潮/绝区零 机器人测试', '游戏：鸣潮/绝区零\n这是一条机器人测试消息。'),
@@ -378,7 +406,7 @@ function createAgentPushService(options) {
     const startedAt = Date.now();
     const deadline = startedAt + DEADLINE_MS;
     const createdAt = new Date(startedAt).toISOString();
-    const robots = new Map(config.robots.filter((robot) => robot.enabled).map((robot) => [robot.id, robot]));
+    const robots = new Map(config.robots.filter((robot) => isRobotActive(robot, startedAt)).map((robot) => [robot.id, robot]));
     const jobs = [];
 
     if (config.enabled) {
@@ -461,7 +489,7 @@ function createAgentPushService(options) {
         }
         try {
           const result = await runWithDeadline(
-            () => sendRobot(job.robot, job.message.title, job.message.content),
+            () => sendRobot(job.robot, job.message.title, job.message.content, { rawMarkdown: true }),
             deadline - Date.now(),
             '机器人发送超时'
           );

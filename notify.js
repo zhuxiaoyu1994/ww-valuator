@@ -156,13 +156,13 @@ function buildDingTalkSignedUrl(webhook, secret, timestamp) {
 /**
  * 向指定钉钉机器人发送 Markdown；供代理人独立机器人配置复用
  */
-async function sendDingTalkRobot(robot, title, content) {
+async function sendDingTalkRobot(robot, title, content, options = {}) {
   if (!robot || !robot.webhook) return { success: false, error: '机器人webhook未配置' };
   try {
     const signedUrl = buildDingTalkSignedUrl(robot.webhook, robot.secret || '', Date.now());
     const postData = JSON.stringify({
       msgtype: 'markdown',
-      markdown: { title, text: `### ${title}\n\n${content}` },
+      markdown: { title, text: options.rawMarkdown === true ? content : `### ${title}\n\n${content}` },
     });
     const result = await httpRequest(signedUrl, {
       method: 'POST',

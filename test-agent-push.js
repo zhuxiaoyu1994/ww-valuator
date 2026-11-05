@@ -4,6 +4,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 const { createAgentPushService } = require('./agent-push');
 const { buildDingTalkSignedUrl } = require('./notify');
+const getAgentPushPage = require('./views/agent-push');
 
 function createMemoryDb() {
   const store = new Map();
@@ -137,8 +138,10 @@ async function expectReject(promise, messagePart) {
   assert.strictEqual(first.total, 2, '同一机器人命中两条规则只能生成一个发送任务');
   assert.strictEqual(sends.length, 2);
   const r1Send = sends.find((item) => item.robot.id === 'r1');
-  assert.ok(r1Send.content.includes('完整条件、同机器人合并'));
-  assert.ok(r1Send.content.includes('差价：¥500'), '差价必须由服务端根据估值与标价计算');
+  assert.ok(r1Send.content.includes('![账号图](https://example.com/a.jpg)'));
+  assert.ok(r1Send.content.includes('**[🔗 查看详情](https://example.com/product/e1)**'));
+  assert.ok(r1Send.content.includes('命中：完整条件、同机器人合并'));
+  assert.ok(r1Send.content.includes('差价 +500元'), '差价必须由服务端根据估值与标价计算');
   const filtered = await service.dispatch([
     event('low-const', { characters: [{ name: '椿', const: 1 }, { name: '守岸人', const: 0 }] }),
     event('missing-char', { characters: [{ name: '椿', const: 2 }] }),
@@ -202,10 +205,30 @@ async function expectReject(promise, messagePart) {
   assert.deepStrictEqual(await service.testRobot('r1'), { success: true, robotId: 'r1' });
   assert.strictEqual(sends.length, 1);
   assert.ok(sends[0].content.includes('机器人测试消息'));
+  assert.ok(!sends[0].content.includes('![账号图]'), '测试消息仍使用普通文本格式');
   await expectReject(service.testRobot('missing'), '机器人不存在');
   console.log('  ✓ 日志统计完整，停用开关、非法事件和机器人测试接口行为正确');
 
-  console.log('[5] 钉钉加签与敏感信息处理');
+  console.log('[5] 机器人有效期到期自动停用');
+  const expiring = config();
+  expiring.robots[0].expiresAt = new Date(Date.now() - 1000).toISOString();
+  expiring.robots[1].expiresAt = new Date(Date.now() + 3600000).toISOString();
+  await service.saveConfig(expiring);
+  sends.length = 0;
+  const expiryResult = await service.dispatch([event('expiry-test')]);
+  assert.strictEqual(expiryResult.success, true);
+  assert.strictEqual(expiryResult.matched, 1);
+  assert.strictEqual(expiryResult.sent, 1);
+  assert.deepStrictEqual(expiryResult.results.map((item) => item.robotId), ['r2'],
+    '过期机器人即使 enabled=true 也不得参与分发');
+  await expectReject(service.testRobot('r1'), '机器人已停用或已过期');
+  const badExpiry = config();
+  badExpiry.robots[0].expiresAt = 'not-a-time';
+  await expectReject(service.saveConfig(badExpiry), '不是有效时间');
+  await service.saveConfig(config());
+  console.log('  ✓ 过期机器人不再分发和测试，非法有效期被拒绝');
+
+  console.log('[6] 钉钉加签与敏感信息处理');
   const timestamp = 1700000000000;
   const signed = new URL(buildDingTalkSignedUrl(webhook('sign-token'), 'SEC-test', timestamp));
   const expectedSign = crypto.createHmac('sha256', 'SEC-test').update(timestamp + '\nSEC-test').digest('base64');
@@ -213,6 +236,20 @@ async function expectReject(promise, messagePart) {
   assert.strictEqual(signed.searchParams.get('timestamp'), String(timestamp));
   assert.strictEqual(signed.searchParams.get('sign'), expectedSign);
   console.log('  ✓ HMAC-SHA256、时间戳和URL编码正确，原access_token保留');
+
+  console.log('[7] 管理页交互与文案');
+  const page = getAgentPushPage({ wuwa: ['椿', '守岸人'], zzz: ['星见雅'] });
+  assert.ok(!page.includes('代理人'), '管理页可见文案不得出现代理人');
+  assert.ok(page.includes('<title>推送管理</title>'));
+  assert.ok(page.includes("const CHARACTER_GROUPS = {\"wuwa\":[\"椿\",\"守岸人\"],\"zzz\":[\"星见雅\"]}"), '角色下拉列表必须来自服务端配置');
+  assert.ok(page.includes("name.type = 'select'") || page.includes("document.createElement('select')"), '角色条件必须使用下拉选择');
+  assert.ok(page.includes('id="robot-valid-hours"'), '机器人必须支持有效小时数');
+  assert.ok(page.includes('有效小时数（留空表示永久）'));
+  assert.ok(page.includes('最低差价（元，留空不限）'));
+  assert.ok(page.includes('translate(-50%, -50%)'), '新增弹窗必须居中');
+  const emptyPage = getAgentPushPage();
+  assert.ok(emptyPage.includes('const CHARACTER_GROUPS = {}'));
+  console.log('  ✓ 弹窗居中、角色下拉、有效期、差价留空和文案约束均生效');
 
   console.log('\n代理人服务端测试全部通过 ✓');
 })().catch((error) => {

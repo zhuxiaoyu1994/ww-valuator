@@ -26,6 +26,12 @@ const engines = {
 const gameConfigs = { wuwa: WUWA_CONFIG, zzz: ZZZ_CONFIG };
 const validGames = Object.keys(engines);
 
+// 代理人推送页的角色下拉选项：直接来自估值配置，避免页面里另维护一份角色名单
+const AGENT_CHARACTER_GROUPS = {
+  wuwa: Array.from(new Set(Object.values(WUWA_CONFIG.charTiers || {}).flatMap((tier) => tier.chars || []))),
+  zzz: Array.from(new Set(Object.values(ZZZ_CONFIG.charTiers || {}).flatMap((tier) => tier.chars || []))),
+};
+
 function getEngine(game) {
   return engines[game] || engines.wuwa;
 }
@@ -2743,7 +2749,7 @@ function requireAgentManager(req, res, next) {
   next();
 }
 
-app.get('/agent-push', (req, res) => res.type('html').send(getAgentPushPage()));
+app.get('/agent-push', (req, res) => res.type('html').send(getAgentPushPage(AGENT_CHARACTER_GROUPS)));
 app.get('/agent-push/api/config', requireAgentManager, async (req, res) => {
   try { res.json({ success: true, config: await agentPushService.getConfig() }); }
   catch (e) { agentPushError(res, e); }

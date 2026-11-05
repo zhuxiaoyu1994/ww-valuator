@@ -1,6 +1,6 @@
 'use strict';
 
-function getAgentPushPage() {
+function getAgentPushPage(characterGroups) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -73,7 +73,7 @@ function getAgentPushPage() {
   td { padding: 12px; border-top: 1px solid #252a42; color: #c6cbdc; font-size: 13px; vertical-align: top; }
   tbody tr:hover { background: rgba(129,140,248,.035); }
   .log-error { max-width: 300px; color: #fca5a5; line-height: 1.5; word-break: break-word; }
-  dialog { width: calc(100% - 32px); max-width: 580px; max-height: 90vh; padding: 0; overflow: auto; border: 1px solid #343a59; border-radius: 12px; background: #171a2e; color: #e5e7eb; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+  dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 32px); max-width: 580px; max-height: 90vh; margin: 0; padding: 0; overflow: auto; border: 1px solid #343a59; border-radius: 12px; background: #171a2e; color: #e5e7eb; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
   dialog::backdrop { background: rgba(3,5,15,.75); }
   .dialog-form { padding: 22px; }
   .dialog-form h2 { margin-bottom: 20px; color: #a5b4fc; font-size: 18px; }
@@ -206,6 +206,11 @@ function getAgentPushPage() {
           <input type="password" id="robot-secret" autocomplete="off" placeholder="未启用加签时留空">
         </div>
         <div class="field span-2">
+          <label for="robot-valid-hours">有效小时数（留空表示永久）</label>
+          <input type="number" id="robot-valid-hours" min="1" max="87600" step="1" placeholder="例如：3 = 3小时，168 = 7天">
+          <div class="help">到期后自动停用；编辑时填写会从当前时间重新计时。</div>
+        </div>
+        <div class="field span-2">
           <label class="check-line"><input type="checkbox" id="robot-enabled" checked>启用此机器人</label>
         </div>
       </div>
@@ -231,8 +236,8 @@ function getAgentPushPage() {
           <div class="condition-tools"><button class="btn btn-sm" type="button" data-action="add-condition">添加角色条件</button></div>
         </div>
         <div class="field">
-          <label for="rule-min-diff">最低差价（元）</label>
-          <input type="number" id="rule-min-diff" min="0" step="0.01" required value="0">
+          <label for="rule-min-diff">最低差价（元，留空不限）</label>
+          <input type="number" id="rule-min-diff" min="0" step="0.01" placeholder="留空不限">
         </div>
         <div class="field"></div>
         <div class="field">
@@ -275,6 +280,7 @@ function getAgentPushPage() {
   'use strict';
 
   const STORAGE_KEY = 'agent_push_key';
+  const CHARACTER_GROUPS = ${JSON.stringify(characterGroups || {}).replace(/</g, '\\u003c')};
   const PLATFORMS = { pxb7: '螃蟹网', pzds: '盼之', kjs: '氪金兽', 'qy': '7881', ysy: '易手游' };
   const $ = function (id) { return document.getElementById(id); };
   let agentKey = '';
@@ -297,6 +303,14 @@ function getAgentPushPage() {
       return prefix + '_' + window.crypto.randomUUID();
     }
     return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
+  }
+
+  function formatDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || '-');
+    const pad = function (number) { return String(number).padStart(2, '0'); };
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+      ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
   }
 
   function toast(message, isError) {
@@ -344,7 +358,8 @@ function getAgentPushPage() {
           remark: String(robot.remark || robot.name || ''),
           webhook: String(robot.webhook || ''),
           secret: String(robot.secret || ''),
-          enabled: robot.enabled !== false
+          enabled: robot.enabled !== false,
+          expiresAt: robot.expiresAt ? String(robot.expiresAt) : null
         });
       }),
       rules: rules.map(function (rule) {
@@ -357,7 +372,7 @@ function getAgentPushPage() {
               minConstellation: Math.max(0, Math.min(6, Number(condition.minConstellation != null ? condition.minConstellation : condition.minConst) || 0))
             };
           }),
-          minPriceDiff: Number(rule.minPriceDiff != null ? rule.minPriceDiff : rule.minDiff) || 0,
+          minPriceDiff: nullableNumber(rule.minPriceDiff != null ? rule.minPriceDiff : rule.minDiff),
           minListPrice: nullableNumber(rule.minListPrice != null ? rule.minListPrice : rule.priceMin),
           maxListPrice: nullableNumber(rule.maxListPrice != null ? rule.maxListPrice : rule.priceMax),
           platforms: Array.isArray(rule.platforms) ? rule.platforms.map(String) : [],
@@ -397,14 +412,21 @@ function getAgentPushPage() {
     }
     list.innerHTML = state.robots.map(function (robot) {
       const id = escapeHtml(robot.id);
+      const expired = robot.expiresAt && Date.parse(robot.expiresAt) <= Date.now();
+      const statusText = expired ? '已过期' : (robot.enabled ? '已启用' : '已停用');
+      const statusClass = robot.enabled && !expired ? 'tag-on' : 'tag-off';
       return '<article class="list-item">' +
         '<div class="item-top"><div class="item-main">' +
           '<div class="item-title">' + escapeHtml(robot.remark || '未命名机器人') +
-            '<span class="tag ' + (robot.enabled ? 'tag-on' : 'tag-off') + '">' + (robot.enabled ? '已启用' : '已停用') + '</span>' +
+            '<span class="tag ' + statusClass + '">' + statusText + '</span>' +
             (robot.secret ? '<span class="tag tag-secret">已加签</span>' : '') + '</div>' +
           '<div class="webhook" title="' + escapeHtml(robot.webhook) + '">' + escapeHtml(robot.webhook) + '</div>' +
+          '<div class="item-meta">' +
+            (robot.expiresAt ? '<span>有效期至：' + escapeHtml(formatDateTime(robot.expiresAt)) + '</span>' : '<span>有效期：永久</span>') +
+          '</div>' +
         '</div><div class="item-actions">' +
-          '<label class="inline-toggle"><input type="checkbox" data-action="toggle-robot" data-id="' + id + '"' + (robot.enabled ? ' checked' : '') + '>启用</label>' +
+          '<label class="inline-toggle"><input type="checkbox" data-action="toggle-robot" data-id="' + id + '"' +
+            (robot.enabled && !expired ? ' checked' : '') + (expired ? ' disabled' : '') + '>启用</label>' +
           '<button class="btn btn-sm" type="button" data-action="test-robot" data-id="' + id + '">测试</button>' +
           '<button class="btn btn-sm" type="button" data-action="edit-robot" data-id="' + id + '">编辑</button>' +
           '<button class="btn btn-danger btn-sm" type="button" data-action="delete-robot" data-id="' + id + '">删除</button>' +
@@ -446,7 +468,7 @@ function getAgentPushPage() {
           '<div class="item-title">' + escapeHtml(rule.name || '未命名规则') +
             '<span class="tag ' + (rule.enabled ? 'tag-on' : 'tag-off') + '">' + (rule.enabled ? '已启用' : '已停用') + '</span></div>' +
           '<div class="conditions">' + conditions + '</div>' +
-          '<div class="item-meta"><span>最低差价：¥' + formatMoney(rule.minPriceDiff) + '</span>' +
+          '<div class="item-meta"><span>最低差价：' + (rule.minPriceDiff == null ? '不限' : '¥' + formatMoney(rule.minPriceDiff)) + '</span>' +
             '<span>标价：' + escapeHtml(formatPriceRange(rule)) + '</span><span>平台：' + platforms + '</span>' +
             '<span>目标：' + escapeHtml(robotNames.length ? robotNames.join('、') : '未选择') + '</span></div>' +
         '</div><div class="item-actions">' +
@@ -518,7 +540,8 @@ function getAgentPushPage() {
           name: robot.remark,
           webhook: robot.webhook,
           secret: robot.secret,
-          enabled: robot.enabled
+          enabled: robot.enabled,
+          expiresAt: robot.expiresAt
         };
       }),
       rules: state.rules.map(function (rule) {
@@ -528,7 +551,7 @@ function getAgentPushPage() {
           chars: rule.conditions.map(function (condition) {
             return { name: condition.name, minConst: condition.minConstellation };
           }),
-          minDiff: rule.minPriceDiff,
+          minDiff: rule.minPriceDiff == null ? 0 : rule.minPriceDiff,
           priceMin: rule.minListPrice == null ? 0 : rule.minListPrice,
           priceMax: rule.maxListPrice == null ? 0 : rule.maxListPrice,
           platforms: rule.platforms,
@@ -574,19 +597,51 @@ function getAgentPushPage() {
     $('robot-webhook').value = robot ? robot.webhook : '';
     $('robot-secret').value = robot ? robot.secret : '';
     $('robot-enabled').checked = robot ? robot.enabled : true;
+    const remainingHours = robot && robot.expiresAt ?
+      Math.max(1, Math.ceil((Date.parse(robot.expiresAt) - Date.now()) / 3600000)) : null;
+    $('robot-valid-hours').value = remainingHours == null ? '' : String(remainingHours);
     $('robot-dialog').showModal();
+  }
+
+  function fillCharacterSelect(select, selectedName) {
+    select.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '请选择角色';
+    select.appendChild(placeholder);
+    const known = new Set();
+    Object.keys(CHARACTER_GROUPS).forEach(function (groupKey) {
+      const characters = Array.isArray(CHARACTER_GROUPS[groupKey]) ? CHARACTER_GROUPS[groupKey] : [];
+      if (!characters.length) return;
+      const group = document.createElement('optgroup');
+      group.label = groupKey === 'zzz' ? '绝区零' : '鸣潮';
+      characters.forEach(function (name) {
+        known.add(String(name));
+        const option = document.createElement('option');
+        option.value = String(name);
+        option.textContent = String(name);
+        group.appendChild(option);
+      });
+      select.appendChild(group);
+    });
+    const selected = String(selectedName || '');
+    if (selected && !known.has(selected)) {
+      const option = document.createElement('option');
+      option.value = selected;
+      option.textContent = selected + '（当前配置角色）';
+      select.appendChild(option);
+    }
+    select.value = selected || '';
   }
 
   function addConditionRow(condition) {
     const row = document.createElement('div');
     row.className = 'condition-row';
-    const name = document.createElement('input');
-    name.type = 'text';
+    const name = document.createElement('select');
     name.className = 'condition-name';
     name.required = true;
-    name.maxLength = 50;
-    name.placeholder = '角色名';
-    name.value = condition ? condition.name : '';
+    name.setAttribute('aria-label', '角色名');
+    fillCharacterSelect(name, condition ? condition.name : '');
     const level = document.createElement('select');
     level.className = 'condition-level';
     level.setAttribute('aria-label', '最低命座');
@@ -632,7 +687,7 @@ function getAgentPushPage() {
     $('rule-id').value = rule ? rule.id : '';
     $('rule-dialog-title').textContent = rule ? '编辑规则' : '添加规则';
     $('rule-name').value = rule ? rule.name : '';
-    $('rule-min-diff').value = rule ? rule.minPriceDiff : 0;
+    $('rule-min-diff').value = rule && rule.minPriceDiff != null ? rule.minPriceDiff : '';
     $('rule-min-price').value = rule && rule.minListPrice != null ? rule.minListPrice : '';
     $('rule-max-price').value = rule && rule.maxListPrice != null ? rule.maxListPrice : '';
     $('rule-enabled').checked = rule ? rule.enabled : true;
@@ -782,13 +837,20 @@ function getAgentPushPage() {
       $('robot-webhook').focus();
       return;
     }
+    const validHours = nullableNumber($('robot-valid-hours').value);
+    if (validHours != null && (!(validHours > 0) || validHours > 87600)) {
+      toast('有效小时数必须是1到87600之间的数字，留空表示永久', true);
+      $('robot-valid-hours').focus();
+      return;
+    }
     const existing = id ? findRobot(id) : null;
     const robot = Object.assign({}, existing || {}, {
       id: existing ? existing.id : createId('robot'),
       remark: $('robot-remark').value.trim(),
       webhook: webhook,
       secret: $('robot-secret').value.trim(),
-      enabled: $('robot-enabled').checked
+      enabled: $('robot-enabled').checked,
+      expiresAt: validHours == null ? null : new Date(Date.now() + validHours * 3600000).toISOString()
     });
     if (existing) {
       const index = state.robots.indexOf(existing);
@@ -832,7 +894,7 @@ function getAgentPushPage() {
       id: existing ? existing.id : createId('rule'),
       name: $('rule-name').value.trim(),
       conditions: conditions,
-      minPriceDiff: Number($('rule-min-diff').value) || 0,
+      minPriceDiff: nullableNumber($('rule-min-diff').value),
       minListPrice: minListPrice,
       maxListPrice: maxListPrice,
       platforms: platforms,
