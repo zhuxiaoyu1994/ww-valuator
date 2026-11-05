@@ -51,7 +51,6 @@ async function getEffectiveConfig(game) {
 // HTML页面模板（从views/目录加载）
 const getPlatformPage = require('./views/platform');
 const getPageHTML = require('./views/wuwa');
-const getZZZPage = require('./views/zzz');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
 const getLitePage = require('./views/lite');
@@ -68,7 +67,6 @@ const PAGE_EVAL_KEY = process.env.PAGE_EVAL_KEY || '';
 // QQ 官方机器人（v4.11.0）：WebHook 回调接入，群聊 @机器人 鸣潮估价
 const QQ_BOT_APP_ID = process.env.QQ_BOT_APP_ID || '';
 const QQ_BOT_SECRET = process.env.QQ_BOT_SECRET || '';
-const QQ_BOT_PUBLIC_KEY = process.env.QQ_BOT_PUBLIC_KEY || '';   // Ed25519 公钥（64位HEX）
 const QQ_BOT_ENCRYPT_KEY = process.env.QQ_BOT_ENCRYPT_KEY || ''; // 消息加密密钥（可选）
 
 // IP黑名单（初始从环境变量加载，运行时增删时同步到数据库）
@@ -1924,21 +1922,6 @@ app.get('/zzz', (req, res) => {
   res.redirect(302, '/');
 });
 
-/*
-app.get('/zzz', async (req, res) => {
-  const engine = getEngine('zzz');
-  const defaults = engine.getDefaults();
-  const charList = buildCharList(defaults);
-  const cfg = (await getEffectiveConfig('zzz')) || {};
-  // 只下发可视化编辑器需要的覆盖项（角色等级/价格、专武映射），不下发完整规则参数
-  const serverOverrides = {
-    charTierOverride: cfg.charTierOverride || {},
-    charPrices: cfg.charPrices || {},
-    sigWeaponsOverride: cfg.sigWeaponsOverride || {},
-  };
-  res.send(getZZZPage({ pxb7Proxies: PXB7_PROXY_URLS, charList, sigWeapons: defaults.sigWeapons || {}, serverOverrides }));
-});
-*/
 
 // 从默认配置构建精简角色列表（前端可视化编辑器用）
 function buildCharList(defaults) {

@@ -1429,69 +1429,6 @@ function getAdminPage() {
   // ============================================================
   // 矩阵运算工具（用于多元岭回归）
   // ============================================================
-  function _matT(A) {
-    var m = A.length, n = A[0].length;
-    var T = [];
-    for (var j = 0; j < n; j++) {
-      var row = [];
-      for (var i = 0; i < m; i++) row.push(A[i][j]);
-      T.push(row);
-    }
-    return T;
-  }
-  function _matMul(A, B) {
-    var m = A.length, n = B[0].length, k = B.length;
-    var C = [];
-    for (var i = 0; i < m; i++) {
-      var row = [];
-      for (var j = 0; j < n; j++) {
-        var sum = 0;
-        for (var l = 0; l < k; l++) sum += A[i][l] * B[l][j];
-        row.push(sum);
-      }
-      C.push(row);
-    }
-    return C;
-  }
-  function _matVec(A, v) {
-    var m = A.length, n = v.length;
-    var r = [];
-    for (var i = 0; i < m; i++) {
-      var sum = 0;
-      for (var j = 0; j < n; j++) sum += A[i][j] * v[j];
-      r.push(sum);
-    }
-    return r;
-  }
-  function _gaussSolve(A, b) {
-    var n = A.length;
-    var aug = [];
-    for (var i = 0; i < n; i++) {
-      var row = A[i].slice();
-      row.push(b[i]);
-      aug.push(row);
-    }
-    for (var i = 0; i < n; i++) {
-      var maxRow = i;
-      for (var k = i + 1; k < n; k++) {
-        if (Math.abs(aug[k][i]) > Math.abs(aug[maxRow][i])) maxRow = k;
-      }
-      var tmp = aug[i]; aug[i] = aug[maxRow]; aug[maxRow] = tmp;
-      if (Math.abs(aug[i][i]) < 1e-12) return null;
-      for (var k2 = i + 1; k2 < n; k2++) {
-        var factor = aug[k2][i] / aug[i][i];
-        for (var j = i; j <= n; j++) aug[k2][j] -= factor * aug[i][j];
-      }
-    }
-    var x = [];
-    for (var i2 = 0; i2 < n; i2++) x.push(0);
-    for (var i3 = n - 1; i3 >= 0; i3--) {
-      var s = aug[i3][n];
-      for (var j2 = i3 + 1; j2 < n; j2++) s -= aug[i3][j2] * x[j2];
-      x[i3] = s / aug[i3][i3];
-    }
-    return x;
-  }
 
   // ============================================================
   // 角色定价建议（比例调整法 - 按命座区分）

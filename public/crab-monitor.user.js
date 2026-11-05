@@ -580,10 +580,6 @@
     return G().keywords.resources.filter(r => r.div > 0)
       .map(r => r.name + (r.div > 1 ? '/' + r.div : '')).join('+');
   }
-  // 收录/通知最低等级
-  function minLevel() {
-    return G().minLevel;
-  }
 
   // ============================================================
   // 估值权重默认值（可被用户在设置面板中覆盖；数值参数两游戏相同）
@@ -2473,67 +2469,6 @@
     };
   }
 
-  /**
-   * 计算限定金系数（公式：baseCoeff + floor((yellowCount - base) / step) * stepCoeff）
-   * @param {number} yellowCount - 限定金数
-   * @returns {object} { yellowCount, coefficient, tierLabel }
-   */
-  function getYellowCoeff(yellowCount) {
-    var maxCoeff = (weights && weights.yellowMaxCoeff != null) ? weights.yellowMaxCoeff : DEFAULT_WEIGHTS.yellowMaxCoeff;
-
-    // ===== 分段模式 =====
-    var segments = (weights && weights.yellowSegments && weights.yellowSegments.length > 0) ? weights.yellowSegments : null;
-    if (segments && segments.length > 0) {
-      var seg = segments[0];
-      for (var si = 0; si < segments.length; si++) {
-        if (yellowCount >= segments[si].minYellow) {
-          seg = segments[si];
-        } else {
-          break;
-        }
-      }
-      var segBase = (seg.baseYellow != null) ? seg.baseYellow : seg.minYellow;
-      var segStep = (seg.step != null) ? seg.step : 1;
-      var segBaseCoeff = (seg.baseCoeff != null) ? seg.baseCoeff : 1.0;
-      var segStepCoeff = (seg.stepCoeff != null) ? seg.stepCoeff : 0.01;
-
-      var segTierIndex = Math.floor((yellowCount - segBase) / segStep);
-      var segCoeff = segBaseCoeff + segTierIndex * segStepCoeff;
-      if (segCoeff < 0.1) segCoeff = 0.1;
-      if (maxCoeff > 0 && segCoeff > maxCoeff) segCoeff = maxCoeff;
-
-      var segTierStart = segBase + segTierIndex * segStep;
-      var segTierEnd = segTierStart + segStep;
-      var segTierLabel = segTierStart + '~' + segTierEnd + '有效';
-
-      return {
-        yellowCount: yellowCount,
-        coefficient: Math.round(segCoeff * 1000) / 1000,
-        tierLabel: segTierLabel,
-      };
-    }
-
-    // ===== 单公式模式（向后兼容） =====
-    var base = (weights && weights.yellowBase != null) ? weights.yellowBase : 40;
-    var step = (weights && weights.yellowStep != null) ? weights.yellowStep : 1;
-    var baseCoeff = (weights && weights.yellowBaseCoeff != null) ? weights.yellowBaseCoeff : 1.0;
-    var stepCoeff = (weights && weights.yellowStepCoeff != null) ? weights.yellowStepCoeff : 0.01;
-
-    var tierIndex = Math.floor((yellowCount - base) / step);
-    var coefficient = baseCoeff + tierIndex * stepCoeff;
-    if (coefficient < 0.1) coefficient = 0.1;
-    if (maxCoeff > 0 && coefficient > maxCoeff) coefficient = maxCoeff;
-
-    var tierStart = base + tierIndex * step;
-    var tierEnd = tierStart + step;
-    var tierLabel = tierStart + '~' + tierEnd + '有效';
-
-    return {
-      yellowCount: yellowCount,
-      coefficient: Math.round(coefficient * 1000) / 1000,
-      tierLabel: tierLabel,
-    };
-  }
 
   /**
    * 计算有效金系数（基于有效金数分段，分段首尾相连）
@@ -16204,46 +16139,6 @@ function openSettings() {
   /** 静默模式的轮询间隔：盼之页签独立设置（默认60秒），与螃蟹页签（默认15秒）互不影响 */
   function pzdsSilentIntervalSec() {
     return Math.max(refreshIntervalSec, 10);
-  }
-
-  /** 右下角状态药丸（唯一注入的UI，极简、可启停） */
-  function pzdsSilentBuildUI() {
-    if (pzdsSilentPill || !document.body) return;
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483646;'
-      + 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:20px;'
-      + 'background:rgba(15,23,42,.92);color:#e2e8f0;font-size:12px;line-height:1.4;'
-      + 'box-shadow:0 4px 16px rgba(0,0,0,.35);font-family:-apple-system,"PingFang SC",sans-serif;'
-      + 'user-select:none;';
-    const title = document.createElement('span');
-    title.textContent = '🦀盼之监控';
-    title.style.cssText = 'font-weight:bold;color:#38bdf8;white-space:nowrap;';
-    const status = document.createElement('span');
-    status.style.cssText = 'white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis;';
-    const logBtn = document.createElement('span');
-    logBtn.textContent = '📜日志';
-    logBtn.title = '查看脚本运行日志（盼之页面有反调试，请勿用F12，用此按钮）';
-    logBtn.style.cssText = 'cursor:pointer;padding:2px 10px;border-radius:12px;background:#334155;color:#e2e8f0;white-space:nowrap;';
-    logBtn.addEventListener('click', function () { openLogViewer(); });
-    const dataBtn = document.createElement('span');
-    dataBtn.textContent = '📋数据';
-    dataBtn.style.cssText = 'cursor:pointer;padding:2px 10px;border-radius:12px;background:#334155;color:#e2e8f0;white-space:nowrap;';
-    dataBtn.addEventListener('click', function () { pzdsSilentTogglePanel(); });
-    const btn = document.createElement('span');
-    btn.style.cssText = 'cursor:pointer;padding:2px 10px;border-radius:12px;font-weight:bold;white-space:nowrap;';
-    btn.addEventListener('click', function () {
-      if (pzdsSilentOn) pzdsSilentStop(); else pzdsSilentStart();
-    });
-    wrap.appendChild(title);
-    wrap.appendChild(status);
-    wrap.appendChild(logBtn);
-    wrap.appendChild(dataBtn);
-    wrap.appendChild(btn);
-    document.body.appendChild(wrap);
-    pzdsSilentPill = wrap;
-    pzdsSilentStatusEl = status;
-    pzdsSilentBtnEl = btn;
-    pzdsSilentUpdateUI();
   }
 
   function pzdsSilentUpdateUI() {
