@@ -3,7 +3,7 @@
 const assert = require('assert');
 const crypto = require('crypto');
 const { createAgentPushService } = require('./agent-push');
-const { buildDingTalkSignedUrl } = require('./notify');
+const { buildDingTalkSignedUrl, buildDingTalkRobotPayload } = require('./notify');
 const getAgentPushPage = require('./views/agent-push');
 
 function createMemoryDb() {
@@ -108,8 +108,8 @@ async function expectReject(promise, messagePart) {
     db,
     manageKey: 'manager-secret',
     ingestToken: 'ingest-secret',
-    sendRobot: async (robot, title, content) => {
-      sends.push({ robot, title, content });
+    sendRobot: async (robot, title, content, options) => {
+      sends.push({ robot, title, content, options: options || {} });
       if (failPredicate(robot)) return { success: false, error: '失败 ' + robot.webhook };
       return { success: true };
     },
@@ -139,7 +139,11 @@ async function expectReject(promise, messagePart) {
   assert.strictEqual(sends.length, 2);
   const r1Send = sends.find((item) => item.robot.id === 'r1');
   assert.ok(r1Send.content.includes('![账号图](https://example.com/a.jpg)'));
-  assert.ok(r1Send.content.includes('**[🔗 查看详情](https://example.com/product/e1)**'));
+  assert.ok(!r1Send.content.includes('[🔗 查看详情]('), '商品链接必须改为按钮，不得保留正文链接');
+  assert.deepStrictEqual(r1Send.options.buttons, [{
+    title: '🔗 查看详情',
+    actionURL: 'https://example.com/product/e1',
+  }]);
   assert.ok(r1Send.content.includes('命中：完整条件、同机器人合并'));
   assert.ok(r1Send.content.includes('差价 +500元'), '差价必须由服务端根据估值与标价计算');
   const filtered = await service.dispatch([
@@ -237,7 +241,27 @@ async function expectReject(promise, messagePart) {
   assert.strictEqual(signed.searchParams.get('sign'), expectedSign);
   console.log('  ✓ HMAC-SHA256、时间戳和URL编码正确，原access_token保留');
 
-  console.log('[7] 管理页交互与文案');
+  console.log('[7] 钉钉 actionCard 图片按钮消息');
+  const actionPayload = buildDingTalkRobotPayload('标题', '![账号图](https://example.com/a.jpg)', {
+    rawMarkdown: true,
+    buttons: [
+      { title: '查看详情', actionURL: 'https://example.com/product/e1' },
+      { title: 'bad', actionURL: 'javascript:alert(1)' },
+      { title: '', actionURL: 'https://example.com/x' },
+    ],
+  });
+  assert.strictEqual(actionPayload.msgtype, 'actionCard');
+  assert.strictEqual(actionPayload.actionCard.text, '![账号图](https://example.com/a.jpg)');
+  assert.deepStrictEqual(actionPayload.actionCard.btns, [{
+    title: '查看详情',
+    actionURL: 'https://example.com/product/e1',
+  }]);
+  const markdownPayload = buildDingTalkRobotPayload('标题', '内容');
+  assert.strictEqual(markdownPayload.msgtype, 'markdown');
+  assert.strictEqual(markdownPayload.markdown.text, '### 标题\n\n内容');
+  console.log('  ✓ 有链接时发送 actionCard 按钮和无按钮时回退 markdown，非法按钮被过滤');
+
+  console.log('[8] 管理页交互与文案');
   const page = getAgentPushPage({ wuwa: ['椿', '守岸人'], zzz: ['星见雅'] });
   assert.ok(!page.includes('代理人'), '管理页可见文案不得出现代理人');
   assert.ok(page.includes('<title>推送管理</title>'));

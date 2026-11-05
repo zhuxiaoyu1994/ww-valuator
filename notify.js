@@ -154,16 +154,59 @@ function buildDingTalkSignedUrl(webhook, secret, timestamp) {
 }
 
 /**
- * 向指定钉钉机器人发送 Markdown；供代理人独立机器人配置复用
+ * 规范化钉钉 actionCard 按钮：仅接受 http/https 链接，最多 5 个
+ */
+function normalizeDingTalkButtons(buttons) {
+  if (!Array.isArray(buttons)) return [];
+  return buttons
+    .map((button, index) => {
+      if (!button || typeof button !== 'object') return null;
+      const title = String(button.title || '').trim();
+      const actionURL = String(button.actionURL || '').trim();
+      if (!title || title.length > 100 || !actionURL || actionURL.length > 2048) return null;
+      try {
+        const url = new URL(actionURL);
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+      } catch (e) {
+        return null;
+      }
+      return { title, actionURL };
+    })
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
+/**
+ * 构造钉钉机器人消息体：有按钮时使用 actionCard（图片正文 + 底部按钮），否则使用 markdown
+ */
+function buildDingTalkRobotPayload(title, content, options = {}) {
+  const text = options.rawMarkdown === true ? content : `### ${title}\n\n${content}`;
+  const buttons = normalizeDingTalkButtons(options.buttons);
+  if (buttons.length > 0) {
+    return {
+      msgtype: 'actionCard',
+      actionCard: {
+        title,
+        text,
+        btnOrientation: options.btnOrientation === '1' ? '1' : '0',
+        btns: buttons,
+      },
+    };
+  }
+  return {
+    msgtype: 'markdown',
+    markdown: { title, text },
+  };
+}
+
+/**
+ * 向指定钉钉机器人发送消息；供代理人独立机器人配置复用
  */
 async function sendDingTalkRobot(robot, title, content, options = {}) {
   if (!robot || !robot.webhook) return { success: false, error: '机器人webhook未配置' };
   try {
     const signedUrl = buildDingTalkSignedUrl(robot.webhook, robot.secret || '', Date.now());
-    const postData = JSON.stringify({
-      msgtype: 'markdown',
-      markdown: { title, text: options.rawMarkdown === true ? content : `### ${title}\n\n${content}` },
-    });
+    const postData = JSON.stringify(buildDingTalkRobotPayload(title, content, options));
     const result = await httpRequest(signedUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
@@ -271,6 +314,7 @@ module.exports = {
   sendNotification,
   sendDingTalkRobot,
   buildDingTalkSignedUrl,
+  buildDingTalkRobotPayload,
   getNotificationLog,
   getConfiguredChannels,
   formatNotification,

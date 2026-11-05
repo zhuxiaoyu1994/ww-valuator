@@ -298,11 +298,13 @@ function buildMessage(event, rules) {
       character.name + (character.const > 0 ? character.const + '命' : '')
     ).join('、') + '\n\n';
   }
-  text += '🎯 命中：' + rules.map((rule) => rule.name).join('、') + '\n\n';
-  text += event.productUrl ?
-    '**[🔗 查看详情](' + event.productUrl + ')**' :
-    '链接：暂无';
-  return { title, content: text };
+  text += '🎯 命中：' + rules.map((rule) => rule.name).join('、');
+  if (!event.productUrl) text += '\n\n链接：暂无';
+  const buttons = event.productUrl ? [{
+    title: '🔗 查看详情',
+    actionURL: event.productUrl,
+  }] : [];
+  return { title, content: text, buttons };
 }
 
 function safeEqual(secret, candidate) {
@@ -489,7 +491,10 @@ function createAgentPushService(options) {
         }
         try {
           const result = await runWithDeadline(
-            () => sendRobot(job.robot, job.message.title, job.message.content, { rawMarkdown: true }),
+            () => sendRobot(job.robot, job.message.title, job.message.content, {
+              rawMarkdown: true,
+              buttons: job.message.buttons,
+            }),
             deadline - Date.now(),
             '机器人发送超时'
           );
