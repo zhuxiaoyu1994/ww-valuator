@@ -140,10 +140,8 @@ function buildDefaultTeamPremiums() {
   return result;
 }
 
-// 构建默认权重（合并所有默认配置，等价于油猴脚本 loadWeights() 无用户配置时的结果）
-function buildDefaultWeights(customWeights) {
-  const saved = customWeights || {};
-  // 重建角色查找表（内置角色 + 别名），避免多次调用间残留上一次的自定义角色
+// 重置角色查找表为内置角色+别名（每次求值前调用，防止跨请求残留自定义角色）
+function resetCharLookup() {
   for (const _k in CHAR_LOOKUP) delete CHAR_LOOKUP[_k];
   for (const [_tier, _info] of Object.entries(CHAR_TIERS)) {
     for (const _name of _info.chars) {
@@ -153,6 +151,13 @@ function buildDefaultWeights(customWeights) {
   for (const [_alias, _canonical] of Object.entries(CHAR_ALIASES)) {
     if (CHAR_LOOKUP[_canonical]) CHAR_LOOKUP[_alias] = CHAR_LOOKUP[_canonical];
   }
+}
+
+// 构建默认权重（合并所有默认配置，等价于油猴脚本 loadWeights() 无用户配置时的结果）
+function buildDefaultWeights(customWeights) {
+  const saved = customWeights || {};
+  // 重建角色查找表（内置角色 + 别名），避免多次调用间残留上一次的自定义角色
+  resetCharLookup();
   const w = Object.assign({}, DEFAULT_WEIGHTS, saved);
   w.c6TierWeights = Object.assign({}, DEFAULT_WEIGHTS.c6TierWeights, saved.c6TierWeights || {});
   // 满命抽数加成专用的各级别满命权重（与满命溢价独立；缺省时回落到满命溢价权重）
@@ -219,7 +224,7 @@ function buildDefaultWeights(customWeights) {
     ];
   }
   w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
-  w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
+  w.flatDiscountRules = Array.isArray(saved.flatDiscountRules) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
   w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
   // 抽数阶梯定价公式参数
   w.pullBase = (saved.pullBase != null) ? saved.pullBase : DEFAULT_PULL_FORMULA.pullBase;
@@ -319,7 +324,7 @@ function buildDefaultWeights(customWeights) {
       w.constPrices[_cpName] = convertPremiumsToConstPrices(_cpName, _cpBase, _oldPremiums[_cpName]);
     }
   }
-  w.teamPremiums = (saved.teamPremiums && Object.keys(saved.teamPremiums).length > 0) ? saved.teamPremiums : buildDefaultTeamPremiums();
+  w.teamPremiums = (saved.teamPremiums && typeof saved.teamPremiums === 'object') ? saved.teamPremiums : buildDefaultTeamPremiums();
   w.teams = [];
   for (const teamName of Object.keys(w.teamPremiums)) {
     const t = w.teamPremiums[teamName];
@@ -328,12 +333,12 @@ function buildDefaultWeights(customWeights) {
     }
   }
   // 需要专武的角色列表（兼容旧格式，统一为名字数组）
-  var rawNeedSig = (saved.needSigWeapons && saved.needSigWeapons.length > 0) ? saved.needSigWeapons : DEFAULT_NEED_SIG_WEAPONS;
+  var rawNeedSig = Array.isArray(saved.needSigWeapons) ? saved.needSigWeapons : DEFAULT_NEED_SIG_WEAPONS;
   w.needSigWeapons = rawNeedSig.map(function(n) { return typeof n === 'string' ? n : n.name; });
   // 无专武折扣（可配置）
   w.needSigDiscount = (saved.needSigDiscount != null) ? saved.needSigDiscount : DEFAULT_WEIGHTS.needSigDiscount;
   // 强绑队友配置
-  w.teamMates = (saved.teamMates && Object.keys(saved.teamMates).length > 0) ? saved.teamMates : DEFAULT_TEAM_MATES;
+  w.teamMates = (saved.teamMates && typeof saved.teamMates === 'object') ? saved.teamMates : DEFAULT_TEAM_MATES;
   // 强绑折扣（可配置）
   w.teamDepDiscount = (saved.teamDepDiscount != null) ? saved.teamDepDiscount : DEFAULT_WEIGHTS.teamDepDiscount;
   // 用户自定义专武映射覆盖
@@ -1938,6 +1943,10 @@ function evaluateWithPrice(showTitle, priceInCents, customWeights) {
     weights = buildDefaultWeights(customWeights);
     // 应用用户自定义专武映射
     _sigWeaponsOverride = weights.sigWeaponsOverride || null;
+  } else {
+    // 无自定义权重时也重置查找表：上一次带自定义权重的调用可能在 CHAR_LOOKUP 里残留自定义角色，
+    // 造成跨账号、跨请求的估值污染（finally 只恢复 weights/_sigWeaponsOverride，恢复不了查找表）
+    resetCharLookup();
   }
   try {
     const normalizedTitle = normalizePlatformText(showTitle);

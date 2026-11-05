@@ -109,7 +109,8 @@ async function ensureBlockedIpsLoaded() {
     blockedIpsPromise = (async () => {
       try {
         const saved = await db.getConfig(BLOCKLIST_KEY);
-        if (Array.isArray(saved) && saved.length > 0) {
+        // 空数组也要覆盖：删掉最后一个封禁 IP 后，其他实例不应继续沿用旧封禁
+        if (Array.isArray(saved)) {
           blockedIps = migrateBlocklist(saved);
         }
       } catch (e) {
@@ -140,7 +141,8 @@ async function saveBlockedIps() {
 async function loadBlockedIps() {
   try {
     const saved = await db.getConfig(BLOCKLIST_KEY);
-    if (Array.isArray(saved) && saved.length > 0) {
+    // 空数组同样覆盖，避免残留已删除的封禁
+    if (Array.isArray(saved)) {
       blockedIps = migrateBlocklist(saved);
     }
   } catch (e) {

@@ -104,7 +104,8 @@
     w.effTierWeights = Object.assign({}, DEFAULT_WEIGHTS.effTierWeights || { S: 1, A: 1, B: 1, C: 0.5, D: 0.5, E: 0 }, s.effTierWeights || {});
     w.c6MultiBonus = (s.c6MultiBonus && s.c6MultiBonus.length) ? s.c6MultiBonus : DEFAULT_WEIGHTS.c6MultiBonus;
     w.teamMultiBonus = (s.teamMultiBonus && s.teamMultiBonus.length) ? s.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
-    w.flatDiscountRules = (s.flatDiscountRules && s.flatDiscountRules.length) ? s.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
+    // 存在即尊重用户配置（含显式空数组）：用户清空全部低命折扣后不应恢复默认
+    w.flatDiscountRules = Array.isArray(s.flatDiscountRules) ? s.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.c6TeamDependency = (s.c6TeamDependency && Object.keys(s.c6TeamDependency).length > 0) ? s.c6TeamDependency : (DEFAULT_WEIGHTS.c6TeamDependency || {});
     w.pullBase = (s.pullBase != null) ? s.pullBase : (DEFAULT_WEIGHTS.pullBase != null ? DEFAULT_WEIGHTS.pullBase : (defaults.pullFormula || {}).pullBase);
     w.pullBasePrice = (s.pullBasePrice != null) ? s.pullBasePrice : (DEFAULT_WEIGHTS.pullBasePrice != null ? DEFAULT_WEIGHTS.pullBasePrice : (defaults.pullFormula || {}).pullBasePrice);
@@ -257,7 +258,8 @@
         w.constPrices[_cpName] = _cpPrices;
       }
     }
-    w.teamPremiums = (s.teamPremiums && Object.keys(s.teamPremiums).length > 0) ? s.teamPremiums : (DEFAULT_WEIGHTS.teamPremiums || buildDefaultTeamPremiums(defaults.teams));
+    // 存在即尊重用户配置（含显式空对象）：用户清空全部配队后不应恢复默认
+    w.teamPremiums = (s.teamPremiums && typeof s.teamPremiums === 'object') ? s.teamPremiums : (DEFAULT_WEIGHTS.teamPremiums || buildDefaultTeamPremiums(defaults.teams));
     w.teams = [];
     for (var teamName in w.teamPremiums) {
       if (!w.teamPremiums.hasOwnProperty(teamName)) continue;
@@ -266,7 +268,8 @@
         w.teams.push({ name: teamName, members: t.chars || [], multiplier: t.multiplier || 1.0 });
       }
     }
-    w.needSigWeapons = (s.needSigWeapons && s.needSigWeapons.length > 0) ? s.needSigWeapons : (DEFAULT_WEIGHTS.needSigWeapons || defaults.needSigWeapons || []);
+    // 存在即尊重用户配置（含显式空数组）：用户清空必专武名单后不应恢复默认
+    w.needSigWeapons = Array.isArray(s.needSigWeapons) ? s.needSigWeapons : (DEFAULT_WEIGHTS.needSigWeapons || defaults.needSigWeapons || []);
     w.deletedChars = (s.deletedChars && s.deletedChars.length > 0) ? s.deletedChars : (DEFAULT_WEIGHTS.deletedChars || []);
     w.charTierOverride = (s.charTierOverride && Object.keys(s.charTierOverride).length > 0) ? s.charTierOverride : (DEFAULT_WEIGHTS.charTierOverride || {});
     // 数量加成：{ threshold, bonus }，两者均为 0 时不生效

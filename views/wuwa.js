@@ -5500,6 +5500,12 @@ function getPageHTML(options) {
           game: 'wuwa',
         });
         const result = await resp.json();
+        // 防过期响应：请求期间用户若改了角色/命座/价格，旧结果必须丢弃，否则覆盖新输入的估价
+        const priceNow = parseFloat(priceEl.value) || 0;
+        if (desc !== veGenerateDescText(veGetInfo()) || price !== priceNow) {
+          veShowError('描述或价格已修改，请重新估价');
+          return;
+        }
         if (result.success) {
           veClearStatus();
           showResult(result.data);

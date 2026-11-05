@@ -1616,7 +1616,7 @@
       ];
     }
     w.teamMultiBonus = (saved.teamMultiBonus && saved.teamMultiBonus.length) ? saved.teamMultiBonus : DEFAULT_WEIGHTS.teamMultiBonus;
-    w.flatDiscountRules = (saved.flatDiscountRules && saved.flatDiscountRules.length) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
+    w.flatDiscountRules = Array.isArray(saved.flatDiscountRules) ? saved.flatDiscountRules : DEFAULT_WEIGHTS.flatDiscountRules;
     w.c6TeamDependency = saved.c6TeamDependency || DEFAULT_WEIGHTS.c6TeamDependency;
     // 抽数阶梯定价公式参数
     w.pullBase = (saved.pullBase != null) ? saved.pullBase : DEFAULT_PULL_FORMULA.pullBase;
@@ -6936,7 +6936,7 @@
     if (!notifyEnabled) return false;
     if (notifiedIds.includes(productId)) return false;
     if (/自主截图/.test(showTitle)) return false;
-    if ((valuation.level || 0) < 70) return false;
+    if ((valuation.level || 0) < G().minLevel) return false;   // v4.10.2 用游戏配置的最低等级（绝区零为40，原先硬编码70误杀40~69级通知）
 
     const notifyDiff = valuation.totalValue - price;
     // 检查指定账号通知规则（v4.7.0 须同时满足标价范围）

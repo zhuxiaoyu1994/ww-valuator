@@ -1140,9 +1140,9 @@ function getAdminPage() {
       dealsPage = 1;
       dealsData = [];
       dealsHasMore = true;
-    } else {
-      dealsPage++;
     }
+    // 页码先算后提交：请求失败时 dealsPage 不变，重试不会跳过整页
+    const nextPage = reset ? 1 : dealsPage + 1;
 
     const tbody = document.getElementById('d-tbody');
     const moreBtn = document.getElementById('d-more-btn');
@@ -1168,7 +1168,7 @@ function getAdminPage() {
       const resp = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, page: dealsPage, pageSize: dealsPageSize, customWeights, source: dealsSource, game: currentGame }),
+        body: JSON.stringify({ password: pw, page: nextPage, pageSize: dealsPageSize, customWeights, source: dealsSource, game: currentGame }),
       });
       const json = await resp.json();
       if (!json.success) {
@@ -1179,6 +1179,7 @@ function getAdminPage() {
       }
 
       const newItems = json.data.list || [];
+      dealsPage = nextPage;   // 请求成功才提交页码
       if (json.data.totalRecords != null) {
         dealsTotalRecords = json.data.totalRecords;
         var info = document.getElementById('d-total-info');
