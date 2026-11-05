@@ -2738,7 +2738,7 @@ function agentPushError(res, err) {
 function requireAgentManager(req, res, next) {
   if (!process.env.AGENT_PUSH_KEY) return res.status(503).json({ success: false, error: '服务端尚未配置 AGENT_PUSH_KEY' });
   if (!agentPushService.isManager(String(req.get('x-agent-key') || ''))) {
-    return res.status(401).json({ success: false, error: '代理人密钥错误' });
+    return res.status(401).json({ success: false, error: '管理密钥错误' });
   }
   next();
 }

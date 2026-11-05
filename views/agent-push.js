@@ -6,7 +6,7 @@ function getAgentPushPage() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>代理人推送管理</title>
+<title>推送管理</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root { color-scheme: dark; }
@@ -118,11 +118,11 @@ function getAgentPushPage() {
 <body>
   <div class="login-shell" id="login-shell">
     <form class="login-card" id="login-form">
-      <h1>代理人推送管理</h1>
-      <p class="intro">请输入独立的代理人密钥。密钥仅保存在当前浏览器会话中。</p>
+      <h1>推送管理</h1>
+      <p class="intro">请输入独立管理密钥。密钥仅保存在当前浏览器会话中。</p>
       <div class="login-error" id="login-error" role="alert"></div>
-      <label for="agent-key">代理人密钥</label>
-      <input type="password" id="agent-key" autocomplete="current-password" required placeholder="请输入代理人密钥">
+      <label for="agent-key">管理密钥</label>
+      <input type="password" id="agent-key" autocomplete="current-password" required placeholder="请输入管理密钥">
       <button class="btn btn-primary" id="login-btn" type="submit">验证并进入</button>
     </form>
   </div>
@@ -130,7 +130,7 @@ function getAgentPushPage() {
   <div class="app hidden" id="app">
     <header class="page-header">
       <div>
-        <h1>代理人推送管理</h1>
+        <h1>推送管理</h1>
         <div class="subtitle">独立配置推送机器人、筛选规则并查看推送结果</div>
       </div>
       <div class="header-actions">
