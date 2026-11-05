@@ -7,6 +7,7 @@
 
 const https = require('https');
 const http = require('http');
+const crypto = require('crypto');
 const { URL } = require('url');
 
 // 通知记录（内存中保留最近50条）
@@ -60,7 +61,7 @@ function httpRequest(urlStr, options = {}) {
       reject(err);
     });
 
-    req.setTimeout(10000, () => {
+    req.setTimeout(options.timeout || 10000, () => {
       req.destroy(new Error('Request timeout'));
     });
 
@@ -139,43 +140,53 @@ async function sendBark(title, content) {
 }
 
 /**
- * 钉钉机器人推送
- * @param {string} title - 标题
- * @param {string} content - 内容
+ * 构造钉钉加签地址：HMAC-SHA256(timestamp + "\n" + secret)，Base64 后由 URL 编码
  */
-async function sendDingTalk(title, content) {
-  const webhook = process.env.DINGTALK_WEBHOOK;
-  if (!webhook) return { success: false, error: 'DINGTALK_WEBHOOK not configured' };
+function buildDingTalkSignedUrl(webhook, secret, timestamp) {
+  const url = new URL(webhook);
+  if (secret) {
+    const ts = timestamp == null ? Date.now() : timestamp;
+    const sign = crypto.createHmac('sha256', secret).update(ts + '\n' + secret).digest('base64');
+    url.searchParams.set('timestamp', String(ts));
+    url.searchParams.set('sign', sign);
+  }
+  return url.toString();
+}
 
+/**
+ * 向指定钉钉机器人发送 Markdown；供代理人独立机器人配置复用
+ */
+async function sendDingTalkRobot(robot, title, content) {
+  if (!robot || !robot.webhook) return { success: false, error: '机器人webhook未配置' };
   try {
+    const signedUrl = buildDingTalkSignedUrl(robot.webhook, robot.secret || '', Date.now());
     const postData = JSON.stringify({
       msgtype: 'markdown',
-      markdown: {
-        title: title,
-        text: `### ${title}\n\n${content}`,
-      },
+      markdown: { title, text: `### ${title}\n\n${content}` },
     });
-
-    const result = await httpRequest(webhook, {
+    const result = await httpRequest(signedUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData),
-      },
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
       body: postData,
+      timeout: 5000,
     });
-
-    if (result.statusCode === 200) {
-      const body = JSON.parse(result.body);
-      if (body.errcode === 0 || body.errcode === undefined) {
-        return { success: true, channel: 'dingtalk' };
-      }
-      return { success: false, channel: 'dingtalk', error: body.errmsg || `Error code: ${body.errcode}` };
+    let body = null;
+    try { body = JSON.parse(result.body); } catch (e) { /* 下方统一报错 */ }
+    if (result.statusCode === 200 && body && body.errcode === 0) {
+      return { success: true, channel: 'dingtalk' };
     }
-    return { success: false, channel: 'dingtalk', error: `HTTP ${result.statusCode}` };
+    return {
+      success: false,
+      channel: 'dingtalk',
+      error: body && body.errmsg ? body.errmsg : (body && body.errcode != null ? `Error code: ${body.errcode}` : `HTTP ${result.statusCode}`),
+    };
   } catch (err) {
     return { success: false, channel: 'dingtalk', error: err.message };
   }
+}
+
+async function sendDingTalk(title, content) {
+  return sendDingTalkRobot({ webhook: process.env.DINGTALK_WEBHOOK || '', secret: process.env.DINGTALK_SECRET || '' }, title, content);
 }
 
 /**
@@ -258,6 +269,8 @@ function formatNotification(hotAccounts) {
 
 module.exports = {
   sendNotification,
+  sendDingTalkRobot,
+  buildDingTalkSignedUrl,
   getNotificationLog,
   getConfiguredChannels,
   formatNotification,

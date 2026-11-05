@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.10.4
+// @version      4.11.0
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.10.0 恢复声音提醒（蜂鸣，可开关）、彻底移除后台保活音频——音爆元凶）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -1037,6 +1037,9 @@
     sync: 'https://www.youxigujia.cn/api/push-config/sync',
     get: 'https://www.youxigujia.cn/api/push-config/get',
   };
+  const AGENT_PUSH_URL = 'https://www.youxigujia.cn/api/agent-push/dispatch';
+  const AGENT_PUSH_BATCH_SIZE = 20;
+  const AGENT_PUSH_FLUSH_DELAY = 15000;
 
   // 监控列表云端备份URL（防止脚本重装/换浏览器丢失历史列表）
   const BACKUP_URLS = {
@@ -1136,6 +1139,7 @@
     dingtalkRobots: [],    // 钉钉群机器人列表 [{name, webhook, secret}]（v3.76.0 支持多个机器人，全部收推送）
     dingtalkWebhook: '',   // 旧格式：单机器人Webhook（首次启动自动迁移为dingtalkRobots）
     dingtalkSecret: '',    // 旧格式：单机器人加签密钥
+    dispatchToken: '',     // 代理人推送事件上报密钥（填写后启用，与代理人管理密钥不同）
     syncPassword: '',    // 云端同步密码（管理后台密码）
     secondaryDelay: 10,    // 从通知延迟秒数
     skipHighDiffSecondary: false, // 从通知过滤高差价（开启后差价>阈值的账号不推送给从通知用户）
@@ -4081,6 +4085,12 @@
           existRow.showTitle = detailText;
           var newParsed = parseAccountInfo(detailText);
           var newValuation = calculateValue(newParsed, price);
+          queueAgentPushEvent({
+            platform: 'pzds', stage: 'pzds_detail', productId: productId,
+            showTitle: detailText, price: price, value: newValuation.totalValue,
+            characters: newParsed.characters, goodsImg: product.goodsImg || existRow.goodsImg || '',
+            productUrl: getProductUrl(product),
+          });
           existRow.parsed = {
             yellowCount: newParsed.yellowCount,
             pulls: Math.round(newParsed.pulls * 10) / 10,
@@ -4133,6 +4143,12 @@
     // 解析和估值（优先使用详情页完整文本）
     const parsed = parseAccountInfo(parseText);
     const valuation = calculateValue(parsed, price);
+    queueAgentPushEvent({
+      platform: 'pzds', stage: 'pzds_initial', productId: productId,
+      showTitle: parseText, price: price, value: valuation.totalValue,
+      characters: parsed.characters, goodsImg: product.goodsImg || '',
+      productUrl: getProductUrl(product),
+    });
 
     console.log('[鸣潮监控-盼之] 解析结果: ' + product.productUniqueNo +
       ' | 角色' + parsed.characters.length + '个:' + parsed.characters.map(c => c.const + G().constUnitDisplay + c.name).join(',') +
@@ -4852,6 +4868,12 @@
     // 解析和估值
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
+    queueAgentPushEvent({
+      platform: 'kjs', stage: 'kjs_initial', productId: productId,
+      showTitle: showTitle, price: price, value: valuation.totalValue,
+      characters: parsed.characters, goodsImg: product.goodsImg || '',
+      productUrl: getProductUrl(product),
+    });
 
     console.log('[鸣潮监控-氪金兽] 解析结果: ' + product.productUniqueNo +
       ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
@@ -5885,6 +5907,12 @@
     // 解析和估值
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
+    queueAgentPushEvent({
+      platform: 'qy', stage: 'qy_initial', productId: productId,
+      showTitle: showTitle, price: price, value: valuation.totalValue,
+      characters: parsed.characters, goodsImg: product.goodsImg || '',
+      productUrl: getProductUrl(product),
+    });
 
     console.log('[鸣潮监控-7881] 解析结果: ' + product.productUniqueNo +
       ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
@@ -6298,6 +6326,12 @@
     // 解析和估值
     var parsed = parseAccountInfo(showTitle);
     var valuation = calculateValue(parsed, price);
+    queueAgentPushEvent({
+      platform: 'ysy', stage: 'ysy_initial', productId: productId,
+      showTitle: showTitle, price: price, value: valuation.totalValue,
+      characters: parsed.characters, goodsImg: product.goodsImg || '',
+      productUrl: getProductUrl(product),
+    });
 
     console.log('[监控-易手游] 解析结果: ' + product.productUniqueNo +
       ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
@@ -6750,6 +6784,12 @@
     // 初步估值
     const parsed = parseAccountInfo(showTitle);
     const valuation = calculateValue(parsed, price);
+    queueAgentPushEvent({
+      platform: 'pxb7', stage: fromFlashSale ? 'pxb7_flash_initial' : 'pxb7_initial', productId: productId,
+      showTitle: showTitle, price: price, value: valuation.totalValue,
+      characters: parsed.characters, goodsImg: item.goodsImg || pickProductImg(item, '螃蟹') || '',
+      productUrl: getProductUrl(item),
+    });
 
     console.log('[鸣潮监控] 解析结果: ' + (productUniqueNo || productId) +
       ' | 角色' + parsed.characters.length + '个 | 武器' + parsed.weapons.length + '个' +
@@ -7047,6 +7087,18 @@
         // 重新解析和估值
         const parsed = parseAccountInfo(showTitle);
         const valuation = calculateValue(parsed, detailPrice);
+        // 秒杀商品保留最终秒杀价；代理人事件必须在本地收录过滤和通知之前上报
+        const existingRow = tableIndex.get(item.productId);
+        const isFlashSale = existingRow && existingRow.status === '秒杀';
+        const preserveStatus = isFlashSale ? '秒杀' : '详估';
+        const finalPrice = isFlashSale ? Math.min(existingRow.price, detailPrice) : detailPrice;
+        const finalRatio = finalPrice > 0 ? ((valuation.totalValue - finalPrice) / finalPrice) * 100 : valuation.ratio;
+        queueAgentPushEvent({
+          platform: 'pxb7', stage: 'pxb7_detail', productId: item.productId,
+          showTitle: showTitle, price: finalPrice, value: valuation.totalValue,
+          characters: parsed.characters, goodsImg: (existingRow && existingRow.goodsImg) || '',
+          productUrl: getProductUrl(existingRow || { productId: item.productId, productUniqueNo: productUniqueNo }),
+        });
 
         // 详估后命中收录过滤（估值过低/差价不足/严重高估），从表格移除
         if (adoptionRejectReason(valuation)) {
@@ -7078,13 +7130,6 @@
         }
 
         // 更新表格行（保留"秒杀"状态和秒杀价，不被"详估"覆盖）
-        const existingRow = tableIndex.get(item.productId);
-        const isFlashSale = existingRow && existingRow.status === '秒杀';
-        const preserveStatus = isFlashSale ? '秒杀' : '详估';
-        // 秒杀商品的秒杀价低于详情API返回的标价，保留秒杀价
-        const finalPrice = isFlashSale ? Math.min(existingRow.price, detailPrice) : detailPrice;
-        // 用保留的价格重算性价比
-        const finalRatio = finalPrice > 0 ? ((valuation.totalValue - finalPrice) / finalPrice) * 100 : valuation.ratio;
         updateTableRow(item.productId, {
           showTitle,
           price: finalPrice,
@@ -8218,10 +8263,16 @@
         '<div style="margin-bottom:12px;text-align:center;">' +
           '<button id="mwTestPush" style="padding:8px 24px;border:1px solid #0f3460;border-radius:6px;background:#16213e;color:#10b981;font-size:13px;cursor:pointer;">发送测试通知</button>' +
         '</div>' +
+        // 代理人商品事件上报
+        '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;border:1px solid #1e3a5f;">' +
+          '<div style="font-size:12px;font-weight:600;color:#6a9fff;margin-bottom:4px;">代理人推送事件上报</div>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">填写独立上报密钥后启用；估值事件最多20条一批，15秒或本轮扫描结束即上报，不受本地通知开关影响</div>' +
+          '<input type="password" id="mwDispatchToken" placeholder="PUSH_INGEST_TOKEN（不是代理人管理密钥）" value="' + (pushConfig.dispatchToken || '') + '" style="width:100%;padding:6px 8px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
+        '</div>' +
         // 云端同步
         '<div style="margin-bottom:16px;padding:10px;background:#16213e;border-radius:8px;border:1px solid #1e3a5f;">' +
           '<div style="font-size:12px;font-weight:600;color:#6a9fff;margin-bottom:4px;">推送配置云端同步</div>' +
-          '<div style="font-size:10px;color:#666;margin-bottom:6px;">同步PushPlus订阅者和Server酱接收人到服务器，换电脑不丢失</div>' +
+          '<div style="font-size:10px;color:#666;margin-bottom:6px;">同步推送渠道、上报密钥和通知规则到服务器，换电脑不丢失</div>' +
           '<div style="display:flex;gap:6px;align-items:center;">' +
           '<input type="password" id="mwSyncPassword" placeholder="管理后台密码" value="' + (pushConfig.syncPassword || '') + '" style="flex:1;padding:5px 6px;border:1px solid #0f3460;border-radius:4px;background:#0d1a3a;color:#e0e0e0;font-size:12px;" />' +
           '<button id="mwSyncUpload" style="padding:5px 10px;border:none;border-radius:4px;background:#3b82f6;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;">上传</button>' +
@@ -8801,6 +8852,7 @@
             box.querySelector('#mwSoundAlert').checked = !!pushConfig.soundAlert;
             box.querySelector('#mwVisualAlert').checked = !!pushConfig.visualAlert;
             box.querySelector('#mwRepeatAlert').checked = !!pushConfig.repeatAlert;
+            box.querySelector('#mwDispatchToken').value = pushConfig.dispatchToken || '';
             // 通知阈值
             box.querySelector('#mwNotifyDiff').value = notifyDiffThreshold || 0;
             box.querySelector('#mwNotifyMinValue').value = notifyMinValue || 0;
@@ -8881,6 +8933,7 @@
         pushConfig.highDiffThreshold = parseFloat(box.querySelector('#mwHighDiffThreshold').value) || 0;
         pushConfig.highDiffFilterPlatforms = Array.from(box.querySelectorAll('.mwHighDiffPlatform:checked')).map(function (cb) { return cb.value; });
         pushConfig.syncPassword = box.querySelector('#mwSyncPassword').value.trim();
+        pushConfig.dispatchToken = box.querySelector('#mwDispatchToken').value.trim();
         pushConfig.devMessage = box.querySelector('#mwDevMessage').value.trim();
         // 钉钉机器人（v3.76.0）已在添加/编辑/删除时实时修改 pushConfig.dingtalkRobots
         // pushPlusSubscribers 已在添加/编辑/删除时实时修改，无需额外读取
@@ -14792,6 +14845,7 @@ function openSettings() {
       serverChanSubscribers: pushConfig.serverChanSubscribers || [],
       pushPlusSubscribers: pushConfig.pushPlusSubscribers || [],
       dingtalkRobots: pushConfig.dingtalkRobots || [],
+      dispatchToken: pushConfig.dispatchToken || '',
       devMessage: pushConfig.devMessage || '',
       // 推送规则
       secondaryDelay: pushConfig.secondaryDelay != null ? pushConfig.secondaryDelay : 20,
@@ -14875,6 +14929,7 @@ function openSettings() {
             pushConfig.pushPlusSubscribers = Array.isArray(remote.pushPlusSubscribers) ? remote.pushPlusSubscribers : pushConfig.pushPlusSubscribers;
             pushConfig.dingtalkRobots = Array.isArray(remote.dingtalkRobots) ? remote.dingtalkRobots : pushConfig.dingtalkRobots;
             migrateDingTalkRobots();
+            pushConfig.dispatchToken = remote.dispatchToken != null ? String(remote.dispatchToken) : (pushConfig.dispatchToken || '');
             pushConfig.devMessage = remote.devMessage != null ? remote.devMessage : (pushConfig.devMessage || '');
             // 推送规则
             pushConfig.secondaryDelay = remote.secondaryDelay != null ? remote.secondaryDelay : pushConfig.secondaryDelay;
@@ -14929,6 +14984,135 @@ function openSettings() {
         if (onDone) onDone(false);
       },
     });
+  }
+
+  // ============================================================
+  // 代理人商品事件上报：15秒 / 最多20条 / 轮末三重触发
+  // ============================================================
+  var agentPushQueue = [];
+  var agentPushQueuedIds = new Set();
+  var agentPushTimer = null;
+  var agentPushInflight = false;
+  var agentPushLastError = '';
+  var agentPushLastErrorLogAt = 0;
+
+  function postAgentPushEvents(events) {
+    return new Promise(function (resolve, reject) {
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url: AGENT_PUSH_URL,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dispatch-token': String(pushConfig.dispatchToken || '').trim(),
+        },
+        data: JSON.stringify({ events: events }),
+        timeout: 13000,
+        onload: function (resp) {
+          var json = null;
+          try { json = JSON.parse(resp.responseText || '{}'); } catch (e) {}
+          if (resp.status >= 200 && resp.status < 300 && json && json.success === true) {
+            resolve(json);
+            return;
+          }
+          var message = json && json.error ? String(json.error) : ('HTTP ' + (resp.status || '未知'));
+          if (json && json.success === false && json.failed > 0) {
+            message = '服务端部分推送失败（' + json.failed + '条），等待重试';
+          }
+          reject(new Error(message));
+        },
+        onerror: function () { reject(new Error('网络错误')); },
+        ontimeout: function () { reject(new Error('请求超时')); },
+        onabort: function () { reject(new Error('请求中止')); },
+      });
+    });
+  }
+
+  function scheduleAgentPushFlush(delay) {
+    if (agentPushTimer || !agentPushQueue.length || !String(pushConfig.dispatchToken || '').trim()) return;
+    agentPushTimer = setTimeout(function () {
+      agentPushTimer = null;
+      flushAgentPushQueue().catch(function () {});
+    }, delay);
+  }
+
+  async function flushAgentPushQueue() {
+    if (agentPushInflight || !agentPushQueue.length || !String(pushConfig.dispatchToken || '').trim()) return false;
+    if (agentPushTimer) { clearTimeout(agentPushTimer); agentPushTimer = null; }
+    agentPushInflight = true;
+    var failed = false;
+    try {
+      while (agentPushQueue.length) {
+        var batch = agentPushQueue.slice(0, AGENT_PUSH_BATCH_SIZE);
+        try {
+          await postAgentPushEvents(batch);
+        } catch (e) {
+          failed = true;
+          var message = e && e.message ? e.message : '未知错误';
+          var now = Date.now();
+          if (message !== agentPushLastError || now - agentPushLastErrorLogAt >= 60000) {
+            console.warn('[鸣潮监控] 代理人事件上报失败，保留本批并15秒后重试: ' + message);
+            agentPushLastError = message;
+            agentPushLastErrorLogAt = now;
+          }
+          break;
+        }
+        agentPushQueue.splice(0, batch.length);
+        batch.forEach(function (event) { agentPushQueuedIds.delete(event.eventId); });
+      }
+    } finally {
+      agentPushInflight = false;
+      if (agentPushTimer) { clearTimeout(agentPushTimer); agentPushTimer = null; }
+      if (agentPushQueue.length) scheduleAgentPushFlush(failed ? AGENT_PUSH_FLUSH_DELAY : 0);
+    }
+    return !failed;
+  }
+
+  function normalizeAgentPushUrl(value) {
+    var text = String(value || '').trim();
+    if (!/^https?:\/\//i.test(text) || text.length > 2048) return '';
+    return text;
+  }
+
+  function queueAgentPushEvent(input) {
+    if (!String(pushConfig.dispatchToken || '').trim() || !input || input.productId == null) return false;
+    var price = Number(input.price);
+    var value = Number(input.value);
+    if (!Number.isFinite(price) || price < 0 || !Number.isFinite(value) || value < 0) return false;
+    price = Math.round(price * 100) / 100;
+    value = Math.round(value * 100) / 100;
+    var characters = (Array.isArray(input.characters) ? input.characters : []).slice(0, 200).map(function (character) {
+      var constellation = Number(character && character.const);
+      return {
+        name: String(character && character.name || '').trim().slice(0, 100),
+        const: Number.isInteger(constellation) ? Math.max(0, Math.min(6, constellation)) : 0,
+      };
+    }).filter(function (character) { return !!character.name; });
+    var event = {
+      eventId: '',
+      productId: String(input.productId),
+      game: currentGame === 'zzz' ? 'zzz' : 'wuwa',
+      platform: String(input.platform || ''),
+      showTitle: String(input.showTitle || '').slice(0, 1500),
+      price: price,
+      value: value,
+      characters: characters,
+      goodsImg: normalizeAgentPushUrl(input.goodsImg),
+      productUrl: normalizeAgentPushUrl(input.productUrl),
+      stage: String(input.stage || '').slice(0, 100),
+    };
+    var identity = [event.game, event.platform, event.productId, event.stage,
+      price.toFixed(2), value.toFixed(2), event.showTitle, JSON.stringify(characters)].join('|');
+    event.eventId = 'agent_' + kjsMd5(identity);
+    if (agentPushQueuedIds.has(event.eventId)) return false;
+    agentPushQueue.push(event);
+    agentPushQueuedIds.add(event.eventId);
+    if (agentPushQueue.length >= AGENT_PUSH_BATCH_SIZE) {
+      if (agentPushTimer) { clearTimeout(agentPushTimer); agentPushTimer = null; }
+      scheduleAgentPushFlush(0);
+    } else {
+      scheduleAgentPushFlush(AGENT_PUSH_FLUSH_DELAY);
+    }
+    return true;
   }
 
   // ============================================================
@@ -16039,6 +16223,7 @@ function openSettings() {
       console.error('[鸣潮监控] 其他平台扫描失败:', e);
     }
 
+    await flushAgentPushQueue();
     updateBottomBar();
     console.log('[鸣潮监控] 本轮刷新完成 · 耗时' + ((Date.now() - refreshStartTs) / 1000).toFixed(1) + 's · 表格' + tableData.length + '行' +
       (lastRefreshError ? ' · 异常: ' + lastRefreshError : ''));
@@ -16415,6 +16600,7 @@ function openSettings() {
       pzdsSilentStat.lastError = (e && e.message ? String(e.message) : '扫描异常').substring(0, 30);
       console.error('[鸣潮监控-盼之静默] 扫描异常:', e);
     } finally {
+      await flushAgentPushQueue();
       pzdsSilentBusy = false;
       pzdsSilentSave();
       pzdsSilentUpdateUI();

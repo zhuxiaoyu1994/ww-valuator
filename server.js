@@ -15,6 +15,8 @@ const WUWA_CONFIG = require('./configs/wuwa');
 const ZZZ_CONFIG = require('./configs/zzz');
 const WUWA_EVENTS = require('./configs/wuwa-events.json');
 const db = require('./db');
+const notify = require('./notify');
+const { createAgentPushService } = require('./agent-push');
 
 // 多游戏引擎实例
 const engines = {
@@ -54,12 +56,21 @@ const getPageHTML = require('./views/wuwa');
 const getBlocklistPage = require('./views/blocklist');
 const getAdminPage = require('./views/admin');
 const getLitePage = require('./views/lite');
+const getAgentPushPage = require('./views/agent-push');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 管理后台密码（可通过环境变量配置）
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zhucs3336466';
+
+// 代理人推送：管理密钥与监控上报密钥相互独立，均不使用管理员密码
+const agentPushService = createAgentPushService({
+  db,
+  manageKey: process.env.AGENT_PUSH_KEY || '',
+  ingestToken: process.env.PUSH_INGEST_TOKEN || '',
+  sendRobot: notify.sendDingTalkRobot,
+});
 
 // 页面估值接口的主密钥（可选，作为管理员兜底密钥；分发给朋友的密钥存在数据库 eval_keys 表中）
 const PAGE_EVAL_KEY = process.env.PAGE_EVAL_KEY || '';
@@ -387,6 +398,8 @@ if (MAINTENANCE_KEY) {
       // 0. 管理后台与封禁管理豁免（自身有独立密码保护）：闭站期间仍可登录 /admin 发放/管理通行证
       //    QQ 机器人 WebHook 豁免：QQ 服务器无法携带维护密钥，闭站期间估价机器人需保持可用
       if (req.path === '/admin' || req.path.startsWith('/admin/api/') ||
+          req.path === '/agent-push' || req.path.startsWith('/agent-push/api/') ||
+          req.path === '/api/agent-push/dispatch' ||
           req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
           req.path === '/api/qq-bot' || req.path === '/api/qq-bot-debug' ||
           req.path === '/api/qq-card-task' ||
@@ -436,6 +449,8 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
 app.use(async (req, res, next) => {
   // 放行管理页面和封禁管理API（否则被封IP无法解封）
   if (req.path === '/blocklist' || req.path.startsWith('/blocklist/api/') ||
+      req.path === '/agent-push' || req.path.startsWith('/agent-push/api/') ||
+      req.path === '/api/agent-push/dispatch' ||
       req.path === '/admin' || req.path.startsWith('/admin/api/')) {
     return next();
   }
@@ -2710,6 +2725,51 @@ async function handlePublicStats(req, res) {
 
 app.get('/api/public-stats', (req, res) => handlePublicStats(req, res));
 app.post('/api/public-stats', (req, res) => handlePublicStats(req, res));
+
+// ============================================================
+// 代理人独立推送：管理密钥只能维护配置，上报密钥只能提交商品事件
+// ============================================================
+function agentPushError(res, err) {
+  const status = err && err.status ? err.status : 500;
+  if (status >= 500) console.error('[代理人推送]', err && err.message ? err.message : err);
+  return res.status(status).json({ success: false, error: err && err.message ? err.message : '操作失败' });
+}
+
+function requireAgentManager(req, res, next) {
+  if (!process.env.AGENT_PUSH_KEY) return res.status(503).json({ success: false, error: '服务端尚未配置 AGENT_PUSH_KEY' });
+  if (!agentPushService.isManager(String(req.get('x-agent-key') || ''))) {
+    return res.status(401).json({ success: false, error: '代理人密钥错误' });
+  }
+  next();
+}
+
+app.get('/agent-push', (req, res) => res.type('html').send(getAgentPushPage()));
+app.get('/agent-push/api/config', requireAgentManager, async (req, res) => {
+  try { res.json({ success: true, config: await agentPushService.getConfig() }); }
+  catch (e) { agentPushError(res, e); }
+});
+app.put('/agent-push/api/config', requireAgentManager, async (req, res) => {
+  try { res.json({ success: true, config: await agentPushService.saveConfig(req.body && req.body.config) }); }
+  catch (e) { agentPushError(res, e); }
+});
+app.post('/agent-push/api/test', requireAgentManager, async (req, res) => {
+  try {
+    const result = await agentPushService.testRobot(req.body && req.body.robotId);
+    res.json(Object.assign({ message: '测试消息已成功发送到钉钉' }, result));
+  } catch (e) { agentPushError(res, e); }
+});
+app.get('/agent-push/api/logs', requireAgentManager, async (req, res) => {
+  try { res.json({ success: true, logs: await agentPushService.getLogs() }); }
+  catch (e) { agentPushError(res, e); }
+});
+app.post('/api/agent-push/dispatch', async (req, res) => {
+  if (!process.env.PUSH_INGEST_TOKEN) return res.status(503).json({ success: false, error: '服务端尚未配置 PUSH_INGEST_TOKEN' });
+  if (!agentPushService.isIngest(String(req.get('x-dispatch-token') || ''))) {
+    return res.status(401).json({ success: false, error: '事件上报密钥错误' });
+  }
+  try { res.json(await agentPushService.dispatch(req.body && req.body.events)); }
+  catch (e) { agentPushError(res, e); }
+});
 
 // ============================================================
 // 推送配置云端同步（油猴脚本调用）

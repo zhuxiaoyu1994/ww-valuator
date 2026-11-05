@@ -480,6 +480,96 @@ async function setConfig(key, value) {
 }
 
 /**
+ * 严格读取配置：数据库异常向上抛出，避免推送链路把故障误判为“无配置”而静默漏推
+ */
+async function getConfigStrict(key) {
+  if (!dbClient) {
+    return memoryConfigStore.has(key) ? memoryConfigStore.get(key).value : null;
+  }
+  const result = await dbClient.execute({
+    sql: 'SELECT value FROM app_config WHERE key = ?',
+    args: [key],
+  });
+  return result.rows.length > 0 ? JSON.parse(result.rows[0].value) : null;
+}
+
+/**
+ * 原子写入不存在的配置，用于跨实例事件去重
+ * @returns {boolean|null} true=本次插入，false=已存在，null=写入异常
+ */
+async function insertConfigIfAbsent(key, value) {
+  const now = new Date().toISOString();
+  if (!dbClient) {
+    if (memoryConfigStore.has(key)) return false;
+    memoryConfigStore.set(key, { value, updatedAt: now });
+    return true;
+  }
+  try {
+    const result = await dbClient.execute({
+      sql: 'INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO NOTHING',
+      args: [key, JSON.stringify(value), now],
+    });
+    return (result.rowsAffected || 0) > 0;
+  } catch (e) {
+    console.error('[DB] 原子写配置失败:', e.message);
+    return null;
+  }
+}
+
+async function deleteConfig(key) {
+  if (!dbClient) return memoryConfigStore.delete(key);
+  try {
+    const result = await dbClient.execute({ sql: 'DELETE FROM app_config WHERE key = ?', args: [key] });
+    return (result.rowsAffected || 0) > 0;
+  } catch (e) {
+    console.error('[DB] 删除配置失败:', e.message);
+    return false;
+  }
+}
+
+function configPrefixPattern(prefix) {
+  return String(prefix).replace(/[\\%_]/g, '\\$&') + '%';
+}
+
+async function listConfigsByPrefix(prefix) {
+  if (!dbClient) {
+    return Array.from(memoryConfigStore.entries())
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, entry]) => ({ key, value: entry.value, updatedAt: entry.updatedAt }))
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  }
+  const result = await dbClient.execute({
+    sql: "SELECT key, value, updated_at FROM app_config WHERE key LIKE ? ESCAPE '\\' ORDER BY updated_at DESC",
+    args: [configPrefixPattern(prefix)],
+  });
+  return result.rows.map(row => ({
+    key: row.key,
+    value: JSON.parse(row.value),
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function deleteConfigsBefore(prefix, iso) {
+  if (!dbClient) {
+    let removed = 0;
+    for (const [key, entry] of memoryConfigStore.entries()) {
+      if (key.startsWith(prefix) && entry.updatedAt < iso) { memoryConfigStore.delete(key); removed++; }
+    }
+    return removed;
+  }
+  try {
+    const result = await dbClient.execute({
+      sql: "DELETE FROM app_config WHERE key LIKE ? ESCAPE '\\' AND updated_at < ?",
+      args: [configPrefixPattern(prefix), iso],
+    });
+    return result.rowsAffected || 0;
+  } catch (e) {
+    console.error('[DB] 按前缀清理配置失败:', e.message);
+    return 0;
+  }
+}
+
+/**
  * 删除指定时间之前写入的猜价卡片图（key 前缀 qq_card_，惰性清理由存图方触发）
  * 注意 LIKE 中下划线是通配符，需 ESCAPE 转义，避免误伤其他 key
  */
@@ -1011,8 +1101,13 @@ module.exports = {
   getStats,
   searchLogs,
   getConfig,
+  getConfigStrict,
   getConfigWithMeta,
   setConfig,
+  insertConfigIfAbsent,
+  deleteConfig,
+  listConfigsByPrefix,
+  deleteConfigsBefore,
   deleteCardImagesBefore,
   insertDealsBatch,
   queryDeals,
