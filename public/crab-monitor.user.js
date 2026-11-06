@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         账号监控助手
 // @namespace    pxb7-monitor
-// @version      4.11.0
+// @version      4.11.2
 // @description  监控螃蟹网+盼之+氪金兽+7881+易手游鸣潮/绝区零账号列表，支持游戏切换，自动发现高性价比账号（4.10.0 恢复声音提醒（蜂鸣，可开关）、彻底移除后台保活音频——音爆元凶）
 // @match        https://www.pxb7.com/buy/10302/*
 // @match        https://www.pxb7.com/buy/10302
@@ -41,6 +41,8 @@
 
 (function () {
   'use strict';
+
+  var MW_VERSION = '4.11.2'; // 与 @version 保持一致，用于错误浮层诊断输出
 
   // ============================================================
   // 实时日志捕获
@@ -1065,6 +1067,7 @@
   var tableIndex = new Map();
   function rebuildTableIndex() {
     tableIndex = new Map();
+    if (!Array.isArray(tableData)) return; // 防御：数据尚未加载（null/非数组）时静默跳过
     for (var ti = 0; ti < tableData.length; ti++) {
       var tr = tableData[ti];
       if (tr && tr.productId) tableIndex.set(tr.productId, tr);
@@ -1193,7 +1196,10 @@
       try {
         var raw = GM_getValue(key);
         if (raw !== undefined && raw !== null) {
-          return JSON.parse(raw);
+          var parsedGm = JSON.parse(raw);
+          // v4.11.2 防御：存储值可能损坏为字面量 "null"，解析成功但为空，须回退默认值
+          if (parsedGm === null || parsedGm === undefined) return defaultVal;
+          return parsedGm;
         }
       } catch (e) {
         console.warn('[鸣潮监控] GM读取失败，回退localStorage:', key, e);
@@ -1204,6 +1210,7 @@
       const raw = localStorage.getItem(key);
       if (raw === null) return defaultVal;
       var parsed = JSON.parse(raw);
+      if (parsed === null || parsed === undefined) return defaultVal;
       // 自动迁移：找到 localStorage 旧数据，写入 GM 存储并清除 localStorage
       if (_gmReady) {
         try {
@@ -16680,13 +16687,14 @@ function openSettings() {
     if (isPzdsPage() && STORAGE_KEYS.pzdsTabTable) {
       // 盼之页签：优先读专属存储；为空（首次升级）时从旧共享key按平台前缀迁移本页签负责的行
       tableData = loadStorage(STORAGE_KEYS.pzdsTabTable, null);
-      rebuildTableIndex();
       if (!Array.isArray(tableData)) {
+        // v4.11.2 修复：先做空值迁移再建索引（此前 rebuildTableIndex 在检查前被调用，
+        // 首次升级无专属key时 loadStorage 返回 null，读 .length 抛错导致静默初始化失败）
         const legacyRows = loadStorage(STORAGE_KEYS.table, []) || [];
         tableData = legacyRows.filter(function (r) { return /^(pz_|kjs_|qy_|ysy_)/.test(String(r.productId || '')); });
-        rebuildTableIndex();
         console.log('[鸣潮监控] 盼之页签数据迁移：从共享存储迁入' + tableData.length + '行（盼之/氪金兽/7881/易手游），共享存储保留螃蟹数据');
       }
+      rebuildTableIndex();
       seenIds = loadStorage(STORAGE_KEYS.pzdsTabSeen, null);
       if (!Array.isArray(seenIds)) {
         seenIds = (loadStorage(STORAGE_KEYS.seen, []) || []).filter(function (id) { return /^(pz_|kjs_|qy_|ysy_)/.test(String(id)); });
@@ -16888,18 +16896,70 @@ function openSettings() {
 
   // 检测当前游戏：螃蟹网列表页URL优先（/buy/10302鸣潮、/buy/10312绝区零），否则用上次选择
   (function detectGame() {
-    const m = window.location.pathname.match(/\/buy\/(\d+)/);
-    if (m) {
-      for (const [key, g] of Object.entries(GAME_CONFIGS)) {
-        if (g.platformIds.pxb7 === m[1]) { currentGame = key; break; }
+    try {
+      const m = window.location.pathname.match(/\/buy\/(\d+)/);
+      if (m) {
+        for (const [key, g] of Object.entries(GAME_CONFIGS)) {
+          if (g.platformIds.pxb7 === m[1]) { currentGame = key; break; }
+        }
+      } else {
+        const saved = localStorage.getItem(GLOBAL_STORAGE_KEYS.game);
+        if (saved && GAME_CONFIGS[saved]) currentGame = saved;
       }
-    } else {
-      const saved = localStorage.getItem(GLOBAL_STORAGE_KEYS.game);
-      if (saved && GAME_CONFIGS[saved]) currentGame = saved;
+      applyGameConfig();
+      console.log('[监控] 当前游戏: ' + G().name + ' (minLevel=' + G().minLevel + ')');
+    } catch (e) {
+      mwFatal('游戏检测', e);
     }
-    applyGameConfig();
-    console.log('[监控] 当前游戏: ' + G().name + ' (minLevel=' + G().minLevel + ')');
   })();
+
+  // ============================================================
+  // 启动致命错误浮层（v4.11.1）
+  // 螃蟹网反调试导致用户无法打开控制台看报错；init() 抛错时面板会静默消失，
+  // 用户只会看到"没有UI"。此浮层独立于面板，把异常变成可见、可复制的信息。
+  // 浮层出现 = 脚本已注入但初始化失败；浮层不出现 = 脚本根本没被注入（油猴侧问题）。
+  // ============================================================
+  function mwFatal(where, err) {
+    try {
+      if (document.getElementById('mw-fatal')) return;
+      var msg = '';
+      try { msg = (err && (err.stack || err.message)) || String(err); } catch (e2) { msg = String(err); }
+      console.error('[鸣潮监控] ' + where + '失败:', err);
+      var box = document.createElement('div');
+      box.id = 'mw-fatal';
+      box.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2147483647;' +
+        'background:#2a0a0f;color:#ffb4be;border:1px solid #e94560;border-radius:8px;padding:10px 14px;' +
+        'max-width:640px;font:12px/1.6 -apple-system,Microsoft YaHei,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5);';
+      var info = '监控助手 ' + (typeof MW_VERSION !== 'undefined' ? MW_VERSION : '') + ' ' + where +
+        '失败\nURL: ' + location.href + '\n' + msg;
+      var pre = document.createElement('div');
+      pre.style.cssText = 'white-space:pre-wrap;word-break:break-all;max-height:180px;overflow:auto;color:#ffd9de;';
+      pre.textContent = info;
+      var btnCopy = document.createElement('button');
+      btnCopy.textContent = '复制诊断信息';
+      btnCopy.style.cssText = 'margin-top:8px;margin-right:8px;padding:3px 10px;background:#e94560;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:11px;';
+      btnCopy.addEventListener('click', function () {
+        var text = navigator.userAgent + '\n' + info;
+        try { navigator.clipboard.writeText(text); btnCopy.textContent = '已复制'; } catch (e3) { btnCopy.textContent = '复制失败'; }
+      });
+      var btnClose = document.createElement('button');
+      btnClose.textContent = '关闭';
+      btnClose.style.cssText = 'margin-top:8px;padding:3px 10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;cursor:pointer;font-size:11px;';
+      btnClose.addEventListener('click', function () { box.remove(); });
+      box.appendChild(pre);
+      box.appendChild(btnCopy);
+      box.appendChild(btnClose);
+      (document.body || document.documentElement).appendChild(box);
+    } catch (e4) { /* 浮层都建不出来时只能靠控制台 */ console.error('[鸣潮监控] 致命错误浮层创建失败:', e4); }
+  }
+
+  function safeInit(skipUI, where) {
+    try {
+      init(skipUI);
+    } catch (e) {
+      mwFatal(where || '初始化', e);
+    }
+  }
 
   // 交易猫页面：数据捕获模式（v4.2.0 侦察阶段，不扫描不推送）
   if (isJymPage()) {
@@ -16934,9 +16994,9 @@ function openSettings() {
     currentGame = 'wuwa';
     applyGameConfig();
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function () { init(true); });
+      document.addEventListener('DOMContentLoaded', function () { safeInit(true, '盼之静默初始化'); });
     } else {
-      init(true);
+      safeInit(true, '盼之静默初始化');
     }
     return;
   }
@@ -16953,12 +17013,12 @@ function openSettings() {
 
   // 等待DOM就绪后初始化UI
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', function () { safeInit(false, '列表页初始化'); });
   } else if (document.readyState === 'interactive') {
-    init();
+    safeInit(false, '列表页初始化');
   } else {
     // complete 或其他情况
-    init();
+    safeInit(false, '列表页初始化');
   }
 
 })();
