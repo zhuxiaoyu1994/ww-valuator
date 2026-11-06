@@ -299,6 +299,30 @@ function formatReply(result, priceYuan) {
   if (teams.length > 0) {
     lines.push('· 成型配队：' + teams.slice(0, 8).join('、') + (teams.length > 8 ? ' 等' + teams.length + '队' : ''));
   }
+  // 折扣提示（与网站估值结果页口径一致：缺强绑队友 / 缺必需专武 / 低命整体折扣）
+  const depNotes = d.c6DepNotes || [];
+  if (depNotes.length > 0) {
+    lines.push('· 缺队友折扣：' + depNotes.slice(0, 6).join('、') + (depNotes.length > 6 ? ' 等' + depNotes.length + '项' : ''));
+  }
+  const sigNotes = d.sigDiscountNotes || [];
+  if (sigNotes.length > 0) {
+    lines.push('· 专武折扣：' + sigNotes.slice(0, 6).join('、') + (sigNotes.length > 6 ? ' 等' + sigNotes.length + '项' : ''));
+  }
+  const fd = d.flatDiscount;
+  if (fd && fd.value && fd.value < 1) {
+    lines.push('· 低命折扣：整体 ×' + fd.value);
+  }
+  // 数量类加成（已计入估值，>0 时展示来源）
+  if (d.charCountBonus > 0) {
+    lines.push('· 角色数量加成：+' + fmtMoney(d.charCountBonus) + '（五星' + (d.fiveStarChars || 0) + '个）');
+  }
+  if (d.weaponCountBonus > 0) {
+    lines.push('· 专武数量加成：+' + fmtMoney(d.weaponCountBonus) + '（' + (d.hasSignatureWeapons || []).length + '把专武）');
+  }
+  if (d.outfitCountBonus > 0) {
+    const oc = info.outfits != null ? info.outfits : (d.outfits || []).length;
+    lines.push('· 皮肤加成：+' + fmtMoney(d.outfitCountBonus) + '（' + oc + '套）');
+  }
   if (priceYuan > 0) {
     lines.push('');
     lines.push('🏷️ 标价：' + fmtMoney(priceYuan));
@@ -1001,4 +1025,4 @@ function createQQBotHandler(opts) {
   };
 }
 
-module.exports = { createQQBotHandler, HELP_TEXT };
+module.exports = { createQQBotHandler, HELP_TEXT, formatReply };
