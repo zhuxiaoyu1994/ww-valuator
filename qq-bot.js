@@ -299,29 +299,70 @@ function formatReply(result, priceYuan) {
   if (teams.length > 0) {
     lines.push('· 成型配队：' + teams.slice(0, 8).join('、') + (teams.length > 8 ? ' 等' + teams.length + '队' : ''));
   }
+
+  // 估值明细（对齐网站估价结果页"估价计算明细"的行序与显示条件）
+  const detail = [];
+  // 角色价值
+  if (d.characterValue != null) {
+    detail.push('· 角色价值：' + fmtValue(d.characterValue) + ' 元');
+  }
+  // 配队溢价
+  if (d.teamPremium != null && d.teamPremium > 0) {
+    detail.push('· 配队溢价：+' + fmtValue(d.teamPremium) + ' 元');
+  }
+  // 抽数价值（仅基础抽数价值，参与有效金系数，与网站口径一致）
+  const mpi = d.pullInfo || {};
+  const basePull = (mpi.baseTotal != null) ? mpi.baseTotal : Math.max(0, (d.pullValue || 0) - (mpi.c6Bonus || 0));
+  if (basePull > 0) {
+    detail.push('· 抽数价值：+' + fmtValue(basePull) + ' 元');
+  }
+  // 资源价值（皮肤/车架等）
+  if (d.resourceValue != null && d.resourceValue > 0) {
+    detail.push('· 资源价值：+' + fmtValue(d.resourceValue) + ' 元');
+  }
   // 折扣提示（与网站估值结果页口径一致：缺强绑队友 / 缺必需专武 / 低命整体折扣）
   const depNotes = d.c6DepNotes || [];
   if (depNotes.length > 0) {
-    lines.push('· 缺队友折扣：' + depNotes.slice(0, 6).join('、') + (depNotes.length > 6 ? ' 等' + depNotes.length + '项' : ''));
+    detail.push('· 缺队友折扣：' + depNotes.slice(0, 6).join('、') + (depNotes.length > 6 ? ' 等' + depNotes.length + '项' : ''));
   }
   const sigNotes = d.sigDiscountNotes || [];
   if (sigNotes.length > 0) {
-    lines.push('· 专武折扣：' + sigNotes.slice(0, 6).join('、') + (sigNotes.length > 6 ? ' 等' + sigNotes.length + '项' : ''));
+    detail.push('· 专武折扣：' + sigNotes.slice(0, 6).join('、') + (sigNotes.length > 6 ? ' 等' + sigNotes.length + '项' : ''));
   }
   const fd = d.flatDiscount;
   if (fd && fd.value && fd.value < 1) {
-    lines.push('· 低命折扣：整体 ×' + fd.value);
+    detail.push('· 低命折扣：整体 ×' + fd.value);
+  }
+  // 有效金系数
+  if (yi.coefficient != null && yi.coefficient !== 1) {
+    const goldLabel = yi.effectiveYellow != null ? '（' + fmtGold(yi.effectiveYellow) + '金）' : '';
+    detail.push('· 有效金系数：×' + yi.coefficient + goldLabel);
+  }
+  // 满命溢价（不参与有效金系数，系数后直接相加）
+  if (d.c6Premium != null && d.c6Premium > 0) {
+    detail.push('· 满命溢价：+' + fmtValue(d.c6Premium) + ' 元');
+  }
+  // 满命抽数加成（不参与有效金系数，系数后直接相加）
+  if (mpi.c6Bonus != null && mpi.c6Bonus > 0) {
+    let c6PullVal = '· 满命抽数加成：+' + fmtValue(mpi.c6Bonus) + ' 元';
+    if (mpi.c6Multiplier != null) c6PullVal += '（+' + Math.round(mpi.c6Multiplier * 100) + '%）';
+    detail.push(c6PullVal);
   }
   // 数量类加成（已计入估值，>0 时展示来源）
   if (d.charCountBonus > 0) {
-    lines.push('· 角色数量加成：+' + fmtMoney(d.charCountBonus) + '（五星' + (d.fiveStarChars || 0) + '个）');
+    detail.push('· 角色数量加成：+' + fmtMoney(d.charCountBonus) + '（五星' + (d.fiveStarChars || 0) + '个）');
   }
   if (d.weaponCountBonus > 0) {
-    lines.push('· 专武数量加成：+' + fmtMoney(d.weaponCountBonus) + '（' + (d.hasSignatureWeapons || []).length + '把专武）');
+    detail.push('· 专武数量加成：+' + fmtMoney(d.weaponCountBonus) + '（' + (d.hasSignatureWeapons || []).length + '把专武）');
   }
   if (d.outfitCountBonus > 0) {
     const oc = info.outfits != null ? info.outfits : (d.outfits || []).length;
-    lines.push('· 皮肤加成：+' + fmtMoney(d.outfitCountBonus) + '（' + oc + '套）');
+    detail.push('· 皮肤加成：+' + fmtMoney(d.outfitCountBonus) + '（' + oc + '套）');
+  }
+  if (detail.length > 0) {
+    lines.push('');
+    lines.push('估值明细');
+    lines.push.apply(lines, detail);
   }
   if (priceYuan > 0) {
     lines.push('');

@@ -681,15 +681,25 @@ function parseCharacters(section) {
     let name = '';
 
     // 命座单位按当前游戏配置（鸣潮"命"、绝区零"命/影"）
+    // 覆盖写法：前缀"满命X/N命X/六命X"、括号后缀"X(满命)/X(N命)"、直连后缀"X满命/XN命/X六命"
     for (const unit of CONST_UNITS) {
       let m = item.match(new RegExp('^满' + unit + '(.+)$'));
       if (m) { constNum = 6; name = m[1]; break; }
       m = item.match(new RegExp('^(\\d+)' + unit + '(.+)$'));
       if (m) { constNum = parseInt(m[1]); name = m[2]; break; }
+      m = item.match(new RegExp('^([一二三四五六])' + unit + '(.+)$'));
+      if (m) { constNum = '一二三四五六'.indexOf(m[1]) + 1; name = m[2]; break; }
       m = item.match(new RegExp('^(.+?)\\(满' + unit + '\\)$'));
       if (m) { constNum = 6; name = m[1]; break; }
       m = item.match(new RegExp('^(.+?)\\((\\d+)' + unit + '\\)$'));
       if (m) { constNum = parseInt(m[2]); name = m[1]; break; }
+      // 后缀写法（自由文本常见，如"椿满命""长离2命""维里奈一命"）
+      m = item.match(new RegExp('^(.+?)满' + unit + '$'));
+      if (m) { constNum = 6; name = m[1]; break; }
+      m = item.match(new RegExp('^(.+?)(\\d+)' + unit + '$'));
+      if (m) { constNum = parseInt(m[2]); name = m[1]; break; }
+      m = item.match(new RegExp('^(.+?)([一二三四五六])' + unit + '$'));
+      if (m) { constNum = '一二三四五六'.indexOf(m[2]) + 1; name = m[1]; break; }
     }
     if (constNum < 0) {
       name = item;
@@ -790,7 +800,9 @@ function findCharsInText(text) {
     }
     let found = false;
     for (const checkName of namesToCheck) {
-      // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，绝区零还支持"影"）
+      // 命座单位按当前游戏（"满命X"/"N命X"/"X(满命)"/"X(N命)"，及后缀"X满命/XN命/X六命"，绝区零还支持"影"）
+      // 前缀写法严格匹配（不加 \s*：避免"椿2命 长离0命"里"2命 长离"被误认成前缀命座）；
+      // 后缀写法允许名字与数字间一个空格（"长离 2命"常见）
       for (const unit of CONST_UNITS) {
         if (cleanText.includes('满' + unit + checkName)) {
           chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
@@ -801,14 +813,38 @@ function findCharsInText(text) {
           chars.push({ name, const: parseInt(m[1]), tier, price: info.price, isHot: info.isHot });
           found = true; break;
         }
+        const mCnPre = cleanText.match(new RegExp('([一二三四五六])' + unit + checkName));
+        if (mCnPre) {
+          chars.push({ name, const: '一二三四五六'.indexOf(mCnPre[1]) + 1, tier, price: info.price, isHot: info.isHot });
+          found = true; break;
+        }
         if (cleanText.includes(checkName + '(满' + unit + ')')) {
           chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
           found = true; break;
         }
-        const m2 = cleanText.match(new RegExp(checkName + '\\((\\d+)' + unit + '\\)'));
+        const m2 = cleanText.match(new RegExp(checkName + '\\s*\\((\\d+)' + unit + '\\)'));
         if (m2) {
           chars.push({ name, const: parseInt(m2[1]), tier, price: info.price, isHot: info.isHot });
           found = true; break;
+        }
+        // 直连后缀写法（自由文本常见，如"椿满命""长离2命""长离 2命""维里奈一命"）
+        // 短名防护：名字的每次出现都落在更长角色名内部时跳过（如"鉴心满命"里的"心满命"）
+        const _shortGuard = !isNameCoveredByLonger(cleanText, checkName, _containedBy[checkName]);
+        if (_shortGuard && (cleanText.includes(checkName + '满' + unit) || new RegExp(checkName + '\\s*满' + unit).test(cleanText))) {
+          chars.push({ name, const: 6, tier, price: info.price, isHot: info.isHot });
+          found = true; break;
+        }
+        if (_shortGuard) {
+          const m3 = cleanText.match(new RegExp(checkName + '\\s*(\\d+)' + unit));
+          if (m3) {
+            chars.push({ name, const: parseInt(m3[1]), tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
+          const m3Cn = cleanText.match(new RegExp(checkName + '\\s*([一二三四五六])' + unit));
+          if (m3Cn) {
+            chars.push({ name, const: '一二三四五六'.indexOf(m3Cn[1]) + 1, tier, price: info.price, isHot: info.isHot });
+            found = true; break;
+          }
         }
       }
       if (found) break;
@@ -1001,6 +1037,10 @@ function parseAccountInfo(text) {
     if (r.div > 1) result.pulls += (result[r.key] || 0) / r.div;
     else if (r.div === 1) result.pulls += (result[r.key] || 0);
   }
+  // 直连抽数写法（"抽卡剩800发"/"抽卡剩余800"/"抽数800"/"抽卡:800"）直接计入总抽数
+  // （自由文本/机器人描述常见此类写法，此前不被资源关键词覆盖，抽数价值恒为0）
+  const _dpM = text.match(/(?:抽卡|抽数)(?:剩余|剩)?[：:]?\s*(\d+)\s*(?:发|抽)?/);
+  if (_dpM) result.pulls += parseInt(_dpM[1]);
   result.pulls = Math.round(result.pulls);
 
   // 防护：过滤掉无主专武（有专武但对应角色不在角色列表中，则忽略这把专武）
